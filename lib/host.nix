@@ -43,7 +43,6 @@ with builtins;
       roles, 
       cpuCores, 
       laptop, 
-      services,
       users, 
       wifi ? [],
       gpuTempSensor ? null,
@@ -91,8 +90,6 @@ with builtins;
           boot.kernelPatches = kernelPatches;
           boot.kernelParams = kernelParams;
           boot.kernelPackages = kernelPackage;
-
-          services = services;
 
           nixpkgs.pkgs = pkgs;
           nix.maxJobs = lib.mkDefault cpuCores;

@@ -14,12 +14,8 @@
   time.timeZone = "Europe/Copenhagen";
   i18n.defaultLocale = "en_US.UTF-8";
 
-  console = {
-    font = "Ubuntu";
-    keyMap = "us";
-  };
-
   hardware.enableRedistributableFirmware = lib.mkDefault true;
+  hardware.video.hidpi.enable = lib.mkDefault true;
 
   # Hot fix for issues
   documentation.info.enable = false;

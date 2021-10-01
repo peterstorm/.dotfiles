@@ -9,6 +9,6 @@
   ];
 
   home.file = {
-    ".config/alacritty/alacritty.yaml".source = ./alacritty.yaml
+    ".config/alacritty/alacritty.yaml".source = ./alacritty.yaml;
   };
 }

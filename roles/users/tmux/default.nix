@@ -23,7 +23,7 @@
       # Bind CTRL+Z to zoom current pane
       unbind-key C-z
       bind-key -n C-z resize-pane -Z
-      '';
+    '';
   };
 }
 

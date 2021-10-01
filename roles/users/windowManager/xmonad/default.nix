@@ -1,21 +1,18 @@
 {pkgs, config, lib, ...}:
-
 let
-
   extra = ''
-    ${pkgs.xcape}/bin/xcape -e ''\"Hyper_L=Caps_Lock;Hyper_R=backslash''\"
+    ${pkgs.xcape}/bin/xcape -e "Hyper_L=Caps_Lock;Hyper_R=backslash"
   '';
-
 in {
 
   imports = [
-    ../shared/fonts.nix
+    #../shared/fonts.nix
     ../shared/xmobar
     ../shared/alacritty
     ../shared/applications.nix
   ];
 
-  home.packages = with pkgs; = [
+  home.packages = with pkgs; [
     xcape
   ];
 
@@ -29,9 +26,7 @@ in {
         hp.xmonad-extras
         hp.xmonad
       ];
-      config = ./xmonad.hs
+      config = ./xmonad.hs;
     };
   };
-
-  services.xserver.displayManager.defaultSesssion = "none+xmonad";
 }

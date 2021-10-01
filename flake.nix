@@ -3,13 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    home-manager.url = "github:nix-community/home-manager";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs @ {nixpkgs, home-manager, ... }:
+  outputs = inputs @ { self, nixpkgs, home-manager, ... }:
   let
 
     inherit (nixpkgs) lib;
@@ -26,13 +24,14 @@
     pkgs = import nixpkgs {
       inherit system;
       config = { allowUnfree = true; };
+      overlays = [];
     };
 
   in {
 
     homeManagerConfigurations = {
       peterstorm = user.mkHMUser {
-        roles = [ "git" "windowManager/xmonad" "tmux" ];
+        roles = [ "git" "tmux" "windowManager/xmonad" ];
         username = "peterstorm";
       };
     };
@@ -55,7 +54,7 @@
           ignoreConfigErrors = true;
         }];
         kernelParams = [ "acpi_rev_override" ];
-        roles = [ "core" "wifi" "efi" "intel-graphics" "bluetooth" "desktop-plasma" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" ];
         users = [{
           name = "peterstorm";
           groups = [ "wheel" "networkmanager" "docker" ];
@@ -63,10 +62,6 @@
         }];
         cpuCores = 8;
         laptop = true;
-        services = {
-          xserver.libinput.enable = true;
-          thermald.enable = true;
-        };
       };
     };
   };

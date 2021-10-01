@@ -2,13 +2,11 @@
 {
   home.packages = with pkgs; [
     nerdfonts
-    fira-code
-    fira-code-symbols
     ubuntu_font_family
   ];
 
-  fonts.enableDefaultFonts = true;
-  fonts.fontconfig = {
+  home.fonts.enableDefaultFonts = true;
+  home.fonts.fontconfig = {
     defaultFonts = {
       serif = [ "Ubuntu" ];
       sansSerif = [ "Ubuntu" ];
