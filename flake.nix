@@ -19,6 +19,7 @@
 
     inherit (util) host;
     inherit (util) user;
+    inherit (util) shell;
 
     system = "x86_64-linux";
 

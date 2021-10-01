@@ -17,7 +17,7 @@
   console = {
     font = "Ubuntu";
     keyMap = "us";
-  }
+  };
 
   hardware.enableRedistributableFirmware = lib.mkDefault true;
 

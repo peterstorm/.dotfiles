@@ -36,7 +36,7 @@ with builtins;
   };
 
 
- mkSystemUser = {name, groups, uid, shell, ...}:
+ mkSystemUser = {name, groups, uid, ...}:
  {
     users.users."${name}" = {
       name = name;
