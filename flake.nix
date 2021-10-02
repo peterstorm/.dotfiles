@@ -30,13 +30,15 @@
   in {
 
     homeManagerConfigurations = {
+
       peterstorm = user.mkHMUser {
-        roles = [ "git" "tmux" "windowManager/xmonad" ];
+        roles = [ "core-apps" "window-manager/xmonad" ];
         username = "peterstorm";
       };
     };
 
     nixosConfigurations = {
+
       laptop-xps = host.mkHost {
         name = "laptop-xps";
         NICs = [ "wlp0s20f3" ];
@@ -54,7 +56,7 @@
           ignoreConfigErrors = true;
         }];
         kernelParams = [ "acpi_rev_override" ];
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
         users = [{
           name = "peterstorm";
           groups = [ "wheel" "networkmanager" "docker" ];

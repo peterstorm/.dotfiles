@@ -1,7 +1,6 @@
 {config, pkgs, lib, ...}:
 
 {
-
   nix = {
     extraOptions = "experimental-features = nix-command flakes";
     gc = {
@@ -17,13 +16,11 @@
   hardware.enableRedistributableFirmware = lib.mkDefault true;
   hardware.video.hidpi.enable = lib.mkDefault true;
 
-  # Hot fix for issues
   documentation.info.enable = false;
 
   virtualisation.docker.enable = true;
 
   environment.systemPackages = with pkgs; [
-
     # Core utilities that need to be on every machine
     wget
     curl

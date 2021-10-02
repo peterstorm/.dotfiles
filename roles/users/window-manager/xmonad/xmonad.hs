@@ -788,8 +788,7 @@ myKeys =
 main :: IO ()
 main = do
     -- Launching three instances of xmobar on their monitors.
-    xmproc0 <- spawnPipe "xmobar -x 0 /home/peterstorm/.config/xmobar/xmobarrc0"
-    xmproc1 <- spawnPipe "xmobar -x 1 /home/peterstorm/.config/xmobar/xmobarrc1"
+    xmproc0 <- spawnPipe "xmobar"
     -- the xmonad, ya know...what the WM is named after!
     xmonad $ dynamicProjects projects
            $ withNavigation2DConfig myNav2DConf
@@ -809,7 +808,7 @@ main = do
         , normalBorderColor  = myNormColor
         , focusedBorderColor = myFocusedBorderColor
         , logHook = workspaceHistoryHook <+> myLogHook <+> dynamicLogWithPP xmobarPP
-                        { ppOutput = \x -> hPutStrLn xmproc0 x >> hPutStrLn xmproc1 x
+                        { ppOutput = \x -> hPutStrLn xmproc0 x
                         , ppCurrent = xmobarColor "#c3e88d" "" . wrap "[" "]" -- Current workspace in xmobar
                         , ppVisible = xmobarColor "#c3e88d" ""                -- Visible but not current workspace
                         , ppHidden = xmobarColor "#82AAFF" "" . wrap "*" ""   -- Hidden workspaces in xmobar

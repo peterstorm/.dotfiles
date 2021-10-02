@@ -5,6 +5,12 @@
     EDITOR = "nvim";
   };
 
+  imports = [
+    ./git
+    ./tmux
+    ./alacritty
+  ];
+
   home.packages = with pkgs;[
     firefox
     google-chrome
