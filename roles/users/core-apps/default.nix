@@ -9,6 +9,7 @@
     ./git
     ./tmux
     ./alacritty
+    ./starship
   ];
 
   home.packages = with pkgs;[
