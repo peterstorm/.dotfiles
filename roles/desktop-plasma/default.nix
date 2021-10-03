@@ -6,12 +6,12 @@
   services.xserver = {
     enable = true;
     layout = "us";
-    xkbOptions = "caps:none";
-    displayManager = {
-      sddm.enable = true;
-      defaultSession = "none+xmonad";
-    };
     libinput.enable = true;
+    xkbOptions = "caps:none, caps:hyper";
+    displayManager = {
+      defaultSession = "none+xmonad";
+      sddm.enable = true;
+    };
     windowManager.xmonad = {
       enable = true;
       enableContribAndExtras = true;
