@@ -43,6 +43,7 @@
     kubernetes-helm # Shell
     kube3d
     ripgrep
+    gcc
   ];
 }
 
