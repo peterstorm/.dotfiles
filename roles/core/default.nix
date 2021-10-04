@@ -20,9 +20,14 @@
 
   virtualisation.docker.enable = true;
 
+  environment.interactiveShellInit = ''
+    eval "$(starship init bash)"
+  '';
+
   environment.systemPackages = with pkgs; [
     # Core utilities that need to be on every machine
     wget
+    xcape
     curl
     killall
     htop

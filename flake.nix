@@ -5,6 +5,8 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    neovim-nightly-overlay.url = "github:nix-community/neovim-nightly-overlay";
+    neovim-nightly-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, ... }:
@@ -24,7 +26,7 @@
     pkgs = import nixpkgs {
       inherit system;
       config = { allowUnfree = true; };
-      overlays = [];
+      overlays = [ inputs.neovim-nightly-overlay.overlay ];
     };
 
   in {

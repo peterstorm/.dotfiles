@@ -10,6 +10,7 @@
     ./tmux
     ./alacritty
     ./starship
+    ./neovim
   ];
 
   home.packages = with pkgs;[
@@ -17,7 +18,6 @@
     google-chrome
     element-desktop
     discord
-    neovim
   ];
 }
 

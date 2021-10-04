@@ -7,7 +7,7 @@
     enable = true;
     layout = "us";
     libinput.enable = true;
-    xkbOptions = "caps:none, caps:hyper";
+    xkbOptions = "caps:hyper";
     displayManager = {
       defaultSession = "none+xmonad";
       sddm.enable = true;
