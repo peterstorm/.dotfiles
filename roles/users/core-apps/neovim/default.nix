@@ -10,5 +10,6 @@
     ".config/nvim/lua/settings/setup.lua".source = ./lua/settings/setup.lua;
     ".config/nvim/lua/plugins.lua".source = ./lua/plugins.lua;
     ".config/nvim/lua/settings/nvim-treesitter.lua".source = ./lua/settings/nvim-treesitter.lua;
+    ".config/nvim/lua/settings/nvim-cmp.lua".source = ./lua/settings/nvim-cmp.lua;
   };
 }

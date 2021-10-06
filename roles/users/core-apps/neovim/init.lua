@@ -38,11 +38,12 @@ opt.undofile = true                 -- persistent undo
 cmd('colorscheme tomorrow-night-eighties')
 
 -- nvim mappings
-g.mapleader = ","
+g['mapleader'] = ","
 map('i', 'jk', '<ESC>')
 map('x', 'jk', '<ESC>')
 map('v', 'jk', '<ESC>')
 map('n', 'n', '<cmd>noh<cr>')
+map('n', '<leader>bd', '<cmd>bd<cr>')
 
 -- telescope config
 map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
@@ -51,3 +52,26 @@ map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
 
 -- nvim-treesitter config
 require('settings.nvim-treesitter').setup()
+
+-- nvim-cmp config
+require('settings.nvim-cmp').setup()
+
+-- vim-sneak config
+g['sneak#label'] = 1
+
+-- lsp config
+map('n', '<leader>gd', [[<cmd>lua vim.lsp.buf.declaration()<cr>]])
+
+-- metals config
+metals_config = require("metals").bare_config
+metals_config.init_options.statusBarProvider = "on"
+cmd([[augroup lsp]])
+cmd([[autocmd!]])
+cmd([[autocmd FileType scala,sbt lua require("metals").initialize_or_attach(metals_config)]])
+cmd([[augroup end]])
+
+-- lualine config
+require('lualine').setup {
+  options = { theme = 'iceberg_dark' }
+}
+

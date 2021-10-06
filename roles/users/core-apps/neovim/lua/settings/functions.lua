@@ -7,4 +7,3 @@ end
 return {
   map = map
 }
-
