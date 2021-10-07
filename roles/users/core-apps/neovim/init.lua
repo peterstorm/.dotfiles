@@ -59,9 +59,6 @@ require('settings.nvim-cmp').setup()
 -- vim-sneak config
 g['sneak#label'] = 1
 
--- lsp config
-map('n', '<leader>gd', [[<cmd>lua vim.lsp.buf.declaration()<cr>]])
-
 -- metals config
 metals_config = require("metals").bare_config
 metals_config.init_options.statusBarProvider = "on"
@@ -70,8 +67,11 @@ cmd([[autocmd!]])
 cmd([[autocmd FileType scala,sbt lua require("metals").initialize_or_attach(metals_config)]])
 cmd([[augroup end]])
 
+-- lsp config
+map('n', '<leader>gd', '<cmd>lua vim.lsp.buf.declaration()<cr>')
+
 -- lualine config
 require('lualine').setup {
-  options = { theme = 'iceberg_dark' }
+  options = { theme = 'iceberg_dark' },
+  sections = { lualine_a = {'g:metals_status'} }
 }
-
