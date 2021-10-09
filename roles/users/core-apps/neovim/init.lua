@@ -46,9 +46,13 @@ map('n', 'n', '<cmd>noh<cr>')
 map('n', '<leader>bd', '<cmd>bd<cr>')
 
 -- telescope config
+require('telescope').load_extension('fzy_native')
+require('telescope').load_extension('coc')
 map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
 map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
 map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
+map('n', '<leader>ds', '<cmd>Telescope coc document_symbols<cr>')
+map('n', '<leader>cc', '<cmd>Telescope coc commands<cr>')
 
 -- nvim-treesitter config
 require('settings.nvim-treesitter').setup()
@@ -56,22 +60,20 @@ require('settings.nvim-treesitter').setup()
 -- nvim-cmp config
 require('settings.nvim-cmp').setup()
 
+-- coc.nvim config
+map('n', '<leader>cd', '<cmd>call CocActionAsync("jumpDefinition")<cr>')
+map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticPrevious")<cr>')
+map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
+map('n', 'K', '<cmd>call CocActionAsync("doHover")<cr>')
+
+
+
+-- lualine config
 -- vim-sneak config
 g['sneak#label'] = 1
-
--- metals config
-metals_config = require("metals").bare_config
-metals_config.init_options.statusBarProvider = "on"
-cmd([[augroup lsp]])
-cmd([[autocmd!]])
-cmd([[autocmd FileType scala,sbt lua require("metals").initialize_or_attach(metals_config)]])
-cmd([[augroup end]])
-
--- lsp config
-map('n', '<leader>gd', '<cmd>lua vim.lsp.buf.declaration()<cr>')
 
 -- lualine config
 require('lualine').setup {
   options = { theme = 'iceberg_dark' },
-  sections = { lualine_a = {'g:metals_status'} }
+  sections = { lualine_a = {'g:coc_status'} }
 }

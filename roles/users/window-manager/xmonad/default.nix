@@ -4,6 +4,8 @@
     ../shared/xmobar
   ];
 
+  home.keyboard = null;
+
   xsession = {
     enable = true;
     windowManager.xmonad = {

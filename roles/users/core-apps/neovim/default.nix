@@ -2,6 +2,7 @@
 {
   home.packages = with pkgs; [
     neovim-nightly
+    nodejs-16_x
   ];
 
   home.file = {

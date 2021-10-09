@@ -6,7 +6,14 @@
   services.xserver = {
     enable = true;
     layout = "us";
-    libinput.enable = true;
+    libinput = {
+      enable = true;
+      touchpad.disableWhileTyping = true;
+      touchpad.tapping = true;
+      touchpad.additionalOptions = ''
+        Option "PalmDetection" "on"
+      '';
+    };
     xkbOptions = "caps:hyper";
     displayManager = {
       defaultSession = "none+xmonad";
