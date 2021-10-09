@@ -65,10 +65,16 @@ map('n', '<leader>cd', '<cmd>call CocActionAsync("jumpDefinition")<cr>')
 map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticPrevious")<cr>')
 map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
 map('n', 'K', '<cmd>call CocActionAsync("doHover")<cr>')
+cmd[[inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"]]
+cmd[[inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"]]
+cmd[[nnoremap <expr><C-f> coc#util#has_float() ? coc#util#float_scroll(1) : "\<C-f>"]]
+cmd[[nnoremap <expr><C-b> coc#util#has_float() ? coc#util#float_scroll(0) : "\<C-b>"]]
+cmd[[if exists('*complete_info')
+  inoremap <expr> <cr> complete_info()["selected"] != "-1" ? "\<C-y>" : "\<C-g>u\<CR>"
+else
+  imap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
+endif]]
 
-
-
--- lualine config
 -- vim-sneak config
 g['sneak#label'] = 1
 
@@ -77,3 +83,9 @@ require('lualine').setup {
   options = { theme = 'iceberg_dark' },
   sections = { lualine_a = {'g:coc_status'} }
 }
+
+-- vim-fugitive
+map('n', '<leader>gs', '<cmd>Git<cr>')
+map('n', '<leader>gc', '<cmd>Git commit<cr>')
+map('n', '<leader>gl', '<cmd>Git log<cr>')
+
