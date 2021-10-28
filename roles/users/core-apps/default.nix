@@ -16,8 +16,10 @@
   home.packages = with pkgs;[
     firefox
     google-chrome
+    gparted
     element-desktop
     discord
+    slack
   ];
 }
 
