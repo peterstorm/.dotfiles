@@ -53,6 +53,7 @@ map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
 map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
 map('n', '<leader>ds', '<cmd>Telescope coc document_symbols<cr>')
 map('n', '<leader>cc', '<cmd>Telescope coc commands<cr>')
+map('n', '<leader>cd', '<cmd>Telescope coc diagnostics<cr>')
 
 -- nvim-treesitter config
 require('settings.nvim-treesitter').setup()
@@ -61,9 +62,11 @@ require('settings.nvim-treesitter').setup()
 require('settings.nvim-cmp').setup()
 
 -- coc.nvim config
-map('n', '<leader>cd', '<cmd>call CocActionAsync("jumpDefinition")<cr>')
+map('n', '<leader>gd', '<cmd>call CocActionAsync("jumpDefinition")<cr>')
 map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticPrevious")<cr>')
-map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
+map('n', '<leader>d.', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
+map('n', '<leader>ca', '<cmd>call CocActionAsync("codeAction", "cursor")<cr>')
+map('n', '<leader>rn', '<cmd>call CocActionAsync("rename")<cr>')
 map('n', 'K', '<cmd>call CocActionAsync("doHover")<cr>')
 cmd[[inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"]]
 cmd[[inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"]]
