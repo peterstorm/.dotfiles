@@ -44,6 +44,7 @@ map('x', 'jk', '<ESC>')
 map('v', 'jk', '<ESC>')
 map('n', 'n', '<cmd>noh<cr>')
 map('n', '<leader>bd', '<cmd>bd<cr>')
+map('n', '<leader>e', '<cmd>Explore<cr>')
 
 -- telescope config
 require('telescope').load_extension('fzy_native')
@@ -91,4 +92,7 @@ require('lualine').setup {
 map('n', '<leader>gs', '<cmd>Git<cr>')
 map('n', '<leader>gc', '<cmd>Git commit<cr>')
 map('n', '<leader>gl', '<cmd>Git log<cr>')
+map('n', '<leader>gp', '<cmd>Git push<cr>')
 
+-- comment nvim
+require('Comment').setup()

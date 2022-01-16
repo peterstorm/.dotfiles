@@ -9,6 +9,12 @@ return require('packer').startup(function(use)
   use 'hoob3rt/lualine.nvim'
   use {'neoclide/coc.nvim', branch = 'release'}
   use 'fannheyward/telescope-coc.nvim'
+  use {
+    'numToStr/Comment.nvim',
+    config = function()
+        require('Comment').setup()
+    end
+  }
   --use 'neovim/nvim-lspconfig'
   --use({'scalameta/nvim-metals', requires = { "nvim-lua/plenary.nvim" }})
   use({

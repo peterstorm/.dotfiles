@@ -20,6 +20,8 @@
     element-desktop
     discord
     slack
+    torrential
+    vlc
   ];
 }
 
