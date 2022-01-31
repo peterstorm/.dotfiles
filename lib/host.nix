@@ -42,6 +42,7 @@ with builtins;
       kernelParams,
       kernelPackage,
       roles,
+      machine,
       cpuCores,
       laptop,
       users,
@@ -62,18 +63,21 @@ with builtins;
       }];
 
       roles_mods = (map (r: mkRole r) roles );
+      machine_mods = (map (m: mkMachine m) machine );
       sys_users = (map (u: user.mkSystemUser u) users);
 
       flaten = lst: foldl' (l: r: l // r) {} lst;
 
       mkRole = name: import (../roles + "/${name}");
 
+      mkMachine = name: import (../machines + "/${name}");
+
     in lib.nixosSystem {
       inherit system;
 
       modules = [
         {
-          imports = [ ../modules ] ++ roles_mods ++ sys_users;
+          imports = [ ../modules ] ++ roles_mods ++ sys_users ++ machine_mods;
 
           environment.etc = {
             "hmsystemdata.json".text = builtins.toJSON userCfg;

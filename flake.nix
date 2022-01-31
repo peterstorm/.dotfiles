@@ -43,6 +43,8 @@
 
       laptop-xps = host.mkHost {
         name = "laptop-xps";
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
+        machine = [ "laptop-xps" ];
         NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
         initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
@@ -59,7 +61,6 @@
           ignoreConfigErrors = true;
         }];
         kernelParams = [ "acpi_rev_override" ];
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
         users = [{
           name = "peterstorm";
           groups = [ "wheel" "networkmanager" "docker" ];
