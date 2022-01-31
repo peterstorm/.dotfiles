@@ -41,7 +41,7 @@
 
     nixosConfigurations = {
 
-      nixos = host.mkHost {
+      laptop-xps = host.mkHost {
         name = "laptop-xps";
         NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
