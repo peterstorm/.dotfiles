@@ -35,6 +35,7 @@ with builtins;
     mkHost = { 
       name, 
       NICs, 
+      initrdAvailableMods,			
       initrdMods,
       kernelMods, 
       kernelPatches,
@@ -85,7 +86,8 @@ with builtins;
           networking.networkmanager.enable = true;
           networking.useDHCP = false; # Disable any new interface added that is not in config.
 
-          boot.initrd.availableKernelModules = initrdMods;
+          boot.initrd.availableKernelModules = initrdAvailableMods;
+  	  boot.initrd.kernelModules = initrdMods;
           boot.kernelModules = kernelMods;
           boot.kernelPatches = kernelPatches;
           boot.kernelParams = kernelParams;

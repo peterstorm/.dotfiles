@@ -4,7 +4,7 @@
     enable = true;
     settings = {
       General = {
-        Enable = "Source,Sink,Media,Socke";
+        Enable = "Source,Sink,Media,Socket";
       };
     };
   };

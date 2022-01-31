@@ -41,11 +41,12 @@
 
     nixosConfigurations = {
 
-      laptop-xps = host.mkHost {
+      nixos = host.mkHost {
         name = "laptop-xps";
         NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
-        initrdMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
+        initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
+        initrdMods = [ "dm-snapshot" ];
         kernelMods = [ "kvm-intel" ];
         kernelPatches = [{
           name = "enable-soundwire-drivers";
