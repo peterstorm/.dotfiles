@@ -69,6 +69,22 @@
         cpuCores = 8;
         laptop = true;
       };
+
+      desktop = host.mkHost {
+        name = "desktop";
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "nvidia-graphics" ];
+        machine = [ "desktop" ];
+        NICs = [ "wlp5s0" "enp6s0" ];
+        kernelPackage = pkgs.linuxPackages_latest;
+        users = [{
+          name = "peterstorm";
+          groups = [ "wheel" "networkmanager" "docker" ];
+          uid = 1000;
+        }];
+        cpuCores = 8;
+        laptop = true;
+      };
+
     };
   };
 }

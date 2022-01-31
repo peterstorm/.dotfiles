@@ -22,7 +22,7 @@
     [ { device = "/dev/disk/by-uuid/0ade5970-fd1f-48d0-a315-b5b52099e63b"; }
     ];
 
-  hardware.cpu.intel.updateMicrocode = true;
+  hardware.amd.intel.updateMicrocode = true;
 
 }
 
