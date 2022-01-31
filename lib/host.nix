@@ -32,19 +32,19 @@ with builtins;
       ];
     };
 
-    mkHost = { 
-      name, 
-      NICs, 
-      initrdAvailableMods,			
+    mkHost = {
+      name,
+      NICs,
+      initrdAvailableMods,
       initrdMods,
-      kernelMods, 
+      kernelMods,
       kernelPatches,
-      kernelParams, 
-      kernelPackage, 
-      roles, 
-      cpuCores, 
-      laptop, 
-      users, 
+      kernelParams,
+      kernelPackage,
+      roles,
+      cpuCores,
+      laptop,
+      users,
       wifi ? [],
       gpuTempSensor ? null,
       cpuTempSensor ? null}:
@@ -87,7 +87,7 @@ with builtins;
           networking.useDHCP = false; # Disable any new interface added that is not in config.
 
           boot.initrd.availableKernelModules = initrdAvailableMods;
-  	  boot.initrd.kernelModules = initrdMods;
+          boot.initrd.kernelModules = initrdMods;
           boot.kernelModules = kernelMods;
           boot.kernelPatches = kernelPatches;
           boot.kernelParams = kernelParams;

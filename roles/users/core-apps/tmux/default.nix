@@ -25,5 +25,9 @@
       bind-key -n C-z resize-pane -Z
     '';
   };
+
+  home.file = {
+    ".tmux.sh".source = ./.tmux.sh;
+  };
 }
 
