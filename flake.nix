@@ -75,6 +75,11 @@
         roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "nvidia-graphics" ];
         machine = [ "desktop" ];
         NICs = [ "wlp5s0" "enp6s0" ];
+        initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
+        initrdMods = [];
+        kernelMods = [ "kvm-amd" ];
+        kernelPatches = [];
+        kernelParams = [];
         kernelPackage = pkgs.linuxPackages_latest;
         users = [{
           name = "peterstorm";

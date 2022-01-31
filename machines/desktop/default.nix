@@ -1,28 +1,21 @@
 { pkgs, lib, config, ...}:
 {
 
-  boot.initrd.luks.devices = {
-    root = {
-      device = "/dev/nvme0n1p2";
-      preLVM = true;
-    };
-  };
-
   fileSystems."/" =
-    { device = "/dev/disk/by-uuid/11374d4d-27ea-465c-919d-5554be3af4be";
+    { device = "/dev/disk/by-uuid/4599e228-a6ce-4bf8-82da-f900e46b508d";
       fsType = "ext4";
     };
 
   fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/F800-7BD7";
+    { device = "/dev/disk/by-uuid/DDF7-F2D8";
       fsType = "vfat";
     };
 
   swapDevices =
-    [ { device = "/dev/disk/by-uuid/0ade5970-fd1f-48d0-a315-b5b52099e63b"; }
+    [ { device = "/dev/disk/by-uuid/edab49d9-d6b5-47ef-a74f-c1edf349069e"; }
     ];
 
-  hardware.amd.intel.updateMicrocode = true;
+  hardware.cpu.amd.updateMicrocode = true;
 
 }
 

@@ -98,7 +98,7 @@ with builtins;
           boot.kernelPackages = kernelPackage;
 
           nixpkgs.pkgs = pkgs;
-          nix.settings.maxJobs = lib.mkDefault cpuCores;
+          nix.settings.max-jobs = lib.mkDefault cpuCores;
 
           system.stateVersion = "21.05";
 
