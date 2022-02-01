@@ -42,7 +42,7 @@ g['mapleader'] = ","
 map('i', 'jk', '<ESC>')
 map('x', 'jk', '<ESC>')
 map('v', 'jk', '<ESC>')
-map('n', 'n', '<cmd>noh<cr>')
+map('n', '<leader>n', '<cmd>noh<cr>')
 map('n', '<leader>bd', '<cmd>bd<cr>')
 map('n', '<leader>e', '<cmd>Explore<cr>')
 
