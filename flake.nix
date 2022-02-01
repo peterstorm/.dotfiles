@@ -70,6 +70,26 @@
         laptop = true;
       };
 
+      laptop-work = host.mkHost {
+        name = "laptop-work";
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
+        machine = [ "laptop-work" ];
+        NICs = [ "SETME" ];
+        kernelPackage = pkgs.linuxPackages_latest;
+        initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
+        initrdMods = [ "dm-snapshot" ];
+        kernelMods = [ "kvm-intel" ];
+        kernelPatches = [];
+        kernelParams = [ "acpi_rev_override" ];
+        users = [{
+          name = "peterstorm";
+          groups = [ "wheel" "networkmanager" "docker" ];
+          uid = 1000;
+        }];
+        cpuCores = 8;
+        laptop = true;
+      };
+
       desktop = host.mkHost {
         name = "desktop";
         roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "nvidia-graphics" ];
