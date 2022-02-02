@@ -74,7 +74,7 @@
         name = "laptop-work";
         roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
         machine = [ "laptop-work" ];
-        NICs = [ "SETME" ];
+        NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
         initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
         initrdMods = [ "dm-snapshot" ];

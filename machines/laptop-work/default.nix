@@ -9,17 +9,17 @@
   };
 
   fileSystems."/" =
-    { device = "/dev/disk/by-uuid/11374d4d-27ea-465c-919d-5554be3af4be";
+    { device = "/dev/disk/by-uuid/a422f57f-f490-46df-8d43-bc660435b040";
       fsType = "ext4";
     };
 
   fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/F800-7BD7";
+    { device = "/dev/disk/by-uuid/A647-6038";
       fsType = "vfat";
     };
 
   swapDevices =
-    [ { device = "/dev/disk/by-uuid/0ade5970-fd1f-48d0-a315-b5b52099e63b"; }
+    [ { device = "/dev/disk/by-uuid/24f2a3e7-0469-4b5c-88aa-62111314e383"; }
     ];
 
   hardware.cpu.intel.updateMicrocode = true;
