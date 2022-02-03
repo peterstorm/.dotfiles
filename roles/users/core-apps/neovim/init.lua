@@ -45,6 +45,9 @@ map('v', 'jk', '<ESC>')
 map('n', '<leader>n', '<cmd>noh<cr>')
 map('n', '<leader>bd', '<cmd>bd<cr>')
 map('n', '<leader>e', '<cmd>Explore<cr>')
+map('n', '<leader>hs', '<cmd>split<cr>')
+map('n', '<leader>vs', '<cmd>vsplit<cr>')
+map('n', '<leader>cs', '<cmd>close<cr>')
 
 -- telescope config
 require('telescope').load_extension('fzy_native')
@@ -64,6 +67,7 @@ require('settings.nvim-cmp').setup()
 
 -- coc.nvim config
 map('n', '<leader>gd', '<cmd>call CocActionAsync("jumpDefinition")<cr>')
+map('n', '<leader>gr', '<cmd>call CocActionAsync("jumpReferences")<cr>')
 map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticPrevious")<cr>')
 map('n', '<leader>d.', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
 map('n', '<leader>ca', '<cmd>call CocActionAsync("codeAction", "cursor")<cr>')
