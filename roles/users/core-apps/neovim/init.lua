@@ -52,6 +52,18 @@ map('n', '<leader>cs', '<cmd>close<cr>')
 -- telescope config
 require('telescope').load_extension('fzy_native')
 require('telescope').load_extension('coc')
+local actions = require "telescope.actions"
+require("telescope").setup {
+  pickers = {
+    buffers = {
+      mappings = {
+        i = {
+          ["<c-d>"] = actions.delete_buffer + actions.move_to_top,
+        }
+      }
+    }
+  }
+}
 map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
 map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
 map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')

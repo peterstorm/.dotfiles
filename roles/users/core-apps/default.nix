@@ -22,6 +22,8 @@
     slack
     torrential
     vlc
+    i3lock
   ];
+
 }
 
