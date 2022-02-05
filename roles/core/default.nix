@@ -23,7 +23,7 @@
   environment.interactiveShellInit = ''
     eval "$(starship init bash)"
     alias lock='i3lock -c 000000'
-    alias suspend='systemctl suspend'
+    alias sus='systemctl suspend'
   '';
 
   environment.systemPackages = with pkgs; [
