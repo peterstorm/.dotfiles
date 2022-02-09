@@ -70,7 +70,7 @@ map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
 map('n', '<leader>ds', '<cmd>Telescope coc document_symbols<cr>')
 map('n', '<leader>cc', '<cmd>Telescope coc commands<cr>')
 map('n', '<leader>cd', '<cmd>Telescope coc diagnostics<cr>')
-map('n', '<c-R>', '<cmd>Telescope resume<cr>')
+map('n', '<leader>fr', '<cmd>Telescope resume<cr>')
 
 -- nvim-treesitter config
 require('settings.nvim-treesitter').setup()

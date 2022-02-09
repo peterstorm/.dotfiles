@@ -23,6 +23,7 @@
     torrential
     vlc
     i3lock
+    zoom-us
   ];
 
 }

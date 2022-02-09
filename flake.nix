@@ -70,7 +70,16 @@
         initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
         initrdMods = [ "dm-snapshot" ];
         kernelMods = [ "kvm-intel" ];
-        kernelPatches = [];
+        kernelPatches = [{
+          name = "enable-soundwire-drivers";
+          patch = null;
+          extraConfig = ''
+            SND_SOC_INTEL_USER_FRIENDLY_LONG_NAMES y
+            SND_SOC_INTEL_SOUNDWIRE_SOF_MACH m
+            SND_SOC_RT1308 m
+          '';
+          ignoreConfigErrors = true;
+        }];
         kernelParams = [ "acpi_rev_override" ];
         users = [{
           name = "peterstorm";
