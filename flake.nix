@@ -43,7 +43,7 @@
 
       laptop-xps = host.mkHost {
         name = "laptop-xps";
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "plex" ];
         machine = [ "laptop-xps" ];
         NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
