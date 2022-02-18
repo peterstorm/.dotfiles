@@ -34,7 +34,7 @@
     homeManagerConfigurations = {
 
       peterstorm = user.mkHMUser {
-        roles = [ "core-apps" "window-manager/xmonad" ];
+        roles = [ "core-apps" "window-manager/xmonad" "dunst" ];
         username = "peterstorm";
       };
     };
