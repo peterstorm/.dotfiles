@@ -48,17 +48,22 @@ map('n', '<leader>e', '<cmd>Explore<cr>')
 map('n', '<leader>hs', '<cmd>split<cr>')
 map('n', '<leader>vs', '<cmd>vsplit<cr>')
 map('n', '<leader>cs', '<cmd>close<cr>')
+map('n', '<leader>h', '<cmd>vertical res -10<cr>')
+map('n', '<leader>l', '<cmd>vertical res +10<cr>')
+map('n', '<leader>j', '<cmd>res +10<cr>')
+map('n', '<leader>k', '<cmd>res -10<cr>')
 
 -- telescope config
 require('telescope').load_extension('fzy_native')
 require('telescope').load_extension('coc')
 local actions = require "telescope.actions"
 require("telescope").setup {
+  file_ignore_patterns = { "node_modules", "%.kml" },
   pickers = {
     buffers = {
       mappings = {
         i = {
-          ["<c-d>"] = actions.delete_buffer + actions.move_to_top,
+          ["<C-d>"] = actions.delete_buffer + actions.move_to_top,
         }
       }
     }
