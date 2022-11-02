@@ -100,7 +100,7 @@ with builtins;
           nixpkgs.pkgs = pkgs;
           nix.settings.max-jobs = lib.mkDefault cpuCores;
 
-          system.stateVersion = "21.05";
+          system.stateVersion = "22.11";
 
         }
 

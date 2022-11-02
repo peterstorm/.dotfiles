@@ -5,12 +5,15 @@ local opt = vim.opt  -- to set options
 local f = require('settings.functions')
 local setup = require('settings.setup')
 local map = f.map
+local keyset = vim.keymap.set
+
 
 -- setup packer and plugins
 setup.bootstrapPacker()
 require('plugins')
 
 -- generel nvim config
+opt.colorcolumn = "80"
 opt.expandtab = true                -- Use spaces instead of tabs
 opt.hidden = true                   -- Enable background buffers
 opt.hlsearch = true                 -- Highlight search terms
@@ -91,16 +94,25 @@ map('n', '<leader>d.', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
 map('n', '<leader>ca', '<cmd>call CocActionAsync("codeAction", "cursor")<cr>')
 map('n', '<leader>rn', '<cmd>call CocActionAsync("rename")<cr>')
 map('n', 'K', '<cmd>call CocActionAsync("doHover")<cr>')
-cmd[[inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"]]
-cmd[[inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"]]
-cmd[[nnoremap <expr><C-f> coc#util#has_float() ? coc#util#float_scroll(1) : "\<C-f>"]]
-cmd[[nnoremap <expr><C-b> coc#util#has_float() ? coc#util#float_scroll(0) : "\<C-b>"]]
-cmd[[if exists('*complete_info')
-  inoremap <expr> <cr> complete_info()["selected"] != "-1" ? "\<C-y>" : "\<C-g>u\<CR>"
-else
-  imap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
-endif]]
 
+function _G.check_back_space()
+    local col = vim.fn.col('.') - 1
+    return col == 0 or vim.fn.getline('.'):sub(col, col):match('%s') ~= nil
+end
+
+-- Use tab for trigger completion with characters ahead and navigate.
+-- NOTE: There's always complete item selected by default, you may want to enable
+-- no select by `"suggest.noselect": true` in your configuration file.
+-- NOTE: Use command ':verbose imap <tab>' to make sure tab is not mapped by
+-- other plugin before putting this into your config.
+local opts = {silent = true, noremap = true, expr = true, replace_keycodes = false}
+keyset("i", "<TAB>", 'coc#pum#visible() ? coc#pum#next(1) : v:lua.check_back_space() ? "<TAB>" : coc#refresh()', opts)
+keyset("i", "<S-TAB>", [[coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"]], opts)
+
+-- Make <CR> to accept selected completion item or notify coc.nvim to format
+-- <C-g>u breaks current undo, please make your own choice.
+keyset("i", "<cr>", [[coc#pum#visible() ? coc#pum#confirm() : "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"]], opts)
+--
 -- vim-sneak config
 g['sneak#label'] = 1
 

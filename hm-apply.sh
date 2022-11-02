@@ -1,3 +1,3 @@
 #!/bin/sh
-nix build --impure .#homeManagerConfigurations.$USER.activationPackage
+nix build .#homeManagerConfigurations.$USER.activationPackage
 result/activate

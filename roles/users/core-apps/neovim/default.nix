@@ -1,8 +1,8 @@
 {pkgs, lib, config, ...}:
 {
   home.packages = with pkgs; [
-    neovim-nightly
     nodejs-16_x
+    neovim-nightly
   ];
 
   home.file = {
