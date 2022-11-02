@@ -14,6 +14,7 @@
   ];
 
   home.packages = with pkgs;[
+    cachix
     firefox
     google-chrome
     gparted
@@ -25,6 +26,7 @@
     i3lock
     zoom-us
     obsidian
+    docker-compose
   ];
 
 }

@@ -616,10 +616,18 @@ searchList = [ ("a", archwiki)
              , ("z", S.amazon)
              ]
 
+safeLast :: [String] -> String
+safeLast [] = ""
+safeLast x = last x
+
+electronIdentifier :: String -> String
+electronIdentifier = safeLast . words
+
 myScratchpads :: [NamedScratchpad]
 myScratchpads =
     [   (NS "term" spawnTerm findTerm manageTerm)
     ,   (NS "fox" spawnFox findFox manageFox)
+    ,   (NS "obs" spawnObs findObs manageObs)
     ] 
   where
     spawnTerm = myTerminal ++ " -t scratchpad"
@@ -633,6 +641,14 @@ myScratchpads =
     spawnFox = "firefox -P scratchpad --class foxpad"
     findFox = className =? "foxpad"
     manageFox = customFloating $ W.RationalRect l t w h
+               where
+                 h = (5/6)
+                 w = (4/6)
+                 t = 0.08
+                 l = 0.315
+    spawnObs = "obsidian --class obspad"
+    findObs = (electronIdentifier <$> className) =? "obspad"
+    manageObs = customFloating $ W.RationalRect l t w h
                where
                  h = (5/6)
                  w = (4/6)
@@ -694,6 +710,7 @@ myKeys =
     -- Scratchpads
         , ("M-S-x", namedScratchpadAction myScratchpads "term")
         , ("M-x", namedScratchpadAction myScratchpads "fox")
+        , ("M-o", namedScratchpadAction myScratchpads "obs")
 
     -- Grid Select (CTRL-g followed by a key)
         , ("C-g g", spawnSelected' myAppGrid)                 -- grid select favorite apps

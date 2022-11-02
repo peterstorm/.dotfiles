@@ -1,6 +1,9 @@
 {config, pkgs, lib, ...}:
 
 {
+  imports = [
+   ./cachix.nix
+  ];
   nix = {
     extraOptions = "experimental-features = nix-command flakes";
     gc = {
@@ -8,6 +11,14 @@
       options = "--delete-older-than 5d";
     };
     package = pkgs.nixUnstable;
+    settings = {
+      trusted-public-keys = [
+        "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
+      ];
+      substituters = [
+        "https://cache.iog.io"
+      ];
+    };
   };
 
   time.timeZone = "Europe/Copenhagen";
