@@ -136,6 +136,6 @@ require('Comment').setup()
 api.nvim_create_autocmd(
   "BufWritePost",
   { pattern = "*.hs"
-  , command = "%!fourmolu -q --stdin-input-file %:p"
+  , command = "silent %!fourmolu -q --stdin-input-file %:p"
   }
 )
