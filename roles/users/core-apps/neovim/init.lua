@@ -1,3 +1,4 @@
+local api = vim.api
 local cmd = vim.cmd  -- to execute Vim commands e.g. cmd('pwd')
 local fn = vim.fn    -- to call Vim functions e.g. fn.bufnr()
 local g = vim.g      -- a table to access global variables
@@ -130,3 +131,11 @@ map('n', '<leader>gp', '<cmd>Git push<cr>')
 
 -- comment nvim
 require('Comment').setup()
+
+-- haskell specific
+api.nvim_create_autocmd(
+  "BufWritePost",
+  { pattern = "*.hs"
+  , command = "%!fourmolu -q --stdin-input-file %:p"
+  }
+)
