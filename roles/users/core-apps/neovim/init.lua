@@ -133,9 +133,15 @@ map('n', '<leader>gp', '<cmd>Git push<cr>')
 require('Comment').setup()
 
 -- haskell specific
+fourmoluOnSave = function()
+  cmd("silent %!fourmolu -q --stdin-input-file %:p")
+  -- local key = api.nvim_replace_termcodes("<C-o>", true, false, true)
+  -- api.nvim_feedkeys(key, 'n', false)
+end
+
 api.nvim_create_autocmd(
-  "BufWritePost",
+  "BufWritePre",
   { pattern = "*.hs"
-  , command = "silent %!fourmolu -q --stdin-input-file %:p"
+  , callback = fourmoluOnSave
   }
 )
