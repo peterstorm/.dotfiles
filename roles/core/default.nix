@@ -5,7 +5,7 @@
     extraOptions = "experimental-features = nix-command flakes";
     gc = {
       automatic = true;
-      options = "--delete-older-than 5d";
+      options = "--delete-older-than 10d";
     };
     package = pkgs.nixUnstable;
     settings = {
@@ -38,6 +38,7 @@
 
   environment.systemPackages = with pkgs; [
     # Core utilities that need to be on every machine
+    awscli2
     wget
     xcape
     curl
@@ -51,7 +52,6 @@
     unrar
     gitAndTools.gh
     parted
-    kubectl # Should be moved to shell
     kubernetes-helm # Shell
     kube3d
     ripgrep

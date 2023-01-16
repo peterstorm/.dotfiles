@@ -196,7 +196,7 @@ wsWww = "www"
 myWorkspaces :: [String]
 myWorkspaces = fmap xmobarEscape
                -- $ ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
-               ["dev", "www", "chat", "sys", "gen", "mon"]
+               ["dev", "dev_two", "chat", "www", "sys", "mon"]
 
 projects :: [Project]
 projects =
@@ -220,12 +220,15 @@ projects =
                 , projectDirectory  = "~/"
                 , projectStartHook  = Nothing
                 }
+    , Project   { projectName       = "dev_two"
+                , projectDirectory  = "~/"
+                , projectStartHook  = Nothing
+                }
 
     , Project   { projectName       = "www"
                 , projectDirectory  = "~/"
                 , projectStartHook  = Nothing
                 }
-    
     , Project   { projectName       = "chat"
                 , projectDirectory  = "~/"
                 , projectStartHook  = Nothing
@@ -788,6 +791,8 @@ myKeys =
         , ("<XF86Mail>", runOrRaise "geary" (resource =? "thunderbird"))
         , ("<XF86Calculator>", runOrRaise "gcalctool" (resource =? "gcalctool"))
         , ("<XF86Eject>", spawn "toggleeject")
+        , ("<XF86MonBrightnessUp>", spawn "light -U 10")
+        , ("<XF86MonBrightnessDown>", spawn "light -A 10")
         , ("<Print>", spawn "scrotd 0")
         ]
         -- Appending search engine prompts to keybindings list.

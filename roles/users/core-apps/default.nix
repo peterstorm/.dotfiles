@@ -27,6 +27,7 @@
     zoom-us
     obsidian
     docker-compose
+    light
   ];
 
 }
