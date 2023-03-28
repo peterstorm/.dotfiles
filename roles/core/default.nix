@@ -24,13 +24,16 @@
   i18n.defaultLocale = "en_US.UTF-8";
 
   hardware.enableRedistributableFirmware = lib.mkDefault true;
-  hardware.video.hidpi.enable = lib.mkDefault true;
 
   documentation.info.enable = false;
 
   virtualisation.docker.enable = true;
 
   environment.interactiveShellInit = ''
+    if [ -z "$SSH_AUTH_SOCK" ] ; then
+      eval `ssh-agent -s`
+      ssh-add
+    fi
     eval "$(starship init bash)"
     alias lock='i3lock -c 000000'
     alias sus='systemctl suspend'
