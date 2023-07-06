@@ -9,6 +9,7 @@ return require('packer').startup(function(use)
   use 'hoob3rt/lualine.nvim'
   use {'neoclide/coc.nvim', branch = 'release'}
   use 'fannheyward/telescope-coc.nvim'
+  use 'github/copilot.vim'
   use {
     'numToStr/Comment.nvim',
     config = function()
