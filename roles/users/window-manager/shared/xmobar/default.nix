@@ -30,6 +30,8 @@
                             -- Disk space free
                           , Run DiskU [("/", "hdd: <free> free")] [] 60
                             -- Runs a standard shell command 'uname -r' to get kernel version
+                          , Run Battery ["BAT0"] 10
+                            -- Runs battery status
                           , Run Com "uname" ["-r"] "" 3600
                             -- Prints out the left side items such as workspaces, layout, etc.
                             -- The workspaces are 'clickable' in my configs.
@@ -37,7 +39,7 @@
                           ]
              , sepChar = "%"
              , alignSep = "}{"
-             , template = "<action=`xdotool key control+alt+g`><icon=haskell_20.xpm/> </action><fc=#666666>  |</fc> %UnsafeStdinReader% }{ <fc=#666666><fn=2>|</fn></fc><fc=#b3afc2><fn=1></fn>  %uname% </fc><fc=#666666> <fn=2>|</fn></fc><fc=#FFB86C> %cpu% </fc><fc=#666666><fn=2>|</fn></fc> <fc=#FF5555> %memory% </fc><fc=#666666> <fn=2>|</fn></fc> <fc=#82AAFF> %disku% </fc><fc=#666666><fn=2>|</fn></fc><fc=#8BE9FD> %date%  </fc>" 
+             , template = "<action=`xdotool key control+alt+g`><icon=haskell_20.xpm/> </action><fc=#666666>  |</fc> %UnsafeStdinReader% }{ <fc=#666666><fn=2>|</fn></fc><fc=#b3afc2><fn=1></fn>  %uname% </fc><fc=#666666> <fn=2>|</fn></fc><fc=#FFB86C> %cpu% </fc><fc=#666666><fn=2>|</fn></fc> <fc=#FF5555> %memory% </fc><fc=#666666> <fn=2>|</fn></fc> <fc=#82AAFF> %battery% </fc><fc=#666666><fn=2>|</fn></fc><fc=#8BE9FD> %date%  </fc>" 
              }
     '';
   };
