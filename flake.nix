@@ -36,7 +36,7 @@
     homeManagerConfigurations = {
 
       peterstorm = user.mkHMUser {
-        roles = [ "core-apps" "window-manager/xmonad" "dunst" ];
+        roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" ];
         username = "peterstorm";
       };
     };
@@ -45,7 +45,7 @@
 
       laptop-xps = host.mkHost {
         name = "laptop-xps";
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "plex" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
         machine = [ "laptop-xps" ];
         NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
