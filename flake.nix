@@ -85,7 +85,7 @@
 
       desktop = host.mkHost {
         name = "desktop";
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "nvidia-graphics" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "dual-desktop-plasma" "nvidia-graphics" ];
         machine = [ "desktop" ];
         NICs = [ "wlp5s0" "enp6s0" ];
         initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
