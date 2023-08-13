@@ -45,13 +45,13 @@
 
       laptop-xps = host.mkHost {
         name = "laptop-xps";
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" ];
         machine = [ "laptop-xps" ];
         NICs = [ "wlp0s20f3" ];
         kernelPackage = pkgs.linuxPackages_latest;
         initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
         initrdMods = [ "dm-snapshot" ];
-        kernelMods = [ "kvm-intel" ];
+        kernelMods = [ "kvm-intel" "nvidia" "nvidia_modeset" "nvidia_drm" "nvidia_uvm" ];
         kernelPatches = [];
         kernelParams = [ "acpi_rev_override" ];
         users = [{
