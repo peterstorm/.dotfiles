@@ -58,24 +58,13 @@ map('n', '<leader>j', '<cmd>res +10<cr>')
 map('n', '<leader>k', '<cmd>res -10<cr>')
 
 -- telescope config
-require('telescope').load_extension('fzy_native')
-local actions = require "telescope.actions"
-require("telescope").setup {
-  file_ignore_patterns = { "node_modules", "%.kml" },
-  pickers = {
-    buffers = {
-      mappings = {
-        i = {
-          ["<C-d>"] = actions.delete_buffer + actions.move_to_top,
-        }
-      }
-    }
-  }
-}
+require('settings.telescope').setup()
+
 map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
 map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
 map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
 map('n', '<leader>fr', '<cmd>Telescope resume<cr>')
+map('n', '<leader>cd', '<cmd>Telescope diagnostics<cr>')
 
 -- nvim-treesitter config
 require('settings.nvim-treesitter').setup()
@@ -83,31 +72,9 @@ require('settings.nvim-treesitter').setup()
 -- nvim-cmp config
 require('settings.nvim-cmp').setup()
 
--- nvim-metails config
+-- nvim-metals config
+require('settings.nvim-metals').setup()
 
-local metals_config = require("metals").bare_config()
-
-metals_config.settings = {
-  showImplicitArguments = true,
-  excludedPackages = { "akka.actor.typed.javadsl", "com.github.swagger.akka.javadsl" },
-}
-
-metals_config.capabilities = require("cmp_nvim_lsp").default_capabilities()
-
--- Autocmd that will actually be in charging of starting the whole thing
-local nvim_metals_group = api.nvim_create_augroup("nvim-metals", { clear = true })
-api.nvim_create_autocmd("FileType", {
-  -- NOTE: You may or may not want java included here. You will need it if you
-  -- want basic Java support but it may also conflict if you are using
-  -- something like nvim-jdtls which also works on a java filetype autocmd.
-  pattern = { "scala", "sbt", "java" },
-  callback = function()
-    require("metals").initialize_or_attach(metals_config)
-  end,
-  group = nvim_metals_group,
-})
-
-keyset("n", "<leader>mmc", require("metals").commands)
 keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
 
 -- nvim-lsp config
@@ -134,6 +101,14 @@ map('n', '<leader>gp', '<cmd>Git push<cr>')
 require('Comment').setup()
 
 -- haskell specific
+
+require('lspconfig')['hls'].setup{
+  filetypes = { 'haskell', 'lhaskell', 'cabal' },
+  haskell = {
+    formattingProvider = "formolu"
+  }
+}
+
 fourmoluOnSave = function()
   cmd("silent %!fourmolu -q --stdin-input-file %:p")
   -- local key = api.nvim_replace_termcodes("<C-o>", true, false, true)

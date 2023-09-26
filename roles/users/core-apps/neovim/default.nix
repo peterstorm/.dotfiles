@@ -12,5 +12,7 @@
     ".config/nvim/lua/plugins.lua".source = ./lua/plugins.lua;
     ".config/nvim/lua/settings/nvim-treesitter.lua".source = ./lua/settings/nvim-treesitter.lua;
     ".config/nvim/lua/settings/nvim-cmp.lua".source = ./lua/settings/nvim-cmp.lua;
+    ".config/nvim/lua/settings/nvim-metals.lua".source = ./lua/settings/nvim-metals.lua;
+    ".config/nvim/lua/settings/telescope.lua".source = ./lua/settings/telescope.lua;
   };
 }
