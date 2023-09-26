@@ -59,7 +59,6 @@ map('n', '<leader>k', '<cmd>res -10<cr>')
 
 -- telescope config
 require('telescope').load_extension('fzy_native')
-require('telescope').load_extension('coc')
 local actions = require "telescope.actions"
 require("telescope").setup {
   file_ignore_patterns = { "node_modules", "%.kml" },
@@ -76,9 +75,6 @@ require("telescope").setup {
 map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
 map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
 map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
-map('n', '<leader>ds', '<cmd>Telescope coc document_symbols<cr>')
-map('n', '<leader>cc', '<cmd>Telescope coc commands<cr>')
-map('n', '<leader>cd', '<cmd>Telescope coc diagnostics<cr>')
 map('n', '<leader>fr', '<cmd>Telescope resume<cr>')
 
 -- nvim-treesitter config
@@ -87,40 +83,45 @@ require('settings.nvim-treesitter').setup()
 -- nvim-cmp config
 require('settings.nvim-cmp').setup()
 
--- coc.nvim config
-map('n', '<leader>gd', '<cmd>call CocActionAsync("jumpDefinition")<cr>')
-map('n', '<leader>gr', '<cmd>call CocActionAsync("jumpReferences")<cr>')
-map('n', '<leader>d,', '<cmd>call CocActionAsync("diagnosticPrevious")<cr>')
-map('n', '<leader>d.', '<cmd>call CocActionAsync("diagnosticNext")<cr>')
-map('n', '<leader>ca', '<cmd>call CocActionAsync("codeAction", "cursor")<cr>')
-map('n', '<leader>rn', '<cmd>call CocActionAsync("rename")<cr>')
-map('n', 'K', '<cmd>call CocActionAsync("doHover")<cr>')
+-- nvim-metails config
 
-function _G.check_back_space()
-    local col = vim.fn.col('.') - 1
-    return col == 0 or vim.fn.getline('.'):sub(col, col):match('%s') ~= nil
-end
+local metals_config = require("metals").bare_config()
 
--- Use tab for trigger completion with characters ahead and navigate.
--- NOTE: There's always complete item selected by default, you may want to enable
--- no select by `"suggest.noselect": true` in your configuration file.
--- NOTE: Use command ':verbose imap <tab>' to make sure tab is not mapped by
--- other plugin before putting this into your config.
-local opts = {silent = true, noremap = true, expr = true, replace_keycodes = false}
-keyset("i", "<TAB>", 'coc#pum#visible() ? coc#pum#next(1) : v:lua.check_back_space() ? "<TAB>" : coc#refresh()', opts)
-keyset("i", "<S-TAB>", [[coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"]], opts)
+metals_config.settings = {
+  showImplicitArguments = true,
+  excludedPackages = { "akka.actor.typed.javadsl", "com.github.swagger.akka.javadsl" },
+}
 
--- Make <CR> to accept selected completion item or notify coc.nvim to format
--- <C-g>u breaks current undo, please make your own choice.
-keyset("i", "<cr>", [[coc#pum#visible() ? coc#pum#confirm() : "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"]], opts)
---
+metals_config.capabilities = require("cmp_nvim_lsp").default_capabilities()
+
+-- Autocmd that will actually be in charging of starting the whole thing
+local nvim_metals_group = api.nvim_create_augroup("nvim-metals", { clear = true })
+api.nvim_create_autocmd("FileType", {
+  -- NOTE: You may or may not want java included here. You will need it if you
+  -- want basic Java support but it may also conflict if you are using
+  -- something like nvim-jdtls which also works on a java filetype autocmd.
+  pattern = { "scala", "sbt", "java" },
+  callback = function()
+    require("metals").initialize_or_attach(metals_config)
+  end,
+  group = nvim_metals_group,
+})
+
+keyset("n", "<leader>mmc", require("metals").commands)
+keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
+
+-- nvim-lsp config
+keyset("n", "<leader>gd",  vim.lsp.buf.definition)
+keyset("n", "gr", vim.lsp.buf.references)
+keyset("n", "K",  vim.lsp.buf.hover)
+keyset("n", "<leader>ca", vim.lsp.buf.code_action)
+
 -- vim-sneak config
 g['sneak#label'] = 1
 
 -- lualine config
 require('lualine').setup {
   options = { theme = 'iceberg_dark' },
-  sections = { lualine_a = {'g:coc_status'} }
 }
 
 -- vim-fugitive

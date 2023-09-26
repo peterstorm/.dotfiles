@@ -7,7 +7,6 @@ return require('packer').startup(function(use)
   use 'tpope/vim-fugitive'
   use 'justinmk/vim-sneak'
   use 'hoob3rt/lualine.nvim'
-  use {'neoclide/coc.nvim', branch = 'release'}
   use 'fannheyward/telescope-coc.nvim'
   use 'github/copilot.vim'
   use {
@@ -16,8 +15,9 @@ return require('packer').startup(function(use)
         require('Comment').setup()
     end
   }
-  --use 'neovim/nvim-lspconfig'
-  --use({'scalameta/nvim-metals', requires = { "nvim-lua/plenary.nvim" }})
+  use 'hrsh7th/vim-vsnip'
+  use 'neovim/nvim-lspconfig'
+  use({'scalameta/nvim-metals', requires = { "nvim-lua/plenary.nvim" }})
   use({
     'nvim-telescope/telescope.nvim',
     requires = {
