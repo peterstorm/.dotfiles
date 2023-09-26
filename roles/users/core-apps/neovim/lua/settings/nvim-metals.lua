@@ -1,4 +1,5 @@
 local M = {}
+local api = vim.api
 
 M.setup = function()
   local metals_config = require('metals').bare_config()
