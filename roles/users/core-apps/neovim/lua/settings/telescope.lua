@@ -5,8 +5,10 @@ M.setup = function()
   local actions = require "telescope.actions"
   telescope.load_extension('fzy_native')
   telescope.setup({
-    file_ignore_patterns = { "node_modules", "%.kml" },
     pickers = {
+      find_files = {
+        file_ignore_patterns = { 'node_modules', '%.kml' },
+      },
       buffers = {
         mappings = {
           i = {

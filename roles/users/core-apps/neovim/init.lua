@@ -78,8 +78,8 @@ require('settings.nvim-metals').setup()
 keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
 
 -- nvim-lsp config
-keyset("n", "<leader>gd",  vim.lsp.buf.definition)
-keyset("n", "gr", vim.lsp.buf.references)
+map('n', '<leader>gd', '<cmd>Telescope lsp_definitions<cr>')
+map('n', '<leader>gr', '<cmd>Telescope lsp_references<cr>')
 keyset("n", "K",  vim.lsp.buf.hover)
 keyset("n", "<leader>ca", vim.lsp.buf.code_action)
 
