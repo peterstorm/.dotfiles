@@ -83,6 +83,13 @@ map('n', '<leader>gr', '<cmd>Telescope lsp_references<cr>')
 keyset("n", "K",  vim.lsp.buf.hover)
 keyset("n", "<leader>ca", vim.lsp.buf.code_action)
 
+-- lsp-lines config
+vim.diagnostic.config({
+  virtual_text = false,
+})
+
+require("lsp_lines").setup()
+
 -- vim-sneak config
 g['sneak#label'] = 1
 

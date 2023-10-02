@@ -19,7 +19,7 @@
              , hideOnStart = False
              , allDesktops = True
              , persistent = True
-             , iconRoot = "/home/peterstorm/.dotfiles/roles/users/windowManager/shared/xmobar/xpm/"  -- default: "."
+             , iconRoot = "/home/peterstorm/.dotfiles/roles/users/window-manager/shared/xmobar/xpm/"  -- default: "."
              , commands = [ 
                             -- Time and date
                             Run Date "%b %d %Y (%H:%M)" "date" 50
@@ -43,5 +43,6 @@
              }
     '';
   };
+  xdg.configFile.".dotfiles/roles/users/window-manager/shared/xmobar/xpm/haskell_20.xpm".source = ./xpm/haskell_20.xpm;
 }
 
