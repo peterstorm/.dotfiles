@@ -21,7 +21,7 @@ with builtins;
   };
 
 
- mkSystemUser = {name, groups, uid, ...}:
+ mkSystemUser = {name, groups, uid, ssh_pub, ...}:
  {
     users.users."${name}" = {
       name = name;
@@ -30,6 +30,9 @@ with builtins;
       extraGroups = groups;
       uid = uid;
       initialPassword = "hunter2";
+      openssh.authorizedKeys.keys = [
+	"${ssh_pub}"
+      ];
     };
   };
 }
