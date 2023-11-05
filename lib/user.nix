@@ -29,7 +29,7 @@ with builtins;
       isSystemUser = false;
       extraGroups = groups;
       uid = uid;
-      initialPassword = "helloWorld";
+      initialPassword = "hunter2";
     };
   };
 }

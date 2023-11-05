@@ -103,6 +103,22 @@
         laptop = true;
       };
 
+      homelab = host.mkHost {
+        name = "homelab";
+        roles = [ "core" "wifi" "efi" "bluetooth" "ssh" ];
+        machine = [ "desktop" ];
+        NICs = [ "wlp3s0" ];
+        initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
+        initrdMods = [];
+        kernelMods = [ "kvm-amd" ];
+        kernelPatches = [];
+        kernelParams = [];
+        kernelPackage = pkgs.linuxPackages_latest;
+        users = [];
+        cpuCores = 8;
+        laptop = true;
+      };
+
     };
   };
 }
