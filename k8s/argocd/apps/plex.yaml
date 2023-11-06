@@ -11,7 +11,7 @@ spec:
   - repoURL: https://github.com/peterstorm/.dotfiles.git
     path: /k8s/argocd/kube-plex/charts/kube-plex
     targetRevision: 0.2.7
-    chart: transmission-openvpn
+    chart: kube-plex
     helm:
      valueFiles:
      - $values/k8s/argocd/kube-plex/values.yaml
