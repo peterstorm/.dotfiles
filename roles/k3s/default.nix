@@ -4,8 +4,6 @@
   services.k3s = {
     enable = true;
     role = "server";
-    extraFlags = "--disable servicelb --disable traefik";
+    extraFlags = "--disable servicelb --disable traefik --write-kubeconfig-mode=644";
   };
-
-  environment.systemPackages = [ pkgs.k3s ];
 }

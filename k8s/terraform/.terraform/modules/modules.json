@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"","Source":"","Dir":"."},{"Key":"argocd","Source":"./argocd","Dir":"argocd"},{"Key":"ingress","Source":"./ingress","Dir":"ingress"},{"Key":"ingress-nginx","Source":"./ingress-nginx","Dir":"ingress-nginx"},{"Key":"metallb","Source":"./metallb-config","Dir":"metallb-config"},{"Key":"nginx-ingress","Source":"./nginx-ingress","Dir":"nginx-ingress"}]}
