@@ -41,6 +41,7 @@
 
   environment.systemPackages = with pkgs; [
     # Core utilities that need to be on every machine
+    openvpn
     k3s
     iptables
     terraform
