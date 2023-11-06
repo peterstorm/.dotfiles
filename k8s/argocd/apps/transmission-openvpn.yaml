@@ -7,13 +7,14 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  sources:
+  source:
   - repoURL: https://bananaspliff.github.io/geek-charts
     targetRevision: HEAD
     chart: transmission-openvpn
     helm:
      valueFiles:
      - $values/k8s/argocd/transmission-openvpn/values.yaml
+  sources:
   - repoURL: https://github.com/peterstorm/.dotfiles.github
     targetRevision: HEAD
     ref: values
