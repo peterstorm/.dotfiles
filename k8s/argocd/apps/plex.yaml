@@ -9,7 +9,7 @@ spec:
   project: default
   sources:
   - repoURL: https://github.com/peterstorm/.dotfiles.git
-    path: /k8s/argocd/kube-plex/charts/kube-plex
+    path: /k8s/argocd/kube-plex/charts/
     targetRevision: 0.2.7
     chart: kube-plex
     helm:
