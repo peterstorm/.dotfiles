@@ -19,7 +19,3 @@ spec:
             port:
               name: http
     host: argocd.192.168.0.240.nip.io
-  tls:
-  - hosts:
-    - argocd.peterstorm.io
-    secretName: argocd-ingress-http
