@@ -14,7 +14,7 @@ spec:
     helm:
      valueFiles:
      - $values/k8s/argocd/transmission-openvpn/values.yaml
-  - repoURL: https://github.com/peterstorm/.dotfiles.github
+  - repoURL: https://github.com/peterstorm/.dotfiles.git
     targetRevision: HEAD
     ref: values
   destination:
