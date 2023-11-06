@@ -12,6 +12,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: transmission-transmission-openvpn
+            name: transmission-openvpn
             port:
               number: 80
