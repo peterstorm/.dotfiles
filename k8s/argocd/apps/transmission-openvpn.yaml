@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: transmission-openvpn
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+  - repoURL: https://bananaspliff.github.io/geek-charts
+    targetRevision: HEAD
+    chart: transmission-openvpn
+    helm:
+     valueFiles:
+     - $values/k8s/argocd/transmission-openvpn/values.yaml
+  - repoUrl: https://github.com/peterstorm/.dotfiles.github
+    targetRevision: HEAD
+    ref: values
+
+
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - Validate=true
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
