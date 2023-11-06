@@ -10,7 +10,7 @@ spec:
     http:
       paths:
         - backend:
-          pathType: Prefix
+          pathType: Exact
             service:
               name: transmission-transmission-openvpn
               port:
