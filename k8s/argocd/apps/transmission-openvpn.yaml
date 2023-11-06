@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://bananaspliff.github.io/geek-charts
-    targetRevision: HEAD
+    targetRevision: 0.1.0
     chart: transmission-openvpn
     helm:
      valueFiles:
