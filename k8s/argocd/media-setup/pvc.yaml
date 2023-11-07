@@ -4,7 +4,7 @@ metadata:
   namespace: "media"
   name: "media-ssd"
 spec:
-  storageClassName: "manual"
+  storageClassName: local-path
   accessModes:
     - ReadWriteMany
   resources:
