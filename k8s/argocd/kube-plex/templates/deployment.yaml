@@ -170,13 +170,6 @@ spec:
 {{- else }}
           claimName: "{{ template "fullname" . }}-data"
 {{- end }}
-      - name: config
-        persistentVolumeClaim:
-{{- if .Values.persistence.config.claimName }}
-          claimName: "{{ .Values.persistence.config.claimName }}"
-{{- else }}
-          claimName: "{{ template "fullname" . }}-config"
-{{- end }}
       - name: transcode
 {{- if .Values.persistence.transcode.enabled }}
         persistentVolumeClaim:

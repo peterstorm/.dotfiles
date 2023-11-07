@@ -26,6 +26,8 @@ persistence:
     claimName: "media-ssd"
   config:
     claimName: "media-ssd"
+    subPath: "configs/plex-data"
+
 
 resources: {}
 podAnnotations: {}
