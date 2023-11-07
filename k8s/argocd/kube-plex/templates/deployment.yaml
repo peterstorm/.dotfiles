@@ -140,7 +140,7 @@ spec:
         {{- if .Values.persistence.data.subPath }}
           subPath: {{ .Values.persistence.data.subPath }}
         {{ end }}
-        - name: config
+        - name: data
           mountPath: /config
         {{- if .Values.persistence.config.subPath }}
           subPath: {{ .Values.persistence.config.subPath }}
