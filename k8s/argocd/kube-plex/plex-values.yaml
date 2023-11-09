@@ -2,7 +2,7 @@ claimToken: "claim-DgKBfryXVyGtKERunaji"
 
 image:
   repository: linuxserver/plex
-  tag: latest
+  tag: 1.32.7
   pullPolicy: IfNotPresent
 
 kubePlex:
