@@ -8,12 +8,6 @@ module "metallb" {
   source = "./metallb-config"
 }
 
-module "ingress" {
-  source = "./ingress"
-
-  depends_on = [module.metallb]
-}
-
 module "argocd" {
   source = "./argocd"
 

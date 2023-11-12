@@ -113,7 +113,7 @@
 
       homelab = host.mkHost {
         name = "homelab";
-        roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" ];
+        roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" ];
         machine = [ "homelab" ];
         NICs = [ "wlp3s0" ];
         initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
