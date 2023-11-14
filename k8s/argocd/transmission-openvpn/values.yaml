@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: "haugene/transmission-openvpn"
-  tag: "5.2" # Suffixed by -armhf to pull the ARM image
+  tag: "" # Suffixed by -armhf to pull the ARM image
   pullPolicy: "IfNotPresent"
 
 env:
@@ -54,8 +54,8 @@ volumeMounts:
     mountPath: "/data"
     subPath: "configs/transmission-data" # Path /mnt/ssd/media/configs/transmission-data where transmission writes the configuration
   - name: "media-ssd"
-    mountPath: "/torrents"
-    subPath: "downloads/transmission" # Path /mnt/ssd/media/downloads/transmission where transmission downloads Torrents
+    mountPath: "/data"
+    subPath: "torrents" # Path /mnt/ssd/media/downloads/transmission where transmission downloads Torrents
   - name: "dev-tun"
     mountPath: "/dev/net/tun" # Needed for VPN
 
