@@ -29,7 +29,7 @@ env:
   - name: TRANSMISSION_PEER_PORT
     value: "47444"
   - name: TRANSMISSION_DOWNLOAD_DIR
-    value: "/downloads/transmission"
+    value: "/torrents"
   - name: PUID
     value: "1000"
   - name: PGID
