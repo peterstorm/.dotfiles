@@ -54,8 +54,8 @@ volumeMounts:
     mountPath: "/data"
     subPath: "configs/transmission-data" # Path /mnt/ssd/media/configs/transmission-data where transmission writes the configuration
   - name: "media-ssd"
-    mountPath: "/data"
-    subPath: "torrents" # Path /mnt/ssd/media/downloads/transmission where transmission downloads Torrents
+    mountPath: "/torrents"
+    subPath: "/torrents" # Path /mnt/ssd/media/downloads/transmission where transmission downloads Torrents
   - name: "dev-tun"
     mountPath: "/dev/net/tun" # Needed for VPN
 
