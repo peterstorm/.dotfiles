@@ -30,7 +30,7 @@ with builtins;
       extraGroups = groups;
       uid = uid;
       initialPassword = "hunter2";
-      openssh.authorizedKeys.keys = ssh_keys;
+      openssh.authorizedKeys.keys = lib.splitString "\n" ssh_keys;
     };
   };
 }
