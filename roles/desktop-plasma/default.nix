@@ -28,6 +28,9 @@
     displayManager = {
       defaultSession = "none+xmonad";
       sddm.enable = true;
+      setupCommands = ''
+        ${pkgs.xorg.xrandr}/bin/xrandr --dpi 144;
+      '';
     };
     windowManager.xmonad = {
       enable = true;

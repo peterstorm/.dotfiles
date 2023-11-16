@@ -128,3 +128,6 @@ api.nvim_create_autocmd(
   , callback = fourmoluOnSave
   }
 )
+
+-- copilot
+g.copilot_assume_mapped = true
