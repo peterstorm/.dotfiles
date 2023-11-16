@@ -18,7 +18,7 @@ with builtins;
           imports = [ ../modules ] ++ roles_mods;
 
           networking.hostName = "${name}";
-          networking.useDHCP = true;
+          networking.useDHCP = false;
 
           boot.initrd.availableKernelModules = initrdMods;
           boot.kernelModules = kernelMods;

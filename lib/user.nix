@@ -21,7 +21,7 @@ with builtins;
   };
 
 
- mkSystemUser = {name, groups, uid, ...}:
+ mkSystemUser = {name, groups, uid, ssh_keys, ...}:
  {
     users.users."${name}" = {
       name = name;
@@ -29,7 +29,8 @@ with builtins;
       isSystemUser = false;
       extraGroups = groups;
       uid = uid;
-      initialPassword = "helloWorld";
+      initialPassword = "hunter2";
+      openssh.authorizedKeys.keys = ssh_keys;
     };
   };
 }

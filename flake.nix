@@ -39,6 +39,11 @@
         roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" ];
         username = "peterstorm";
       };
+
+      homelab = user.mkHMUser {
+        roles = [ "core-apps" ];
+        username = "peterstorm";
+      };
     };
 
     nixosConfigurations = {
@@ -58,6 +63,7 @@
           name = "peterstorm";
           groups = [ "wheel" "networkmanager" "docker" ];
           uid = 1000;
+          ssh_keys = [];
         }];
         cpuCores = 8;
         laptop = true;
@@ -78,6 +84,7 @@
           name = "peterstorm";
           groups = [ "wheel" "networkmanager" "docker" ];
           uid = 1000;
+          ssh_keys = [];
         }];
         cpuCores = 8;
         laptop = true;
@@ -98,6 +105,28 @@
           name = "peterstorm";
           groups = [ "wheel" "networkmanager" "docker" ];
           uid = 1000;
+          ssh_keys = [];
+        }];
+        cpuCores = 8;
+        laptop = true;
+      };
+
+      homelab = host.mkHost {
+        name = "homelab";
+        roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" ];
+        machine = [ "homelab" ];
+        NICs = [ "wlp3s0" ];
+        initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
+        initrdMods = [];
+        kernelMods = [ "kvm-amd" ];
+        kernelPatches = [];
+        kernelParams = [];
+        kernelPackage = pkgs.linuxPackages_latest;
+        users = [{
+          name = "peterstorm";
+          groups = [ "wheel" "networkmanager" "docker" ];
+          uid = 1000;
+          ssh_keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ+2TgMEWwmsE5i/kEHHo7iJyD4BzItKMakGg2AcbgyH peterstorm" ];
         }];
         cpuCores = 8;
         laptop = true;
