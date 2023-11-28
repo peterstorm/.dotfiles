@@ -42,7 +42,7 @@
 
       homelab = user.mkHMUser {
         roles = [ "core-apps" ];
-        username = "peterstorm";
+        username = "homelab";
       };
     };
 
@@ -123,10 +123,10 @@
         kernelParams = [];
         kernelPackage = pkgs.linuxPackages_latest;
         users = [{
-          name = "peterstorm";
+          name = "homelab";
           groups = [ "wheel" "networkmanager" "docker" ];
           uid = 1000;
-          ssh_keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ+2TgMEWwmsE5i/kEHHo7iJyD4BzItKMakGg2AcbgyH peterstorm" ];
+          ssh_keys = builtins.readFile ./authorized_keys.txt;
         }];
         cpuCores = 8;
         laptop = true;
