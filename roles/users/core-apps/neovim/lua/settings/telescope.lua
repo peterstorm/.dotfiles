@@ -8,6 +8,7 @@ M.setup = function()
     pickers = {
       find_files = {
         file_ignore_patterns = { 'node_modules', '%.kml' },
+        path_display = { "truncate" },
       },
       buffers = {
         mappings = {

@@ -14,6 +14,7 @@
   ];
 
   home.packages = with pkgs;[
+    cloudflare-warp
     cachix
     firefox
     google-chrome
