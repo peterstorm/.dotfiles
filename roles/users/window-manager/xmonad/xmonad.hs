@@ -706,7 +706,7 @@ myKeys =
         , ("M-S-<Backspace>", killAll)                         -- Kill all windows on current workspace
 
     -- Floating windows
-        , ("M-f", sendMessage (T.Toggle "floats"))       -- Toggles my 'floats' layout
+        , ("M-f", sendMessage (MT.Toggle "floats"))       -- Toggles my 'floats' layout
         , ("M-<Delete>", withFocused $ windows . W.sink) -- Push floating window back to tile
         , ("M-S-<Delete>", sinkAll)                      -- Push ALL floating windows to tile
 
@@ -735,6 +735,7 @@ myKeys =
         , ("M-C-s", killAllOtherCopies)
 
         -- Layouts
+        , ("M-S-f", sendMessage (T.Toggle FULL))       -- Toggles my 'floats' layout
         , ("M-<Tab>", sendMessage NextLayout)                -- Switch to next layout
         , ("M-C-M1-<Up>", sendMessage Arrange)
         , ("M-C-M1-<Down>", sendMessage DeArrange)

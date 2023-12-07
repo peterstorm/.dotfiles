@@ -34,6 +34,7 @@
       eval `ssh-agent -s`
       ssh-add
     fi
+    eval "$(direnv hook bash)"
     eval "$(starship init bash)"
     alias lock='i3lock -c 000000'
     alias sus='systemctl suspend'
@@ -46,7 +47,6 @@
     k3s
     iptables
     terraform
-    awscli2
     wget
     xcape
     curl

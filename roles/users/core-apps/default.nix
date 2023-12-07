@@ -11,9 +11,12 @@
     ./alacritty
     ./starship
     ./neovim
+    ./nix-direnv
   ];
 
   home.packages = with pkgs;[
+    vscode
+    konsole
     cloudflare-warp
     cachix
     firefox
