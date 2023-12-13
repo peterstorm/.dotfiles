@@ -9,6 +9,7 @@ return require('packer').startup(function(use)
   use 'hoob3rt/lualine.nvim'
   use 'fannheyward/telescope-coc.nvim'
   use 'github/copilot.vim'
+  use ({'ShinKage/idris2-nvim', requires = {'neovim/nvim-lspconfig', 'MunifTanjim/nui.nvim'}})
   use {
     'numToStr/Comment.nvim',
     config = function()

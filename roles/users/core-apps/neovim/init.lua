@@ -131,3 +131,6 @@ api.nvim_create_autocmd(
 
 -- copilot
 g.copilot_assume_mapped = true
+
+-- idris
+require('idris2').setup({})
