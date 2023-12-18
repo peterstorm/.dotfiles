@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, DeriveDataTypeable, TypeSynonymInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -Wno-depcrecations #-}
   -- Base
 import XMonad hiding ((|||))
 import System.IO (hPutStrLn)
@@ -56,7 +57,7 @@ import XMonad.Hooks.InsertPosition
 import XMonad.Hooks.ManageDocks             -- avoid xmobar
 import XMonad.Hooks.ManageHelpers
 import XMonad.Hooks.UrgencyHook
-import XMonad.Hooks.DynamicBars
+import XMonad.Hooks.StatusBar
 
     -- Layouts
 import XMonad.Layout.GridVariants (Grid(Grid))
@@ -706,7 +707,7 @@ myKeys =
         , ("M-S-<Backspace>", killAll)                         -- Kill all windows on current workspace
 
     -- Floating windows
-        , ("M-f", sendMessage (MT.Toggle "floats"))       -- Toggles my 'floats' layout
+    --  , ("M-f", sendMessage (MT.Toggle "floats"))       -- Toggles my 'floats' layout
         , ("M-<Delete>", withFocused $ windows . W.sink) -- Push floating window back to tile
         , ("M-S-<Delete>", sinkAll)                      -- Push ALL floating windows to tile
 
@@ -735,7 +736,7 @@ myKeys =
         , ("M-C-s", killAllOtherCopies)
 
         -- Layouts
-        , ("M-S-f", sendMessage (T.Toggle FULL))       -- Toggles my 'floats' layout
+        --, ("M-S-f", sendMessage (T.Toggle FULL))       -- Toggles my 'floats' layout
         , ("M-<Tab>", sendMessage NextLayout)                -- Switch to next layout
         , ("M-C-M1-<Up>", sendMessage Arrange)
         , ("M-C-M1-<Down>", sendMessage DeArrange)
