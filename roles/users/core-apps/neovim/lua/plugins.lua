@@ -7,7 +7,6 @@ return require('packer').startup(function(use)
   use 'tpope/vim-fugitive'
   use 'justinmk/vim-sneak'
   use 'hoob3rt/lualine.nvim'
-  use 'fannheyward/telescope-coc.nvim'
   use 'github/copilot.vim'
   use ({'ShinKage/idris2-nvim', requires = {'neovim/nvim-lspconfig', 'MunifTanjim/nui.nvim'}})
   use {
@@ -18,6 +17,7 @@ return require('packer').startup(function(use)
   }
   use 'hrsh7th/vim-vsnip'
   use 'neovim/nvim-lspconfig'
+  use 'simrat39/rust-tools.nvim'
   use({
     "https://git.sr.ht/~whynothugo/lsp_lines.nvim",
     config = function()

@@ -134,3 +134,6 @@ g.copilot_assume_mapped = true
 
 -- idris
 require('idris2').setup({})
+
+-- setup rust
+require('settings.rust-tools').setup()

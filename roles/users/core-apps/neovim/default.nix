@@ -1,7 +1,6 @@
 {pkgs, lib, config, ...}:
 {
   home.packages = with pkgs; [
-    nodejs_18
     neovim-nightly
   ];
 
@@ -14,5 +13,6 @@
     ".config/nvim/lua/settings/nvim-cmp.lua".source = ./lua/settings/nvim-cmp.lua;
     ".config/nvim/lua/settings/nvim-metals.lua".source = ./lua/settings/nvim-metals.lua;
     ".config/nvim/lua/settings/telescope.lua".source = ./lua/settings/telescope.lua;
+    ".config/nvim/lua/settings/rust-tools.lua".source = ./lua/settings/rust-tools.lua;
   };
 }
