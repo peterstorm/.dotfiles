@@ -134,3 +134,6 @@ g.copilot_assume_mapped = true
 
 -- idris
 require('idris2').setup({})
+
+-- emmet-ls
+require('settings.emmet-ls').setup()
