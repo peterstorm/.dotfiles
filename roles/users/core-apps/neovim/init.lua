@@ -137,3 +137,6 @@ require('idris2').setup({})
 
 -- emmet-ls
 require('settings.emmet-ls').setup()
+
+-- setup rust
+require('settings.rust-tools').setup()

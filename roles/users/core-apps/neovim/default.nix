@@ -14,5 +14,6 @@
     ".config/nvim/lua/settings/nvim-metals.lua".source = ./lua/settings/nvim-metals.lua;
     ".config/nvim/lua/settings/telescope.lua".source = ./lua/settings/telescope.lua;
     ".config/nvim/lua/settings/emmet-ls.lua".source = ./lua/settings/emmet-ls.lua;
+    ".config/nvim/lua/settings/rust-tools.lua".source = ./lua/settings/rust-tools.lua;
   };
 }

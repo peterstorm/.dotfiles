@@ -13,6 +13,7 @@ M.setup = function()
     , "java"
     , "html"
     , "css"
+    , "rust"
     }, highlight = { enable = true } }
 end
 
