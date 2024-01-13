@@ -6,6 +6,10 @@ metadata:
   annotations: cert-manager.io/cluster-issuer: "letsencrypt-staging"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - media.peterstorm.io
+    secretName: media-peterstorm-tls
   rules:
   - host: media.peterstorm.io
     http:
@@ -17,7 +21,3 @@ spec:
             name: transmission-openvpn
             port:
               number: 80
-  tls:
-  - hosts:
-    - media.peterstorm.io
-    secretName: media-peterstorm-tls
