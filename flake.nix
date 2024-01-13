@@ -122,12 +122,20 @@
         kernelPatches = [];
         kernelParams = [];
         kernelPackage = pkgs.linuxPackages_latest;
-        users = [{
-          name = "homelab";
-          groups = [ "wheel" "networkmanager" "docker" ];
-          uid = 1000;
-          ssh_keys = builtins.readFile ./authorized_keys.txt;
-        }];
+        users = [
+          {
+            name = "homelab";
+            groups = [ "wheel" "networkmanager" "docker" ];
+            uid = 1001;
+            ssh_keys = builtins.readFile ./authorized_keys.txt;
+          }
+          {
+            name = "peterstorm";
+            groups = [ "wheel" "networkmanager" "docker" ];
+            uid = 1000;
+            ssh_keys = builtins.readFile ./authorized_keys.txt;
+          }
+        ];
         cpuCores = 8;
         laptop = true;
       };
