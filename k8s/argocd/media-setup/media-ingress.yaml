@@ -3,7 +3,8 @@ kind: Ingress
 metadata:
   name: media-ingress
   namespace: media
-  annotations: cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
 spec:
   ingressClassName: nginx
   tls:
