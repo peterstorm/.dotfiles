@@ -12,10 +12,13 @@
       trusted-public-keys = [
         "undo-foundation.cachix.org-1:BSP9SjfX89JXxs2QXF9qxTYBlTSG3ad4N7V4HSlH9s0="
         "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
+        "miso-haskell.cachix.org-1:6N2DooyFlZOHUfJtAx1Q09H0P5XXYzoxxQYiwn6W1e8="
+
       ];
       substituters = [
         "https://undo-foundation.cachix.org"
         "https://cache.iog.io"
+        "https://miso-haskell.cachix.org"
       ];
     };
   };
