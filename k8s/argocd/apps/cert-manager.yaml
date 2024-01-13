@@ -8,13 +8,13 @@ metadata:
 spec:
   project: default
   sources:
+  - repoURL: https://charts.jetstack.io
     chart: cert-manager
+    targetRevision: v1.13.3
     helm:
       parameters:
         - name: installCRDs
           value: "true"
-    repoURL: https://charts.jetstack.io
-    targetRevision: v1.13.3
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
