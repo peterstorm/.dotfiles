@@ -3,6 +3,7 @@ kind: Ingress
 metadata:
   name: media-ingress
   namespace: media
+  annotations: cert-manager.io/cluster-issuer: "letsencrypt-staging"
 spec:
   ingressClassName: nginx
   rules:
@@ -16,3 +17,7 @@ spec:
             name: transmission-openvpn
             port:
               number: 80
+  tls:
+  - hosts:
+        - media.peterstorm.io
+    secretName: media-peterstorm-tls
