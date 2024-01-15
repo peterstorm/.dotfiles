@@ -4,8 +4,8 @@ cloudflare:
   ingress:
     - hostname: '*.peterstorm.io'
       service: https://ingress-nginx-controller.ingress-nginx.svc.cluster.local:443
-        originRequest:
-          noTLSVerify: true
+      originRequest:
+        noTLSVerify: true
     - service: http_status:404
 image:
   repository: cloudflare/cloudflared
