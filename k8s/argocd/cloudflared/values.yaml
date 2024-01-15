@@ -3,7 +3,7 @@ cloudflare:
   secretName: cloudflared-credentials
   ingress:
     - hostname: '*.peterstorm.io'
-      service: https://ingress-nginx-controller.ingress-nginx.svc.cluster.local:443
+      service: https://ingress-nginx-controller.ingress-nginx
       originRequest:
         noTLSVerify: true
 image:
