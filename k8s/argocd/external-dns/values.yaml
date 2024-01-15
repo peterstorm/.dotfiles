@@ -1,0 +1,13 @@
+sources:
+  - crd
+  - ingress
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token-dns
+        key: cloudflare_api_token
+provider: cloudflare
+txtOwnerId: homelab
+interval: 5m
+triggerLoopOnEvent: true
