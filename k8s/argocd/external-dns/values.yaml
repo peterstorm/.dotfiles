@@ -1,5 +1,4 @@
 sources:
-  - crd
   - ingress
 env:
   - name: CF_API_TOKEN
