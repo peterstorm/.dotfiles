@@ -10,10 +10,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - echo.peterstorm.io
-    secretName: echo-peterstorm-tls
+    - echo-server.peterstorm.io
+    secretName: echo-server-peterstorm-tls
   rules:
-  - host: echo.peterstorm.io
+  - host: echo-server.peterstorm.io
     http:
       paths:
       - path: /
