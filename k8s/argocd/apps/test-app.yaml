@@ -13,6 +13,7 @@ spec:
     path: k8s/argocd/test-app
   destination:
     server: https://kubernetes.default.svc
+    namespace: test-app
   syncPolicy:
     automated:
       prune: true
@@ -20,6 +21,6 @@ spec:
       allowEmpty: false
     syncOptions:
       - Validate=true
-      - CreateNamespace=false
+      - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
