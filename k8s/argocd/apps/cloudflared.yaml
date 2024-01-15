@@ -19,7 +19,7 @@ spec:
     ref: values
   - repoURL: https://github.com/peterstorm/.dotfiles.git
     targetRevision: HEAD
-    path: k8s/argocd/cloudflared
+    path: k8s/argocd/cloudflared/secrets
   destination:
     server: https://kubernetes.default.svc
     namespace: cloudflared
