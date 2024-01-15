@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echoserver
+  namespace: foo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echoserver
+  template:
+    metadata:
+      labels:
+        app: echoserver
+    spec:
+      containers:
+      - image: gcr.io/google_containers/echoserver:1.0
+        imagePullPolicy: Always
+        name: echoserver
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echoserver
+  namespace: foo
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: echoserver
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echoserver
+  namespace: foo
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    external-dns.alpha.kubernetes.io/target: homelab-tunnel.peterstorm.io
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  ingressClassName: nginx
+  - hosts:
+    - echo.peterstorm.io
+    secretName: echo-peterstorm-tls
+  rules:
+  - host: echo.peterstorm.io
+    http:
+      paths:
+      - path: /
+        backend:
+          service:
+            name: echoserver
+            port:
+              number: 80
