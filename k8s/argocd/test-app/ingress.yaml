@@ -3,7 +3,7 @@ kind: Ingress
 metadata:
   name: echoserver
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     external-dns.alpha.kubernetes.io/target: homelab-tunnel.peterstorm.io
     external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
