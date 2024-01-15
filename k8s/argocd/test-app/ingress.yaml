@@ -8,6 +8,7 @@ metadata:
     external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
   ingressClassName: nginx
+  tls:
   - hosts:
     - echo.peterstorm.io
     secretName: echo-peterstorm-tls
