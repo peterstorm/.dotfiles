@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echoserver
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    external-dns.alpha.kubernetes.io/target: homelab-tunnel.peterstorm.io
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  ingressClassName: nginx
+  - hosts:
+    - echo.peterstorm.io
+    secretName: echo-peterstorm-tls
+  rules:
+  - host: echo.peterstorm.io
+    http:
+      paths:
+      - path: /
+        backend:
+          service:
+            name: echoserver
+            port:
+              number: 80
