@@ -13,8 +13,11 @@ spec:
         app: echoserver
     spec:
       containers:
-      - image: gcr.io/google_containers/echoserver:1.9
+      - image: ealen/echo-server:latest
         imagePullPolicy: Always
         name: echoserver
         ports:
-        - containerPort: 8080
+        - containerPort: 80
+        env:
+        - name: PORT
+          value: "80"
