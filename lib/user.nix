@@ -4,7 +4,7 @@ with builtins;
 
  mkHMUser = {roles, username}:
  let
-  mkRole = name: import (../roles/users + "/${name}");
+  mkRole = name: import (../roles/home-manager + "/${name}");
   mod_roles = map (r: mkRole r) roles;
  in home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
