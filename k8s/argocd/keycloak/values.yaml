@@ -28,3 +28,6 @@ extraEnvVars:
       secretKeyRef:
         name: "keycloak-password-secret"
         key: "password"
+postgresql:
+  image:
+    tag: 15.4.0-debian-11-r54
