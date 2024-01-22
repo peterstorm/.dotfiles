@@ -1,7 +1,7 @@
 auth:
   adminUser: "peterstorm"
   existingSecret: "keycloak-password-secret"
-  passwordSecretKey: "pasword"
+  passwordSecretKey: "password"
 ingress:
   enabled: true
   annotations:
