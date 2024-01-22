@@ -39,6 +39,8 @@
     eval "$(starship init bash)"
     alias lock='i3lock -c 000000'
     alias sus='systemctl suspend'
+    alias warpc='warp-cli connect'
+    alias warpd='warp-cli disconnect'
   '';
 
   environment.systemPackages = with pkgs; [
