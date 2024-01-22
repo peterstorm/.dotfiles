@@ -12,8 +12,8 @@ ingress:
   - host: keycloak.peterstorm.io
     http:
       paths:
-      - path: /
-        pathType: Prefix
+        - path: /
+          pathType: Prefix
 
 postgresql:
   enabled: true
