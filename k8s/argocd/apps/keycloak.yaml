@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   sources:
-  - repoURL: oci://registry-1.docker.io/bitnamicharts/keycloak
+  - repoURL: https://github.com/bitnami/charts
     targetRevision: 18.3.0
     chart: keycloak
     helm:
