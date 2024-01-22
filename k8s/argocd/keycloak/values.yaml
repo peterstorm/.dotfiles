@@ -1,3 +1,7 @@
+auth:
+  adminUser: "peterstorm"
+  existingSecret: "keycloak-password-secret"
+  passwordSecretKey: "pasword"
 ingress:
   enabled: true
   annotations:
@@ -6,17 +10,6 @@ ingress:
   ingressClassName: nginx
   hostname: keycloak.peterstorm.io
   tls: true
-extraEnvVars:
-  - name: KEYCLOAK_ADMIN
-    valueFrom:
-      secretKeyRef:
-        name: "keycloak-admin-secret"
-        key: "user"
-  - name: KEYCLOAK_ADMIN_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: "keycloak-password-secret"
-        key: "password"
 postgres:
   auth:
     existingSecret: "bitnami-postgress-keycloak-password"
