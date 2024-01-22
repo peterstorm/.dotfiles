@@ -2,6 +2,7 @@ auth:
   adminUser: "peterstorm"
   existingSecret: "keycloak-password-secret"
   passwordSecretKey: "password"
+proxy: edge
 ingress:
   enabled: true
   annotations:
