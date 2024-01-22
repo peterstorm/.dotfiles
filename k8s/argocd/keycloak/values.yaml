@@ -16,3 +16,15 @@ ingress:
 
 postgresql:
   enabled: true
+
+extraEnvFrom:
+  - name: KEYCLOAK_ADMIN
+    valueFrom:
+      secretRef:
+        name: "keycloak-admin-secret"
+        key: "user"
+  - name: KEYCLOAK_ADMIN_PASSWORD
+    valueFrom:
+      secretRef:
+        name: "keycloak-password-secret"
+        key: "password"
