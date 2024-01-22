@@ -17,3 +17,6 @@ extraEnvVars:
       secretKeyRef:
         name: "keycloak-password-secret"
         key: "password"
+postgres:
+  auth:
+    existingSecret: "bitnami-postgress-keycloak-password"
