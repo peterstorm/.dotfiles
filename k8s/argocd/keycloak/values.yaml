@@ -1,6 +1,3 @@
-image:
-  repository: quay.io/keycloak/keycloak
-  tag: "23.0.4"
 ingress:
   enabled: true
   annotations:
@@ -20,7 +17,7 @@ ingress:
 postgresql:
   enabled: true
 
-extraEnv: |
+extraEnvVars:
   - name: KEYCLOAK_ADMIN
     valueFrom:
       secretKeyRef:
