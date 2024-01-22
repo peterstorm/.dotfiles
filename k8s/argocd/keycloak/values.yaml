@@ -17,7 +17,7 @@ ingress:
 postgresql:
   enabled: true
 
-extraEnvFrom:
+extraEnv:
   - name: KEYCLOAK_ADMIN
     valueFrom:
       secretRef:
