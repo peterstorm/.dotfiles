@@ -20,11 +20,11 @@ postgresql:
 extraEnv: |
   - name: KEYCLOAK_ADMIN
     valueFrom:
-      secretRef:
+      secretKeyRef:
         name: "keycloak-admin-secret"
         key: "user"
   - name: KEYCLOAK_ADMIN_PASSWORD
     valueFrom:
-      secretRef:
+      secretKeyRef:
         name: "keycloak-password-secret"
         key: "password"
