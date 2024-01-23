@@ -1,7 +1,7 @@
 auth:
-  adminUser: "peterstorm"
-  existingSecret: "keycloak-password-secret"
-  passwordSecretKey: "password"
+  adminUser: peterstorm
+  existingSecret: keycloak-password-secret
+  passwordSecretKey: admin-password
 proxy: edge
 ingress:
   enabled: true
@@ -13,4 +13,4 @@ ingress:
   tls: true
 postgres:
   auth:
-    existingSecret: "bitnami-postgress-keycloak-password"
+    existingSecret: bitnami-postgress-keycloak-password
