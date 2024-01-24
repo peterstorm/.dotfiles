@@ -17,5 +17,37 @@
 
   hardware.cpu.amd.updateMicrocode = true;
 
+  hardware.fancontrol = {
+    enable = true;
+    config = ''
+      Common Settings:
+      INTERVAL=10
+
+      Settings of hwmon3/pwm3:
+      Depends on hwmon0/temp3_input
+      Controls hwmon3/fan3_input
+      '  MINTEMP=20
+      MAXTEMP=60
+      MINSTART=150
+      MINSTOP=100
+
+      Settings of hwmon3/pwm2:
+      Depends on hwmon0/temp3_input
+      Controls hwmon3/fan2_input
+      MINTEMP=20
+      MAXTEMP=60
+      MINSTART=150
+      MINSTOP=100
+
+      Settings of hwmon3/pwm1:
+      Depends on hwmon0/temp3_input
+      Controls hwmon3/fan1_input
+      MINTEMP=20
+      MAXTEMP=60
+      MINSTART=150
+      MINSTOP=100
+    '';
+  };
+
 }
 
