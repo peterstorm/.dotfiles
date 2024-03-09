@@ -1,4 +1,4 @@
-{config, pkgs, lib, ...}:
+{inputs, config, pkgs, lib, ...}:
 
 {
   nix = {
@@ -10,13 +10,11 @@
     package = pkgs.nixUnstable;
     settings = {
       trusted-public-keys = [
-        "undo-foundation.cachix.org-1:BSP9SjfX89JXxs2QXF9qxTYBlTSG3ad4N7V4HSlH9s0="
         "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
         "miso-haskell.cachix.org-1:6N2DooyFlZOHUfJtAx1Q09H0P5XXYzoxxQYiwn6W1e8="
 
       ];
       substituters = [
-        "https://undo-foundation.cachix.org"
         "https://cache.iog.io"
         "https://miso-haskell.cachix.org"
       ];
@@ -41,6 +39,8 @@
     eval "$(starship init bash)"
     alias lock='i3lock -c 000000'
     alias sus='systemctl suspend'
+    alias warpc='warp-cli connect'
+    alias warpd='warp-cli disconnect'
   '';
 
   environment.systemPackages = with pkgs; [
@@ -67,6 +67,10 @@
     kube3d
     ripgrep
     gcc
+  ];
+
+  imports = [
+    inputs.sops-nix.nixosModules.sops
   ];
 }
 

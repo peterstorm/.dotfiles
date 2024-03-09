@@ -1,4 +1,4 @@
-{ system, pkgs, home-manager, lib, user, ...}:
+{ inputs, system, pkgs, home-manager, lib, user, ...}:
 with builtins;
 {
 
@@ -44,7 +44,7 @@ with builtins;
       roles,
       machine,
       cpuCores,
-      laptop,
+      sopsSecrets ? false,
       users,
       wifi ? [],
       gpuTempSensor ? null,
@@ -55,11 +55,10 @@ with builtins;
       }) NICs);
 
       userCfg = {
-        inherit name NICs roles cpuCores laptop gpuTempSensor cpuTempSensor;
+        inherit name NICs roles cpuCores gpuTempSensor cpuTempSensor;
       };
 
       sysdata = [{
-        options.laptop = lib.mkEnableOption "test";
       }];
 
       roles_mods = (map (r: mkRole r) roles );
@@ -75,6 +74,10 @@ with builtins;
     in lib.nixosSystem {
       inherit system;
 
+      specialArgs = {
+        inherit inputs;
+      };
+
       modules = [
         {
           imports = [ ../modules ] ++ roles_mods ++ sys_users ++ machine_mods;
@@ -82,6 +85,8 @@ with builtins;
           environment.etc = {
             "hmsystemdata.json".text = builtins.toJSON userCfg;
           };
+
+          custom.secrets.enable = sopsSecrets;
 
           networking.hostName = "${name}";
           networking.interfaces = networkCfg;

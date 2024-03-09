@@ -5,6 +5,8 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    sops-nix.url = "github:Mic92/sops-nix";
+    sops-nix.inputs.nixpkgs.follows = "nixpkgs";
     neovim-nightly-overlay.url = "github:nix-community/neovim-nightly-overlay";
     neovim-nightly-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -14,7 +16,7 @@
 
     inherit (nixpkgs) lib;
     util = import ./lib { 
-      inherit system pkgs home-manager lib; overlays = (pkgs.overlays);
+      inherit inputs system pkgs home-manager lib; overlays = (pkgs.overlays);
     };
 
     inherit (util) host;
@@ -66,7 +68,7 @@
           ssh_keys = [];
         }];
         cpuCores = 8;
-        laptop = true;
+        sopsSecrets = true;
       };
 
       laptop-work = host.mkHost {
@@ -87,7 +89,6 @@
           ssh_keys = [];
         }];
         cpuCores = 8;
-        laptop = true;
       };
 
       desktop = host.mkHost {
@@ -108,7 +109,6 @@
           ssh_keys = [];
         }];
         cpuCores = 8;
-        laptop = true;
       };
 
       homelab = host.mkHost {
@@ -137,7 +137,6 @@
           }
         ];
         cpuCores = 8;
-        laptop = true;
       };
 
     };

@@ -1,24 +1,25 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: media-ingress
-  namespace: media
+  name: echoserver
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    external-dns.alpha.kubernetes.io/target: homelab-tunnel.peterstorm.io
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - media.peterstorm.io
-    secretName: media-peterstorm-tls
+    - echo-server.peterstorm.io
+    secretName: echo-server-peterstorm-tls
   rules:
-  - host: media.peterstorm.io
+  - host: echo-server.peterstorm.io
     http:
       paths:
-      - path: /transmission
+      - path: /
         pathType: Prefix
         backend:
           service:
-            name: transmission-openvpn
+            name: echoserver
             port:
               number: 80

@@ -1,0 +1,16 @@
+auth:
+  adminUser: peterstorm
+  existingSecret: keycloak-password-secret
+  passwordSecretKey: admin-password
+proxy: edge
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    external-dns.alpha.kubernetes.io/target: 192.168.0.240
+  ingressClassName: nginx
+  hostname: keycloak.peterstorm.io
+  tls: true
+postgres:
+  auth:
+    existingSecret: bitnami-postgress-keycloak-password
