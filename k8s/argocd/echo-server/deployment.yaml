@@ -13,7 +13,7 @@ spec:
         app: echoserver
     spec:
       containers:
-      - image: ealen/echo-server:latest
+      - image: ealen/echo-server:0.9.3
         imagePullPolicy: Always
         name: echoserver
         ports:
