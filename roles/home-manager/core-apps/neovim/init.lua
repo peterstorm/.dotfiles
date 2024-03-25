@@ -140,3 +140,6 @@ require('settings.emmet-ls').setup()
 
 -- setup rust
 require('settings.rust-tools').setup()
+
+-- typescript-tools
+require("typescript-tools").setup({})
