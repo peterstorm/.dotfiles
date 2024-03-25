@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
     sops-nix.url = "github:Mic92/sops-nix";
@@ -11,134 +12,144 @@
     neovim-nightly-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs @ { self, nixpkgs, home-manager, ... }:
-  let
+  outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
 
-    inherit (nixpkgs) lib;
-    util = import ./lib { 
-      inherit inputs system pkgs home-manager lib; overlays = (pkgs.overlays);
-    };
-
-    inherit (util) host;
-    inherit (util) user;
-    inherit (util) shell;
-
-    system = "x86_64-linux";
-
-    pkgs = import nixpkgs {
-      inherit system;
-      config = { allowUnfree = true; };
-      overlays = [
-        inputs.neovim-nightly-overlay.overlay 
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
       ];
-    };
 
-  in {
+      perSystem = { self', system, pkgs, lib, config, inputs', ... }: let
 
-    homeManagerConfigurations = {
+        pkgs = import self.inputs.nixpkgs {
+          inherit system;
+          overlays = [
+            self.inputs.neovim-nightly-overlay.overlay
+          ];
+          config.allowUnfree = true;
+        };
 
-      peterstorm = user.mkHMUser {
-        roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" ];
-        username = "peterstorm";
-      };
+        inherit (nixpkgs) lib;
+        util = import ./lib {
+          inherit inputs pkgs home-manager system lib; overlays = (pkgs.overlays);
+        };
+        inherit (util) host user shell;
 
-      homelab = user.mkHMUser {
-        roles = [ "core-apps" ];
-        username = "homelab";
-      };
-    };
+      in {
 
-    nixosConfigurations = {
+        legacyPackages.homeManagerConfigurations = {
 
-      laptop-xps = host.mkHost {
-        name = "laptop-xps";
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" ];
-        machine = [ "laptop-xps" ];
-        NICs = [ "wlp0s20f3" ];
-        kernelPackage = pkgs.linuxPackages_latest;
-        initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
-        initrdMods = [ "dm-snapshot" ];
-        kernelMods = [ "kvm-intel" "nvidia" "nvidia_modeset" "nvidia_drm" "nvidia_uvm" ];
-        kernelPatches = [];
-        kernelParams = [ "acpi_rev_override" ];
-        users = [{
-          name = "peterstorm";
-          groups = [ "wheel" "networkmanager" "docker" ];
-          uid = 1000;
-          ssh_keys = [];
-        }];
-        cpuCores = 8;
-        sopsSecrets = true;
-      };
+          peterstorm = user.mkHMUser {
+            roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" ];
+            username = "peterstorm";
+          };
 
-      laptop-work = host.mkHost {
-        name = "laptop-work";
-        roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
-        machine = [ "laptop-work" ];
-        NICs = [ "wlp0s20f3" ];
-        kernelPackage = pkgs.linuxPackages_latest;
-        initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
-        initrdMods = [ "dm-snapshot" ];
-        kernelMods = [ "kvm-intel" ];
-        kernelPatches = [];
-        kernelParams = [ "acpi_rev_override" ];
-        users = [{
-          name = "peterstorm";
-          groups = [ "wheel" "networkmanager" "docker" ];
-          uid = 1000;
-          ssh_keys = [];
-        }];
-        cpuCores = 8;
-      };
+          hansen142 = user.mkHMUser {
+              roles = [ "core-apps/neovim"];
+              username = "hansen142";
+          };
 
-      desktop = host.mkHost {
-        name = "desktop";
-        roles = [ "core" "wifi" "efi" "bluetooth" "dual-desktop-plasma" "nvidia-graphics" ];
-        machine = [ "desktop" ];
-        NICs = [ "wlp5s0" "enp6s0" ];
-        initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
-        initrdMods = [];
-        kernelMods = [ "kvm-amd" ];
-        kernelPatches = [];
-        kernelParams = [];
-        kernelPackage = pkgs.linuxPackages_latest;
-        users = [{
-          name = "peterstorm";
-          groups = [ "wheel" "networkmanager" "docker" ];
-          uid = 1000;
-          ssh_keys = [];
-        }];
-        cpuCores = 8;
-      };
+          homelab = user.mkHMUser {
+            roles = [ "core-apps" ];
+            username = "homelab";
+          };
+        };
 
-      homelab = host.mkHost {
-        name = "homelab";
-        roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" ];
-        machine = [ "homelab" ];
-        NICs = [ "wlp3s0" ];
-        initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
-        initrdMods = [];
-        kernelMods = [ "kvm-amd" ];
-        kernelPatches = [];
-        kernelParams = [];
-        kernelPackage = pkgs.linuxPackages_latest;
-        users = [
-          {
+        legacyPackages.nixosConfigurations = {
+
+          laptop-xps = host.mkHost {
+            name = "laptop-xps";
+            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" ];
+            machine = [ "laptop-xps" ];
+            NICs = [ "wlp0s20f3" ];
+            kernelPackage = pkgs.linuxPackages_latest;
+            initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
+            initrdMods = [ "dm-snapshot" ];
+            kernelMods = [ "kvm-intel" "nvidia" "nvidia_modeset" "nvidia_drm" "nvidia_uvm" ];
+            kernelPatches = [];
+            kernelParams = [ "acpi_rev_override" ];
+            users = [{
+              name = "peterstorm";
+              groups = [ "wheel" "networkmanager" "docker" ];
+              uid = 1000;
+              ssh_keys = [];
+            }];
+            cpuCores = 8;
+            sopsSecrets = true;
+          };
+
+          laptop-work = host.mkHost {
+            name = "laptop-work";
+            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
+            machine = [ "laptop-work" ];
+            NICs = [ "wlp0s20f3" ];
+            kernelPackage = pkgs.linuxPackages_latest;
+            initrdAvailableMods = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
+            initrdMods = [ "dm-snapshot" ];
+            kernelMods = [ "kvm-intel" ];
+            kernelPatches = [];
+            kernelParams = [ "acpi_rev_override" ];
+            users = [{
+              name = "peterstorm";
+              groups = [ "wheel" "networkmanager" "docker" ];
+              uid = 1000;
+              ssh_keys = [];
+            }];
+            cpuCores = 8;
+          };
+
+          desktop = host.mkHost {
+            name = "desktop";
+            roles = [ "core" "wifi" "efi" "bluetooth" "dual-desktop-plasma" "nvidia-graphics" ];
+            machine = [ "desktop" ];
+            NICs = [ "wlp5s0" "enp6s0" ];
+            initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
+            initrdMods = [];
+            kernelMods = [ "kvm-amd" ];
+            kernelPatches = [];
+            kernelParams = [];
+            kernelPackage = pkgs.linuxPackages_latest;
+            users = [{
+              name = "peterstorm";
+              groups = [ "wheel" "networkmanager" "docker" ];
+              uid = 1000;
+              ssh_keys = [];
+            }];
+            cpuCores = 8;
+          };
+
+          homelab = host.mkHost {
             name = "homelab";
-            groups = [ "wheel" "networkmanager" "docker" ];
-            uid = 1001;
-            ssh_keys = builtins.readFile ./authorized_keys.txt;
-          }
-          {
-            name = "peterstorm";
-            groups = [ "wheel" "networkmanager" "docker" ];
-            uid = 1000;
-            ssh_keys = builtins.readFile ./authorized_keys.txt;
-          }
-        ];
-        cpuCores = 8;
+            roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" ];
+            machine = [ "homelab" ];
+            NICs = [ "wlp3s0" ];
+            initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
+            initrdMods = [];
+            kernelMods = [ "kvm-amd" ];
+            kernelPatches = [];
+            kernelParams = [];
+            kernelPackage = pkgs.linuxPackages_latest;
+            users = [
+              {
+                name = "homelab";
+                groups = [ "wheel" "networkmanager" "docker" ];
+                uid = 1001;
+                ssh_keys = builtins.readFile ./authorized_keys.txt;
+              }
+              {
+                name = "peterstorm";
+                groups = [ "wheel" "networkmanager" "docker" ];
+                uid = 1000;
+                ssh_keys = builtins.readFile ./authorized_keys.txt;
+              }
+            ];
+            cpuCores = 8;
+          };
+
+        };
+
       };
 
     };
-  };
 }

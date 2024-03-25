@@ -6,6 +6,9 @@ with builtins;
  let
   mkRole = name: import (../roles/home-manager + "/${name}");
   mod_roles = map (r: mkRole r) roles;
+  homeDirectory = if system == "aarch64-darwin" 
+    then "/Users/${username}" 
+    else "/home/${username}";
  in home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
   modules = [
@@ -15,7 +18,7 @@ with builtins;
       systemd.user.startServices = true;
       home.stateVersion = "22.11";
       home.username = username;
-      home.homeDirectory = "/home/${username}";
+      home.homeDirectory = homeDirectory;
     }
   ] ++ mod_roles;
   };
