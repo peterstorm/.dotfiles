@@ -9,6 +9,6 @@
   ];
 
   home.file = {
-    ".config/alacritty/alacritty.yml".source = ./alacritty.yml;
+    ".config/alacritty/alacritty.toml".source = ./alacritty.toml;
   };
 }

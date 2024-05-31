@@ -1,7 +1,7 @@
-{pkgs, lib, config, ...}:
+{input, pkgs, lib, config, ...}:
 {
   home.packages = with pkgs; [
-    neovim-nightly
+    neovim
   ];
 
   home.file = {

@@ -26,7 +26,7 @@
         pkgs = import self.inputs.nixpkgs {
           inherit system;
           overlays = [
-            self.inputs.neovim-nightly-overlay.overlay
+            self.inputs.neovim-nightly-overlay.overlays.default
           ];
           config.allowUnfree = true;
         };

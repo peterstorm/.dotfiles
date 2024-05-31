@@ -7,7 +7,7 @@
       automatic = true;
       options = "--delete-older-than 10d";
     };
-    package = pkgs.nixUnstable;
+    package = pkgs.nixVersions.latest;
     settings = {
       trusted-public-keys = [
         "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
