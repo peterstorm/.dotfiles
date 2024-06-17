@@ -47,5 +47,4 @@ return require('packer').startup(function(use)
       require("typescript-tools").setup {}
     end,
   })
-  use 'LuaLS/lua-language-server'
 end)

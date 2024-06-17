@@ -2,6 +2,7 @@
 {
   home.packages = with pkgs; [
     neovim
+    lua-language-server
   ];
 
   home.file = {
