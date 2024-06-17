@@ -143,3 +143,6 @@ require('settings.rust-tools').setup()
 
 -- typescript-tools
 require("typescript-tools").setup({})
+
+-- lua setup
+require('lspconfig')['lua_ls'].setup{}
