@@ -8,6 +8,8 @@ local setup = require('settings.setup')
 local map = f.map
 local keyset = vim.keymap.set
 
+-- setup lazy.nvim
+require('config.lazy')
 
 -- setup packer and plugins
 setup.bootstrapPacker()
