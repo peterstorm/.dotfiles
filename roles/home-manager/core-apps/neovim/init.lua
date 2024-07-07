@@ -74,7 +74,11 @@ require('settings.nvim-metals').setup()
 keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
 
 -- nvim-java
-require('java').setup()
+require('java').setup({
+  jdk = {
+    auto_install = false,
+  },
+})
 
 -- nvim-lsp config
 map('n', '<leader>gd', '<cmd>Telescope lsp_definitions<cr>')
