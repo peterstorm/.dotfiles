@@ -70,8 +70,10 @@ require('settings.nvim-cmp').setup()
 
 -- nvim-metals config
 require('settings.nvim-metals').setup()
-
 keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
+
+-- mason
+require("mason").setup()
 
 -- nvim-java
 require('java').setup()
