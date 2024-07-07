@@ -36,7 +36,6 @@ opt.mouse = 'a'
 opt.undofile = true                 -- persistent undo
 
 -- nvim mappings
-g['mapleader'] = ","
 map('i', 'jk', '<ESC>')
 map('x', 'jk', '<ESC>')
 map('v', 'jk', '<ESC>')
