@@ -36,6 +36,7 @@ opt.mouse = 'a'
 opt.undofile = true                 -- persistent undo
 
 -- nvim mappings
+g['mapleader'] = ","
 map('i', 'jk', '<ESC>')
 map('x', 'jk', '<ESC>')
 map('v', 'jk', '<ESC>')
@@ -49,9 +50,6 @@ map('n', '<leader>h', '<cmd>vertical res -10<cr>')
 map('n', '<leader>l', '<cmd>vertical res +10<cr>')
 map('n', '<leader>j', '<cmd>res +10<cr>')
 map('n', '<leader>k', '<cmd>res -10<cr>')
-
--- setup lazy.nvim
-require('config.lazy')
 
 -- telescope config
 require('settings.telescope').setup()
@@ -70,11 +68,8 @@ require('settings.nvim-cmp').setup()
 
 -- nvim-metals config
 require('settings.nvim-metals').setup()
+
 keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
-
--- mason
-require("mason").setup()
-
 -- nvim-java
 require('java').setup()
 
