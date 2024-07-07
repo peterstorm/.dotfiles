@@ -51,6 +51,9 @@ map('n', '<leader>l', '<cmd>vertical res +10<cr>')
 map('n', '<leader>j', '<cmd>res +10<cr>')
 map('n', '<leader>k', '<cmd>res -10<cr>')
 
+-- setup lazy.nvim
+require('config.lazy')
+
 -- telescope config
 require('settings.telescope').setup()
 
@@ -68,8 +71,8 @@ require('settings.nvim-cmp').setup()
 
 -- nvim-metals config
 require('settings.nvim-metals').setup()
-
 keyset("n", "<leader>mc", require("telescope").extensions.metals.commands)
+
 -- nvim-java
 require('java').setup()
 
