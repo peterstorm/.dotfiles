@@ -92,7 +92,7 @@ return {
         'github:mason-org/mason-registry',
       },
     },
-  }
+  },
   {
     'nvim-java/nvim-java'
   }
