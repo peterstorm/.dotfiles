@@ -88,5 +88,8 @@ return {
     --[[ config = function()
       require("typescript-tools").setup {}
     end, ]]
+  },
+  {
+    'nvim-java/nvim-java'
   }
 }

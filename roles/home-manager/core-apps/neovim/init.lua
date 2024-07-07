@@ -148,3 +148,6 @@ require("typescript-tools").setup({})
 
 -- lua setup
 require'lspconfig'.lua_ls.setup{}
+
+-- nvim-java
+require('java').setup()
