@@ -75,6 +75,7 @@ return {
       'nvim-lua/plenary.nvim',
       'nvim-telescope/telescope-fzy-native.nvim'
     },
+    lazy = false
   },
   {
     'hrsh7th/nvim-cmp',
