@@ -8,11 +8,6 @@ local setup = require('settings.setup')
 local map = f.map
 local keyset = vim.keymap.set
 
--- setup lazy.nvim
-require('config.lazy')
-
--- setup packer and plugins
-
 -- generel nvim config
 opt.colorcolumn = "80"
 opt.expandtab = true                -- Use spaces instead of tabs
@@ -55,6 +50,9 @@ map('n', '<leader>h', '<cmd>vertical res -10<cr>')
 map('n', '<leader>l', '<cmd>vertical res +10<cr>')
 map('n', '<leader>j', '<cmd>res +10<cr>')
 map('n', '<leader>k', '<cmd>res -10<cr>')
+
+-- setup lazy.nvim
+require('config.lazy')
 
 -- telescope config
 require('settings.telescope').setup()
