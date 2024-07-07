@@ -8,10 +8,13 @@ local setup = require('settings.setup')
 local map = f.map
 local keyset = vim.keymap.set
 
+-- setup lazy.nvim
+require('config.lazy')
+
+-- load colorscheme
+cmd('colorscheme tomorrow-night-eighties')
 
 -- setup packer and plugins
-setup.bootstrapPacker()
-require('plugins')
 
 -- generel nvim config
 opt.colorcolumn = "80"
@@ -39,7 +42,6 @@ opt.wildmode = {'list', 'longest'}  -- Command-line completion mode
 opt.wrap = false                    -- Disable line wrap
 opt.mouse = 'a'
 opt.undofile = true                 -- persistent undo
-cmd('colorscheme tomorrow-night-eighties')
 
 -- nvim mappings
 g['mapleader'] = ","
