@@ -6,6 +6,8 @@ return {
   },
   {
     'nvim-treesitter/nvim-treesitter',
+    lazy = false,
+    version = nil,
     build = ':TSUpdate'
   },
   {
