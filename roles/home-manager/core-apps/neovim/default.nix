@@ -6,6 +6,7 @@
   ];
 
   home.file = {
+    ".config/nvim/lua/config/lazy.lua".source = ./lua/config/lazy.lua;
     ".config/nvim/init.lua".source = ./init.lua;
     ".config/nvim/lua/settings/functions.lua".source = ./lua/settings/functions.lua;
     ".config/nvim/lua/settings/setup.lua".source = ./lua/settings/setup.lua;
