@@ -9,6 +9,15 @@ return {
     end
   },
   {
+    'nvim-telescope/telescope.nvim',
+    dependencies = {
+      'nvim-lua/popup.nvim',
+      'nvim-lua/plenary.nvim',
+      'nvim-telescope/telescope-fzy-native.nvim'
+    },
+    lazy = false
+  },
+  {
     'nvim-treesitter/nvim-treesitter',
     lazy = false,
     build = ':TSUpdate'
@@ -66,15 +75,6 @@ return {
     dependencies = {
       "nvim-lua/plenary.nvim"
     }
-  },
-  {
-    'nvim-telescope/telescope.nvim',
-    dependencies = {
-      'nvim-lua/popup.nvim',
-      'nvim-lua/plenary.nvim',
-      'nvim-telescope/telescope-fzy-native.nvim'
-    },
-    lazy = false
   },
   {
     'hrsh7th/nvim-cmp',
