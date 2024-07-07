@@ -3,6 +3,10 @@ return {
     'peterstorm/tomorrow-night-eighties',
     lazy = false,
     priority = 100,
+    config = function()
+      -- load the colorscheme here
+      vim.cmd([[colorscheme tomorrow-night-eighties]])
+    end
   },
   {
     'nvim-treesitter/nvim-treesitter',

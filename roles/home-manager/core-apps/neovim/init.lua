@@ -11,9 +11,6 @@ local keyset = vim.keymap.set
 -- setup lazy.nvim
 require('config.lazy')
 
--- load colorscheme
-cmd('colorscheme tomorrow-night-eighties')
-
 -- setup packer and plugins
 
 -- generel nvim config
