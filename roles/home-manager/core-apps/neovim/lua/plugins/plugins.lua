@@ -50,9 +50,6 @@ return {
   {
     'numToStr/Comment.nvim',
     opts = {}
-    --[[ config = function()
-        require('Comment').setup()
-    end ]]
   },
   {
     'hrsh7th/vim-vsnip'
@@ -66,9 +63,6 @@ return {
   {
     'https://git.sr.ht/~whynothugo/lsp_lines.nvim',
     opts = {}
-    --[[ config = function()
-      require("lsp_lines").setup()
-    end, ]]
   },
   {
     'scalameta/nvim-metals',
@@ -89,20 +83,9 @@ return {
       'nvim-lua/plenary.nvim',
       'neovim/nvim-lspconfig'
     },
-    --[[ config = function()
-      require("typescript-tools").setup {}
-    end, ]]
   },
   {
     'williamboman/mason.nvim',
-    opts = {
-      ui = {
-      icons = {
-        package_installed = '✓',
-        package_pending = '➜',
-        package_uninstalled = '✗',
-      },
-    },
   },
   {
     'nvim-java/nvim-java'
