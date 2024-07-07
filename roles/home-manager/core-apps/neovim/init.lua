@@ -145,3 +145,6 @@ require("typescript-tools").setup({})
 
 -- lua setup
 require'lspconfig'.lua_ls.setup{}
+
+-- java lsp
+require('lspconfig').jdtls.setup({})
