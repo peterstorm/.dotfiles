@@ -54,7 +54,7 @@ map('n', '<leader>k', '<cmd>res -10<cr>')
 require('config.lazy')
 
 -- telescope config
-require('settings.telescope').setup()
+--require('settings.telescope').setup()
 
 map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
 map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
