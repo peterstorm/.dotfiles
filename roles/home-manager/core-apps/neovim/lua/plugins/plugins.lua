@@ -84,4 +84,19 @@ return {
       'neovim/nvim-lspconfig'
     },
   },
+  { 'williamboman/mason-lspconfig.nvim',
+    opts = {
+      ensure_installed = {
+        'tailwindcss',
+        'lua_ls',
+      }
+    }
+  },
+  {
+    'luckasRanarison/tailwind-tools.nvim',
+    dependencies = {
+      'nvim-treesitter/nvim-treesitter' ,
+    },
+    opts = {}
+  }
 }
