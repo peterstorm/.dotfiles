@@ -152,3 +152,6 @@ require'lspconfig'.lua_ls.setup{}
 
 -- java lsp
 require('lspconfig').jdtls.setup({})
+
+-- tailwindcss
+require('lspconfig').tailwindcss.setup({})
