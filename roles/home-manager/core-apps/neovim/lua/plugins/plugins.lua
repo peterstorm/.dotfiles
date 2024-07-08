@@ -88,6 +88,7 @@ return {
     opts = {
       ensure_installed = {
         'tailwindcss',
+        'lua_ls',
       }
     }
   },
