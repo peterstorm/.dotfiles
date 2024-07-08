@@ -85,8 +85,17 @@ return {
     },
   },
   {
-    "luckasRanarison/tailwind-tools.nvim",
-    dependencies = { "nvim-treesitter/nvim-treesitter" },
+    'luckasRanarison/tailwind-tools.nvim',
+    dependencies = {
+      'nvim-treesitter/nvim-treesitter' ,
+      { 'mason-lspconfig',
+        opts = {
+          ensure_installed = {
+            'tailwindcss',
+          }
+        }
+      }
+    },
     opts = {}
   }
 }
