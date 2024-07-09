@@ -4,6 +4,9 @@
     enable = true;
     keyMode = "vi";
     extraConfig = ''
+      # set colors correctly
+      set -g default-terminal "tmux-256color"
+      set -ag terminal-overrides ",xterm-256color:RGB"
       # Smart pane switching with awareness of Vim splits.
       # See: https://github.com/christoomey/vim-tmux-navigator
       is_vim="ps -o state= -o comm= -t '#{pane_tty}' \

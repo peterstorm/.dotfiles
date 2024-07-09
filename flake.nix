@@ -47,7 +47,11 @@
           };
 
           hansen142 = user.mkHMUser {
-            roles = [ "core-apps/neovim" "core-apps/darwin"];
+            roles = [
+              "core-apps/neovim"
+              "core-apps/darwin"
+              "core-apps/tmux"
+            ];
             username = "hansen142";
           };
 
