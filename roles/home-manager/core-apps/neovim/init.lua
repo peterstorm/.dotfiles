@@ -87,6 +87,7 @@ map('n', '<leader>gd', '<cmd>Telescope lsp_definitions<cr>')
 map('n', '<leader>gr', '<cmd>Telescope lsp_references<cr>')
 keyset("n", "K",  vim.lsp.buf.hover)
 keyset("n", "<leader>ca", vim.lsp.buf.code_action)
+keyset("n", "<leader>sr", vim.lsp.buf.rename)
 
 -- lsp-lines config
 vim.diagnostic.config({
