@@ -11,6 +11,8 @@ ingress:
   ingressClassName: nginx
   hostname: keycloak.peterstorm.io
   tls: true
-postgres:
+postgresql:
   auth:
     existingSecret: bitnami-postgress-keycloak-password
+    secretKeys:
+      userPasswordKey: postgres-password
