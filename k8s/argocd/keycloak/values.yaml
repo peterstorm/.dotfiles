@@ -15,4 +15,4 @@ postgresql:
   auth:
     existingSecret: bitnami-postgress-keycloak-password
     secretKeys:
-      userPasswordKey: postgress-password
+      userPasswordKey: postgres-password
