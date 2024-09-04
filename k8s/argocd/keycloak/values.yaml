@@ -14,3 +14,4 @@ ingress:
 postgres:
   auth:
     existingSecret: bitnami-postgress-keycloak-password
+    passwordSecretKey: postgress-password
