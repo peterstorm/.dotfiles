@@ -13,6 +13,6 @@ ingress:
   tls: true
 postgres:
   auth:
-    existingSecret: bitnami-postgress-keycloak-password
+    existingSecret: keycloak-postgresql
     secretKeys:
-      userPasswordKey: postgress-password
+      userPasswordKey: password
