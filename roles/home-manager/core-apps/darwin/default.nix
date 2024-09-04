@@ -6,6 +6,7 @@
     discord
     ripgrep
     gh
+    colima
   ];
 
 }
