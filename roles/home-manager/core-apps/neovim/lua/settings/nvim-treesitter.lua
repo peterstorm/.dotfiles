@@ -2,7 +2,7 @@ local M = {}
 
 M.setup = function()
   local ts = require 'nvim-treesitter.configs'
-  ts.setup { ensure_installed = 
+  ts.setup { ensure_installed =
     { "scala"
     , "nix"
     , "kotlin"
@@ -14,6 +14,10 @@ M.setup = function()
     , "html"
     , "css"
     , "rust"
+    , "javascript"
+    , "typescript"
+    , "dockerfile"
+    , "jsonc"
     }, highlight = { enable = true } }
 end
 

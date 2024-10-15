@@ -8,6 +8,7 @@
       intelBusId = "PCI:0:2:0";
       nvidiaBusId = "PCI:1:0:0";
     };
+    open = false;
     nvidiaPersistenced = true;
     modesetting = {
       enable = true;
@@ -21,7 +22,6 @@
 
   hardware.opengl = {
     enable = true;
-    driSupport = true;
     driSupport32Bit = true;
   };
 }
