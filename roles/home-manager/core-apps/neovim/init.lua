@@ -158,3 +158,12 @@ require('lspconfig').jdtls.setup({})
 
 -- tailwindcss
 require('lspconfig').tailwindcss.setup({})
+
+-- neoformat
+
+g.neoformat_try_node_exe = 1
+
+api.nvim_create_autocmd("BufWritePre", {
+  pattern = { "javascript", "javascriptreact", "typescript", "typescriptreact" },
+  command = "Neoformat prettier",
+})
