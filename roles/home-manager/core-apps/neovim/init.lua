@@ -83,8 +83,9 @@ require('java').setup({
 })
 
 -- nvim-lsp config
-map('n', '<leader>gd', '<cmd>Telescope lsp_definitions<cr>')
-map('n', '<leader>gr', '<cmd>Telescope lsp_references<cr>')
+local builtin = require('telescope.builtin')
+keyset('n', '<leader>gd', builtin.lsp_definitions)
+keyset('n', '<leader>gr', builtin.lsp_references)
 keyset("n", "K",  vim.lsp.buf.hover)
 keyset("n", "<leader>ca", vim.lsp.buf.code_action)
 keyset("n", "<leader>sr", vim.lsp.buf.rename)
