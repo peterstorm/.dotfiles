@@ -2,7 +2,7 @@
 {
   services.thermald.enable = lib.mkDefault true;
   powerManagement.cpuFreqGovernor = lib.mkDefault "powersave";
-  hardware.opengl = {
-    driSupport32Bit = true;
+  hardware.graphics = {
+    enable32Bit = true;
   };
 }

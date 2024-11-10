@@ -12,21 +12,27 @@
     #jack.enable = true;
   };
 
-  services.xserver = {
+  services.libinput = {
     enable = true;
-    layout = "us";
-    libinput = {
-      enable = true;
-      touchpad.disableWhileTyping = true;
-      touchpad.tapping = true;
-      touchpad.additionalOptions = ''
+    touchpad.disableWhileTyping = true;
+    touchpad.tapping = true;
+    touchpad.additionalOptions = ''
         Option "PalmDetection" "on"
-      '';
-    };
-    xkbOptions = "caps:hyper";
-    displayManager = {
+    '';
+  };
+
+  services.displayManager = {
       defaultSession = "none+xmonad";
       sddm.enable = true;
+  };
+
+  services.xserver = {
+    enable = true;
+    xkb = {
+        layout = "us";
+        options = "caps:hyper";
+    };
+    displayManager = {
       setupCommands = ''
         ${pkgs.xorg.xrandr}/bin/xrandr --dpi 144;
       '';
