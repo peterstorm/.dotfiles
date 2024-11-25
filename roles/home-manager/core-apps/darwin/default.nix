@@ -7,6 +7,7 @@
     ripgrep
     gh
     colima
+    postman
   ];
 
 }
