@@ -30,7 +30,7 @@
     enable = true;
     xkb = {
         layout = "us";
-        options = "caps:hyper";
+        options = "ctrl:swapcaps";
     };
     displayManager = {
       setupCommands = ''
