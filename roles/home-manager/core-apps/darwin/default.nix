@@ -6,8 +6,12 @@
     discord
     ripgrep
     gh
+    git
     colima
     postman
+    bruno
+    bytecode-viewer
+    azure-cli
   ];
 
 }

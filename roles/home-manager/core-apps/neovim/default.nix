@@ -17,5 +17,6 @@
     ".config/nvim/lua/settings/telescope.lua".source = ./lua/settings/telescope.lua;
     ".config/nvim/lua/settings/emmet-ls.lua".source = ./lua/settings/emmet-ls.lua;
     ".config/nvim/lua/settings/rust-tools.lua".source = ./lua/settings/rust-tools.lua;
+    ".config/nvim/lua/plugins/copilot-chat.lua".source = ./lua/plugins/copilot-chat.lua;
   };
 }
