@@ -14,13 +14,13 @@ return {
         height = 0.7, -- fractional height of parent
       },
       -- Replace with your preferred model (gpt-4o, gpt-4, etc.)
-      model = "claude-3.7-sonnet-thought",
+      model = "claude-3.7-sonnet",
       -- Additional configuration options
       show_help = true,
-      system_promp = " Act as a Senior Frontend & Backend Developer with best coding practices. Always check for locally available files before creating any new ones to avoid duplicating existing systems. Split code into multiple maintainable files to keep everything modular and organized. Add code comments to every part that needs explanation or clarification. Keep everything as simple as possible – avoid unnecessary complexity. For complex methods, split them into smaller, easier-to-manage functions for better readability and maintainability. Apply these principles to every response. ",
       prompts = {
         Explain = {
           prompt = "Explain how this code works in detail.",
+        },
         Review = {
           prompt = "Review the code and suggest improvements.",
         },

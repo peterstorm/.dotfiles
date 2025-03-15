@@ -12,6 +12,7 @@
     bruno
     bytecode-viewer
     azure-cli
+    element-desktop
   ];
 
 }

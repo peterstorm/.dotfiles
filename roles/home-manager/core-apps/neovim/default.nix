@@ -1,7 +1,7 @@
-{input, pkgs, lib, config, ...}:
+{input, pkgs, lib, config, inputs, ...}:
 {
   home.packages = with pkgs; [
-    neovim
+    inputs.neovim-nightly-overlay.packages.${system}.default
   ];
 
   home.file = {

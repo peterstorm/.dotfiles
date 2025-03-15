@@ -1,4 +1,4 @@
-{ pkgs, home-manager, lib, system, overlays, ... }:
+{ pkgs, home-manager, lib, system, overlays, inputs, ... }:
 with builtins;
 {
 
@@ -11,6 +11,7 @@ with builtins;
     else "/home/${username}";
  in home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
+  extraSpecialArgs = { inherit inputs; };
   modules = [
     {
       nixpkgs.overlays = overlays;

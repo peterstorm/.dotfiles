@@ -10,7 +10,6 @@
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
     neovim-nightly-overlay.url = "github:nix-community/neovim-nightly-overlay";
-    neovim-nightly-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:
@@ -25,9 +24,6 @@
 
         pkgs = import self.inputs.nixpkgs {
           inherit system;
-          overlays = [
-            self.inputs.neovim-nightly-overlay.overlays.default
-          ];
           config.allowUnfree = true;
         };
 
