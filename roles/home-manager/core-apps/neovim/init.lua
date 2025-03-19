@@ -2,7 +2,7 @@ local api = vim.api
 local cmd = vim.cmd  -- to execute Vim commands e.g. cmd('pwd')
 local fn = vim.fn    -- to call Vim functions e.g. fn.bufnr()
 local g = vim.g      -- a table to access global variables
-local opt = vim.opt  -- to set options
+local opt = vim.opt  -- to set optio
 local f = require('settings.functions')
 local setup = require('settings.setup')
 local map = f.map
@@ -89,10 +89,10 @@ keyset('n', '<leader>gr', builtin.lsp_references)
 keyset("n", "K",  vim.lsp.buf.hover)
 keyset("n", "<leader>ca", vim.lsp.buf.code_action)
 keyset("n", "<leader>sr", vim.lsp.buf.rename)
+map("n", "<space>e", ":lua vim.diagnostic.open_float(0, { scope = 'line' })<CR>")
 
--- lsp-lines config
 vim.diagnostic.config({
-  virtual_text = false,
+  virtual_text = true,
 })
 
 require("lsp_lines").setup()

@@ -64,10 +64,6 @@ return {
     'simrat39/rust-tools.nvim'
   },
   {
-    'https://git.sr.ht/~whynothugo/lsp_lines.nvim',
-    opts = {}
-  },
-  {
     'scalameta/nvim-metals',
     dependencies = {
       "nvim-lua/plenary.nvim"
