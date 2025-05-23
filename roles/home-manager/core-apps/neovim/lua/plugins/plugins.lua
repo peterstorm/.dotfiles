@@ -55,9 +55,6 @@ return {
     'sbdchd/neoformat'
   },
   {
-    'hrsh7th/vim-vsnip'
-  },
-  {
     'neovim/nvim-lspconfig'
   },
   {
@@ -97,5 +94,11 @@ return {
       'nvim-treesitter/nvim-treesitter' ,
     },
     opts = {}
+  },
+  {
+   "m4xshen/hardtime.nvim",
+   lazy = false,
+   dependencies = { "MunifTanjim/nui.nvim" },
+   opts = {},
   },
 }

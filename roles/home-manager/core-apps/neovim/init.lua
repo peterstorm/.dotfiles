@@ -134,6 +134,9 @@ api.nvim_create_autocmd(
   }
 )
 
+-- hardtime
+require("hardtime").setup()
+
 -- copilot
 g.copilot_assume_mapped = true
 
