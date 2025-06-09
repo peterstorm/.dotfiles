@@ -16,7 +16,6 @@
 
   home.packages = with pkgs;[
     vscode
-    konsole
     cloudflare-warp
     cachix
     firefox
