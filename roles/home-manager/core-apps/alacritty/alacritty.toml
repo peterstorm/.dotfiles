@@ -31,11 +31,3 @@ foreground = "0xcccccc"
 
 [font]
 size = 6
-
-[[keyboard.bindings]]
-key = "Back"
-chars = "\u007f"
-
-[[keyboard.bindings]]
-key = "Return"
-chars = "\u000d"

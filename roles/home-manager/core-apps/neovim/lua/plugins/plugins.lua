@@ -55,6 +55,9 @@ return {
     'sbdchd/neoformat'
   },
   {
+    'hrsh7th/vim-vsnip'
+  },
+  {
     'neovim/nvim-lspconfig'
   },
   {

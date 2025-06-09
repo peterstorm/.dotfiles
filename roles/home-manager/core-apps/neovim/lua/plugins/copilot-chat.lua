@@ -14,7 +14,7 @@ return {
         height = 0.7, -- fractional height of parent
       },
       -- Replace with your preferred model (gpt-4o, gpt-4, etc.)
-      model = "claude-3.7-sonnet",
+      model = "claude-sonnet-4",
       -- Additional configuration options
       show_help = true,
       prompts = {
