@@ -77,7 +77,6 @@
               ssh_keys = [];
             }];
             cpuCores = 8;
-            sopsSecrets = true;
           };
 
           laptop-work = host.mkHost {

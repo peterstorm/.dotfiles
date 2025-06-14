@@ -44,7 +44,6 @@ with builtins;
       roles,
       machine,
       cpuCores,
-      sopsSecrets ? false,
       users,
       wifi ? [],
       gpuTempSensor ? null,
@@ -85,8 +84,6 @@ with builtins;
           environment.etc = {
             "hmsystemdata.json".text = builtins.toJSON userCfg;
           };
-
-          custom.secrets.enable = sopsSecrets;
 
           networking.hostName = "${name}";
           networking.interfaces = networkCfg;

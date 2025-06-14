@@ -4,6 +4,5 @@
 
   imports = [
     ./laptop
-    ./secrets
   ];
 }
