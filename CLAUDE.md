@@ -67,26 +67,83 @@ secrets/
 └── users/{username}/ # User-specific secrets (home-manager)
 ```
 
-### Usage in Roles
+### Secure Template-Based Usage (RECOMMENDED)
+Templates prevent secrets from entering the Nix store - use this approach for security:
+
+```nix
+{ util, config, lib, ... }:
+
+# SECURE: Template-based approach
+(util.sops.mkSecretsAndTemplatesConfig
+  # 1. Define secrets (encrypted references)
+  [
+    (util.sops.userSecret "github-token" "personal-github.yaml" "token")
+    (util.sops.hostSecret "api-key" "service.yaml" "api_key")
+  ]
+  
+  # 2. Define templates (rendered files with actual values)
+  [
+    # Environment file template
+    (util.sops.envTemplate "app-env" {
+      GITHUB_TOKEN = "github-token";
+      API_KEY = "api-key";
+    })
+    
+    # Config file template
+    (util.sops.configTemplate "app-config" ''
+      api_key = ${config.sops.placeholder."api-key"}
+      token = ${config.sops.placeholder."github-token"}
+    '')
+  ]
+  
+  # 3. Regular configuration
+  {
+    # Use rendered templates (contain actual secret values)
+    systemd.services.myapp = {
+      serviceConfig.EnvironmentFile = config.sops.templates."app-env".path;
+    };
+  }
+) { inherit config lib; }
+
+# Access templates via: config.sops.templates.template-name.path
+```
+
+### Legacy Direct Access (Less Secure)
+Only use when templates aren't suitable:
+
 ```nix
 { util, config, ... }:
 
-util.sops.mkSecrets [
-  # Auto-detect context and ownership
-  { name = "github-token"; file = "secrets/users/peterstorm/github.yaml"; key = "token"; }
-  
-  # Explicit configuration
-  { name = "api-key"; file = "secrets/common/api.yaml"; key = "key"; owner = "nginx"; mode = "0440"; }
-] { inherit config; }
-
-# Access secrets via: config.sops.secrets.github-token.path
+# WARNING: May expose secrets in nix store
+(util.sops.mkSecretsConfig [
+  (util.sops.userSecret "github-token" "personal-github.yaml" "token")
+] {
+  # Access secrets via: config.sops.secrets.github-token.path
+}) { inherit config lib; }
 ```
+
+### Dynamic Secret Helpers
+- `userSecret`: Resolves to `secrets/users/{current-user}/`
+- `hostSecret`: Resolves to `secrets/hosts/{current-host}/`  
+- `commonSecret`: Resolves to `secrets/common/`
+
+### Template Locations
+- **NixOS**: `/run/secrets/rendered/{template-name}`
+- **Home Manager**: `~/.config/sops-nix/secrets/rendered/{template-name}`
 
 ### Encrypting Secrets
 ```bash
 # Encrypt new secret file
-sops -e -i secrets/common/new-secret.yaml
+sops -e -i secrets/users/username/new-secret.yaml
 
 # Edit existing encrypted file  
-sops secrets/users/peterstorm/github.yaml
+sops secrets/hosts/hostname/service.yaml
+```
+
+### Testing Templates
+```bash
+# Verify template content (should show placeholders, not actual secrets)
+nix eval .#nixosConfigurations.hostname.config.sops.templates.template-name.content
+
+# Templates should contain: <SOPS:hash:PLACEHOLDER>
 ```

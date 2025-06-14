@@ -166,4 +166,101 @@ rec {
     group = "root"; 
     mode = "0644";
   };
+
+  # TEMPLATE-BASED API (RECOMMENDED for security - avoids nix store)
+  # Templates use placeholders and generate files with actual secret values
+  
+  # Combined secrets + templates configuration - this defines both secrets and templates together
+  mkSecretsAndTemplatesConfig = secretsSpecs: templatesSpecs: extraConfig: { config, lib, ... }:
+    let
+      # First define all the secrets
+      secretsConfig = mkSecrets secretsSpecs { inherit config; };
+      
+      # Then define templates that reference those secrets via placeholders
+      templatesConfig = lib.foldl' lib.recursiveUpdate {} (map (templateSpec:
+        let
+          template = if builtins.isFunction templateSpec
+                    then templateSpec { inherit config; }
+                    else templateSpec;
+        in {
+          sops.templates.${template.name} = {
+            content = template.content;
+          } // (lib.optionalAttrs (template ? owner) { owner = template.owner; })
+            // (lib.optionalAttrs (template ? group) { group = template.group; })
+            // (lib.optionalAttrs (template ? mode) { mode = template.mode; });
+        }
+      ) templatesSpecs);
+    in
+    lib.recursiveUpdate 
+      (lib.recursiveUpdate secretsConfig templatesConfig)
+      extraConfig;
+
+  # Template helpers for common patterns
+  
+  # Create environment file template from secret placeholders
+  # Usage: envTemplate "app-env" { API_KEY = "github-token"; DB_PASS = "db-password"; }
+  envTemplate = name: envVars: { config, ... }:
+  let
+    envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretName: 
+      "${envName}=${config.sops.placeholder.${secretName}}"
+    ) envVars);
+  in {
+    inherit name;
+    content = envContent;
+  };
+
+  # Create config file template with secret substitution
+  # Usage: configTemplate "nginx.conf" "server { ssl_cert ${config.sops.placeholder.\"ssl-cert\"}; }"
+  configTemplate = name: content: {
+    inherit name content;
+  };
+
+  # Dynamic template helpers that work with our secret organization
+  
+  # User environment template - creates .env file with user-specific secrets
+  userEnvTemplate = name: envVars: { config, ... }: 
+  let
+    isHomeManager = config ? home;
+    currentUser = if isHomeManager then config.home.username else "unknown";
+    envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretInfo: 
+      let
+        secretName = "${currentUser}-${secretInfo.name}";
+      in "${envName}=${config.sops.placeholder.${secretName}}"
+    ) envVars);
+  in {
+    inherit name;
+    content = envContent;
+  };
+
+  # Host config template - creates config file with host-specific secrets
+  hostConfigTemplate = name: templateContent: { config, ... }:
+  let
+    currentHost = config.networking.hostName or "unknown";
+  in {
+    inherit name;
+    content = templateContent;
+  };
+
+  # Simplified API for common use case: secrets + single template + config
+  mkSecretTemplate = {
+    secrets,                 # List of secret specs (same as mkSecrets)
+    template,                # Template spec: { name, content, owner?, group?, mode? }
+    config ? {}              # Additional configuration
+  }: { config, lib, ... }:
+    let
+      # Define secrets
+      secretsConfig = mkSecrets secrets { inherit config; };
+      
+      # Define template
+      templateConfig = {
+        sops.templates.${template.name} = {
+          content = template.content;
+        } // (lib.optionalAttrs (template ? owner) { owner = template.owner; })
+          // (lib.optionalAttrs (template ? group) { group = template.group; })
+          // (lib.optionalAttrs (template ? mode) { mode = template.mode; });
+      };
+    in
+    lib.recursiveUpdate 
+      (lib.recursiveUpdate secretsConfig templateConfig)
+      config;
 }
