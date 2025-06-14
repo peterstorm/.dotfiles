@@ -9,10 +9,14 @@ with builtins;
   homeDirectory = if system == "aarch64-darwin" 
     then "/Users/${username}" 
     else "/home/${username}";
+  # Import util libraries to make them available to roles
+  util = import ./. { inherit inputs pkgs home-manager system lib overlays; };
  in home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
-  extraSpecialArgs = { inherit inputs; };
+  extraSpecialArgs = { inherit inputs util; };
   modules = [
+    inputs.sops-nix.homeManagerModules.sops
+    (import ../roles/home-manager/sops-config)
     {
       nixpkgs.overlays = overlays;
       nixpkgs.config.allowUnfree = true;

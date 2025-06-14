@@ -67,10 +67,15 @@
     kube3d
     ripgrep
     gcc
+    sops
+    age
   ];
 
   imports = [
     inputs.sops-nix.nixosModules.sops
   ];
+
+  # Configure sops age key location
+  sops.age.keyFile = "/var/lib/sops-nix/keys.txt";
 }
 
