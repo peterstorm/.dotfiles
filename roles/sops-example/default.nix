@@ -1,31 +1,21 @@
-{ lib, config, pkgs, ... }:
+{ lib, config, pkgs, util, ... }:
 
-let
-  util = import ../../lib {
-    inherit lib pkgs;
-    inputs = {};
-    home-manager = {};
-    overlays = [];
-    system = pkgs.system;
-  };
-in
-
-# Example NixOS role using dynamic host-specific encrypted secrets  
-util.sops.mkSecrets [
+# Clean example of NixOS role using dynamic host-specific encrypted secrets  
+(util.sops.mkSecretsConfig [
   # Test token (dynamically resolves to current host)
-  ({ config, ... }: (util.sops.hostSecret "test-token" "example.yaml" "api_token") { inherit config; } // {
+  (util.sops.hostSecret "test-token" "example.yaml" "api_token" {
     owner = "root";
     group = "root"; 
     mode = "0400";
   })
   
   # Zone ID for DNS configuration (dynamically resolves to current host)
-  ({ config, ... }: (util.sops.hostSecret "zone-id" "example.yaml" "zone_id") { inherit config; } // {
+  (util.sops.hostSecret "zone-id" "example.yaml" "zone_id" {
     owner = "root";
     group = "root";
     mode = "0444"; # World-readable since it's not sensitive
   })
-] { inherit config; } // {
+] {
 
   # Example service configuration using the secrets
   systemd.services.example-sops-service = {
@@ -44,4 +34,4 @@ util.sops.mkSecrets [
       ''}";
     };
   };
-}
+}) { inherit config lib; }

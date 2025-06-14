@@ -49,6 +49,8 @@ with builtins;
       gpuTempSensor ? null,
       cpuTempSensor ? null}:
     let
+      # Import util to make it available to NixOS roles
+      util = import ./. { inherit inputs pkgs home-manager system lib; overlays = []; };
       networkCfg = listToAttrs (map (n: {
         name = "${n}"; value = { useDHCP = true; };
       }) NICs);
@@ -74,7 +76,7 @@ with builtins;
       inherit system;
 
       specialArgs = {
-        inherit inputs;
+        inherit inputs util;
       };
 
       modules = [

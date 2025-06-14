@@ -55,7 +55,7 @@ rec {
       // optionalAttrs (resolvedPath != null) { path = resolvedPath; };
   };
 
-  # Create multiple sops secrets from a list
+  # Create multiple sops secrets from a list - low-level function
   # Each item in the list should be a secret spec (same as mkSecret args)
   # Supports both static specs and dynamic functions that resolve based on config
   mkSecrets = secrets: { config, ... }:
@@ -67,9 +67,17 @@ rec {
     in
     foldl' recursiveUpdate {} (map resolveSecret secrets);
     
-  # Alternative: Create secrets that can be merged directly (simpler API)
+  # PREFERRED API: Create secrets and merge with other config - this is what you should use!
+  # Usage: util.sops.mkSecretsConfig [secrets] { your other config }
+  mkSecretsConfig = secrets: extraConfig: 
+    { config, lib, ... }:
+    lib.recursiveUpdate 
+      (mkSecrets secrets { inherit config; })
+      extraConfig;
+      
+  # Pure secrets-only module (for imports or when you only need secrets)
   mkSecretsModule = secrets: { config, ... }:
-    foldl' recursiveUpdate {} (map (secret: (mkSecret secret) { inherit config; }) secrets);
+    mkSecrets secrets { inherit config; };
 
   # Helper to construct secret file paths
   secretFile = filename: "secrets/${filename}";
@@ -89,7 +97,7 @@ rec {
   };
 
   # Host-specific secret - resolves to secrets/hosts/{current-hostname}/filename  
-  hostSecret = name: filename: key: { config, ... }:
+  hostSecret = name: filename: key: attrs: { config, ... }:
   let
     currentHost = config.networking.hostName or "unknown";
     resolvedFile = "secrets/hosts/${currentHost}/${filename}";
@@ -97,7 +105,7 @@ rec {
     inherit name key;
     file = resolvedFile;
     format = "yaml";
-  };
+  } // attrs;
 
   # Common secret - resolves to secrets/common/filename
   commonSecret = name: filename: key: {
