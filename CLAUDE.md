@@ -17,6 +17,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `nix flake check` - Validate flake configuration
 - `nix develop` - Enter development shell (if available)
 
+### Testing
+- `nix build .#nixosConfigurations.HOSTNAME.config.system.build.toplevel --dry-run` - Test NixOS config builds without downloading/building
+- `nix build .#homeManagerConfigurations.USERNAME.activationPackage --dry-run` - Test home-manager config builds without downloading/building
+- `nix eval .#nixosConfigurations.HOSTNAME.config.sops.templates --apply 'builtins.attrNames'` - List SOPS templates for a host
+- `nix eval .#homeManagerConfigurations.USERNAME.config.sops.templates.TEMPLATE_NAME.content` - Preview SOPS template content (should show placeholders)
+
 **Important for Nix Development**:
 - When refactoring Nix code, always examine the full build logs when testing. Nix error messages can be verbose and the root cause is often buried in the output. Use `--show-trace` flag for detailed error traces when debugging.
 - Always `git add .` newly created files before testing - Nix flakes only see files that are tracked by git.
@@ -108,19 +114,6 @@ Templates prevent secrets from entering the Nix store - use this approach for se
 # Access templates via: config.sops.templates.template-name.path
 ```
 
-### Legacy Direct Access (Less Secure)
-Only use when templates aren't suitable:
-
-```nix
-{ util, config, ... }:
-
-# WARNING: May expose secrets in nix store
-(util.sops.mkSecretsConfig [
-  (util.sops.userSecret "github-token" "personal-github.yaml" "token")
-] {
-  # Access secrets via: config.sops.secrets.github-token.path
-}) { inherit config lib; }
-```
 
 ### Dynamic Secret Helpers
 - `userSecret`: Resolves to `secrets/users/{current-user}/`

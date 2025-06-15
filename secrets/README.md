@@ -55,19 +55,13 @@ cat secrets/users/myuser/github.yaml
 # Shows: token: ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
 ```
 
-## APIs Available
+## Template-Based Secret Management
 
-We provide two APIs for using secrets:
-
-### 🚨 Legacy API (Secrets in Nix Store - Less Secure)
-Direct secret access - secrets may be exposed in `/nix/store/` 
-
-### ✅ Template API (Recommended - Secure)  
-Template-based approach - secrets are **never** in the Nix store
+This repository uses a template-based approach for managing secrets to ensure they never enter the Nix store.
 
 ---
 
-# Template-Based API (Recommended)
+# Template-Based API
 
 ## Why Templates?
 
@@ -331,72 +325,23 @@ GITHUB_TOKEN=ghp_actual_secret_here  # Only exists at runtime!
 
 ---
 
-# Legacy API (Less Secure)
-
-## Direct Secret Access
-
-⚠️ **Warning**: This approach may expose secrets in the Nix store. Use only when templates are not suitable.
-
-### Basic Usage
-
-```nix
-{ lib, config, pkgs, util, ... }:
-
-(util.sops.mkSecretsConfig [
-  (util.sops.userSecret "github-token" "github.yaml" "token")
-  (util.sops.hostSecret "api-key" "api.yaml" "key")
-] {
-  # Access secrets via file paths
-  home.file."script.sh".text = ''
-    #!/bin/sh
-    export TOKEN=$(cat ${config.sops.secrets.github-token.path})
-  '';
-}) { inherit config lib; }
-```
-
-### Dynamic Resolution Helpers
-
-#### User Secrets (`userSecret`)
-Resolves to `secrets/users/{current-username}/filename`
-```nix
-(util.sops.userSecret "secret-name" "filename.yaml" "key-name")
-```
-
-#### Host Secrets (`hostSecret`) 
-Resolves to `secrets/hosts/{current-hostname}/filename`
-```nix
-(util.sops.hostSecret "secret-name" "filename.yaml" "key-name" {
-  owner = "root";
-  group = "root";
-  mode = "0400";
-})
-```
-
-#### Common Secrets (`commonSecret`)
-Resolves to `secrets/common/filename`
-```nix
-(util.sops.commonSecret "secret-name" "filename.yaml" "key-name")
-```
-
----
-
 # Migration Guide
 
-## From Legacy to Templates
+## Migrating Existing Configurations
 
-**Before (legacy)**:
+If you have existing direct secret access patterns, convert them to templates for better security:
+
+**Before**:
 ```nix
-(util.sops.mkSecretsConfig [
-  (util.sops.userSecret "github-token" "github.yaml" "token")
-] {
-  home.file."script.sh".text = ''
-    export TOKEN=$(cat ${config.sops.secrets.github-token.path})
-  '';
-}) { inherit config lib; }
+# Direct file access - less secure
+home.file."script.sh".text = ''
+  export TOKEN=$(cat /path/to/secret)
+'';
 ```
 
-**After (secure templates)**:
+**After**:
 ```nix
+# Template-based - secure
 (util.sops.mkSecretsAndTemplatesConfig 
   [(util.sops.userSecret "github-token" "github.yaml" "token")]
   [(util.sops.envTemplate "app-env" { TOKEN = "github-token"; })]

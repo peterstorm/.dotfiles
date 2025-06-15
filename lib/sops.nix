@@ -67,21 +67,6 @@ rec {
     in
     foldl' recursiveUpdate {} (map resolveSecret secrets);
     
-  # PREFERRED API: Create secrets and merge with other config - this is what you should use!
-  # Usage: util.sops.mkSecretsConfig [secrets] { your other config }
-  mkSecretsConfig = secrets: extraConfig: 
-    { config, lib, ... }:
-    lib.recursiveUpdate 
-      (mkSecrets secrets { inherit config; })
-      extraConfig;
-      
-  # Pure secrets-only module (for imports or when you only need secrets)
-  mkSecretsModule = secrets: { config, ... }:
-    mkSecrets secrets { inherit config; };
-
-  # Helper to construct secret file paths
-  secretFile = filename: "secrets/${filename}";
-
   # Dynamic path resolution helpers - these resolve paths based on current context
   
   # User-specific secret - resolves to secrets/users/{current-username}/filename
@@ -114,58 +99,7 @@ rec {
     format = "yaml";
   };
 
-  # Environment file helpers with dynamic paths
-  userEnvFile = name: filename: { config, ... }:
-  let
-    isHomeManager = config ? home;
-    currentUser = if isHomeManager then config.home.username else "unknown";
-  in {
-    inherit name;
-    file = "secrets/users/${currentUser}/${filename}";
-    format = "dotenv";
-  };
 
-  hostEnvFile = name: filename: { config, ... }:
-  let
-    currentHost = config.networking.hostName or "unknown";
-  in {
-    inherit name;
-    file = "secrets/hosts/${currentHost}/${filename}";
-    format = "dotenv";
-  };
-
-  # Legacy helpers (for backward compatibility)
-  envFile = name: {
-    inherit name;
-    file = secretFile "${name}.env";
-    format = "dotenv";
-  };
-
-  yamlSecret = name: key: {
-    inherit name key;
-    file = secretFile "${name}.yaml";
-    format = "yaml";
-  };
-
-  # Helper for explicit user-specific secrets (override auto-detection)
-  explicitUserSecret = username: secretSpec: secretSpec // {
-    owner = username;
-    group = "users";
-  };
-
-  # Helper for system-wide secrets  
-  systemSecret = secretSpec: secretSpec // {
-    owner = "root";
-    group = "root";
-    mode = "0600";
-  };
-
-  # Helper for world-readable secrets (use with caution)
-  publicSecret = secretSpec: secretSpec // {
-    owner = "root";
-    group = "root"; 
-    mode = "0644";
-  };
 
   # TEMPLATE-BASED API (RECOMMENDED for security - avoids nix store)
   # Templates use placeholders and generate files with actual secret values
