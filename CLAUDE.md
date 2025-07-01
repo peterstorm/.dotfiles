@@ -63,6 +63,7 @@ The system supports multiple architectures (x86_64-linux, aarch64-darwin) and us
 ### SOPS Integration
 - **NixOS**: sops-nix module imported in core role with age key at `/var/lib/sops-nix/keys.txt`
 - **Home Manager**: sops-nix module and age key configuration automatically included
+- **Darwin**: Age key location: `~/Library/Application Support/sops/age/keys.txt`
 - **Library**: Custom sops utilities available as `util.sops` in all roles
 
 ### Secrets Directory Structure
@@ -131,6 +132,10 @@ sops -e -i secrets/users/username/new-secret.yaml
 
 # Edit existing encrypted file  
 sops secrets/hosts/hostname/service.yaml
+
+# Darwin: Encrypt with specific age key
+export SOPS_AGE_RECIPIENTS=age15szuax689kt40ftylqynggcn7fgxp6y8x7lrmk44htcjcu6yjqzs2p0l8e
+sops -e -i secrets/users/username/new-secret.yaml
 ```
 
 ### Testing Templates
@@ -139,4 +144,49 @@ sops secrets/hosts/hostname/service.yaml
 nix eval .#nixosConfigurations.hostname.config.sops.templates.template-name.content
 
 # Templates should contain: <SOPS:hash:PLACEHOLDER>
+```
+
+## Darwin-Specific Configuration
+
+### SOPS Setup for Darwin
+Darwin uses a different age key location and launchd service management:
+
+1. **Age Key Generation**: 
+```bash
+mkdir -p "$HOME/Library/Application Support/sops/age"
+age-keygen -o "$HOME/Library/Application Support/sops/age/keys.txt"
+```
+
+2. **Service Management**:
+```bash
+# Check sops-nix service status
+launchctl print gui/$(id -u)/org.nix-community.home.sops-nix
+
+# Restart service after configuration changes
+launchctl kickstart gui/$(id -u)/org.nix-community.home.sops-nix
+
+# Check service logs
+cat ~/Library/Logs/SopsNix/stderr
+```
+
+3. **Template Verification**:
+```bash
+# Check if templates are rendered
+ls -la ~/.config/sops-nix/secrets/rendered/
+
+# View template content (contains actual secrets at runtime)
+cat ~/.config/sops-nix/secrets/rendered/template-name
+```
+
+### Darwin Role Configuration
+The `roles/home-manager/core-apps/darwin/default.nix` role is specifically for Darwin machines and includes:
+- Darwin-specific packages (colima, etc.)
+- Shell aliases with SOPS template integration
+- Platform-specific configurations
+
+Example secure shell alias using SOPS templates:
+```nix
+programs.zsh.shellAliases = {
+  myalias = "source ${config.sops.templates."env-file".path} && command --option=$SECRET_VAR";
+};
 ```
