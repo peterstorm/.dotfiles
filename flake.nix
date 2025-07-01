@@ -47,6 +47,8 @@
               "core-apps/neovim"
               "core-apps/darwin"
               "core-apps/tmux"
+              "core-apps/nix-direnv-zsh"
+              "core-apps/starship"
             ];
             username = "hansen142";
           };
