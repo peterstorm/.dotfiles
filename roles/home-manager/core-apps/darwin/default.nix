@@ -24,6 +24,7 @@
       vscode
       discord
       ripgrep
+      firefox
       claude-code
       gh
       git
@@ -35,6 +36,7 @@
       bytecode-viewer
       azure-cli
       element-desktop
+      kubeseal
     ];
 
     programs.zsh = {
@@ -43,6 +45,7 @@
         ocdev = "source ${config.sops.templates."openshift-env".path} && oc login --web --server=$OC_DEV_SERVER --insecure-skip-tls-verify";
         ocstage = "source ${config.sops.templates."openshift-env".path} && oc login --web --server=$OC_STAGE_SERVER --insecure-skip-tls-verify";
         ocprod = "source ${config.sops.templates."openshift-env".path} && oc login --web --server=$OC_PROD_SERVER --insecure-skip-tls-verify";
+        seal = "kubeseal --controller-namespace=sealed-secrets yaml -o yaml < \"$1\" > \"$2\"";
         # Add your custom aliases here
       };
     };
