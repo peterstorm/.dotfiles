@@ -1,8 +1,8 @@
-claimToken: "claim-XSWzQYmHARvBzKu_GUGj"
+claimToken: "claim-DXs4-bLbbFzhPz6t4pJW"
 
 image:
   repository: linuxserver/plex
-  tag: 1.41.6
+  tag: 1.42.1
   pullPolicy: IfNotPresent
 
 kubePlex:
