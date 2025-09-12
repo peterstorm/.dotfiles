@@ -104,4 +104,8 @@ return {
    dependencies = { "MunifTanjim/nui.nvim" },
    opts = {},
   },
+  {
+  'stevearc/conform.nvim',
+  opts = {},
+  },
 }
