@@ -5,6 +5,16 @@
     EDITOR = "nvim";
   };
 
+  programs.ssh = {
+    enable = true;
+    matchBlocks = {
+      homelab = {
+        hostname = "192.168.0.28";
+        user = "peterstorm";
+      };
+    };
+  };
+
   imports = [
     ./git
     ./tmux
