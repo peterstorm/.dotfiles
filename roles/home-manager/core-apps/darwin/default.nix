@@ -1,4 +1,4 @@
-{pkgs, config, lib, util, ...}:
+{pkgs, config, lib, util, inputs, ...}:
 
 (util.sops.mkSecretsAndTemplatesConfig
   # Define secrets
@@ -31,7 +31,7 @@
       discord
       ripgrep
       firefox
-      claude-code
+      inputs.nixpkgs-claude-pr.legacyPackages.${pkgs.system}.claude-code-bin
       gh
       git
       (colima.override {
