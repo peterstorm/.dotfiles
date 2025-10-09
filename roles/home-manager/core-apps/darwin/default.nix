@@ -31,7 +31,7 @@
       discord
       ripgrep
       firefox
-      inputs.nixpkgs-claude-pr.legacyPackages.${pkgs.system}.claude-code-bin
+      clau-code
       gh
       git
       (colima.override {
