@@ -31,7 +31,7 @@
       discord
       ripgrep
       firefox
-      clau-code
+      claude-code
       gh
       git
       (colima.override {
