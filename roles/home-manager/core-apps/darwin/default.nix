@@ -26,11 +26,12 @@
   # Configuration
   {
     home.packages = with pkgs;[
+      wget
       openshift
       vscode
       discord
       ripgrep
-      firefox
+      # inputs.nixpkgs-claude-pr.legacyPackages.${pkgs.system}.claude-code-bin
       claude-code
       gh
       git

@@ -89,7 +89,11 @@ return {
         'tailwindcss',
         'lua_ls',
       }
-    }
+    },
+    dependencies = {
+        { "mason-org/mason.nvim", opts = {} },
+        "neovim/nvim-lspconfig",
+    },
   },
   {
     'luckasRanarison/tailwind-tools.nvim',
