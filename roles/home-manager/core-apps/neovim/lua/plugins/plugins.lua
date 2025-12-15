@@ -41,13 +41,6 @@ return {
     'github/copilot.vim'
   },
   {
-    'ShinKage/idris2-nvim',
-    dependencies = {
-      'neovim/nvim-lspconfig',
-      'MunifTanjim/nui.nvim'
-    }
-  },
-  {
     'numToStr/Comment.nvim',
     opts = {}
   },
@@ -59,9 +52,6 @@ return {
   },
   {
     'neovim/nvim-lspconfig'
-  },
-  {
-    'simrat39/rust-tools.nvim'
   },
   {
     'scalameta/nvim-metals',
@@ -86,7 +76,6 @@ return {
   { 'williamboman/mason-lspconfig.nvim',
     opts = {
       ensure_installed = {
-        'tailwindcss',
         'lua_ls',
       }
     },
@@ -94,13 +83,6 @@ return {
         { "mason-org/mason.nvim", opts = {} },
         "neovim/nvim-lspconfig",
     },
-  },
-  {
-    'luckasRanarison/tailwind-tools.nvim',
-    dependencies = {
-      'nvim-treesitter/nvim-treesitter' ,
-    },
-    opts = {}
   },
   {
    "m4xshen/hardtime.nvim",

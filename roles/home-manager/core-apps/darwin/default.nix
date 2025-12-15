@@ -54,10 +54,10 @@
         ocprod = "source ${config.sops.templates."openshift-env".path} && oc login --web --server=$OC_PROD_SERVER --insecure-skip-tls-verify";
         # Add your custom aliases here
       };
-      initExtra = ''
+      initContent = ''
         # Source database environment variables
         source ${config.sops.templates."db-env".path}
-        
+
         seal() {
           kubeseal --controller-namespace=sealed-secrets --format=yaml -o yaml < "$1" > "$2"
         }

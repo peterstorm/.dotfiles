@@ -30,7 +30,7 @@
 
         inherit (nixpkgs) lib;
         util = import ./lib {
-          inherit inputs pkgs home-manager system lib; overlays = (pkgs.overlays);
+          inherit inputs pkgs home-manager system lib; overlays = [];
         };
         inherit (util) host user shell;
 
