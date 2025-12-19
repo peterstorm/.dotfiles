@@ -135,8 +135,8 @@ rec {
   # Usage: envTemplate "app-env" { API_KEY = "github-token"; DB_PASS = "db-password"; }
   envTemplate = name: envVars: { config, ... }:
   let
-    envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretName: 
-      "${envName}=${config.sops.placeholder.${secretName}}"
+    envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretName:
+      "${envName}='${config.sops.placeholder.${secretName}}'"
     ) envVars);
   in {
     inherit name;
@@ -152,14 +152,14 @@ rec {
   # Dynamic template helpers that work with our secret organization
   
   # User environment template - creates .env file with user-specific secrets
-  userEnvTemplate = name: envVars: { config, ... }: 
+  userEnvTemplate = name: envVars: { config, ... }:
   let
     isHomeManager = config ? home;
     currentUser = if isHomeManager then config.home.username else "unknown";
-    envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretInfo: 
+    envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretInfo:
       let
         secretName = "${currentUser}-${secretInfo.name}";
-      in "${envName}=${config.sops.placeholder.${secretName}}"
+      in "${envName}='${config.sops.placeholder.${secretName}}'"
     ) envVars);
   in {
     inherit name;

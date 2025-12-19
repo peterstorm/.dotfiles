@@ -28,6 +28,7 @@
     home.packages = with pkgs;[
       wget
       openshift
+      kubectl
       vscode
       discord
       ripgrep
@@ -44,6 +45,8 @@
       azure-cli
       element-desktop
       kubeseal
+      gemini-cli
+      github-copilot-cli
     ];
 
     programs.zsh = {
