@@ -8,6 +8,7 @@
     (util.sops.userSecret "oc-prod-server" "openshift.yaml" "prod_server")
     (util.sops.userSecret "flexii-db-password" "db_secrets.yaml" "flexii_database_password")
     (util.sops.userSecret "oister-db-password" "db_secrets.yaml" "oister_database_password")
+    (util.sops.userSecret "keycloak-client-secret" "keycloak.yaml" "keycloak_client_secret")
   ]
   
   # Define templates
@@ -20,6 +21,7 @@
     (util.sops.envTemplate "db-env" {
       FLEXII_DATABASE_PASSWORD = "flexii-db-password";
       OISTER_DATABASE_PASSWORD = "oister-db-password";
+      KEYCLOAK_CLIENT_SECRET = "keycloak-client-secret";
     })
   ]
   
@@ -29,7 +31,7 @@
       wget
       openshift
       kubectl
-      vscode
+      vscode-insiders
       discord
       ripgrep
       # inputs.nixpkgs-claude-pr.legacyPackages.${pkgs.system}.claude-code-bin

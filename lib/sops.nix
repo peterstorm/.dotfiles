@@ -136,7 +136,7 @@ rec {
   envTemplate = name: envVars: { config, ... }:
   let
     envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretName:
-      "${envName}='${config.sops.placeholder.${secretName}}'"
+      "export ${envName}='${config.sops.placeholder.${secretName}}'"
     ) envVars);
   in {
     inherit name;
@@ -159,7 +159,7 @@ rec {
     envContent = concatStringsSep "\n" (mapAttrsToList (envName: secretInfo:
       let
         secretName = "${currentUser}-${secretInfo.name}";
-      in "${envName}='${config.sops.placeholder.${secretName}}'"
+      in "export ${envName}='${config.sops.placeholder.${secretName}}'"
     ) envVars);
   in {
     inherit name;

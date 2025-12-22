@@ -23,14 +23,18 @@
 
       perSystem = { self', system, pkgs, lib, config, inputs', ... }: let
 
+        overlays = [
+          (import ./overlays/vscode-insiders.nix)
+        ];
+
         pkgs = import self.inputs.nixpkgs {
-          inherit system;
+          inherit system overlays;
           config.allowUnfree = true;
         };
 
         inherit (nixpkgs) lib;
         util = import ./lib {
-          inherit inputs pkgs home-manager system lib; overlays = [];
+          inherit inputs pkgs home-manager system lib overlays;
         };
         inherit (util) host user shell;
 
