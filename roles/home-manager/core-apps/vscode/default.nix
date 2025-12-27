@@ -10,6 +10,7 @@
         vscodevim.vim
         github.copilot
         github.copilot-chat
+        jnoortheen.nix-ide
         redhat.java
         vscjava.vscode-java-pack
         vscjava.vscode-java-debug
