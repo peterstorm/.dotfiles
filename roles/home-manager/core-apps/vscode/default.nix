@@ -27,6 +27,8 @@
         "vim.ignorecase" = true;
         "vim.smartcase" = true;
         "vim.useSystemClipboard" = true;
+        "vim.sneak" = true;
+        "vim.sneakUseIgnorecaseAndSmartcase" = true;
 
         # jk to escape in insert/visual modes
         "vim.insertModeKeyBindings" = [
