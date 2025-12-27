@@ -31,7 +31,6 @@
       wget
       openshift
       kubectl
-      vscode-insiders
       discord
       ripgrep
       # inputs.nixpkgs-claude-pr.legacyPackages.${pkgs.system}.claude-code-bin

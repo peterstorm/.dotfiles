@@ -11,6 +11,8 @@
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
     neovim-nightly-overlay.url = "github:nix-community/neovim-nightly-overlay";
+    nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
+    nix-vscode-extensions.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:
@@ -25,6 +27,7 @@
 
         overlays = [
           (import ./overlays/vscode-insiders.nix)
+          inputs.nix-vscode-extensions.overlays.default
         ];
 
         pkgs = import self.inputs.nixpkgs {
@@ -51,6 +54,7 @@
             roles = [
               "core-apps/neovim"
               "core-apps/darwin"
+              "core-apps/vscode"
               "core-apps/tmux"
               "core-apps/nix-direnv-zsh"
               "core-apps/starship"
