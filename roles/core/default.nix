@@ -61,10 +61,9 @@
     git-crypt
     tmux
     unrar
-    gitAndTools.gh
     parted
     kubernetes-helm # Shell
-    kube3d
+    k3d
     ripgrep
     gcc
     sops

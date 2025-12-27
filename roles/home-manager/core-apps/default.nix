@@ -34,7 +34,6 @@
     element-desktop
     discord
     slack
-    torrential
     vlc
     i3lock
     zoom-us
