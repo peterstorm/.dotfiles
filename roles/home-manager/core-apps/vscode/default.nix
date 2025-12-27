@@ -1,15 +1,9 @@
 {pkgs, lib, ...}:
 
-let
-  # Auto-select package: vscode-insiders on darwin, vscode on linux
-  vscodePackage = if pkgs.stdenv.isDarwin
-    then pkgs.vscode-insiders
-    else pkgs.vscode;
-in
 {
   programs.vscode = {
     enable = true;
-    package = vscodePackage;
+    package = pkgs.vscode-insiders;
 
     profiles.default = {
       extensions = with pkgs.vscode-marketplace; [
