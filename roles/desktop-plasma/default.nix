@@ -41,9 +41,6 @@
       enable = true;
       enableContribAndExtras = true;
     };
-    desktopManager = {
-      plasma5.enable = true;
-    };
   };
 
 }
