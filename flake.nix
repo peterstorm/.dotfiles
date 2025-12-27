@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs-claude-pr.url = "github:nixos/nixpkgs/pull/447265/head";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
     home-manager.url = "github:nix-community/home-manager";
@@ -10,6 +11,8 @@
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
     neovim-nightly-overlay.url = "github:nix-community/neovim-nightly-overlay";
+    nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
+    nix-vscode-extensions.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:
@@ -22,14 +25,19 @@
 
       perSystem = { self', system, pkgs, lib, config, inputs', ... }: let
 
+        overlays = [
+          (import ./overlays/vscode-insiders.nix)
+          inputs.nix-vscode-extensions.overlays.default
+        ];
+
         pkgs = import self.inputs.nixpkgs {
-          inherit system;
+          inherit system overlays;
           config.allowUnfree = true;
         };
 
         inherit (nixpkgs) lib;
         util = import ./lib {
-          inherit inputs pkgs home-manager system lib; overlays = (pkgs.overlays);
+          inherit inputs pkgs home-manager system lib overlays;
         };
         inherit (util) host user shell;
 
@@ -46,6 +54,7 @@
             roles = [
               "core-apps/neovim"
               "core-apps/darwin"
+              "core-apps/vscode"
               "core-apps/tmux"
               "core-apps/nix-direnv-zsh"
               "core-apps/starship"

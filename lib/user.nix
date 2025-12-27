@@ -1,4 +1,4 @@
-{ pkgs, home-manager, lib, system, overlays, inputs, ... }:
+{ pkgs, home-manager, lib, overlays, inputs, ... }:
 with builtins;
 {
 
@@ -6,11 +6,11 @@ with builtins;
  let
   mkRole = name: import (../roles/home-manager + "/${name}");
   mod_roles = map (r: mkRole r) roles;
-  homeDirectory = if system == "aarch64-darwin" 
-    then "/Users/${username}" 
+  homeDirectory = if pkgs.stdenv.isDarwin
+    then "/Users/${username}"
     else "/home/${username}";
   # Import util libraries to make them available to roles
-  util = import ./. { inherit inputs pkgs home-manager system lib overlays; };
+  util = import ./. { inherit inputs pkgs home-manager lib overlays; };
  in home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
   extraSpecialArgs = { inherit inputs util; };

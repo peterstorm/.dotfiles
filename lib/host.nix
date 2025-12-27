@@ -50,7 +50,7 @@ with builtins;
       cpuTempSensor ? null}:
     let
       # Import util to make it available to NixOS roles
-      util = import ./. { inherit inputs pkgs home-manager system lib; overlays = []; };
+      util = import ./. { inherit inputs pkgs home-manager lib; overlays = []; };
       networkCfg = listToAttrs (map (n: {
         name = "${n}"; value = { useDHCP = true; };
       }) NICs);

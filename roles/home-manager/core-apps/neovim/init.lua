@@ -113,13 +113,15 @@ map('n', '<leader>gp', '<cmd>Git push<cr>')
 require('Comment').setup()
 
 -- haskell specific
-
-require('lspconfig')['hls'].setup{
+vim.lsp.config('hls', {
   filetypes = { 'haskell', 'lhaskell', 'cabal' },
-  haskell = {
-    formattingProvider = "formolu"
+  settings = {
+    haskell = {
+      formattingProvider = "formolu"
+    }
   }
-}
+})
+vim.lsp.enable('hls')
 
 fourmoluOnSave = function()
   cmd("silent %!fourmolu -q --stdin-input-file %:p")
@@ -140,26 +142,19 @@ require("hardtime").setup()
 -- copilot
 g.copilot_assume_mapped = true
 
--- idris
-require('idris2').setup({})
 
 -- emmet-ls
 require('settings.emmet-ls').setup()
 
--- setup rust
-require('settings.rust-tools').setup()
 
 -- typescript-tools
 require("typescript-tools").setup({})
 
 -- lua setup
-require'lspconfig'.lua_ls.setup{}
+vim.lsp.enable('lua_ls')
 
 -- java lsp
-require('lspconfig').jdtls.setup({})
-
--- tailwindcss
-require('lspconfig').tailwindcss.setup({})
+vim.lsp.enable('jdtls')
 
 -- neoformat
 

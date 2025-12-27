@@ -1,7 +1,7 @@
 {input, pkgs, lib, config, inputs, ...}:
 {
   home.packages = with pkgs; [
-    inputs.neovim-nightly-overlay.packages.${system}.default
+    inputs.neovim-nightly-overlay.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
   home.file = {
@@ -16,8 +16,6 @@
     ".config/nvim/lua/settings/nvim-metals.lua".source = ./lua/settings/nvim-metals.lua;
     ".config/nvim/lua/settings/telescope.lua".source = ./lua/settings/telescope.lua;
     ".config/nvim/lua/settings/emmet-ls.lua".source = ./lua/settings/emmet-ls.lua;
-    ".config/nvim/lua/settings/rust-tools.lua".source = ./lua/settings/rust-tools.lua;
     ".config/nvim/lua/plugins/copilot-chat.lua".source = ./lua/plugins/copilot-chat.lua;
-    ".config/nvim/lua/plugins/mason-workaround.lua".source = ./lua/plugins/mason-workaround.lua;
   };
 }
