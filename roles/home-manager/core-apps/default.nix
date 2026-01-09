@@ -40,6 +40,7 @@
     obsidian
     docker-compose
     light
+    claude-code
   ];
 
 }
