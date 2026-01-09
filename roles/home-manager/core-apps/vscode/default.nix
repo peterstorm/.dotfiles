@@ -85,6 +85,9 @@
         "editor.insertSpaces" = true;
         "editor.wordWrap" = "off";
         "editor.rulers" = [80];
+
+        # Chat settings
+        "chat.useAgentSkills" = true;
       };
     };
   };
