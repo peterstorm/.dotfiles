@@ -40,6 +40,7 @@
       (colima.override {
         lima = lima.override { withAdditionalGuestAgents = true; };
       })
+      podman-compose
       postman
       bruno
       bytecode-viewer

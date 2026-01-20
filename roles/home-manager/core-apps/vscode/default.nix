@@ -88,6 +88,11 @@
 
         # Chat settings
         "chat.useAgentSkills" = true;
+
+        # Copilot custom instructions - add ~/.github to search paths
+        "chat.instructionsFilesLocations" = {
+          "~/.github" = true;
+        };
       };
     };
   };

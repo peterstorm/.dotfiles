@@ -4,6 +4,7 @@ M.setup = function()
   local telescope = require('telescope')
   local actions = require "telescope.actions"
   telescope.load_extension('fzy_native')
+  telescope.load_extension('undo')
   telescope.setup({
     pickers = {
       find_files = {

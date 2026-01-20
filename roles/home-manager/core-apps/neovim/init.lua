@@ -63,6 +63,7 @@ map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
 map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
 map('n', '<leader>fb', '<cmd>Telescope buffers<cr>')
 map('n', '<leader>fr', '<cmd>Telescope resume<cr>')
+map('n', '<leader>fu', '<cmd>Telescope undo<cr>')
 map('n', '<leader>cd', '<cmd>Telescope diagnostics<cr>')
 
 -- nvim-treesitter config
