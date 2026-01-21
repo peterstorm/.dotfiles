@@ -11,6 +11,10 @@ Expert guidance for architectural review, refactoring, and testability optimizat
 
 **Core principles defined in @rules/architecture.md** - this skill provides detailed patterns and review process.
 
+**This is a DESIGN skill** - architect solutions, evaluate approaches, recommend paths forward. Do NOT implement code during design phase. After user approves the plan, implementation happens separately.
+
+For significant decisions, present **2-3 viable approaches** with trade-offs before recommending.
+
 ---
 
 ## Review Process
@@ -43,6 +47,20 @@ Expert guidance for architectural review, refactoring, and testability optimizat
 - **Unit Tests**: Pure function tests
 - **Property Tests**: Invariants that always hold
 - **Edge Tests**: Minimal integration for I/O only
+
+### 4. Evaluate Multiple Approaches
+
+For significant design decisions, present 2-3 options:
+
+**For each approach:**
+- **Description**: How it works
+- **Pros**: Advantages
+- **Cons**: Disadvantages
+- **Trade-offs**: What you gain vs sacrifice
+- **Complexity**: Implementation + maintenance burden
+- **Fit**: Alignment with existing codebase patterns
+
+Then recommend optimal approach with clear justification.
 
 ---
 
@@ -391,6 +409,32 @@ export async function POST(req: Request) {
 
 ---
 
+## Security Considerations
+
+Evaluate security implications for every design:
+
+- **Input Validation**: Trust boundaries? What needs sanitization?
+- **Authentication/Authorization**: Permissions checked at right layer?
+- **Data Exposure**: Sensitive data in logs? Caches? Error messages?
+- **Injection Risks**: SQL, command, XSS vectors?
+- **Secrets Management**: How are credentials/keys handled?
+
+Flag OWASP Top 10 risks relevant to the architecture.
+
+---
+
+## Non-Functional Requirements
+
+Consider and document impact on:
+
+- **Scalability**: Will approach scale? Bottlenecks?
+- **Performance**: N+1 queries? Unnecessary computation? Caching opportunities?
+- **Resilience**: Failure modes? Retry logic? Circuit breakers needed?
+- **Observability**: Can we debug in production? Logging/metrics?
+- **Future Evolution**: How hard to extend? Painted into corners?
+
+---
+
 ## Output Format
 
 ### Executive Summary
@@ -417,6 +461,15 @@ For each recommendation:
 - **Property Tests**: Properties to verify
 - **Edge Tests**: Minimal integration tests
 - **Test Examples**: Concrete test cases
+
+### Security Review
+- Identified risks and mitigations
+- Trust boundaries and validation points
+
+### Non-Functional Impact
+- Scalability/performance implications
+- Observability requirements
+- Future extensibility assessment
 
 ### Metrics
 - Estimated mocking reduction
