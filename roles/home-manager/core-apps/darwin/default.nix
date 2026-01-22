@@ -49,6 +49,7 @@
       kubeseal
       gemini-cli
       github-copilot-cli
+      jq
     ];
 
     programs.zsh = {

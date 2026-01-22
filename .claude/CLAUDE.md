@@ -10,6 +10,7 @@ BEFORE writing code, MUST check if a relevant skill exists and invoke it FIRST:
 | done implementing, ready to commit/push/PR | `/finalize` |
 | review code, check PR, before merging | `/pr-review-toolkit:review-pr` |
 | architectural decisions, design review | `/architecture-tech-lead` |
+| multi-step tasks, "plan this", "orchestrate", complex features | `/task-planner` |
 
 Do NOT skip skills because you "know how" - skills ensure consistency and best practices.
 
@@ -38,11 +39,13 @@ For deep architectural review: `/architecture-tech-lead`
 Make the questions extremely concise. Sacrifice grammer for the sake of concision.
 
 ## Multi-phase plans
-- When making multi-phase plans, create a Github Issue containing the FULL detailed plan:
-  - All phases with goals and file lists (checkboxes for tracking)
-  - Code examples and implementation details
-  - Execution order table (effort/dependencies/risk)
-  - Verification checklist
-- Write the plan in plan mode as normal, then copy the ENTIRE plan content to the issue
+Use `/task-planner` for automated orchestration:
+- Decomposes tasks, assigns agents, schedules waves
+- Creates GitHub Issue with full plan + checkboxes
+- Hooks auto-update checkboxes on task completion
+- Hooks auto-link PRs to issue
+
+Manual fallback (if not using task-planner):
+- Create Github Issue with FULL detailed plan
 - Update issue checkboxes as phases complete
 - Link PRs to the issue

@@ -1,5 +1,9 @@
 result/
 result
+
+# Claude state files (runtime, not persisted)
+.claude/state/*
+!.claude/state/.gitkeep
 # Local .terraform directories
 **/.terraform/*
 
