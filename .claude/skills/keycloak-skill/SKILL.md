@@ -12,7 +12,8 @@ Expert guidance for Keycloak identity and access management with deep focus on A
 2. [ABAC Implementation](#abac-implementation)
 3. [Configuration as Code](#configuration-as-code)
 4. [Integration Patterns](#integration-patterns)
-5. [OpenShift Deployment](#openshift-deployment)
+5. [Security](#security)
+6. [OpenShift Deployment](#openshift-deployment)
 
 ## Core Concepts
 
@@ -209,6 +210,46 @@ FluentAzureIdpBuilder.forRealm("toolbox")
     .apply();
 ```
 
+## Security
+
+For detailed security guidance, see: **[references/security.md](references/security.md)**
+
+### PKCE (Required for All Clients)
+Per OAuth 2.0 Security BCP, enable PKCE even for confidential clients:
+```java
+.createClient("my-app")
+    .confidentialClient()
+    .enableStandardFlow()
+    .enablePKCE()
+    .withPkceMethod("S256")
+    .and()
+```
+
+### Security Hardening Checklist
+- [ ] Admin console on separate hostname with network restrictions
+- [ ] TLS enabled, HTTP disabled in production
+- [ ] Brute force protection enabled
+- [ ] Rate limiting configured (`KC_HTTP_MAX_QUEUED_REQUESTS`)
+- [ ] Event logging enabled for auditing
+- [ ] Credential rotation procedures documented
+
+### Token Revocation
+```java
+// Revoke refresh token
+String revokeEndpoint = authServerUrl + "/realms/" + realm + "/protocol/openid-connect/revoke";
+form.add("token", refreshToken);
+form.add("token_type_hint", "refresh_token");
+```
+
+### Monitoring
+Enable metrics endpoint:
+```bash
+KC_METRICS_ENABLED=true
+KC_HEALTH_ENABLED=true
+```
+
+Key alerts: login failures >10/min, token latency p99 >2s, error rate >1%
+
 ## OpenShift Deployment
 
 For OpenShift/Kubernetes specifics, see: **[references/deployment.md](references/deployment.md)**
@@ -268,6 +309,7 @@ spec:
 - **[references/integrations.md](references/integrations.md)**: Spring Security, NextAuth.js, and API integration patterns
 - **[references/deployment.md](references/deployment.md)**: OpenShift operator, Docker Compose, environment variables
 - **[references/abac-patterns.md](references/abac-patterns.md)**: Advanced ABAC patterns, policy strategies, UMA protocol details
+- **[references/security.md](references/security.md)**: PKCE, hardening, token revocation, monitoring
 
 ## Quick Reference
 

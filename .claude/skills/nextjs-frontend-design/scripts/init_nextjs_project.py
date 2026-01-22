@@ -432,8 +432,3 @@ Happy coding! 🎨
 
 if __name__ == "__main__":
     main()
-'''
-    scripts_path = project_path / "scripts/init_nextjs_project.py"
-    scripts_path.parent.mkdir(parents=True, exist_ok=True)
-    scripts_path.write_text(script_content)
-    os.chmod(scripts_path, 0o755)

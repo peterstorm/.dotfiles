@@ -1,6 +1,13 @@
 ---
 name: nextjs-frontend-design
-description: "This skill should be used when the user asks to 'build a Next.js app', 'create a dashboard', 'design a landing page', 'build a SaaS frontend', 'create React components', or needs distinctive frontend design. Covers App Router, React Server Components, type-safe APIs, Server Actions, and modern styling. Avoids generic 'AI slop' aesthetics (Inter fonts, purple gradients, predictable layouts) - creates memorable, intentional interfaces instead. Triggers on: Next.js projects, e-commerce sites, admin panels, marketing pages, or any frontend needing both architectural excellence and visual distinction."
+description: |
+  This skill should be used when the user asks to 'build a Next.js app', 'create a dashboard',
+  'design a landing page', 'build a SaaS frontend', 'create React components', 'style my app',
+  'design system', 'UI components', or needs distinctive frontend design. Covers App Router,
+  React Server Components, type-safe APIs, Server Actions, and modern styling. Avoids generic
+  'AI slop' aesthetics (Inter fonts, purple gradients, predictable layouts) - creates memorable,
+  intentional interfaces instead. Triggers on: Next.js projects, e-commerce sites, admin panels,
+  marketing pages, or any frontend needing both architectural excellence and visual distinction.
 ---
 
 # Next.js Frontend Design Skill
@@ -11,19 +18,23 @@ Create distinctive, production-grade Next.js applications combining expert TypeS
 You tend to converge toward generic, "on distribution" outputs. In frontend design, this creates what users call the "AI slop" aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.
 
 Focus on:
-- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics.
+- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics. Pair a distinctive display font with a refined body font.
 - **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes. Draw from IDE themes and cultural aesthetics for inspiration.
-- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions.
-- **Backgrounds**: Create atmosphere and depth rather than defaulting to solid colors. Layer CSS gradients, use geometric patterns, or add contextual effects that match the overall aesthetic.
+- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions. Use scroll-triggering and hover states that surprise.
+- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density—not the safe middle ground.
+- **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Layer CSS gradients, use geometric patterns, noise textures, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
 
 Avoid generic AI-generated aesthetics:
 - Overused font families (Inter, Roboto, Arial, system fonts)
 - Clichéd color schemes (particularly purple gradients on white backgrounds)
 - Predictable layouts and component patterns
+- Perfectly centered everything with equal padding
 - Cookie-cutter design that lacks context-specific character
 
 Interpret creatively and make unexpected choices that feel genuinely designed for the context. Vary between light and dark themes, different fonts, different aesthetics. You still tend to converge on common choices (Space Grotesk, for example) across generations. Avoid this: it is critical that you think outside the box!
 </frontend_aesthetics>
+
+---
 
 ## Design Philosophy
 
@@ -34,6 +45,7 @@ Before writing ANY code, commit to a **BOLD aesthetic direction**:
    - Brutally minimal, maximalist chaos, retro-futuristic, organic/natural
    - Luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw
    - Art deco/geometric, soft/pastel, industrial/utilitarian, terminal/code
+   - Japanese minimalism, cyberpunk neon, Miami Vice pastels
 3. **Differentiation**: What's the ONE thing someone will remember?
 
 **CRITICAL**: Bold maximalism and refined minimalism both work—the key is intentionality, not intensity. Half-measures produce mediocrity.
@@ -74,107 +86,7 @@ const fontMono = JetBrains_Mono({
 
 ---
 
-## Project Architecture
-
-### Directory Structure (App Router)
-
-```
-src/
-├── app/                    # App Router
-│   ├── layout.tsx          # Root layout with fonts
-│   ├── page.tsx            # Homepage
-│   ├── globals.css         # Global styles + CSS variables
-│   ├── (routes)/           # Route groups
-│   └── api/                # API routes (when needed)
-├── components/
-│   ├── ui/                 # Reusable UI primitives
-│   └── features/           # Feature-specific components
-├── lib/                    # Utilities (cn, constants, validations)
-├── hooks/                  # Custom React hooks
-├── types/                  # TypeScript definitions
-├── actions/                # Server Actions
-└── services/               # External API integrations
-```
-
-### TypeScript Essentials
-
-**Type everything explicitly**—avoid `any`:
-
-```typescript
-// ✅ Explicit interfaces
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'user' | 'guest';
-}
-
-// ✅ Zod for runtime validation
-import { z } from 'zod';
-
-const UserSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1).max(100),
-  email: z.string().email(),
-});
-
-type User = z.infer<typeof UserSchema>;
-```
-
-### Server vs Client Components
-
-**Default to Server Components** unless you need:
-- Event handlers (onClick, onChange)
-- useState, useEffect, useReducer
-- Browser APIs
-
-```typescript
-// Server Component (default) - async data fetching
-async function UserProfile({ userId }: { userId: string }) {
-  const user = await fetchUser(userId);
-  return <ProfileCard user={user} />;
-}
-
-// Client Component - only when needed
-'use client';
-function Counter() {
-  const [count, setCount] = useState(0);
-  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
-}
-```
-
-### Server Actions
-
-```typescript
-// actions/user.ts
-'use server';
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
-
-const UpdateUserSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-});
-
-export async function updateUser(formData: FormData) {
-  const validated = UpdateUserSchema.safeParse({
-    name: formData.get('name'),
-    email: formData.get('email'),
-  });
-
-  if (!validated.success) {
-    return { error: validated.error.flatten() };
-  }
-
-  await db.user.update({ data: validated.data });
-  revalidatePath('/profile');
-  return { success: true };
-}
-```
-
----
-
-## Styling Implementation
+## Styling Quick Reference
 
 ### CSS Variables Setup
 
@@ -194,16 +106,16 @@ export async function updateUser(formData: FormData) {
   --color-accent: #ff3e00;
   --color-border: #2a2a2a;
 
-  /* Animation easings */
+  /* Animation easings - NEVER use default ease */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 ```
 
-### Animation Patterns
+### Page Load Animation
 
 ```css
-/* Page load stagger */
+/* Staggered reveal - high impact */
 .animate-stagger > * {
   opacity: 0;
   transform: translateY(20px);
@@ -216,19 +128,7 @@ export async function updateUser(formData: FormData) {
 .animate-stagger > *:nth-child(4) { animation-delay: 300ms; }
 
 @keyframes fadeUp {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Hover with personality */
-.card {
-  transition: transform 0.3s var(--ease-out-back);
-}
-
-.card:hover {
-  transform: translateY(-8px) scale(1.02);
+  to { opacity: 1; transform: translateY(0); }
 }
 ```
 
@@ -237,7 +137,7 @@ export async function updateUser(formData: FormData) {
 ```css
 /* Gradient mesh - creates depth */
 .hero-bg {
-  background: 
+  background:
     radial-gradient(ellipse at 20% 50%, rgba(120, 119, 198, 0.3), transparent 50%),
     radial-gradient(ellipse at 80% 50%, rgba(255, 62, 0, 0.2), transparent 50%),
     linear-gradient(180deg, var(--color-bg) 0%, var(--color-surface) 100%);
@@ -256,40 +156,47 @@ export async function updateUser(formData: FormData) {
 
 ---
 
-## Reference Files
-
-**For detailed patterns, see:**
-- `references/design-philosophy.md` — Complete aesthetics guide, theme recipes, anti-patterns
-- `references/typescript-patterns.md` — Advanced TypeScript patterns, API types, hooks
-- `references/component-library.md` — Production component implementations
-- `references/animation-recipes.md` — Motion design patterns, scroll effects
-
----
-
 ## Anti-Patterns Checklist
 
 Before shipping, verify you have NOT:
 
 **Typography:**
 - [ ] Used Inter, Roboto, Arial, or system fonts
-- [ ] Font weights only differ by 200
+- [ ] Font weights only differ by 200 (e.g., 400 vs 600)
+- [ ] Size hierarchy less than 2x between levels
 
 **Color:**
 - [ ] Purple gradient on white background
+- [ ] Blue-purple-pink gradient (the AI classic)
 - [ ] Evenly distributed pastel palette
 
 **Layout:**
 - [ ] Perfectly centered everything
 - [ ] Equal padding everywhere
-- [ ] Standard Bootstrap-like grid
+- [ ] Standard Bootstrap-like grid with no variation
+- [ ] Cards in a perfect 3-column grid
 
 **Animation:**
 - [ ] Default `ease` timing function
 - [ ] No page load orchestration
+- [ ] Hover effects that just change color
 
 **Backgrounds:**
 - [ ] Solid white or #f5f5f5
-- [ ] No texture or depth
+- [ ] No texture, depth, or atmosphere
+
+---
+
+## Reference Files
+
+**Design & Aesthetics:**
+- `references/design-philosophy.md` — Complete aesthetics guide, theme recipes, spatial composition, anti-patterns
+
+**Technical Patterns:**
+- `references/nextjs-patterns.md` — App Router, Server Components, Server Actions, Caching, Streaming, Accessibility
+- `references/typescript-patterns.md` — Advanced TypeScript patterns, API types, hooks
+- `references/component-library.md` — Production component implementations
+- `references/animation-recipes.md` — Motion design patterns, scroll effects, Framer Motion
 
 ---
 

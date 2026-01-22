@@ -42,7 +42,8 @@ Trigger specialist skill review when:
 |-----------------|--------|
 | Auth/JWT changes | Invoke `security-expert` |
 | Keycloak/ABAC code | Invoke `keycloak-skill` |
-| Test file changes | Invoke `java-test-engineer` |
+| Java test file changes | Invoke `java-test-engineer` |
+| TS/React test changes | Invoke `ts-test-engineer` |
 | 5+ new dependencies | Invoke `architecture-tech-lead` |
 | React components | Invoke `frontend-design-skill` |
 

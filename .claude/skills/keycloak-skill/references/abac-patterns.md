@@ -3,6 +3,8 @@
 ## Table of Contents
 1. [ABAC vs RBAC Decision Guide](#abac-vs-rbac-decision-guide)
 2. [UMA Protocol Deep Dive](#uma-protocol-deep-dive)
+   - [Keycloak UMA Caveats](#keycloak-uma-caveats)
+   - [UMA 2.0 Flow](#uma-20-flow)
 3. [Policy Patterns](#policy-patterns)
 4. [JavaScript Policy Examples](#javascript-policy-examples)
 5. [Best Practices](#best-practices)
@@ -47,6 +49,32 @@ public void editDocument(Document doc) {
 ```
 
 ## UMA Protocol Deep Dive
+
+### Keycloak UMA Caveats
+
+**Important**: Keycloak's UMA implementation deviates from the UMA 2.0 specification in several ways:
+
+| Aspect | UMA 2.0 Spec | Keycloak Implementation |
+|--------|--------------|------------------------|
+| Resource ownership | End-user owns resources | Resource server owns resources |
+| Permission management | User grants permissions | Policies configured in admin console |
+| Claims gathering | Interactive claim collection | Static policy evaluation |
+| Requesting party | Can be different from resource owner | Typically the authenticated user |
+
+**Implications**:
+- Resources are registered by the client (resource server), not end-users
+- Users cannot dynamically share resources with other users via UMA
+- Permission tickets are optional - direct token exchange is common
+- External UMA documentation may not apply directly to Keycloak
+
+**When Keycloak UMA works well**:
+- Centralized policy management by administrators
+- Application-defined resources with role/attribute-based access
+- Backend services validating permissions
+
+**When to consider alternatives**:
+- User-to-user resource sharing (consider custom implementation)
+- Dynamic permission delegation (consider OAuth scopes)
 
 ### UMA 2.0 Flow
 

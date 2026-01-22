@@ -54,21 +54,44 @@ void orderTotalAlwaysEqualsLineSum(@ForAll("orders") Order order) {
 - Round-trip tests for serialization
 - Idempotence tests where applicable
 
-### TypeScript
+### TypeScript (Vitest + fast-check)
+
+**Property-based tests for:**
+- Pure functions with invariants
+- Type transformations
+- Discriminated union handling
+- Parsers/validators
+
+```typescript
+fc.assert(
+  fc.property(orderArbitrary, (order) => {
+    expect(calculateTotal(order)).toBeGreaterThanOrEqual(0);
+  })
+);
+```
 
 **Check for:**
 - Type narrowing tests for discriminated unions
-- Exhaustive pattern matching coverage
+- Exhaustive pattern matching coverage (ts-pattern)
 - Error boundary testing
 - Server/Client component testing where appropriate
+- MSW for API mocking (not fetch mocks)
 
 ## Delegation
 
-When finding significant test quality issues or gaps that require deep expertise, recommend invoking **java-test-engineer** skill for:
-- Writing comprehensive test suites
+When finding significant test quality issues or gaps that require deep expertise:
+
+**Java code** → recommend **java-test-engineer** skill for:
+- JUnit 5 / jqwik test suites
 - Property-based test design
-- Test architecture improvements
+- Spring integration test patterns
 - Mock reduction strategies
+
+**TypeScript/React (Vite/Next.js)** → recommend **ts-test-engineer** skill for:
+- Vitest / React Testing Library patterns
+- fast-check property tests
+- Next.js App Router testing (Server Components, API routes, Actions)
+- Playwright E2E tests
 
 ## Rating Guidelines
 
@@ -99,7 +122,7 @@ Tests that are brittle or overfit to implementation
 What's well-tested and follows best practices
 
 ### Delegation Recommendation
-If java-test-engineer skill should be invoked, explain why
+If java-test-engineer or ts-test-engineer skill should be invoked, explain why
 
 ## Important Considerations
 

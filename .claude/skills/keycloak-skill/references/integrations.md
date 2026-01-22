@@ -28,17 +28,15 @@ public class SecurityConfig {
     
     @Bean
     public JwtAuthenticationConverter jwtAuthConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthorities = 
-            new JwtGrantedAuthoritiesConverter();
-        grantedAuthorities.setAuthoritiesClaimName("realm_access.roles");
-        grantedAuthorities.setAuthorityPrefix("ROLE_");
-        
+        // Note: Keycloak stores roles in a nested structure (realm_access.roles)
+        // The standard JwtGrantedAuthoritiesConverter cannot handle nested claims,
+        // so we use a custom converter below.
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(keycloakRoleConverter());
         return converter;
     }
-    
-    // Extract roles from Keycloak's nested structure
+
+    // Extract roles from Keycloak's nested structure (realm_access.roles)
     private Converter<Jwt, Collection<GrantedAuthority>> keycloakRoleConverter() {
         return jwt -> {
             Map<String, Object> realmAccess = jwt.getClaim("realm_access");

@@ -176,8 +176,7 @@ spec:
 ### Complete Development Stack
 
 ```yaml
-version: '3.8'
-
+# Note: 'version' is obsolete in Docker Compose v2+ and can be omitted
 services:
   mysql:
     image: mysql:8.3.0

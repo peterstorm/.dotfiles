@@ -420,14 +420,16 @@ function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 }
 ```
 
-## Framer Motion Patterns
+## Motion Library Patterns
+
+> **Note**: The `framer-motion` package has been renamed to `motion`. Use `motion/react` for imports.
 
 ### Page Transitions
 
 ```tsx
 // components/page-transition.tsx
 'use client';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { usePathname } from 'next/navigation';
 
 const pageVariants = {
@@ -460,7 +462,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
 ```tsx
 'use client';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -500,7 +502,7 @@ function StaggeredList<T>({ items, renderItem }: { items: T[]; renderItem: (item
 ```tsx
 'use client';
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 function ExpandableCard({ title, preview, content }: {
   title: string;
