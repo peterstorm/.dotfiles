@@ -386,6 +386,289 @@ Combines automated task decomposition/orchestration with persistent GitHub Issue
 
 **Key insight:** GitHub Issues = source of truth for humans; `.claude/state/` = source of truth for hooks. Keep them synced.
 
+---
+
+### Artifact Storage & Lifecycle
+
+Three distinct artifacts serve different purposes in the workflow:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           ARTIFACT OVERVIEW                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────────────────┐                                               │
+│  │  .claude/plans/      │  LOCAL DRAFT                                  │
+│  │  {date}-{slug}.md    │  - Full detailed plan from plan mode          │
+│  │                      │  - Reasoning, code examples, decisions        │
+│  │                      │  - Created FIRST, before issue                │
+│  │                      │  - Offline backup, iteration space            │
+│  └──────────┬───────────┘                                               │
+│             │                                                            │
+│             │ user approves                                              │
+│             ▼                                                            │
+│  ┌──────────────────────┐                                               │
+│  │  GitHub Issue #N     │  PRIMARY SOURCE OF TRUTH (humans)             │
+│  │                      │  - Copy of full plan (not summary!)           │
+│  │                      │  - Checkboxes for task tracking               │
+│  │                      │  - Edit history via GitHub                    │
+│  │                      │  - Team comments/discussion                   │
+│  │                      │  - PRs auto-linked here                       │
+│  └──────────┬───────────┘                                               │
+│             │                                                            │
+│             │ extract structured data                                    │
+│             ▼                                                            │
+│  ┌──────────────────────┐                                               │
+│  │  .claude/state/      │  MACHINE-READABLE STATE (hooks)               │
+│  │  active_task_graph   │  - Task IDs, agents, waves, deps, status      │
+│  │  issue_number        │  - Used by hooks for validation               │
+│  │  current_wave        │  - Synced with issue checkboxes               │
+│  └──────────────────────┘                                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 1. Local Plan Draft (`.claude/plans/`)
+
+**Purpose:** Detailed prose, reasoning, architectural decisions - the "why" behind the plan.
+
+**Location:** `.claude/plans/{YYYY-MM-DD}-{task-slug}.md`
+
+**Contents:**
+- Full plan mode output (unchanged from current behavior)
+- Architecture rationale
+- Code examples and patterns
+- Alternative approaches considered
+- Integration points analysis
+- Risk assessment
+
+**Lifecycle:**
+```
+Plan Mode Entry → Write draft → User reviews → User approves
+                      ↑                              │
+                      └── iterate if needed ────────┘
+```
+
+**Why keep it?**
+- Works offline (no GitHub dependency)
+- Draft space before committing to issue
+- Local reference during execution
+- Can iterate privately before publishing
+- Backup if issue is deleted/lost
+
+#### 2. GitHub Issue (Primary Human Source of Truth)
+
+**Purpose:** Persistent, team-visible plan with progress tracking.
+
+**Location:** Repository issues (e.g., `#42`)
+
+**Contents:**
+- **Full plan copied from `.claude/plans/`** (not a summary!)
+- Task checkboxes (auto-updated by hooks)
+- Execution order table
+- Verification checklist
+- Related PRs section (auto-populated)
+
+**Lifecycle:**
+```
+Plan approved → Create issue → Execute waves → Update checkboxes → Link PRs → Close on completion
+                                    ↑                  │
+                                    └── per task ──────┘
+```
+
+**Why GitHub Issue as primary?**
+- Survives branch switches, machine changes, repo clones
+- Team visibility without sharing local files
+- Edit history tracked by GitHub
+- Discussion via comments
+- PR linking is native GitHub feature
+- Searchable, filterable, assignable
+
+**Critical:** The issue contains the FULL detailed plan, not just checkboxes. When someone opens the issue, they should understand the entire approach without needing local files.
+
+#### 3. Machine State (`.claude/state/`)
+
+**Purpose:** Structured data for hook validation and automation.
+
+**Location:** `.claude/state/` directory
+
+**Files:**
+```
+.claude/state/
+├── active_task_graph.json   # Structured task data
+├── issue_number             # GitHub issue # for this plan
+├── current_wave             # Active wave number
+├── plan_file                # Path to local plan draft
+└── completed_tasks          # Task IDs marked done
+```
+
+**active_task_graph.json schema:**
+```json
+{
+  "plan_file": ".claude/plans/2025-01-22-user-auth.md",
+  "issue": 42,
+  "current_wave": 2,
+  "tasks": [
+    {
+      "id": "T1",
+      "description": "Design auth flow and data model",
+      "agent": "architecture-tech-lead",
+      "wave": 1,
+      "depends_on": [],
+      "status": "completed",
+      "completed_at": "2025-01-22T10:30:00Z"
+    },
+    {
+      "id": "T2",
+      "description": "Create User domain model",
+      "agent": "code-implementer",
+      "wave": 2,
+      "depends_on": ["T1"],
+      "status": "in_progress",
+      "started_at": "2025-01-22T10:35:00Z"
+    }
+  ]
+}
+```
+
+**Why separate from issue?**
+- Hooks need fast local access (no API calls)
+- Structured format for programmatic validation
+- Status tracking more granular than checkboxes
+- Can include metadata issue doesn't need (timestamps, etc.)
+
+#### Sync Strategy
+
+The three artifacts must stay in sync:
+
+```
+                    ┌─────────────────┐
+                    │ .claude/plans/  │
+                    │ (detailed plan) │
+                    └────────┬────────┘
+                             │
+                     copy on create
+                             │
+                             ▼
+┌─────────────────┐    ┌─────────────────┐
+│ .claude/state/  │◄───│  GitHub Issue   │
+│ (task graph)    │    │  (full plan +   │
+└────────┬────────┘    │   checkboxes)   │
+         │             └────────┬────────┘
+         │                      │
+         │    SubagentStop      │
+         │    hook syncs        │
+         └──────────────────────┘
+              checkboxes
+```
+
+**Sync points:**
+1. **Plan creation:** Local draft → Issue (copy) + State (extract)
+2. **Task completion:** State updated → Issue checkbox marked
+3. **Wave advancement:** State updated → (optionally) Issue comment
+4. **PR creation:** Hook adds issue link → Issue shows in "Related PRs"
+
+**Conflict handling:**
+- State is authoritative for task status (hooks control it)
+- If human edits issue checkboxes manually, next hook run re-syncs from state
+- Plan content in issue is immutable after creation (edit local draft, create new issue if major changes)
+
+#### Complete Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         COMPLETE ARTIFACT FLOW                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+User: "Add user auth with JWT"
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  /task-planner (or EnterPlanMode + manual decomposition)                 │
+│                                                                          │
+│  1. Explore codebase                                                     │
+│  2. Decompose into tasks                                                 │
+│  3. Assign agents, schedule waves                                        │
+│  4. Write detailed plan                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  WRITE: .claude/plans/2025-01-22-user-auth.md                            │
+│                                                                          │
+│  Contains:                                                               │
+│  - Full reasoning and analysis                                           │
+│  - Architecture decisions                                                │
+│  - Code examples                                                         │
+│  - Task breakdown with agents                                            │
+│  - Wave schedule                                                         │
+│  - Verification checklist                                                │
+└─────────────────────────────────────────────────────────────────────────┘
+            │
+            │ User approves plan
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  PARALLEL WRITES:                                                        │
+│                                                                          │
+│  ┌─────────────────────────────┐  ┌─────────────────────────────┐       │
+│  │  gh issue create            │  │  Write state files          │       │
+│  │  --title "Plan: User Auth"  │  │                             │       │
+│  │  --body "$(cat plan.md)"    │  │  active_task_graph.json     │       │
+│  │                             │  │  issue_number               │       │
+│  │  → Returns issue #42        │  │  current_wave (= 1)         │       │
+│  └─────────────────────────────┘  └─────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  EXECUTION LOOP (per wave)                                               │
+│                                                                          │
+│  For each task in current_wave:                                          │
+│    1. PreToolUse hook validates wave order                               │
+│    2. Agent executes task                                                │
+│    3. SubagentStop hook:                                                 │
+│       - Updates task status in active_task_graph.json                    │
+│       - Marks checkbox in issue #42 via `gh issue edit`                  │
+│       - If wave complete, increments current_wave                        │
+│    4. Repeat until all waves done                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  PR CREATION                                                             │
+│                                                                          │
+│  PreToolUse hook on `gh pr create`:                                      │
+│    - Injects "Part of #42" into PR body                                  │
+│    - Issue #42 now shows PR in sidebar                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  COMPLETION                                                              │
+│                                                                          │
+│  All tasks done:                                                         │
+│    - All checkboxes marked in issue                                      │
+│    - PRs linked                                                          │
+│    - Optionally: `gh issue close 42`                                     │
+│    - State files can be cleared or archived                              │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Benefits of Three-Artifact Approach
+
+| Benefit | How Achieved |
+|---------|--------------|
+| **No lost plans** | Local draft persists even if issue deleted |
+| **Team visibility** | Issue is public, shows progress |
+| **Offline capable** | Local draft + state work without GitHub |
+| **Fast hook execution** | State files are local, no API latency |
+| **Audit trail** | Issue history, PR links, timestamps in state |
+| **Iteration friendly** | Edit local draft, create new issue if needed |
+| **Branch-independent** | Issue persists across branch switches |
+| **Searchable** | GitHub issue search, local grep |
+
+---
+
 ### Workflow
 
 1. **User invokes `/task-planner`** (or auto-triggered for complex tasks)
