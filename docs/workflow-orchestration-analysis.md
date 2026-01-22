@@ -37,6 +37,39 @@ Analysis of [barkain/claude-code-workflow-orchestration](https://github.com/bark
 
 ## Hook Patterns
 
+### Enforcement Modes
+
+The workflow can run in two modes, configured via `.claude/state/enforcement_mode`:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `optional` | `/task-planner` available but not required | Exploratory work, small fixes |
+| `strict` | Must use `/task-planner` before any code changes | Enforced workflow, team standards |
+
+**Configuration:**
+
+```bash
+# Enable strict mode (like their /delegate requirement)
+echo "strict" > .claude/state/enforcement_mode
+
+# Disable strict mode (optional orchestration)
+echo "optional" > .claude/state/enforcement_mode
+# Or just delete the file - defaults to optional
+```
+
+**Strict mode behavior:**
+- All Write/Edit/Bash blocked until `/task-planner` invoked
+- Research tools (Read, Glob, Grep, WebFetch) always allowed
+- Forces structured planning before implementation
+- Active plan tracked in `.claude/state/active_task_graph.json`
+
+**Switching modes mid-session:**
+- Can enable strict mode anytime
+- Disabling clears active delegation state
+- Use `/task-planner --complete` to end current plan and re-enable strict enforcement for next task
+
+---
+
 ### 1. PreToolUse - Tool Gating
 
 **Their implementation:** Block Write/Edit/Bash unless `/delegate` was called first.
@@ -54,19 +87,39 @@ ALLOWED_TOOLS="AskUserQuestion|TodoWrite|Skill|Task"
 **Adaptation for our setup:**
 
 ```bash
-# .claude/hooks/PreToolUse/enforce-skill-usage.sh
-# Force /code-implementer before writing code
+# .claude/hooks/PreToolUse/enforce-workflow.sh
+# Enforce /task-planner usage based on mode
 
 TOOL_NAME=$(echo "$HOOK_INPUT" | jq -r '.tool_name')
+MODE_FILE=".claude/state/enforcement_mode"
+DELEGATION_FILE=".claude/state/delegation_active"
 
-# Allow research tools freely
-[[ "$TOOL_NAME" =~ ^(Read|Glob|Grep|WebFetch|WebSearch|AskUserQuestion|TodoWrite)$ ]] && exit 0
+# Check enforcement mode (default: optional)
+MODE="optional"
+[[ -f "$MODE_FILE" ]] && MODE=$(cat "$MODE_FILE")
 
-# Check if implementation skill was invoked
-if [[ ! -f ".claude/state/implementation_active" ]]; then
-  echo "Use /code-implementer before writing code"
+# Optional mode: allow everything
+[[ "$MODE" == "optional" ]] && exit 0
+
+# Strict mode below ---
+
+# Always allow research/planning tools
+ALLOWED="Read|Glob|Grep|WebFetch|WebSearch|AskUserQuestion|TodoWrite|Skill|Task"
+[[ "$TOOL_NAME" =~ ^($ALLOWED)$ ]] && exit 0
+
+# Check if /task-planner was invoked (delegation active)
+if [[ ! -f "$DELEGATION_FILE" ]]; then
+  cat <<EOF
+Strict mode enabled. Use /task-planner before writing code.
+
+To start: /task-planner "your task description"
+To disable strict mode: echo "optional" > .claude/state/enforcement_mode
+EOF
   exit 2
 fi
+
+# Delegation active - allow tool
+exit 0
 ```
 
 ### 2. SessionStart - Context Injection
@@ -134,40 +187,49 @@ rm -f .claude/state/implementation_active
 
 ### Core Concept
 
-Task planner = decomposition + assignment + scheduling
+Task planner = complexity analysis + (optional design delegation) + decomposition + scheduling
 
 ```
 Input: "Add user auth with JWT"
                 │
                 ▼
 ┌─────────────────────────────────┐
-│        DECOMPOSITION            │
-│  1. Design auth flow            │
-│  2. Create user model           │
-│  3. Implement JWT service       │
-│  4. Add login endpoint          │
-│  5. Add middleware              │
-│  6. Write tests                 │
+│     COMPLEXITY ANALYSIS         │
+│  Complex? → spawn arch-lead     │
+│  arch-lead produces plan with   │
+│  architecture decisions, code   │
+│  examples, phase breakdown      │
+│  → .claude/plans/{slug}.md      │
+└─────────────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────┐
+│   EXTRACT IMPLEMENTATION TASKS  │
+│  (design = plan, not a task)    │
+│                                 │
+│  1. Create user model           │
+│  2. Implement JWT service       │
+│  3. Add login endpoint          │
+│  4. Add middleware              │
+│  5. Write tests                 │
 └─────────────────────────────────┘
                 │
                 ▼
 ┌─────────────────────────────────┐
 │        AGENT ASSIGNMENT         │
-│  1 → architecture-tech-lead     │
+│  1 → code-implementer           │
 │  2 → code-implementer           │
 │  3 → code-implementer           │
 │  4 → code-implementer           │
-│  5 → code-implementer           │
-│  6 → java-test-engineer         │
+│  5 → java-test-engineer         │
 └─────────────────────────────────┘
                 │
                 ▼
 ┌─────────────────────────────────┐
 │        WAVE SCHEDULING          │
-│  Wave 1: [1]        (design)    │
-│  Wave 2: [2,3]      (parallel)  │
-│  Wave 3: [4,5]      (parallel)  │
-│  Wave 4: [6]        (tests)     │
+│  Wave 1: [1,2]      (parallel)  │
+│  Wave 2: [3,4]      (parallel)  │
+│  Wave 3: [5]        (tests)     │
 └─────────────────────────────────┘
 ```
 
@@ -195,57 +257,60 @@ Fallback to `general-purpose` if no agent scores ≥2.
 
 ```markdown
 ---
-description: Decompose tasks, assign agents, schedule waves, create GitHub issue
-tools: [Read, Glob, Grep, Bash, Write, AskUserQuestion, TodoWrite]
+description: Orchestrate planning, decomposition, and execution tracking
+tools: [Read, Glob, Grep, Bash, Write, AskUserQuestion, TodoWrite, Skill]
 ---
 
 # Task Planner
 
 ## Process
 
-1. **Parse Intent**
+1. **Parse Intent & Analyze Complexity**
    - What is the user trying to achieve?
    - What are the success criteria?
-   - Any ambiguities requiring clarification?
+   - **Complexity check:**
+     - Simple (single feature, clear scope)? → decompose directly
+     - Complex (architecture decisions needed)? → spawn arch-lead
 
-2. **Explore Codebase**
-   - Find relevant files/patterns
-   - Identify integration points
-   - Note existing conventions
+2. **If Complex: Design Phase**
+   - Spawn `/architecture-tech-lead`
+   - arch-lead explores codebase, produces detailed plan:
+     - Architecture decisions with rationale
+     - Code examples and patterns
+     - Phase breakdown
+   - Plan saved to `.claude/plans/{date}-{slug}.md`
+   - **User approval checkpoint**
 
-3. **Decompose**
-   - Break into atomic subtasks
-   - Each subtask = single responsibility
-   - Identify dependencies between tasks
+3. **Extract Implementation Tasks**
+   - Parse phases from plan into tasks
+   - Design work = the plan itself (NOT a tracked task)
+   - Tasks start at implementation
 
-4. **Assign Agents**
+4. **Assign Agents to Tasks**
    Match keywords to available agents:
    | Agent | Triggers |
    |-------|----------|
-   | architecture-tech-lead | design, pattern, structure |
-   | code-implementer | implement, create, build |
-   | java-test-engineer | test, junit, property |
+   | code-implementer | implement, create, build, add |
+   | java-test-engineer | test, junit, jqwik, property |
    | ts-test-engineer | vitest, playwright, react test |
-   | security-expert | auth, jwt, keycloak |
-   | code-reviewer | review, quality, check |
+   | security-expert | security audit, vulnerability |
+   | code-reviewer | review, quality check |
 
 5. **Schedule Waves**
-   - Wave 1: Tasks with no dependencies
-   - Wave N: Tasks depending on Wave N-1
+   - Wave 1: Tasks with no dependencies (run parallel)
+   - Wave N: Tasks depending on Wave N-1 completion
    - Maximize parallelism per wave
 
 6. **Output Three Artifacts**
 
    **A. Local Plan Draft** → `.claude/plans/{date}-{slug}.md`
-   - Full reasoning and analysis
-   - Architecture decisions with rationale
-   - Code examples
-   - Task breakdown with agents and waves
-   - Verification checklist
+   - Created by arch-lead (complex) or task-planner (simple)
+   - Full reasoning, architecture, code examples
+   - Task breakdown with waves
 
    **B. GitHub Issue** (after user approval)
    - Copy full plan content to issue body
-   - Use `gh issue create --title "Plan: {title}" --body "$(cat plan.md)"`
+   - `gh issue create --title "Plan: {title}" --body "$(cat plan.md)"`
    - Store returned issue number
 
    **C. State Files** → `.claude/state/`
@@ -253,11 +318,24 @@ tools: [Read, Glob, Grep, Bash, Write, AskUserQuestion, TodoWrite]
    - `issue_number` - GitHub issue # for linking
    - `plan_file` - path to local plan draft
 
+7. **Orchestrate Execution**
+   - Spawn agents per task respecting wave order
+   - Pass plan context to each agent (see "Agent Context Passing" section):
+     - Relevant phase section from plan
+     - Path to full plan file
+     - Task metadata (ID, deps, wave)
+   - Hooks handle: wave validation, checkbox updates, PR linking
+
 ## Constraints
-- Never implement code
-- Only explore for planning context
-- Must write local plan FIRST, then ask user approval before creating issue
+- Never implement code directly
+- Delegate design to arch-lead for complex tasks
+- Must get user approval before creating issue
 - Must populate TodoWrite with task breakdown
+
+## State Management (for strict mode)
+- On invocation: `touch .claude/state/delegation_active`
+- On completion: `rm .claude/state/delegation_active`
+- Use `/task-planner --complete` to manually end delegation
 ```
 
 ### Wave Validation Hook
@@ -308,10 +386,12 @@ done
 - [ ] State directory: `.claude/state/`
 - [ ] Plans directory: `.claude/plans/`
 
-### Phase 2: Skill Enforcement
-- [ ] `PreToolUse/enforce-skills.sh` - gate Write/Edit behind skills
-- [ ] Track skill invocation in state files
-- [ ] Allowlist for research tools
+### Phase 2: Enforcement Mode + Skill Gating
+- [ ] `PreToolUse/enforce-workflow.sh` - check enforcement mode, gate tools
+- [ ] Enforcement mode config: `.claude/state/enforcement_mode` (optional|strict)
+- [ ] Delegation tracking: `.claude/state/delegation_active`
+- [ ] Allowlist for research tools (Read, Glob, Grep, etc.)
+- [ ] `/task-planner --complete` to end delegation
 
 ### Phase 3: Task Planner Skill (Three-Artifact)
 - [ ] Create `.claude/skills/task-planner/SKILL.md`
@@ -334,16 +414,19 @@ done
 
 ## Differences from Their Approach
 
-| Aspect | Theirs | Ours (Merged) |
+| Aspect | Theirs | Ours (Hybrid) |
 |--------|--------|---------------|
 | Philosophy | Strict enforcement via hooks | Skill-based + hooks + GitHub tracking |
+| Design work | task-planner does everything | task-planner delegates to arch-lead |
+| Design output | Ephemeral (in agent context) | Persisted plan (local + issue) |
 | Parallelism | Wave-based concurrent agents | Wave-based with GitHub issue sync |
 | Agent breadth | 8 general agents | Domain-specific (keycloak, security) |
 | Plan persistence | None (ephemeral) | Three artifacts (local + issue + state) |
 | Progress tracking | TodoWrite only | GitHub checkboxes + TodoWrite |
-| /delegate cmd | Required for all tool use | Optional `/task-planner` |
+| /delegate cmd | Required for all tool use | Configurable: optional or strict mode |
+| Tracked tasks | Includes design as T1 | Implementation only (design = plan) |
 
-Our setup combines their orchestration automation with persistent GitHub tracking and domain-specific agents.
+Our hybrid approach: task-planner orchestrates but delegates design to arch-lead for complex tasks. Plans persist as rich documents (local + GitHub issue), not ephemeral context.
 
 ---
 
@@ -356,10 +439,22 @@ Combines automated task decomposition/orchestration with persistent GitHub Issue
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    /task-planner SKILL                       │
-│  1. Explore codebase, decompose into subtasks               │
-│  2. Assign agents via keyword matching                      │
-│  3. Schedule waves (parallel groups)                        │
-│  4. Write detailed plan to .claude/plans/                   │
+│                                                              │
+│  1. Analyze complexity                                       │
+│     ├─ Simple? → decompose directly                          │
+│     └─ Complex? → spawn /architecture-tech-lead              │
+│                         │                                    │
+│                         ▼                                    │
+│                   arch-lead produces detailed plan           │
+│                   (architecture, code examples, phases)      │
+│                         │                                    │
+│                         ▼                                    │
+│                   .claude/plans/{slug}.md                    │
+│                                                              │
+│  2. Extract implementation tasks from plan                   │
+│     (design work = plan itself, not a tracked task)          │
+│                                                              │
+│  3. Assign agents, schedule waves                            │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -412,7 +507,7 @@ Three distinct artifacts serve different purposes in the workflow:
 │                                                                          │
 │  ┌──────────────────────┐                                               │
 │  │  .claude/plans/      │  LOCAL DRAFT                                  │
-│  │  {date}-{slug}.md    │  - Full detailed plan from plan mode          │
+│  │  {date}-{slug}.md    │  - Full detailed plan from arch-lead          │
 │  │                      │  - Reasoning, code examples, decisions        │
 │  │                      │  - Created FIRST, before issue                │
 │  │                      │  - Offline backup, iteration space            │
@@ -448,7 +543,7 @@ Three distinct artifacts serve different purposes in the workflow:
 **Location:** `.claude/plans/{YYYY-MM-DD}-{task-slug}.md`
 
 **Contents:**
-- Full plan mode output (unchanged from current behavior)
+- Full plan from arch-lead (complex) or task-planner (simple)
 - Architecture rationale
 - Code examples and patterns
 - Alternative approaches considered
@@ -520,29 +615,38 @@ Plan approved → Create issue → Execute waves → Update checkboxes → Link 
 {
   "plan_file": ".claude/plans/2025-01-22-user-auth.md",
   "issue": 42,
-  "current_wave": 2,
+  "current_wave": 1,
   "tasks": [
     {
       "id": "T1",
-      "description": "Design auth flow and data model",
-      "agent": "architecture-tech-lead",
+      "description": "Create User domain model with password hash",
+      "agent": "code-implementer",
       "wave": 1,
       "depends_on": [],
-      "status": "completed",
-      "completed_at": "2025-01-22T10:30:00Z"
+      "status": "in_progress",
+      "started_at": "2025-01-22T10:30:00Z"
     },
     {
       "id": "T2",
-      "description": "Create User domain model",
+      "description": "Implement JWT token service",
+      "agent": "code-implementer",
+      "wave": 1,
+      "depends_on": [],
+      "status": "pending"
+    },
+    {
+      "id": "T3",
+      "description": "Add login/register endpoints",
       "agent": "code-implementer",
       "wave": 2,
-      "depends_on": ["T1"],
-      "status": "in_progress",
-      "started_at": "2025-01-22T10:35:00Z"
+      "depends_on": ["T1", "T2"],
+      "status": "pending"
     }
   ]
 }
 ```
+
+Note: Design work is the plan itself (`.claude/plans/`), not a tracked task. Tasks start at implementation.
 
 **Why separate from issue?**
 - Hooks need fast local access (no API calls)
@@ -597,25 +701,37 @@ User: "Add user auth with JWT"
             │
             ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  /task-planner (or EnterPlanMode + manual decomposition)                 │
+│  /task-planner                                                           │
 │                                                                          │
-│  1. Explore codebase                                                     │
-│  2. Decompose into tasks                                                 │
-│  3. Assign agents, schedule waves                                        │
-│  4. Write detailed plan                                                  │
+│  1. Analyze complexity                                                   │
+│     - Simple? → decompose directly, skip to step 3                       │
+│     - Complex? → continue to step 2                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+            │
+            ▼ (complex task)
+┌─────────────────────────────────────────────────────────────────────────┐
+│  2. DESIGN PHASE: Spawn /architecture-tech-lead                          │
+│                                                                          │
+│  arch-lead produces detailed plan:                                       │
+│  - Explores codebase                                                     │
+│  - Architecture decisions with rationale                                 │
+│  - Code examples and patterns                                            │
+│  - Phase breakdown                                                       │
+│                                                                          │
+│  → Writes .claude/plans/2025-01-22-user-auth.md                          │
 └─────────────────────────────────────────────────────────────────────────┘
             │
             ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  WRITE: .claude/plans/2025-01-22-user-auth.md                            │
+│  3. EXTRACT TASKS (design = plan, not a tracked task)                    │
 │                                                                          │
-│  Contains:                                                               │
-│  - Full reasoning and analysis                                           │
-│  - Architecture decisions                                                │
-│  - Code examples                                                         │
-│  - Task breakdown with agents                                            │
-│  - Wave schedule                                                         │
-│  - Verification checklist                                                │
+│  Parse phases into implementation tasks:                                 │
+│  - T1: Create User domain model                                          │
+│  - T2: Implement JWT service                                             │
+│  - T3: Add endpoints                                                     │
+│  - ...                                                                   │
+│                                                                          │
+│  Assign agents, schedule waves                                           │
 └─────────────────────────────────────────────────────────────────────────┘
             │
             │ User approves plan
@@ -682,47 +798,130 @@ User: "Add user auth with JWT"
 
 ---
 
-### Sample GitHub Issue Output
+### Agent Context Passing
+
+When task-planner spawns agents, they need access to the plan. Each agent receives:
+
+1. **Relevant phase section** - extracted from plan, included in prompt
+2. **Path to full plan** - for additional context if needed
+3. **Task metadata** - ID, dependencies, wave number
+
+**Prompt template for spawned agents:**
 
 ```markdown
-## Implementation Plan: Add User Auth with JWT
+## Task Assignment
 
-**Tracking Issue** - Auto-generated by task-planner
+**Task ID:** T2
+**Wave:** 1
+**Agent:** code-implementer
+**Dependencies:** None (Wave 1 task)
 
-### Phase 1: Architecture (Wave 1)
-- [ ] T1: Design auth flow and data model
+## Your Task
 
-### Phase 2: Core Implementation (Wave 2, parallel)
-- [ ] T2: Create User domain model
-- [ ] T3: Implement JWT token service
+Implement JWT token service (sign/verify/refresh)
 
-### Phase 3: API Layer (Wave 3, parallel)
-- [ ] T4: Add login/register endpoints
-- [ ] T5: Add auth middleware
+## Context from Plan
 
-### Phase 4: Verification (Wave 4)
-- [ ] T6: Write property tests for auth logic
-- [ ] T7: Integration tests for endpoints
+> **Architecture Decision:**
+> Stateless JWT with refresh tokens
+> - Access token: 15min TTL, contains user ID + roles
+> - Refresh token: 7d TTL, stored in httpOnly cookie
+
+> **Implementation:**
+> ```java
+> public record TokenPair(String accessToken, String refreshToken, Instant accessExpiresAt) {}
+>
+> public class JwtTokenService {
+>     public Either<TokenError, TokenPair> generateTokens(UserId userId, Set<Role> roles) {
+>         // Pure: no I/O, deterministic with clock injection
+>     }
+> }
+> ```
+
+> **Files to Create:**
+> - `src/main/java/com/example/auth/JwtTokenService.java`
+
+> **Tests to Add:**
+> - Property tests for token generation/verification
+
+## Full Plan
+
+Available at: `.claude/plans/2025-01-22-user-auth.md`
+Read if you need additional context about architecture decisions or related tasks.
+
+## Constraints
+
+- Follow patterns established in the plan
+- Do not modify scope without checking plan
+- Mark task complete when implementation + tests pass
+```
+
+**Why this approach:**
+
+| Aspect | Benefit |
+|--------|---------|
+| Relevant section in prompt | Agent has immediate context, no extra reads |
+| Full plan path provided | Agent can explore if needed |
+| Task metadata included | Agent knows dependencies, wave position |
+| Code examples from plan | Consistent implementation style |
+
+**Implementation in task-planner:**
+
+```bash
+# Extract phase section for task T2
+PHASE_CONTENT=$(sed -n '/## Phase 2/,/## Phase 3/p' "$PLAN_FILE")
+
+# Build agent prompt
+cat <<EOF
+## Task Assignment
+Task ID: $TASK_ID
+...
+
+## Context from Plan
+$PHASE_CONTENT
+
+## Full Plan
+Available at: $PLAN_FILE
+EOF
+```
 
 ---
 
-### Execution Order
+### GitHub Issue Format
 
+The issue body contains the **full plan** from `.claude/plans/` - same format architecture-tech-lead produces.
+
+**Key points:**
+- Full architecture decisions, code examples, reasoning (not a summary)
+- Task checkboxes embedded in phase sections
+- Tasks start at implementation (design work = the plan itself)
+- See example arch-lead plan output for reference format
+
+**Structure:**
+```markdown
+## Plan: {Title}
+
+### Context & Analysis
+[codebase exploration findings]
+
+### Architecture Decisions
+[design choices with rationale, code examples]
+
+### Task Breakdown
+#### Wave 1: {description} (parallel)
+- [ ] T1: {implementation task}
+- [ ] T2: {implementation task}
+
+#### Wave 2: ...
+
+### Execution Order
 | ID | Task | Agent | Wave | Depends |
 |----|------|-------|------|---------|
-| T1 | Design auth flow | architecture-tech-lead | 1 | - |
-| T2 | User domain model | code-implementer | 2 | T1 |
-| T3 | JWT token service | code-implementer | 2 | T1 |
-| T4 | Login endpoints | code-implementer | 3 | T2, T3 |
-| T5 | Auth middleware | code-implementer | 3 | T3 |
-| T6 | Property tests | java-test-engineer | 4 | T2, T3 |
-| T7 | Integration tests | java-test-engineer | 4 | T4, T5 |
+| T1 | ... | code-implementer | 1 | - |
 
 ### Verification Checklist
 - [ ] All tests pass
-- [ ] No mock-heavy tests (architecture check)
-- [ ] Security review completed
-- [ ] PR linked and reviewed
+- [ ] ...
 
 ### Related PRs
 <!-- Auto-updated by hooks -->
@@ -789,6 +988,7 @@ fi
 - ✓ Auto-create issue? → No, user approval first (plan draft → approval → issue)
 - ✓ Checkbox update frequency? → After each task (SubagentStop hook)
 - ✓ Where do completed tasks live? → Stay in task_graph.json with status field
+- ✓ Is "design" a tracked task? → No, design = the plan itself. Tasks start at implementation.
 
 ---
 
