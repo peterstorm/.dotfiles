@@ -55,7 +55,7 @@ Based on changes:
 2. **silent-failure-hunter** - Error handling, Either patterns, silent failures
 
 3. **pr-test-analyzer** - Test coverage, property tests, gaps
-   - Will recommend delegation to: test-engineer
+   - Will recommend delegation to: java-test-engineer
 
 4. **type-design-analyzer** - Invariants, encapsulation, sealed types
 
@@ -83,7 +83,7 @@ After agents complete, summarize:
 ## Delegation Recommendations
 - [ ] security-expert: [reason]
 - [ ] keycloak-skill: [reason]
-- [ ] test-engineer: [reason]
+- [ ] java-test-engineer: [reason]
 - [ ] architecture-tech-lead: [reason]
 
 ## Strengths
@@ -140,7 +140,7 @@ After agents complete, summarize:
 1. Stage all changes
 2. Run: /review-pr all
 3. Address critical and important issues
-4. Run delegated reviews (security-expert, test-engineer, etc.)
+4. Run delegated reviews (security-expert, java-test-engineer, etc.)
 5. Run: /review-pr simplify
 6. Create PR with /finalize
 ```

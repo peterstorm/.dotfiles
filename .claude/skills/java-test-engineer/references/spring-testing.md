@@ -5,12 +5,13 @@ Detailed patterns for Spring Boot integration and controller testing.
 ## Base Test Configuration
 
 ```java
+// Spring Boot 3.4+ (use @MockitoBean instead of deprecated @MockBean)
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional  // rollback after each test
 abstract class BaseIntegrationTest {
     @Autowired protected MockMvc mockMvc;
-    @MockBean protected ExternalService externalService;
+    @MockitoBean protected ExternalService externalService;
 }
 ```
 
@@ -21,7 +22,7 @@ abstract class BaseIntegrationTest {
 @Import(TestSecurityConfig.class)
 class UserControllerTest {
     @Autowired MockMvc mockMvc;
-    @MockBean UserService userService;
+    @MockitoBean UserService userService;  // @MockBean deprecated in 3.4+
 
     @Test
     void shouldReturnUser() throws Exception {
@@ -46,13 +47,14 @@ class UserControllerTest {
 
 ## Repository Tests with Testcontainers
 
+### Spring Boot 3.1+ with @ServiceConnection (Recommended)
 ```java
 @DataJpaTest
-@AutoConfigureTestDatabase(replace = Replace.NONE)
 @Testcontainers
 class UserRepositoryTest {
     @Container
-    static OracleContainer oracle = new OracleContainer("gvenzl/oracle-xe:21-slim");
+    @ServiceConnection  // Auto-configures datasource from container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Autowired UserRepository repo;
 
@@ -64,6 +66,40 @@ class UserRepositoryTest {
 
         assertThat(found).isPresent();
     }
+}
+```
+
+### With Container Reuse (Faster Local Dev)
+```java
+@DataJpaTest
+@Testcontainers
+class OrderRepositoryTest {
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+        .withReuse(true);  // Requires testcontainers.reuse.enable=true in ~/.testcontainers.properties
+
+    // ...
+}
+```
+
+### Legacy Pattern (pre-3.1)
+```java
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = Replace.NONE)
+@Testcontainers
+class UserRepositoryTest {
+    @Container
+    static OracleContainer oracle = new OracleContainer("gvenzl/oracle-xe:21-slim");
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", oracle::getJdbcUrl);
+        registry.add("spring.datasource.username", oracle::getUsername);
+        registry.add("spring.datasource.password", oracle::getPassword);
+    }
+
+    // ...
 }
 ```
 

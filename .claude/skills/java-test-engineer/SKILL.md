@@ -1,9 +1,9 @@
 ---
-name: test-engineer
+name: java-test-engineer
 description: "This skill should be used when the user asks to 'write unit tests', 'add integration tests', 'create property-based tests', 'fix failing test', 'improve test coverage', 'reduce mocking', 'test this class', 'add jqwik tests', or needs guidance on JUnit 5, Mockito, Spring Boot Test, property testing with jqwik, test patterns, mocking strategies, or test anti-patterns. Covers Java/Spring Boot testing best practices."
 ---
 
-# Test Engineer Skill - Java/Spring Boot
+# Java Test Engineer Skill
 
 Expert guidance for writing, reviewing, and fixing tests in Java/Spring Boot applications.
 
@@ -53,7 +53,7 @@ Property tests find edge cases you'd never think to write. Use them for any pure
 <dependency>
     <groupId>net.jqwik</groupId>
     <artifactId>jqwik</artifactId>
-    <version>1.8.2</version>
+    <version>1.9.2</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -248,6 +248,69 @@ static Stream<Arguments> invalidInputs() {
 }
 ```
 
+### Testing Either/Result Types (dk.oister.util.Either)
+
+When testing code that returns `Either<E, T>`:
+
+```java
+@Test
+void shouldReturnRightOnSuccess() {
+    Either<OrderError, Order> result = service.createOrder(validRequest);
+
+    // Assert success case
+    assertThat(result.isRight()).isTrue();
+    assertThat(result.getRight()).satisfies(order -> {
+        assertThat(order.status()).isEqualTo(PENDING);
+        assertThat(order.total()).isEqualTo(Money.of(100));
+    });
+}
+
+@Test
+void shouldReturnLeftOnValidationFailure() {
+    Either<OrderError, Order> result = service.createOrder(invalidRequest);
+
+    // Assert failure case
+    assertThat(result.isLeft()).isTrue();
+    assertThat(result.getLeft()).isInstanceOf(ValidationError.class);
+    assertThat(result.getLeft().message()).contains("invalid");
+}
+
+// Pattern matching with fold
+@Test
+void shouldHandleBothCases() {
+    var result = service.processOrder(request);
+
+    String message = result.fold(
+        error -> "Failed: " + error.message(),
+        order -> "Success: " + order.id()
+    );
+
+    assertThat(message).startsWith("Success:");
+}
+```
+
+**Property tests for Either composition:**
+```java
+@Property
+void flatMapShouldPropagateLeft(@ForAll("validOrders") Either<OrderError, Order> first) {
+    // Left should short-circuit
+    Either<OrderError, Order> left = Either.left(new OrderError("error"));
+    Either<OrderError, Order> result = left.flatMap(o -> first);
+
+    assertThat(result.isLeft()).isTrue();
+    assertThat(result.getLeft().message()).isEqualTo("error");
+}
+
+@Property
+void mapShouldPreserveRight(@ForAll("orders") Order order) {
+    Either<OrderError, Order> right = Either.right(order);
+    Either<OrderError, Money> mapped = right.map(Order::total);
+
+    assertThat(mapped.isRight()).isTrue();
+    assertThat(mapped.getRight()).isEqualTo(order.total());
+}
+```
+
 ---
 
 ## Mocking Best Practices
@@ -318,13 +381,13 @@ For detailed Spring Boot test configurations, MockMvc patterns, repository tests
 Quick patterns:
 
 ```java
-// Base test configuration
+// Base test configuration (Spring Boot 3.4+)
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
 abstract class BaseIntegrationTest {
     @Autowired protected MockMvc mockMvc;
-    @MockBean protected ExternalService externalService;
+    @MockitoBean protected ExternalService externalService;  // @MockBean deprecated in 3.4+
 }
 
 // Controller test with JWT
@@ -335,6 +398,89 @@ class UserControllerTest {
         mockMvc.perform(get("/api/users/1")
                 .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER"))))
             .andExpect(status().isOk());
+    }
+}
+```
+
+---
+
+## Async Testing Patterns
+
+### CompletableFuture Testing
+```java
+@Test
+void shouldCompleteWithinTimeout() {
+    CompletableFuture<Order> future = service.processAsync(request);
+
+    // Use assertj's completablefuture support
+    assertThat(future)
+        .succeedsWithin(Duration.ofSeconds(5))
+        .satisfies(order -> assertThat(order.status()).isEqualTo(COMPLETED));
+}
+
+@Test
+void shouldHandleAsyncFailure() {
+    CompletableFuture<Order> future = service.processAsync(invalidRequest);
+
+    assertThat(future)
+        .failsWithin(Duration.ofSeconds(5))
+        .withThrowableOfType(ExecutionException.class)
+        .havingCause()
+        .isInstanceOf(ValidationException.class);
+}
+```
+
+### Awaitility for Polling Assertions
+```java
+// Maven: org.awaitility:awaitility:4.2.0
+
+@Test
+void shouldEventuallyUpdateStatus() {
+    service.startAsyncProcess(orderId);
+
+    await().atMost(Duration.ofSeconds(10))
+        .pollInterval(Duration.ofMillis(500))
+        .untilAsserted(() -> {
+            var order = repo.findById(orderId).orElseThrow();
+            assertThat(order.status()).isEqualTo(COMPLETED);
+        });
+}
+
+@Test
+void shouldPublishEventWithinTimeout() {
+    service.processOrder(request);
+
+    await().atMost(Duration.ofSeconds(5))
+        .until(() -> eventCaptor.getEvents(), hasSize(1));
+
+    assertThat(eventCaptor.getEvents().get(0))
+        .isInstanceOf(OrderCreatedEvent.class);
+}
+```
+
+### WebFlux Testing with WebTestClient
+```java
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+class ReactiveControllerTest {
+    @Autowired WebTestClient webClient;
+
+    @Test
+    void shouldStreamOrders() {
+        webClient.get().uri("/api/orders/stream")
+            .accept(MediaType.TEXT_EVENT_STREAM)
+            .exchange()
+            .expectStatus().isOk()
+            .expectBodyList(Order.class)
+            .hasSize(3);
+    }
+
+    @Test
+    void shouldHandleReactiveError() {
+        webClient.get().uri("/api/orders/999")
+            .exchange()
+            .expectStatus().isNotFound()
+            .expectBody()
+            .jsonPath("$.error").isEqualTo("Order not found");
     }
 }
 ```

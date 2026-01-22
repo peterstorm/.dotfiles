@@ -64,7 +64,7 @@ void orderTotalAlwaysEqualsLineSum(@ForAll("orders") Order order) {
 
 ## Delegation
 
-When finding significant test quality issues or gaps that require deep expertise, recommend invoking **test-engineer** skill for:
+When finding significant test quality issues or gaps that require deep expertise, recommend invoking **java-test-engineer** skill for:
 - Writing comprehensive test suites
 - Property-based test design
 - Test architecture improvements
@@ -99,7 +99,7 @@ Tests that are brittle or overfit to implementation
 What's well-tested and follows best practices
 
 ### Delegation Recommendation
-If test-engineer skill should be invoked, explain why
+If java-test-engineer skill should be invoked, explain why
 
 ## Important Considerations
 

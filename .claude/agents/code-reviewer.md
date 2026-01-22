@@ -65,7 +65,7 @@ When detecting these patterns, recommend invoking specialized skills:
 
 - **Security/auth code, OWASP concerns** -> `security-expert`
 - **Keycloak/ABAC/JWT/UMA/realm config** -> `keycloak-skill`
-- **Test quality issues, missing coverage** -> `test-engineer`
+- **Test quality issues, missing coverage** -> `java-test-engineer`
 - **Architecture concerns, 5+ dependencies, god classes** -> `architecture-tech-lead`
 - **React components, styling, a11y** -> `frontend-design-skill`
 

@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: "Expert code review for Java/Spring Boot and TypeScript/Next.js codebases. Performs multi-dimensional reviews covering correctness, security, testability, architecture, and maintainability. Automatically delegates to specialized skills when detecting: security vulnerabilities → security-expert, auth/Keycloak → keycloak-skill, test quality → test-engineer, architecture issues → architecture-tech-lead, frontend patterns → frontend-design-skill. Use for PR reviews, code audits, pre-merge checks, or general code quality assessment."
+description: "Expert code review for Java/Spring Boot and TypeScript/Next.js codebases. Performs multi-dimensional reviews covering correctness, security, testability, architecture, and maintainability. Automatically delegates to specialized skills when detecting: security vulnerabilities → security-expert, auth/Keycloak → keycloak-skill, test quality → java-test-engineer, architecture issues → architecture-tech-lead, frontend patterns → frontend-design-skill. Use for PR reviews, code audits, pre-merge checks, or general code quality assessment."
 ---
 
 # Code Reviewer Skill
@@ -16,7 +16,7 @@ Every review covers these dimensions, with automatic skill delegation:
 | **Correctness** | Logic errors, edge cases, null handling | - |
 | **Security** | OWASP Top 10, injection, auth flaws | `security-expert` |
 | **Auth/Keycloak** | JWT handling, ABAC, realm config | `keycloak-skill` |
-| **Testability** | Coverage, mocking, property tests | `test-engineer` |
+| **Testability** | Coverage, mocking, property tests | `java-test-engineer` |
 | **Architecture** | Coupling, SRP, functional core | `architecture-tech-lead` |
 | **Frontend** | Component patterns, a11y, performance | `frontend-design-skill` |
 | **Performance** | N+1 queries, caching, complexity | - |
@@ -141,7 +141,7 @@ Invoke when detecting:
 - Identity provider integration
 - Role/group mapping
 
-### → test-engineer
+### → java-test-engineer
 
 Invoke when detecting:
 - New/modified test files
