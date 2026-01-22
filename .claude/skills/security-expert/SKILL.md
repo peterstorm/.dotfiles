@@ -1,6 +1,6 @@
 ---
 name: security-expert
-description: "Expert guidance on API security, web application security, authentication, and authorization. Use this skill when working with JWT tokens, OAuth 2.0/OIDC flows, Keycloak configuration, Spring Security implementation, ABAC/RBAC policies, secure API design, vulnerability assessment, security headers, CORS, CSRF protection, or any authentication/authorization architecture decisions. Triggers on questions about securing APIs, implementing auth flows, configuring identity providers, token validation, access control patterns, security best practices, penetration testing concepts, OWASP guidelines, or debugging security issues in Spring/Keycloak environments."
+description: "This skill should be used when the user asks to 'secure my API', 'implement authentication', 'configure Keycloak', 'add authorization', 'fix JWT issues', 'set up OAuth', 'review security', 'security audit', 'pen test prep', 'prevent SQL injection', 'fix XSS', 'CSRF protection', or works with JWT tokens, OAuth 2.0/OIDC flows, Spring Security, ABAC/RBAC policies, CORS, CSRF, XSS prevention, SQL injection, OWASP guidelines, or debugging auth failures in Spring/Keycloak environments."
 ---
 
 # Security Expert Skill
@@ -14,6 +14,8 @@ Expert guidance for API security, authentication, authorization, and identity ma
 - **Identity Providers**: Keycloak, Okta, Auth0, Azure AD
 - **Frameworks**: Spring Security, Spring Boot, Jakarta EE Security
 - **Web Security**: OWASP Top 10, CSP, CORS, CSRF, XSS prevention
+- **Injection Prevention**: SQL injection, parameterized queries, input validation
+- **Frontend Security**: React XSS protection, DOMPurify, URL sanitization, CSP for SPAs
 
 ## Quick Reference
 
@@ -54,12 +56,15 @@ public class SecurityConfig {
 
 For detailed guidance, consult these references:
 
-- **[references/jwt-security.md](references/jwt-security.md)**: Deep dive on JWT vulnerabilities, attack vectors, and secure implementation
-- **[references/keycloak.md](references/keycloak.md)**: Keycloak configuration, realm setup, client types, mappers, and flows
-- **[references/spring-security.md](references/spring-security.md)**: Spring Security patterns, filter chain, method security, OAuth2 client/resource server
-- **[references/authorization-patterns.md](references/authorization-patterns.md)**: RBAC, ABAC, ReBAC implementation patterns and policy engines
+- **[references/jwt-security.md](references/jwt-security.md)**: JWT vulnerabilities, attack vectors, secure implementation
+- **[references/keycloak.md](references/keycloak.md)**: Keycloak realm setup, client types, mappers, flows
+- **[references/spring-security.md](references/spring-security.md)**: Filter chain, method security, OAuth2 client/resource server
+- **[references/authorization-patterns.md](references/authorization-patterns.md)**: RBAC, ABAC, ReBAC patterns and policy engines
 - **[references/owasp-api-security.md](references/owasp-api-security.md)**: OWASP API Security Top 10 with mitigations
 - **[references/security-headers.md](references/security-headers.md)**: HTTP security headers, CSP, CORS configuration
+- **[references/injection-prevention.md](references/injection-prevention.md)**: SQL injection prevention, parameterized queries, JPA patterns
+- **[references/xss-prevention.md](references/xss-prevention.md)**: React XSS protection, DOMPurify, URL validation, CSP for SPAs
+- **[references/csrf-prevention.md](references/csrf-prevention.md)**: CSRF tokens, double submit, SameSite cookies, Spring CSRF
 
 ## Workflow: Security Review
 
@@ -81,6 +86,11 @@ For detailed guidance, consult these references:
 ❌ Permissive CORS (Access-Control-Allow-Origin: *)
 ❌ Missing rate limiting on auth endpoints
 ❌ Logging sensitive data (tokens, passwords)
+❌ String concatenation in SQL queries (injection)
+❌ Using innerHTML without sanitization
+❌ Allowing javascript: URLs in user-controlled hrefs
+❌ Disabling CSRF for cookie-authenticated APIs
+❌ GET requests with side effects (CSRF vulnerable)
 ```
 
 ## Debugging Security Issues

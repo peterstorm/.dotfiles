@@ -1,6 +1,6 @@
 ---
 name: nextjs-frontend-design
-description: Create distinctive, production-grade Next.js applications with expert TypeScript architecture and exceptional visual design. Use this skill when building Next.js projects, React Server Components, full-stack TypeScript applications, or any frontend requiring both architectural excellence and visual distinction. Covers App Router patterns, type-safe APIs, Server Actions, and modern styling. Critically, this skill ensures Claude avoids generic "AI slop" aesthetics (Inter fonts, purple gradients, predictable layouts) and instead creates memorable, intentional interfaces. Triggers on requests for Next.js apps, dashboards, landing pages, SaaS applications, e-commerce sites, or any project needing both technical and aesthetic excellence.
+description: "This skill should be used when the user asks to 'build a Next.js app', 'create a dashboard', 'design a landing page', 'build a SaaS frontend', 'create React components', or needs distinctive frontend design. Covers App Router, React Server Components, type-safe APIs, Server Actions, and modern styling. Avoids generic 'AI slop' aesthetics (Inter fonts, purple gradients, predictable layouts) - creates memorable, intentional interfaces instead. Triggers on: Next.js projects, e-commerce sites, admin panels, marketing pages, or any frontend needing both architectural excellence and visual distinction."
 ---
 
 # Next.js Frontend Design Skill

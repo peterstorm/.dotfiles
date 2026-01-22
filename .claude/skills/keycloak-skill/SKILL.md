@@ -1,6 +1,6 @@
 ---
 name: keycloak-expert
-description: "Expert guidance on Keycloak identity and access management, including ABAC (Attribute-Based Access Control), OIDC/OAuth2 flows, realm/client configuration, identity provider integration (Azure AD), custom SPI providers, and Configuration as Code. Use this skill when working with: Keycloak realm setup, client configuration, role management, authorization services, ABAC policies/resources/scopes/permissions, UMA protocol, RPT tokens, policy evaluation, Azure AD federation, group-to-role mapping, custom protocol mappers, username mappers, fluent builder APIs for Keycloak configuration, OpenShift/Kubernetes operator deployment, Spring Security + Keycloak integration, NextAuth.js + Keycloak, or any Keycloak administration and development tasks."
+description: "This skill should be used when the user asks to 'configure Keycloak', 'set up ABAC', 'create Keycloak realm', 'integrate Azure AD with Keycloak', 'implement authorization services', 'configure OIDC client', 'create Keycloak policies', 'set up UMA/RPT tokens', 'deploy Keycloak on OpenShift', 'integrate Spring Security with Keycloak', 'configure NextAuth.js with Keycloak', 'create protocol mappers', 'map Azure groups to roles', or needs guidance on Keycloak realm/client configuration, ABAC policies and permissions, identity provider federation, or Configuration as Code patterns."
 ---
 
 # Keycloak Expert Skill

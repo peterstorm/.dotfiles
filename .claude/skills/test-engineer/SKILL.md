@@ -1,6 +1,6 @@
 ---
 name: test-engineer
-description: "Expert guidance for Java/Spring Boot testing. Use when writing unit tests (JUnit 5, Mockito), integration tests (Spring Boot Test), property-based tests (jqwik), or fixing/reviewing test suites. Covers TDD, test patterns, mocking strategies, security testing, and test anti-patterns. Triggers on: writing tests, test failures, improving test coverage, property-based testing, mocking questions, test architecture decisions."
+description: "This skill should be used when the user asks to 'write unit tests', 'add integration tests', 'create property-based tests', 'fix failing test', 'improve test coverage', 'reduce mocking', 'test this class', 'add jqwik tests', or needs guidance on JUnit 5, Mockito, Spring Boot Test, property testing with jqwik, test patterns, mocking strategies, or test anti-patterns. Covers Java/Spring Boot testing best practices."
 ---
 
 # Test Engineer Skill - Java/Spring Boot
@@ -144,120 +144,17 @@ void doublingInputShouldDoubleOutput(@ForAll @Positive int qty,
 
 ### Custom Arbitraries
 
-#### Domain-Specific Generators
-```java
-@Provide
-Arbitrary<String> validCprs() {
-    return Arbitraries.integers().between(1, 31).flatMap(day ->
-        Arbitraries.integers().between(1, 12).flatMap(month ->
-            Arbitraries.integers().between(0, 99).flatMap(year ->
-                Arbitraries.integers().between(0, 9999).map(seq ->
-                    String.format("%02d%02d%02d-%04d", day, month, year, seq)
-                ))));
-}
+For detailed patterns on custom arbitraries, constraining generation, statistics, and combining with JUnit 5, see: **[references/jqwik-arbitraries.md](references/jqwik-arbitraries.md)**
 
-@Provide
-Arbitrary<PhoneNumber> danishPhoneNumbers() {
-    return Arbitraries.integers().between(10000000, 99999999)
-        .map(n -> new PhoneNumber("+45", String.valueOf(n)));
-}
-
-@Provide
-Arbitrary<Email> validEmails() {
-    var locals = Arbitraries.strings().alpha().ofMinLength(1).ofMaxLength(20);
-    var domains = Arbitraries.of("gmail.com", "outlook.com", "company.dk");
-    return Combinators.combine(locals, domains)
-        .as((local, domain) -> new Email(local + "@" + domain));
-}
-```
-
-#### Combining Arbitraries
+Quick example:
 ```java
 @Provide
 Arbitrary<Order> orders() {
     return Combinators.combine(
         Arbitraries.longs().greaterOrEqual(1),
-        orderStatuses(),
-        Arbitraries.lists(orderItems()).ofMinSize(1).ofMaxSize(10),
-        Arbitraries.of(Currency.DKK, Currency.EUR)
+        Arbitraries.of(OrderStatus.class),
+        Arbitraries.lists(orderItems()).ofMinSize(1).ofMaxSize(10)
     ).as(Order::new);
-}
-
-@Provide
-Arbitrary<OrderStatus> orderStatuses() {
-    return Arbitraries.of(OrderStatus.class);
-}
-```
-
-### Constraining Generation
-
-```java
-@Property
-void shouldHandleValidAges(@ForAll @IntRange(min = 0, max = 150) int age) {
-    assertThat(validator.isValidAge(age)).isTrue();
-}
-
-@Property
-void shouldRejectEmptyStrings(@ForAll @NotEmpty String input) {
-    // input will never be empty
-}
-
-@Property
-void shouldWorkWithUniqueItems(@ForAll @UniqueElements List<String> items) {
-    // items has no duplicates
-}
-
-@Property
-void shouldHandleSmallLists(@ForAll @Size(max = 5) List<Integer> list) {
-    // list has at most 5 elements
-}
-```
-
-### Statistics and Reporting
-
-```java
-@Property
-void shouldDistributeEvenly(@ForAll @IntRange(min = 1, max = 100) int value) {
-    Statistics.label("range")
-        .collect(value <= 25 ? "1-25" :
-                 value <= 50 ? "26-50" :
-                 value <= 75 ? "51-75" : "76-100");
-
-    // actual test
-    assertThat(process(value)).isNotNull();
-}
-```
-
-### Shrinking - Finding Minimal Failing Case
-jqwik automatically shrinks failing cases to the simplest reproduction:
-```java
-@Property
-void listShouldNotExceedMax(@ForAll List<Integer> list) {
-    assertThat(list.size()).isLessThan(100);
-    // If fails with 150-item list, jqwik shrinks to exactly 100 items
-}
-```
-
-### Combining with JUnit 5
-
-```java
-class UserValidatorTest {
-    // Example-based for specific business cases
-    @Test
-    void shouldRejectKnownInvalidCpr_1234567890() {
-        assertThat(validator.isValid("123456-7890")).isFalse();
-    }
-
-    // Property-based for general invariants
-    @Property
-    void shouldAcceptAllValidCprFormats(@ForAll("validCprs") String cpr) {
-        assertThat(validator.isValid(cpr)).isTrue();
-    }
-
-    @Property
-    void shouldRejectAllMalformedCprs(@ForAll("malformedCprs") String cpr) {
-        assertThat(validator.isValid(cpr)).isFalse();
-    }
 }
 ```
 
@@ -416,126 +313,29 @@ void shouldSendWelcomeEmail() {
 
 ## Spring Boot Integration Tests
 
-### Base Test Configuration
+For detailed Spring Boot test configurations, MockMvc patterns, repository tests with Testcontainers, and security testing, see: **[references/spring-testing.md](references/spring-testing.md)**
+
+Quick patterns:
+
 ```java
+// Base test configuration
 @SpringBootTest
 @ActiveProfiles("test")
-@Transactional  // rollback after each test
+@Transactional
 abstract class BaseIntegrationTest {
     @Autowired protected MockMvc mockMvc;
     @MockBean protected ExternalService externalService;
 }
-```
 
-### Controller Tests with MockMvc
-```java
+// Controller test with JWT
 @WebMvcTest(UserController.class)
-@Import(TestSecurityConfig.class)
 class UserControllerTest {
-    @Autowired MockMvc mockMvc;
-    @MockBean UserService userService;
-
     @Test
     void shouldReturnUser() throws Exception {
-        when(userService.findById(1L)).thenReturn(Optional.of(user));
-
         mockMvc.perform(get("/api/users/1")
                 .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER"))))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("John"));
+            .andExpect(status().isOk());
     }
-
-    @Test
-    void shouldReturn404WhenNotFound() throws Exception {
-        when(userService.findById(anyLong())).thenReturn(Optional.empty());
-
-        mockMvc.perform(get("/api/users/999")
-                .with(jwt()))
-            .andExpect(status().isNotFound());
-    }
-}
-```
-
-### Repository Tests
-```java
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = Replace.NONE)
-@Testcontainers
-class UserRepositoryTest {
-    @Container
-    static OracleContainer oracle = new OracleContainer("gvenzl/oracle-xe:21-slim");
-
-    @Autowired UserRepository repo;
-
-    @Test
-    void shouldFindByEmail() {
-        repo.save(new User("test@example.com"));
-
-        var found = repo.findByEmail("test@example.com");
-
-        assertThat(found).isPresent();
-    }
-}
-```
-
-### Service Integration Tests
-```java
-@SpringBootTest
-@ActiveProfiles("test")
-class OrderServiceIntegrationTest extends BaseIntegrationTest {
-    @Autowired OrderService orderService;
-    @Autowired OrderRepository orderRepo;
-
-    @Test
-    void shouldProcessOrder() {
-        var order = orderService.create(orderRequest);
-
-        assertThat(order.getStatus()).isEqualTo(PENDING);
-        assertThat(orderRepo.findById(order.getId())).isPresent();
-    }
-}
-```
-
----
-
-## Security Testing
-
-### JWT/OAuth2 Test Patterns
-```java
-@Test
-@WithMockUser(roles = "ADMIN")
-void shouldAllowAdminAccess() throws Exception {
-    mockMvc.perform(get("/api/admin/users"))
-        .andExpect(status().isOk());
-}
-
-@Test
-void shouldRequireAuthentication() throws Exception {
-    mockMvc.perform(get("/api/protected"))
-        .andExpect(status().isUnauthorized());
-}
-
-// Custom JWT claims
-@Test
-void shouldExtractRealmRoles() throws Exception {
-    mockMvc.perform(get("/api/resource")
-            .with(jwt().jwt(jwt -> jwt
-                .claim("realm_access", Map.of("roles", List.of("manager", "viewer")))
-            )))
-        .andExpect(status().isOk());
-}
-```
-
-### ABAC Policy Testing
-```java
-@Test
-void shouldEnforceAbacPolicy() {
-    // given user without required permission
-    mockSecurityContext(userWithoutPermission);
-
-    // when/then
-    assertThatThrownBy(() -> service.sensitiveOperation())
-        .isInstanceOf(AccessDeniedException.class);
 }
 ```
 
@@ -543,44 +343,18 @@ void shouldEnforceAbacPolicy() {
 
 ## Test Data Builders
 
-### Builder Pattern for Test Data
+For complete builder and mother patterns, see: **[references/test-data-builders.md](references/test-data-builders.md)**
+
+Quick example:
 ```java
 class UserBuilder {
-    private String email = "default@test.com";
-    private String name = "Test User";
-    private List<Role> roles = List.of(Role.USER);
-
     static UserBuilder aUser() { return new UserBuilder(); }
-
-    UserBuilder withEmail(String email) { this.email = email; return this; }
-    UserBuilder withName(String name) { this.name = name; return this; }
-    UserBuilder withRoles(Role... roles) { this.roles = List.of(roles); return this; }
     UserBuilder asAdmin() { return withRoles(Role.ADMIN); }
-
     User build() { return new User(email, name, roles); }
 }
 
 // Usage
 var admin = aUser().withEmail("admin@test.com").asAdmin().build();
-```
-
-### Mother Pattern for Complex Objects
-```java
-class OrderMother {
-    static Order pendingOrder() {
-        return Order.builder()
-            .status(PENDING)
-            .items(List.of(itemMother.defaultItem()))
-            .build();
-    }
-
-    static Order completedOrder() {
-        return pendingOrder().toBuilder()
-            .status(COMPLETED)
-            .completedAt(Instant.now())
-            .build();
-    }
-}
 ```
 
 ---
@@ -729,6 +503,15 @@ mvn test jacoco:report
 # Parallel execution
 mvn test -DforkCount=2 -DreuseForks=true
 ```
+
+---
+
+## Reference Files
+
+For detailed patterns, see:
+- **[references/jqwik-arbitraries.md](references/jqwik-arbitraries.md)**: Custom arbitraries, constraining, statistics, shrinking
+- **[references/spring-testing.md](references/spring-testing.md)**: Spring Boot integration, MockMvc, security testing
+- **[references/test-data-builders.md](references/test-data-builders.md)**: Builder and Mother patterns for test data
 
 ---
 
