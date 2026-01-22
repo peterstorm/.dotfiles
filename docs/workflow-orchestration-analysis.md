@@ -115,10 +115,17 @@ echo "Implementation complete. Spawning code-reviewer for QA..."
 
 **Their implementation:** Clear all delegation state between prompts.
 
+**Our adaptation:** Don't clear task graph during active multi-phase plans.
+
 ```bash
 # .claude/hooks/UserPromptSubmit/clear-state.sh
+
+# Clear ephemeral flags
 rm -f .claude/state/implementation_active
-rm -f .claude/state/active_task_graph.json
+
+# DON'T clear task graph if plan is in progress
+# Task graph persists across prompts until plan completes
+# Only clear when user explicitly says "done" or all tasks complete
 ```
 
 ---
@@ -184,12 +191,12 @@ security-expert:
 
 Fallback to `general-purpose` if no agent scores ≥2.
 
-### Minimal Task Planner Skill
+### Task Planner Skill (Three-Artifact Output)
 
 ```markdown
 ---
-description: Decompose tasks, assign agents, schedule waves
-tools: [Read, Glob, Grep, Bash, AskUserQuestion, TodoWrite]
+description: Decompose tasks, assign agents, schedule waves, create GitHub issue
+tools: [Read, Glob, Grep, Bash, Write, AskUserQuestion, TodoWrite]
 ---
 
 # Task Planner
@@ -227,36 +234,30 @@ tools: [Read, Glob, Grep, Bash, AskUserQuestion, TodoWrite]
    - Wave N: Tasks depending on Wave N-1
    - Maximize parallelism per wave
 
-6. **Output**
-   - Task table with: ID, description, agent, dependencies, wave
-   - JSON task graph for hooks to validate
-   - TodoWrite entries for tracking
+6. **Output Three Artifacts**
 
-## Output Format
+   **A. Local Plan Draft** → `.claude/plans/{date}-{slug}.md`
+   - Full reasoning and analysis
+   - Architecture decisions with rationale
+   - Code examples
+   - Task breakdown with agents and waves
+   - Verification checklist
 
-### Task Table
-| ID | Task | Agent | Depends | Wave |
-|----|------|-------|---------|------|
-| T1 | Design auth flow | architecture-tech-lead | - | 1 |
-| T2 | Create user model | code-implementer | T1 | 2 |
+   **B. GitHub Issue** (after user approval)
+   - Copy full plan content to issue body
+   - Use `gh issue create --title "Plan: {title}" --body "$(cat plan.md)"`
+   - Store returned issue number
 
-### Task Graph JSON
-```json
-{
-  "tasks": [
-    {"id": "T1", "agent": "architecture-tech-lead", "deps": [], "wave": 1},
-    {"id": "T2", "agent": "code-implementer", "deps": ["T1"], "wave": 2}
-  ],
-  "current_wave": 1
-}
-```
-
-Save to `.claude/state/active_task_graph.json` for hook validation.
+   **C. State Files** → `.claude/state/`
+   - `active_task_graph.json` - structured task data for hooks
+   - `issue_number` - GitHub issue # for linking
+   - `plan_file` - path to local plan draft
 
 ## Constraints
 - Never implement code
 - Only explore for planning context
-- Must populate TodoWrite before returning
+- Must write local plan FIRST, then ask user approval before creating issue
+- Must populate TodoWrite with task breakdown
 ```
 
 ### Wave Validation Hook
@@ -271,23 +272,30 @@ TASK_GRAPH=".claude/state/active_task_graph.json"
 TOOL_NAME=$(echo "$HOOK_INPUT" | jq -r '.tool_name')
 [[ "$TOOL_NAME" != "Task" ]] && exit 0
 
-# Extract phase from prompt
+# Extract task ID from agent prompt (expects "Task ID: T1" somewhere in prompt)
 PROMPT=$(echo "$HOOK_INPUT" | jq -r '.tool_input.prompt // empty')
-PHASE_ID=$(echo "$PROMPT" | grep -oE 'Phase ID: (T[0-9]+)' | cut -d' ' -f3)
+TASK_ID=$(echo "$PROMPT" | grep -oE 'Task ID: (T[0-9]+)' | cut -d' ' -f3)
 
-[[ -z "$PHASE_ID" ]] && {
-  echo "Task invocation missing Phase ID"
-  exit 2
-}
+[[ -z "$TASK_ID" ]] && exit 0  # No task ID = not a planned task, allow
 
 # Check wave order
 CURRENT_WAVE=$(jq -r '.current_wave' "$TASK_GRAPH")
-TASK_WAVE=$(jq -r ".tasks[] | select(.id==\"$PHASE_ID\") | .wave" "$TASK_GRAPH")
+TASK_WAVE=$(jq -r ".tasks[] | select(.id==\"$TASK_ID\") | .wave" "$TASK_GRAPH")
 
 [[ "$TASK_WAVE" -gt "$CURRENT_WAVE" ]] && {
-  echo "Cannot execute $PHASE_ID (wave $TASK_WAVE) - current wave is $CURRENT_WAVE"
+  echo "Cannot execute $TASK_ID (wave $TASK_WAVE) - current wave is $CURRENT_WAVE"
   exit 2
 }
+
+# Check dependencies are complete
+DEPS=$(jq -r ".tasks[] | select(.id==\"$TASK_ID\") | .depends_on[]?" "$TASK_GRAPH")
+for dep in $DEPS; do
+  STATUS=$(jq -r ".tasks[] | select(.id==\"$dep\") | .status" "$TASK_GRAPH")
+  [[ "$STATUS" != "completed" ]] && {
+    echo "Cannot execute $TASK_ID - dependency $dep not complete (status: $STATUS)"
+    exit 2
+  }
+done
 ```
 
 ---
@@ -296,39 +304,46 @@ TASK_WAVE=$(jq -r ".tasks[] | select(.id==\"$PHASE_ID\") | .wave" "$TASK_GRAPH")
 
 ### Phase 1: Hooks Foundation
 - [ ] `SessionStart/inject-context.sh` - inject architecture rules
-- [ ] `UserPromptSubmit/clear-state.sh` - reset between prompts
+- [ ] `UserPromptSubmit/clear-state.sh` - reset ephemeral flags (not task graph)
 - [ ] State directory: `.claude/state/`
+- [ ] Plans directory: `.claude/plans/`
 
 ### Phase 2: Skill Enforcement
 - [ ] `PreToolUse/enforce-skills.sh` - gate Write/Edit behind skills
 - [ ] Track skill invocation in state files
 - [ ] Allowlist for research tools
 
-### Phase 3: Task Planner Skill
+### Phase 3: Task Planner Skill (Three-Artifact)
 - [ ] Create `.claude/skills/task-planner/SKILL.md`
 - [ ] Agent keyword mapping
 - [ ] Wave scheduling algorithm
-- [ ] Task graph JSON output
+- [ ] Output: local plan draft → `.claude/plans/`
+- [ ] Output: GitHub issue creation via `gh`
+- [ ] Output: task graph JSON → `.claude/state/`
 
-### Phase 4: Wave Orchestration
+### Phase 4: GitHub Integration Hooks
+- [ ] `SubagentStop/update-issue.sh` - mark checkboxes on task completion
+- [ ] `PreToolUse/link-pr-to-issue.sh` - inject issue reference in PRs
+- [ ] `SubagentStop/advance-wave.sh` - increment wave when all tasks complete
+
+### Phase 5: Wave Orchestration
 - [ ] `PreToolUse/validate-wave.sh` - enforce execution order
-- [ ] `SubagentStop/advance-wave.sh` - progress tracking
-- [ ] `SubagentStop/auto-verify.sh` - spawn reviewers
+- [ ] `SubagentStop/auto-verify.sh` - spawn reviewers after implementation
 
 ---
 
 ## Differences from Their Approach
 
-| Aspect | Theirs | Ours |
-|--------|--------|------|
-| Philosophy | Strict enforcement via hooks | Skill-based guidance |
-| Parallelism | Wave-based concurrent agents | Sequential with optional parallel |
+| Aspect | Theirs | Ours (Merged) |
+|--------|--------|---------------|
+| Philosophy | Strict enforcement via hooks | Skill-based + hooks + GitHub tracking |
+| Parallelism | Wave-based concurrent agents | Wave-based with GitHub issue sync |
 | Agent breadth | 8 general agents | Domain-specific (keycloak, security) |
-| /delegate cmd | Required for all tool use | Optional orchestration |
+| Plan persistence | None (ephemeral) | Three artifacts (local + issue + state) |
+| Progress tracking | TodoWrite only | GitHub checkboxes + TodoWrite |
+| /delegate cmd | Required for all tool use | Optional `/task-planner` |
 
-Our setup has deeper domain expertise but less orchestration automation. Task planner + hooks would add the automation layer while keeping specialized skills.
-
----
+Our setup combines their orchestration automation with persistent GitHub tracking and domain-specific agents.
 
 ---
 
@@ -341,27 +356,25 @@ Combines automated task decomposition/orchestration with persistent GitHub Issue
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    /task-planner SKILL                       │
-│  1. Decompose task into subtasks                            │
+│  1. Explore codebase, decompose into subtasks               │
 │  2. Assign agents via keyword matching                      │
 │  3. Schedule waves (parallel groups)                        │
-│  4. CREATE GITHUB ISSUE with full plan                      │
-│  5. Write task graph to .claude/state/                      │
+│  4. Write detailed plan to .claude/plans/                   │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    GITHUB ISSUE (created)                    │
-│  ## Phase 1: Design (Wave 1)                                │
-│  - [ ] T1: Design auth flow @architecture-tech-lead         │
-│                                                              │
-│  ## Phase 2: Core Implementation (Wave 2)                   │
-│  - [ ] T2: Create user model @code-implementer              │
-│  - [ ] T3: Implement JWT service @code-implementer          │
-│                                                              │
-│  ## Execution Order                                         │
-│  | ID | Task | Agent | Wave | Depends |                     │
-│  | T1 | Design | arch-tech-lead | 1 | - |                   │
-│  | T2 | User model | code-impl | 2 | T1 |                   │
+│              USER APPROVAL (plan draft review)               │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    PARALLEL OUTPUTS                          │
+│  ┌─────────────────────┐  ┌─────────────────────┐           │
+│  │  GitHub Issue       │  │  .claude/state/     │           │
+│  │  (full plan copy)   │  │  active_task_graph  │           │
+│  │  + checkboxes       │  │  issue_number       │           │
+│  └─────────────────────┘  └─────────────────────┘           │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -369,7 +382,7 @@ Combines automated task decomposition/orchestration with persistent GitHub Issue
 │                    HOOKS (enforce + update)                  │
 │  PreToolUse: validate wave order against task graph         │
 │  SubagentStop: mark issue checkbox, advance wave            │
-│  PRs: auto-link to issue via "Closes #123" or "Part of #123"|
+│  PRs: auto-link to issue via "Part of #123"                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -669,26 +682,6 @@ User: "Add user auth with JWT"
 
 ---
 
-### Workflow
-
-1. **User invokes `/task-planner`** (or auto-triggered for complex tasks)
-2. **Skill explores codebase** - finds relevant files, patterns, integration points
-3. **Decomposes** into atomic subtasks with dependencies
-4. **Assigns agents** via keyword matching (see table in Task Planner section)
-5. **Schedules waves** - groups parallelizable tasks
-6. **Creates GitHub Issue** with full plan:
-   - Phases with checkboxes
-   - Execution order table
-   - Verification checklist
-7. **Writes local state:**
-   - `.claude/state/active_task_graph.json` - for hook validation
-   - `.claude/state/issue_number` - for linking
-8. **Execution proceeds** wave by wave
-9. **SubagentStop hook** after each task:
-   - Marks checkbox in GitHub issue via `gh`
-   - Advances wave counter if all wave tasks complete
-10. **PRs auto-linked** to issue (hook adds "Part of #X" to commit/PR)
-
 ### Sample GitHub Issue Output
 
 ```markdown
@@ -785,36 +778,17 @@ if [[ ! "$COMMAND" =~ "#$ISSUE_NUM" ]]; then
 fi
 ```
 
-### State Files
-
-```
-.claude/state/
-├── active_task_graph.json    # Task IDs, agents, waves, deps, status
-├── issue_number              # GitHub issue number for this plan
-├── current_wave              # Current executing wave (1, 2, ...)
-└── completed_tasks           # List of completed task IDs
-```
-
-**active_task_graph.json:**
-```json
-{
-  "issue": 42,
-  "tasks": [
-    {"id": "T1", "desc": "Design auth", "agent": "architecture-tech-lead", "wave": 1, "deps": [], "status": "completed"},
-    {"id": "T2", "desc": "User model", "agent": "code-implementer", "wave": 2, "deps": ["T1"], "status": "in_progress"},
-    {"id": "T3", "desc": "JWT service", "agent": "code-implementer", "wave": 2, "deps": ["T1"], "status": "pending"}
-  ],
-  "current_wave": 2
-}
-```
-
 ### Unresolved Questions
 
-- Auto-create issue or require user approval first?
 - Wave advancement: strict (block until all wave tasks complete) or flexible (proceed if task's deps met)?
-- Issue checkbox update frequency: after each task or batched?
-- Handle issue edit conflicts if human also edits?
-- Should completed tasks stay in task_graph.json or move to separate file?
+- Handle issue edit conflicts if human also edits issue checkboxes?
+- Auto-close issue when all tasks complete, or require manual close?
+- Should local plan draft be updated during execution (add notes/learnings)?
+
+**Resolved by design:**
+- ✓ Auto-create issue? → No, user approval first (plan draft → approval → issue)
+- ✓ Checkbox update frequency? → After each task (SubagentStop hook)
+- ✓ Where do completed tasks live? → Stay in task_graph.json with status field
 
 ---
 
