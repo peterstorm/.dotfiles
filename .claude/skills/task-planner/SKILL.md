@@ -64,18 +64,20 @@ T4: Write tests
 
 ### 4. Assign Agents
 
-Match task keywords to available agents:
+Match task keywords to wrapper agents (these preload the corresponding skills):
 
-| Agent | Triggers |
+| Agent (subagent_type) | Triggers |
 |-------|----------|
-| code-implementer | implement, create, build, add, write code, model |
-| architecture-tech-lead | design, architecture, pattern, refactor |
-| java-test-engineer | test, junit, jqwik, property-based (Java) |
-| ts-test-engineer | vitest, playwright, react test (TypeScript) |
-| security-expert | security, auth, jwt, oauth, vulnerability |
+| code-implementer-agent | implement, create, build, add, write code, model |
+| architecture-agent | design, architecture, pattern, refactor |
+| java-test-agent | test, junit, jqwik, property-based (Java) |
+| ts-test-agent | vitest, playwright, react test (TypeScript) |
+| security-agent | security, auth, jwt, oauth, vulnerability |
 | code-reviewer | review, quality check |
-| dotfiles-expert | nix, nixos, home-manager, sops |
-| k8s-expert | kubernetes, k8s, kubectl, helm, argocd, deploy, pod, ingress, service, external-secrets, cert-manager, metallb, cloudflared |
+| dotfiles-agent | nix, nixos, home-manager, sops |
+| k8s-agent | kubernetes, k8s, kubectl, helm, argocd, deploy, pod, ingress, service, external-secrets, cert-manager, metallb, cloudflared |
+| keycloak-agent | keycloak, realm, oidc, abac, authorization services |
+| frontend-agent | frontend, ui, react, next.js, component, styling |
 
 Fallback: `general-purpose` if no match.
 
@@ -123,76 +125,65 @@ gh issue create \
 
 Store returned issue number.
 
-**C. State File**:
-```json
-// .claude/state/active_task_graph.json
-{
-  "plan_file": ".claude/plans/2026-01-22-user-auth.md",
-  "issue": 42,
-  "current_wave": 1,
-  "executing_task": null,
-  "tasks": [
-    {
-      "id": "T1",
-      "description": "Create User domain model",
-      "agent": "code-implementer",
-      "wave": 1,
-      "depends_on": [],
-      "status": "pending"
-    }
-  ]
-}
-```
+**C. State File**: `.claude/state/active_task_graph.json`
+
+See `templates.md` for full schema. Key fields:
+- `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, review_status)
+- `wave_gates[N]` (impl_complete, tests_passed, reviews_complete, blocked)
 
 ### 8. Orchestrate Execution
 
 For each wave:
 
 1. Get pending tasks in current wave
-2. For each task:
-   - Update state: `executing_task = "T1"`, `status = "in_progress"`
+2. Spawn ALL wave tasks in parallel (single message, multiple Task calls):
+   - Update state: add to `executing_tasks`, `status = "in_progress"`
    - Build agent prompt with context (see Agent Context Template)
-   - Spawn agent via Task tool
-   - SubagentStop hook auto-updates: status → completed, checkbox marked
-3. Wait for all wave tasks
-4. Advance to next wave (strict: ALL must complete)
+   - SubagentStop hook: status → "implemented", removes from executing_tasks
+3. Wait for all wave tasks to reach "implemented"
+4. Run **Wave Gate Sequence** (see 8a) before advancing
+
+### 8a. Wave Gate Sequence
+
+After all wave tasks reach "implemented", the SubagentStop hook outputs:
+
+```
+=========================================
+  Wave N implementation complete
+=========================================
+
+Run: /wave-gate
+
+(Tests + parallel code review + advance)
+```
+
+**Invoke `/wave-gate`** - it handles everything:
+1. Run integration tests
+2. Spawn task-reviewer per task (parallel, uses /review-pr)
+3. Aggregate findings (critical blocks, advisory logged)
+4. Post GH comment with review summary
+5. Advance to next wave (or block if critical findings)
+
+If blocked, fix issues and run `/wave-gate` again - it re-reviews only blocked tasks.
+
+### Helper Scripts (used by /wave-gate)
+
+Located in `~/.claude/hooks/helpers/`:
+
+| Script | Purpose |
+|--------|---------|
+| `mark-tests-passed.sh` | Mark wave tests passed/failed |
+| `store-review-findings.sh` | Store critical/advisory per task |
+| `complete-wave-gate.sh` | Mark complete, update GH, advance |
 
 ---
 
 ## Agent Context Template
 
-When spawning agents, include:
-
-```markdown
-## Task Assignment
-
-**Task ID:** T2
-**Wave:** 1
-**Agent:** code-implementer
-**Dependencies:** None
-
-## Your Task
-
-Implement JWT token service (sign/verify/refresh)
-
-## Context from Plan
-
-> **Architecture Decision:**
-> [Relevant section extracted from plan]
-
-> **Files to Create/Modify:**
-> - src/auth/JwtTokenService.java
-
-## Full Plan
-
-Available at: `.claude/plans/2026-01-22-user-auth.md`
-
-## Constraints
-
-- Follow patterns in plan
-- Do not modify scope
-- Mark complete when implementation + tests pass
-```
+See `templates.md` for full template. Key elements:
+- `**Task ID:** TX` (required for hooks to track)
+- Task description + relevant plan context
+- Constraints: follow plan, write tests, tests must pass
 
 ---
 
@@ -223,46 +214,10 @@ Show: current wave, completed tasks, pending tasks.
 
 ## GitHub Issue Format
 
-Issue body = full plan content with checkbox tasks:
-
-```markdown
-## Plan: User Authentication
-
-### Context & Analysis
-[Codebase exploration findings]
-
-### Architecture Decisions
-[Design choices with rationale, code examples]
-
-### Task Breakdown
-
-#### Wave 1: Core Components (parallel)
-- [ ] T1: Create User domain model with password hash
-- [ ] T2: Implement JWT token service
-
-#### Wave 2: Integration (depends on Wave 1)
-- [ ] T3: Add login/register endpoints
-
-#### Wave 3: Quality (depends on Wave 2)
-- [ ] T4: Write property tests for auth flow
-
-### Execution Order
-
-| ID | Task | Agent | Wave | Depends |
-|----|------|-------|------|---------|
-| T1 | User model | code-implementer | 1 | - |
-| T2 | JWT service | code-implementer | 1 | - |
-| T3 | Endpoints | code-implementer | 2 | T1, T2 |
-| T4 | Tests | java-test-engineer | 3 | T3 |
-
-### Verification Checklist
-- [ ] All tests pass
-- [ ] No security vulnerabilities
-- [ ] Code reviewed
-
-### Related PRs
-<!-- Auto-updated by hooks -->
-```
+See `templates.md` for full format. Key requirements:
+- Checkbox tasks: `- [ ] T1: description` (hooks update these)
+- Wave groupings with dependencies noted
+- Execution order table
 
 ---
 
@@ -270,16 +225,27 @@ Issue body = full plan content with checkbox tasks:
 
 Hooks auto-activate when `active_task_graph.json` exists:
 
-**PreToolUse/validate-wave.sh**: Blocks out-of-order task execution
-**PreToolUse/link-pr-to-issue.sh**: Reminds to link PRs
-**SubagentStop/update-task-status.sh**: Marks checkboxes, advances waves
+| Hook | Purpose |
+|------|---------|
+| `block-direct-edits.sh` | BLOCKS Edit/Write - forces Task tool |
+| `validate-task-execution.sh` | Validates wave order + review gate |
+| `update-task-status.sh` | Marks "implemented", prompts /wave-gate |
 
 ---
 
 ## Constraints
 
-- Never implement code directly
+- **NEVER use Edit/Write directly** - blocked by `block-direct-edits.sh` hook
+- **MUST use Task tool** to spawn agents for ALL implementation work
 - Delegate design to /architecture-tech-lead for complex tasks
 - Must get user approval before creating issue
 - Must populate TodoWrite with task breakdown
 - Task IDs must match `- [ ] T1:` format in issue for checkbox updates
+
+---
+
+## CRITICAL: Parallel Execution
+
+**Multiple Task calls in ONE message** = parallel execution within wave.
+
+Each Task call needs: subagent_type, description, prompt with `**Task ID:** TX`

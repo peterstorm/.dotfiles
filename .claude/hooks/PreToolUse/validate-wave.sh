@@ -9,9 +9,9 @@ TASK_GRAPH=".claude/state/active_task_graph.json"
 TOOL_NAME=$(echo "$HOOK_INPUT" | jq -r '.tool_name')
 [[ "$TOOL_NAME" != "Task" ]] && exit 0
 
-# Extract task ID from prompt (expects "Task ID: T1" pattern)
+# Extract task ID from prompt (handles "Task ID: T1" or "**Task ID:** T1")
 PROMPT=$(echo "$HOOK_INPUT" | jq -r '.tool_input.prompt // empty')
-TASK_ID=$(echo "$PROMPT" | grep -oE 'Task ID: (T[0-9]+)' | head -1 | cut -d' ' -f3)
+TASK_ID=$(echo "$PROMPT" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
 [[ -z "$TASK_ID" ]] && exit 0  # Not a planned task, allow
 
 # Validate wave order

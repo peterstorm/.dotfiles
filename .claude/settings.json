@@ -25,20 +25,38 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "*",
+        "matcher": "Task",
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/PreToolUse/validate-wave.sh"
+            "command": "bash ~/.claude/hooks/PreToolUse/validate-task-execution.sh"
           }
         ]
       },
       {
-        "matcher": "*",
+        "matcher": "Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/PreToolUse/link-pr-to-issue.sh"
+            "command": "bash ~/.claude/hooks/PreToolUse/block-direct-edits.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/PreToolUse/block-direct-edits.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/PreToolUse/link-pr-to-issue.sh"
           }
         ]
       }
@@ -49,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/SubagentStop/update-task-status.sh"
+            "command": "bash ~/.claude/hooks/SubagentStop/update-task-status.sh"
           }
         ]
       }
