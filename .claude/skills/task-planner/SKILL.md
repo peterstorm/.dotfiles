@@ -75,6 +75,7 @@ Match task keywords to available agents:
 | security-expert | security, auth, jwt, oauth, vulnerability |
 | code-reviewer | review, quality check |
 | dotfiles-expert | nix, nixos, home-manager, sops |
+| k8s-expert | kubernetes, k8s, kubectl, helm, argocd, deploy, pod, ingress, service, external-secrets, cert-manager, metallb, cloudflared |
 
 Fallback: `general-purpose` if no match.
 
