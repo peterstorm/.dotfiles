@@ -2,16 +2,22 @@
 # Combined hook: validates wave order AND review gate
 # Replaces: validate-wave.sh + require-review-gate.sh
 # Only active when task graph exists
+#
+# NOTE: Exit code 2 requires stderr output, NOT stdout!
+# NOTE: Hook input comes via stdin, not env var!
 
 TASK_GRAPH=".claude/state/active_task_graph.json"
 [[ ! -f "$TASK_GRAPH" ]] && exit 0
 
+# Read hook input from stdin (Claude Code pipes JSON to stdin)
+INPUT=$(cat)
+
 # Only check Task tool calls
-TOOL_NAME=$(echo "$HOOK_INPUT" | jq -r '.tool_name')
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 [[ "$TOOL_NAME" != "Task" ]] && exit 0
 
 # Extract task ID from prompt (handles "Task ID: T1" or "**Task ID:** T1")
-PROMPT=$(echo "$HOOK_INPUT" | jq -r '.tool_input.prompt // empty')
+PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')
 TASK_ID=$(echo "$PROMPT" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
 [[ -z "$TASK_ID" ]] && exit 0  # Not a planned task, allow
 
@@ -29,8 +35,8 @@ read -r CURRENT_WAVE TASK_WAVE TASK_STATUS TASK_DEPS < <(
 
 # === Check 1: Wave order ===
 if [[ "$TASK_WAVE" -gt "$CURRENT_WAVE" ]]; then
-  echo "BLOCKED: Cannot execute $TASK_ID (wave $TASK_WAVE) - current wave is $CURRENT_WAVE"
-  echo "Complete all wave $CURRENT_WAVE tasks first."
+  echo "BLOCKED: Cannot execute $TASK_ID (wave $TASK_WAVE) - current wave is $CURRENT_WAVE" >&2
+  echo "Complete all wave $CURRENT_WAVE tasks first." >&2
   exit 2
 fi
 
@@ -40,7 +46,7 @@ if [[ -n "$TASK_DEPS" ]]; then
   for dep in "${DEPS[@]}"; do
     DEP_STATUS=$(jq -r ".tasks[] | select(.id==\"$dep\") | .status" "$TASK_GRAPH")
     if [[ "$DEP_STATUS" != "completed" ]]; then
-      echo "BLOCKED: Cannot execute $TASK_ID - dependency $dep not complete (status: $DEP_STATUS)"
+      echo "BLOCKED: Cannot execute $TASK_ID - dependency $dep not complete (status: $DEP_STATUS)" >&2
       exit 2
     fi
   done
@@ -60,18 +66,18 @@ if [[ "$TASK_WAVE" -eq "$CURRENT_WAVE" && "$CURRENT_WAVE" -gt 1 ]]; then
   )
 
   if [[ "$PREV_REVIEWS_COMPLETE" != "true" ]]; then
-    echo "BLOCKED: Wave $PREV_WAVE review gate not passed."
-    echo ""
+    echo "BLOCKED: Wave $PREV_WAVE review gate not passed." >&2
+    echo "" >&2
     if [[ "$PREV_BLOCKED" == "true" ]]; then
-      echo "Wave $PREV_WAVE is BLOCKED due to:"
-      [[ "$PREV_TESTS" == "false" ]] && echo "  - Integration tests failed"
+      echo "Wave $PREV_WAVE is BLOCKED due to:" >&2
+      [[ "$PREV_TESTS" == "false" ]] && echo "  - Integration tests failed" >&2
       CRITICAL=$(jq -r "[.tasks[] | select(.wave == $PREV_WAVE) | .critical_findings // [] | length] | add // 0" "$TASK_GRAPH")
-      [[ "$CRITICAL" -gt 0 ]] && echo "  - $CRITICAL critical review findings"
+      [[ "$CRITICAL" -gt 0 ]] && echo "  - $CRITICAL critical review findings" >&2
     else
-      echo "Wave $PREV_WAVE gates not yet run."
+      echo "Wave $PREV_WAVE gates not yet run." >&2
     fi
-    echo ""
-    echo "Run: /wave-gate"
+    echo "" >&2
+    echo "Run: /wave-gate" >&2
     exit 2
   fi
 fi

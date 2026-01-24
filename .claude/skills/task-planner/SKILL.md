@@ -1,7 +1,7 @@
 ---
 name: task-planner
 version: "1.0.0"
-description: "Use when: multi-step tasks, 'plan this', 'orchestrate', 'break down', complex features needing wave-based execution. Decomposes tasks, assigns agents, creates GitHub Issue for tracking, manages wave-based execution with hooks."
+description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
 tools: [Read, Glob, Grep, Bash, Write, AskUserQuestion, TodoWrite, Skill, Task]
 ---
 
@@ -62,6 +62,11 @@ T3: Add login endpoint
 T4: Write tests
 ```
 
+**Sizing heuristics** - decompose further if:
+- Task touches >5 files
+- Multiple unrelated concerns in one task
+- Description needs "and" to explain
+
 ### 4. Assign Agents
 
 Match task keywords to wrapper agents (these preload the corresponding skills):
@@ -79,7 +84,7 @@ Match task keywords to wrapper agents (these preload the corresponding skills):
 | keycloak-agent | keycloak, realm, oidc, abac, authorization services |
 | frontend-agent | frontend, ui, react, next.js, component, styling |
 
-Fallback: `general-purpose` if no match.
+Fallback: `general-purpose` (Task tool's built-in agent with all tools) if no keyword match.
 
 ### 5. Schedule Waves
 
@@ -93,10 +98,11 @@ Wave N: Tasks depending on Wave N-1
 
 Example:
 ```
-Wave 1: [T1: model, T2: service]     (parallel)
-Wave 2: [T3: endpoint]               (depends on T1, T2)
-Wave 3: [T4: tests]                  (depends on T3)
+Wave 1: [T1: User model + tests, T2: JWT service + tests]  (parallel)
+Wave 2: [T3: Login endpoint + tests]                       (depends on T1, T2)
 ```
+
+**Note:** Each task includes its own tests (per agent template constraints). Don't create separate "write tests" tasks - tests are part of implementation.
 
 ### 6. User Approval
 
@@ -120,7 +126,7 @@ On approval, create three artifacts:
 ```bash
 gh issue create \
   --title "Plan: {title}" \
-  --body "$(cat .claude/plans/{slug}.md)"
+  --body "$(cat .claude/plans/{YYYY-MM-DD}-{slug}.md)"
 ```
 
 Store returned issue number.
@@ -130,6 +136,11 @@ Store returned issue number.
 See `templates.md` for full schema. Key fields:
 - `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, review_status)
 - `wave_gates[N]` (impl_complete, tests_passed, reviews_complete, blocked)
+
+**Status Transitions:**
+- `pending` → `in_progress`: Task spawned to agent
+- `in_progress` → `implemented`: Agent finished (SubagentStop hook)
+- `implemented` → `completed`: Wave gate passed (tests + review ok)
 
 ### 8. Orchestrate Execution
 
@@ -166,7 +177,9 @@ Run: /wave-gate
 
 If blocked, fix issues and run `/wave-gate` again - it re-reviews only blocked tasks.
 
-### Helper Scripts (used by /wave-gate)
+### Helper Scripts
+
+> **Note:** These scripts are called by `/wave-gate` only, not directly by task-planner.
 
 Located in `~/.claude/hooks/helpers/`:
 
@@ -194,10 +207,16 @@ See `templates.md` for full template. Key elements:
 2. Hooks become active (they check for this file)
 
 ### On `/task-planner --status`:
-```bash
-cat .claude/state/active_task_graph.json | jq
+Read state file and display formatted summary:
 ```
-Show: current wave, completed tasks, pending tasks.
+Plan: Issue #42 - Add user authentication
+Wave 2/3 | 2 completed, 1 in progress, 1 pending
+
+[✓] T1: Create User model (code-implementer)
+[✓] T2: JWT service (code-implementer)
+[→] T3: Login endpoint (code-implementer)
+[ ] T4: Tests (java-test-agent)
+```
 
 ### On `/task-planner --complete`:
 1. Verify all tasks completed
@@ -209,6 +228,15 @@ Show: current wave, completed tasks, pending tasks.
 1. Ask: close issue or leave open?
 2. Remove `.claude/state/active_task_graph.json`
 3. Hooks deactivate
+
+### Modifying Plan Mid-Execution
+
+To add/remove/modify tasks:
+1. Edit `active_task_graph.json` - add task to `tasks[]`, set correct `wave`
+2. Update GH Issue - add/edit checkbox line matching task ID
+3. If adding to current wave, task runs in next spawn cycle
+
+Cannot modify tasks already `in_progress` or `completed`.
 
 ---
 
@@ -230,6 +258,18 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | `block-direct-edits.sh` | BLOCKS Edit/Write - forces Task tool |
 | `validate-task-execution.sh` | Validates wave order + review gate |
 | `update-task-status.sh` | Marks "implemented", prompts /wave-gate |
+
+---
+
+## Error Recovery
+
+| Failure | Recovery |
+|---------|----------|
+| Agent crashes mid-task | Re-spawn same task; state shows `in_progress` |
+| GH issue create fails | Retry `gh issue create`; continue without if persistent |
+| State file corrupted | Rebuild from GH issue checkboxes + local plan file |
+| Wave gate blocked | Fix issues, run `/wave-gate` again (re-reviews blocked only) |
+| Tests fail repeatedly | Ask user: fix tests, skip task, or abort plan |
 
 ---
 

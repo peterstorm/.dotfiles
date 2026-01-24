@@ -1,6 +1,6 @@
 ---
 description: "Comprehensive PR review using specialized agents"
-argument-hint: "[review-aspects]"
+argument-hint: "[review-aspects] [--files file1,file2] [--task T1]"
 allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task"]
 ---
 
@@ -8,14 +8,34 @@ allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task"]
 
 Run a comprehensive pull request review using multiple specialized agents, each focusing on a different aspect of code quality.
 
-**Review Aspects (optional):** "$ARGUMENTS"
+**Arguments:** "$ARGUMENTS"
 
 ## Review Workflow
 
 ### 1. Determine Review Scope
-- Check git status to identify changed files
-- Parse arguments to see if user requested specific review aspects
-- Default: Run all applicable reviews
+
+**Parse arguments for:**
+- `--files file1,file2,...` - Explicit file list (comma-separated)
+- `--task T1` - Task ID for wave-gate integration (writes breadcrumb)
+- Review aspects: code, errors, tests, types, comments, simplify, all
+
+**If --files provided:** Use those files instead of git diff
+**If --task provided:** Write breadcrumb to `.claude/state/review-invocations.json`:
+
+```bash
+# Write breadcrumb when --task provided
+TASK_ID="<extracted from args>"
+mkdir -p .claude/state
+INVOCATIONS=".claude/state/review-invocations.json"
+if [ -f "$INVOCATIONS" ]; then
+  jq --arg task "$TASK_ID" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '. + {($task): $time}' "$INVOCATIONS" > "$INVOCATIONS.tmp" && mv "$INVOCATIONS.tmp" "$INVOCATIONS"
+else
+  echo "{\"$TASK_ID\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$INVOCATIONS"
+fi
+```
+
+**Otherwise:** Check git status to identify changed files
 
 ### 2. Available Review Aspects
 
@@ -28,6 +48,11 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 - **all** - Run all applicable reviews (default)
 
 ### 3. Identify Changed Files
+
+**If --files provided:**
+Use the explicit file list directly.
+
+**Otherwise:**
 ```bash
 git diff --name-only
 git diff --cached --name-only
@@ -112,6 +137,12 @@ After agents complete, summarize:
 /review-pr simplify
 ```
 
+**With explicit files (for wave-gate):**
+```
+/review-pr --files components/foo.tsx,lib/bar.ts --task T3
+/review-pr code --files src/User.java --task T1
+```
+
 **Parallel review:**
 ```
 /review-pr all parallel
@@ -120,7 +151,7 @@ After agents complete, summarize:
 ## Tips
 
 - **Run early**: Before creating PR, not after
-- **Focus on changes**: Agents analyze git diff by default
+- **Focus on changes**: Agents analyze git diff by default (unless --files)
 - **Address critical first**: Fix high-priority issues before lower priority
 - **Re-run after fixes**: Verify issues are resolved
 - **Use delegation**: When agents recommend specialized skills, invoke them
@@ -144,4 +175,10 @@ After agents complete, summarize:
 4. Run delegated reviews (security-expert, java-test-engineer, ts-test-engineer, etc.)
 5. Run: /review-pr simplify
 6. Create PR with /finalize
+```
+
+**Wave-gate integration:**
+```
+# Called by review-invoker agent with scoped files
+/review-pr --files components/report-action-cell.tsx --task T3
 ```

@@ -52,31 +52,36 @@ bash ~/.claude/hooks/helpers/mark-tests-passed.sh --failed
 
 ### Step 3: Spawn Reviewers (Parallel)
 
-Get wave tasks from state. **On re-run, only review tasks with `review_status == "blocked"`.**
-
+**First, clear previous breadcrumbs and get wave changes:**
 ```bash
-# Get tasks needing review (all on first run, only blocked on re-run)
+rm -f .claude/state/review-invocations.json
+git diff --name-only HEAD~10
+```
+
+**Get tasks needing review:**
+```bash
 WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
 jq -r ".tasks[] | select(.wave == $WAVE) | select(.review_status == \"pending\" or .review_status == \"blocked\") | .id" .claude/state/active_task_graph.json
 ```
 
-For EACH task needing review, spawn `task-reviewer` agent in **single message with multiple Task calls**:
+**For EACH task, spawn `review-invoker` in parallel (single message, multiple Task calls):**
 
 ```markdown
 ## Task: {task_id}
 **Description:** {task description}
 
-## Files to Review
-{files changed by this task - identify from git diff/log}
+Files: {comma-separated files relevant to this task}
+Task: {task_id}
 
-## Context
-- Wave: {N}
-- Plan: {path to plan file from state}
+Call: Skill(skill: "review-pr", args: "--files {files} --task {task_id}")
 ```
 
-The `task-reviewer` agent:
-- Invokes `/review-pr` scoped to those files
-- Outputs findings in standardized format with CRITICAL_COUNT/ADVISORY_COUNT
+The `review-invoker` agent:
+- Has ONLY the Skill tool (cannot do manual reviews)
+- MUST call `/review-pr --files X --task TN`
+- Validated by SubagentStop hook (blocks if /review-pr not called)
+
+**Note**: Determine relevant files by filtering wave changes based on task description keywords.
 
 ### Step 4: Parse & Store Findings
 
@@ -146,6 +151,7 @@ When user fixes critical issues, run `/wave-gate` again. It will:
 ## Constraints
 
 - MUST spawn all reviewers in parallel (single message)
+- MUST use `review-invoker` agent with `--files` and `--task` args
 - MUST use helper scripts for state updates
 - MUST post GH comment before advancing
 - NEVER advance if critical findings exist

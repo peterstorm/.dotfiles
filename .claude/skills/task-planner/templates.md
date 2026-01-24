@@ -82,6 +82,8 @@ Issue body structure with checkbox tasks:
 {
   "plan_file": ".claude/plans/YYYY-MM-DD-slug.md",
   "issue": 42,
+  "created_at": "2025-01-23T10:00:00Z",
+  "updated_at": "2025-01-23T12:30:00Z",
   "current_wave": 1,
   "executing_tasks": [],
   "tasks": [{
