@@ -1,8 +1,7 @@
 ---
 name: task-planner
-version: "1.0.0"
+version: "1.1.0"
 description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
-tools: [Read, Glob, Grep, Bash, Write, AskUserQuestion, TodoWrite, Skill, Task]
 ---
 
 # Task Planner - Orchestration Skill
@@ -56,10 +55,9 @@ Output: .claude/plans/{YYYY-MM-DD}-{slug}.md
 Parse plan into tasks. **Design = the plan itself, NOT a tracked task**. Tasks start at implementation:
 
 ```
-T1: Create User domain model
-T2: Implement JWT service
-T3: Add login endpoint
-T4: Write tests
+T1: Create User domain model (+ tests)
+T2: Implement JWT service (+ tests)
+T3: Add login endpoint (+ tests)
 ```
 
 **Sizing heuristics** - decompose further if:
@@ -210,12 +208,13 @@ See `templates.md` for full template. Key elements:
 Read state file and display formatted summary:
 ```
 Plan: Issue #42 - Add user authentication
-Wave 2/3 | 2 completed, 1 in progress, 1 pending
+Wave 2/3 | 2 completed, 1 in progress
 
 [✓] T1: Create User model (code-implementer)
 [✓] T2: JWT service (code-implementer)
 [→] T3: Login endpoint (code-implementer)
-[ ] T4: Tests (java-test-agent)
+
+Legend: [✓] completed  [→] in_progress  [ ] pending
 ```
 
 ### On `/task-planner --complete`:
@@ -261,26 +260,74 @@ Hooks auto-activate when `active_task_graph.json` exists:
 
 ---
 
+## Observability & Debugging
+
+**State inspection:**
+- State file: `.claude/state/active_task_graph.json`
+- View current state: `cat .claude/state/active_task_graph.json | jq`
+- Check executing tasks: `jq '.executing_tasks' .claude/state/active_task_graph.json`
+
+**Common symptoms:**
+
+| Symptom | Likely Cause | Diagnosis |
+|---------|-------------|-----------|
+| Task stuck in `in_progress` | Agent crashed/timed out | Check `executing_tasks` array; re-spawn if empty but status is `in_progress` |
+| Hook not triggering | State file missing | Verify `.claude/state/active_task_graph.json` exists |
+| Checkbox not updating | Task ID mismatch | Compare task ID in state vs GH issue format (`- [ ] T1:`) |
+| Wave not advancing | Gate blocked | Check `wave_gates[N].blocked` and `reviews_complete` |
+
+**Debugging steps:**
+1. Run `/task-planner --status` for formatted view
+2. Inspect raw state file for detailed status
+3. Check hook scripts exist in `~/.claude/hooks/`
+4. Verify GH issue matches state file task IDs
+
+---
+
 ## Error Recovery
 
 | Failure | Recovery |
 |---------|----------|
 | Agent crashes mid-task | Re-spawn same task; state shows `in_progress` |
+| Agent completes but wrong impl | Mark task `pending`, update prompt with corrections, re-spawn |
+| Parallel agents edit same file | Resolve conflicts manually, mark affected tasks `pending` |
 | GH issue create fails | Retry `gh issue create`; continue without if persistent |
 | State file corrupted | Rebuild from GH issue checkboxes + local plan file |
 | Wave gate blocked | Fix issues, run `/wave-gate` again (re-reviews blocked only) |
 | Tests fail repeatedly | Ask user: fix tests, skip task, or abort plan |
+| Hook script fails | Check script permissions (`chmod +x`), verify shebang |
+| Context lost between waves | Reference completed task files in new task prompts |
+
+---
+
+## Plan Limits
+
+**Recommended boundaries:**
+- **Max tasks per plan:** 8-12 tasks (beyond this, split into sub-plans)
+- **Max waves:** 4-5 waves (deeper dependency chains = higher failure risk)
+- **Max parallel tasks per wave:** 4-6 (more = harder to track/debug)
+
+**When to split into multiple plans:**
+- Total tasks exceed 12
+- Multiple independent features bundled together
+- Different teams/owners for different parts
+- Risk of context loss in long-running orchestration
+
+**Token budget awareness:**
+- Each agent spawn consumes context tokens
+- Large plans may exhaust context before completion
+- Prefer smaller focused plans over monolithic ones
 
 ---
 
 ## Constraints
 
-- **NEVER use Edit/Write directly** - blocked by `block-direct-edits.sh` hook
-- **MUST use Task tool** to spawn agents for ALL implementation work
+- **ALL implementation via Task tool** - Edit/Write blocked by hook
 - Delegate design to /architecture-tech-lead for complex tasks
 - Must get user approval before creating issue
 - Must populate TodoWrite with task breakdown
 - Task IDs must match `- [ ] T1:` format in issue for checkbox updates
+- Only ONE active plan at a time (state file is singleton)
 
 ---
 

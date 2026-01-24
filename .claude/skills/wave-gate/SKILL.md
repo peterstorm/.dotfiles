@@ -1,8 +1,8 @@
 ---
 name: wave-gate
-version: "1.0.0"
+version: "1.1.0"
 description: "Run after wave implementation complete. Executes test + review gate sequence. Usage: /wave-gate"
-tools: [Read, Bash, Task, Write]
+disable-model-invocation: true
 ---
 
 # Wave Gate - Test & Review Sequence
@@ -55,7 +55,10 @@ bash ~/.claude/hooks/helpers/mark-tests-passed.sh --failed
 **First, clear previous breadcrumbs and get wave changes:**
 ```bash
 rm -f .claude/state/review-invocations.json
-git diff --name-only HEAD~10
+
+# Get files changed in this wave (compare to main/master)
+BASE=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || echo "main")
+git diff --name-only $BASE...HEAD
 ```
 
 **Get tasks needing review:**
@@ -77,11 +80,15 @@ Call: Skill(skill: "review-pr", args: "--files {files} --task {task_id}")
 ```
 
 The `review-invoker` agent:
-- Has ONLY the Skill tool (cannot do manual reviews)
-- MUST call `/review-pr --files X --task TN`
-- Validated by SubagentStop hook (blocks if /review-pr not called)
+- Has full tool access to execute /review-pr properly
+- MUST call `/review-pr --files X --task TN` as first action
+- Returns findings in CRITICAL/ADVISORY format
 
-**Note**: Determine relevant files by filtering wave changes based on task description keywords.
+**File-to-task mapping algorithm:**
+1. Get task description keywords (e.g., "JWT service" → jwt, token, auth)
+2. Filter wave changes to files matching keywords or parent directories
+3. If <3 files match, include all wave changes for that task
+4. If ambiguous, prefer over-inclusion (review more rather than miss files)
 
 ### Step 4: Parse & Store Findings
 
@@ -118,6 +125,11 @@ EOF
 )"
 ```
 
+**If GH comment fails** (rate limit, auth, network):
+- Log review summary to `.claude/state/wave-{N}-review.md` as fallback
+- Proceed with gate logic - don't block on comment failure
+- Retry comment post after gate decision
+
 ### Step 6: Advance or Block
 
 Check if any task has critical findings:
@@ -145,6 +157,31 @@ When user fixes critical issues, run `/wave-gate` again. It will:
 - Skip tests if already passed (`tests_passed == true`)
 - Re-review ONLY tasks with `review_status == "blocked"`
 - Advance when all clear
+
+---
+
+## Handling Review Failures
+
+If a reviewer agent fails to complete:
+
+| Symptom | Cause | Recovery |
+|---------|-------|----------|
+| No output from reviewer | Agent crashed/timed out | Re-spawn that specific reviewer |
+| Malformed output (no CRITICAL/ADVISORY) | Skill parsing issue | Re-spawn with explicit format reminder |
+| Partial output | Context exhaustion | Split files across multiple reviewer calls |
+| Hook validation failed | /review-pr not called | Check agent received correct args |
+
+**Debugging:**
+```bash
+# Check which reviews completed
+cat .claude/state/review-invocations.json
+
+# Compare to expected tasks
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
+jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json
+```
+
+Missing task in breadcrumbs = that reviewer needs re-spawn.
 
 ---
 
