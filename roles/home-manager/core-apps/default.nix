@@ -25,6 +25,7 @@
   ];
 
   home.packages = with pkgs;[
+    gh
     vscode
     cloudflare-warp
     cachix
