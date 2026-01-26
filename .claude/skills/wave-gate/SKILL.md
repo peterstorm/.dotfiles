@@ -2,7 +2,6 @@
 name: wave-gate
 version: "1.1.0"
 description: "Run after wave implementation complete. Executes test + review gate sequence. Usage: /wave-gate"
-disable-model-invocation: true
 ---
 
 # Wave Gate - Test & Review Sequence

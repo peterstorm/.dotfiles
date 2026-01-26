@@ -1,6 +1,6 @@
 ---
 description: "Comprehensive PR review using specialized agents"
-argument-hint: "[review-aspects] [--files file1,file2] [--task T1]"
+argument-hint: "[code|errors|tests|types|comments|architecture|simplify|all] [--files file1,file2] [--task T1]"
 allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task"]
 ---
 
@@ -17,7 +17,7 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 **Parse arguments for:**
 - `--files file1,file2,...` - Explicit file list (comma-separated)
 - `--task T1` - Task ID for wave-gate integration (writes breadcrumb)
-- Review aspects: code, errors, tests, types, comments, simplify, all
+- Review aspects: code, errors, tests, types, comments, architecture, simplify, all
 
 **If --files provided:** Use those files instead of git diff
 **If --task provided:** Write breadcrumb to `.claude/state/review-invocations.json`:
@@ -44,6 +44,7 @@ fi
 - **tests** - Review test coverage quality and completeness
 - **types** - Analyze type design and invariants
 - **comments** - Analyze code comment accuracy
+- **architecture** - FC/IS adherence, coupling, testability, service design
 - **simplify** - Simplify code for clarity (run after other reviews pass)
 - **all** - Run all applicable reviews (default)
 
@@ -68,14 +69,22 @@ Based on changes:
 - **If test files changed or new logic added**: pr-test-analyzer
 - **If types added/modified**: type-design-analyzer
 - **If comments/docs added**: comment-analyzer
+- **If large PR (>500 additions OR >10 files) OR new services/packages/migrations**: architecture-agent (FC/IS, coupling, testability)
 - **After other reviews pass**: code-simplifier (polish)
+
+**To determine PR size, run:**
+```bash
+git diff main...HEAD --stat | tail -1
+# Example output: "23 files changed, 5843 insertions(+), 35 deletions(-)"
+# Parse additions count and file count to decide architecture trigger
+```
 
 ### 5. Launch Review Agents
 
 **For comprehensive review, launch these agents in parallel:**
 
 1. **code-reviewer** - CLAUDE.md compliance, bugs, architecture
-   - Will recommend delegation to: security-expert, keycloak-skill, architecture-tech-lead, frontend-design-skill
+   - Will recommend delegation to: security-expert, keycloak-skill, frontend-design-skill
 
 2. **silent-failure-hunter** - Error handling, Either patterns, silent failures
 
@@ -86,8 +95,14 @@ Based on changes:
 
 5. **comment-analyzer** - Comment accuracy, rot, documentation
 
+6. **architecture-agent** *(auto-triggered for large PRs)* - FC/IS adherence, coupling, testability, service layer design, brand duplication, I/O boundary placement
+   - **Auto-trigger:** >500 additions OR >10 files changed OR new services/packages/DB migrations
+   - **Always included** when `all` or `architecture` aspect requested
+   - Prompt must include: file list, diff stats, architecture principles from CLAUDE.md
+   - Reviews: FC/IS pattern, coupling, testability score, service design, refactoring priorities, unresolved questions
+
 **After fixes applied:**
-6. **code-simplifier** - Clarity, FP patterns, maintainability
+7. **code-simplifier** - Clarity, FP patterns, maintainability
 
 ### 6. Aggregate Results
 
@@ -110,7 +125,6 @@ After agents complete, summarize:
 - [ ] keycloak-skill: [reason]
 - [ ] java-test-engineer: [reason]
 - [ ] ts-test-engineer: [reason]
-- [ ] architecture-tech-lead: [reason]
 
 ## Strengths
 - What's well-done in this PR
@@ -134,6 +148,7 @@ After agents complete, summarize:
 ```
 /review-pr code errors
 /review-pr tests types
+/review-pr architecture
 /review-pr simplify
 ```
 
@@ -156,6 +171,7 @@ After agents complete, summarize:
 - **Re-run after fixes**: Verify issues are resolved
 - **Use delegation**: When agents recommend specialized skills, invoke them
 - **Simplify last**: Run code-simplifier after other issues are fixed
+- **Architecture auto-triggers**: For PRs with >500 additions or >10 files, architecture-agent launches automatically with `all`
 
 ## Workflow Integration
 

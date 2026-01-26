@@ -67,8 +67,9 @@ When detecting these patterns, recommend invoking specialized skills:
 - **Keycloak/ABAC/JWT/UMA/realm config** -> `keycloak-skill`
 - **Java test quality, missing coverage** -> `java-test-engineer`
 - **TypeScript/React (Vite/Next.js) test quality** -> `ts-test-engineer`
-- **Architecture concerns, 5+ dependencies, god classes** -> `architecture-tech-lead`
 - **React components, styling, a11y** -> `frontend-design-skill`
+
+Note: Architecture review is handled directly by `architecture-agent` (auto-launched by `/review-pr` for large PRs). Do NOT recommend delegation to architecture-tech-lead.
 
 ## Output Format
 
