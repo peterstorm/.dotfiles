@@ -63,6 +63,29 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/SubagentStop/store-reviewer-findings.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/SubagentStop/cleanup-subagent-flag.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "review-invoker",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/SubagentStop/validate-review-invoker.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/SubagentStart/mark-subagent-active.sh"
           }
         ]
       }
