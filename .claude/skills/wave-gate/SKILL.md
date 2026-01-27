@@ -1,14 +1,16 @@
 ---
 name: wave-gate
-version: "1.1.0"
+version: "2.0.0"
 description: "Run after wave implementation complete. Executes test + review gate sequence. Usage: /wave-gate"
 ---
 
 # Wave Gate - Test & Review Sequence
 
-Executes the gate sequence after all wave tasks reach "implemented". Handles tests, parallel code review, finding aggregation, GH comment, and wave advancement.
+Executes the gate sequence after all wave tasks reach "implemented". Verifies test evidence, spawns code reviewers, and advances waves.
 
 **Run this after SubagentStop hook outputs "Wave N implementation complete".**
+
+**Important:** State file writes via Bash are blocked by `guard-state-file.sh`. All state mutations happen through SubagentStop hooks and whitelisted helper scripts. Read access (jq, cat) is allowed.
 
 ---
 
@@ -17,44 +19,32 @@ Executes the gate sequence after all wave tasks reach "implemented". Handles tes
 ### Step 1: Verify State
 
 ```bash
-cat .claude/state/active_task_graph.json | jq '{wave: .current_wave, impl_complete: .wave_gates[.current_wave | tostring].impl_complete}'
+jq '{wave: .current_wave, impl_complete: .wave_gates[.current_wave | tostring].impl_complete}' .claude/state/active_task_graph.json
 ```
 
 Abort if `impl_complete != true`.
 
-### Step 2: Run Integration Tests
+### Step 2: Verify Test Evidence
 
-**First check if already passed** (for re-runs after fixing issues):
+Test evidence is set **automatically** by the `update-task-status.sh` SubagentStop hook when implementation agents complete. It extracts pass markers (Maven, Node, Vitest, pytest) from agent transcripts and stores per-task `tests_passed` + `test_evidence`.
+
+**Check evidence status (read-only):**
 ```bash
-jq -r '.wave_gates[(.current_wave | tostring)].tests_passed' .claude/state/active_task_graph.json
-```
-If `true`, skip to Step 3.
-
-**Otherwise**, detect and run project test suite:
-- `package.json` → `npm test`
-- `build.gradle` / `build.gradle.kts` → `./gradlew test`
-- `pom.xml` → `./mvnw test`
-- `Cargo.toml` → `cargo test`
-- `pyproject.toml` / `setup.py` → `pytest`
-
-Run via Bash. Then:
-
-```bash
-# If tests pass
 bash ~/.claude/hooks/helpers/mark-tests-passed.sh
-
-# If tests fail
-bash ~/.claude/hooks/helpers/mark-tests-passed.sh --failed
 ```
 
-**If tests fail → STOP. Inform user. Do not proceed to review.**
+This prints per-task evidence status. Exit 0 = all tasks have evidence, exit 1 = missing.
+
+**If evidence missing** → re-spawn the implementation agent for that task. The agent MUST run tests and the SubagentStop hook must see pass markers in the transcript.
+
+**New test verification:** The `verify-new-tests.sh` SubagentStop hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass.
+
+**Do NOT manually run tests or set test flags.** The guard hook blocks direct state file writes. Evidence can only come from agent execution → SubagentStop hook extraction.
 
 ### Step 3: Spawn Reviewers (Parallel)
 
-**First, clear previous breadcrumbs and get wave changes:**
+**Get wave changes:**
 ```bash
-rm -f .claude/state/review-invocations.json
-
 # Get files changed in this wave (compare to main/master)
 BASE=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || echo "main")
 git diff --name-only $BASE...HEAD
@@ -83,43 +73,35 @@ The `review-invoker` agent:
 - MUST call `/review-pr --files X --task TN` as first action
 - Returns findings in CRITICAL/ADVISORY format
 
+**What happens automatically on reviewer completion:**
+1. `validate-review-invoker.sh` (SubagentStop) — verifies `/review-pr` transcript evidence
+2. `store-reviewer-findings.sh` (SubagentStop) — parses CRITICAL/ADVISORY from output, calls helper to set `review_status` per task ("passed" or "blocked")
+
+Both `review-invoker` and `task-reviewer` agent types are handled.
+
 **File-to-task mapping algorithm:**
 1. Get task description keywords (e.g., "JWT service" → jwt, token, auth)
 2. Filter wave changes to files matching keywords or parent directories
 3. If <3 files match, include all wave changes for that task
 4. If ambiguous, prefer over-inclusion (review more rather than miss files)
 
-### Step 4: Parse & Store Findings
+### Step 4: Post GH Comment
 
-For each reviewer output, extract findings and pipe to store script (handles special chars safely):
-
-```bash
-bash ~/.claude/hooks/helpers/store-review-findings.sh --task T1 <<'EOF'
-CRITICAL: SQL injection in query builder at UserRepo.java:45
-CRITICAL: Missing authorization check on /api/admin endpoint
-ADVISORY: Consider extracting validation logic to separate class
-EOF
-```
-
-Format: Each line starts with `CRITICAL:` or `ADVISORY:` followed by the finding.
-
-### Step 5: Post GH Comment
-
-Get issue number from state. Post review summary:
+After all reviewers complete, read review status and post summary:
 
 ```bash
 gh issue comment {ISSUE} --body "$(cat <<'EOF'
 ## Wave {N} Review
 
 ### T1: {description}
-**Status:** ✅ Passed | ❌ {N} critical findings
+**Status:** PASSED | BLOCKED - {N} critical findings
 - {findings list}
 
 ### T2: {description}
 ...
 
 ---
-**Wave Status:** ✅ Ready to advance | ❌ Blocked - fix critical issues
+**Wave Status:** PASSED - Ready to advance | BLOCKED - fix critical issues
 EOF
 )"
 ```
@@ -129,31 +111,30 @@ EOF
 - Proceed with gate logic - don't block on comment failure
 - Retry comment post after gate decision
 
-### Step 6: Advance or Block
+### Step 5: Advance
 
-Check if any task has critical findings:
+Call `complete-wave-gate.sh` — it handles ALL verification and advancement:
 
-```bash
-# Check state for critical findings (get wave first, then filter)
-WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
-jq "[.tasks[] | select(.wave == $WAVE) | .critical_findings | length] | add // 0" .claude/state/active_task_graph.json
-```
-
-**If 0 critical findings:**
 ```bash
 bash ~/.claude/hooks/helpers/complete-wave-gate.sh
 ```
-Output: "Wave N complete. Ready for wave N+1."
 
-**If critical findings exist:**
-Output blocked status with list of what to fix. Do NOT advance.
+The helper performs four checks before advancing:
+1. **Per-task test evidence** — all wave tasks must have `tests_passed == true`
+2. **New tests written** — all wave tasks must have `new_tests_written == true`
+3. **Per-task review status** — all wave tasks must have `review_status != "pending"` (set by SubagentStop hook)
+4. **No critical findings** — `critical_findings` count must be 0
+
+If any check fails, the helper exits with error and the wave does NOT advance. Fix the issue and re-run `/wave-gate`.
+
+On success: marks tasks "completed", updates GH issue checkboxes, advances to next wave.
 
 ---
 
 ## Re-review After Fixes
 
 When user fixes critical issues, run `/wave-gate` again. It will:
-- Skip tests if already passed (`tests_passed == true`)
+- Skip test verification if evidence already present
 - Re-review ONLY tasks with `review_status == "blocked"`
 - Advance when all clear
 
@@ -169,18 +150,19 @@ If a reviewer agent fails to complete:
 | Malformed output (no CRITICAL/ADVISORY) | Skill parsing issue | Re-spawn with explicit format reminder |
 | Partial output | Context exhaustion | Split files across multiple reviewer calls |
 | Hook validation failed | /review-pr not called | Check agent received correct args |
+| review_status still "pending" | SubagentStop hook didn't fire or parse failed | Check hook output, re-spawn reviewer |
 
 **Debugging:**
 ```bash
-# Check which reviews completed
-cat .claude/state/review-invocations.json
+# Check per-task review status
+jq '.tasks[] | {id, review_status, tests_passed}' .claude/state/active_task_graph.json
 
 # Compare to expected tasks
 WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
 jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json
 ```
 
-Missing task in breadcrumbs = that reviewer needs re-spawn.
+Task with `review_status == "pending"` after reviewer ran = transcript-based validation failed, re-spawn reviewer.
 
 ---
 
@@ -188,7 +170,9 @@ Missing task in breadcrumbs = that reviewer needs re-spawn.
 
 - MUST spawn all reviewers in parallel (single message)
 - MUST use `review-invoker` agent with `--files` and `--task` args
-- MUST use helper scripts for state updates
 - MUST post GH comment before advancing
 - NEVER advance if critical findings exist
-- NEVER skip tests (unless already passed this wave)
+- NEVER manually write to state file (guard hook blocks it)
+- Test evidence comes from SubagentStop hook — cannot be set manually
+- Review status comes from SubagentStop hook — cannot be set manually
+- `complete-wave-gate.sh` is the ONLY path to advance waves

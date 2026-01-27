@@ -16,4 +16,6 @@ Execute the assigned task following:
 - Immutability by default
 - Testable without mocks
 
-When done, summarize what you implemented and any tests needed.
+You MUST write tests for your implementation, run them, and ensure they pass.
+Test output must contain recognizable pass markers (e.g., "X passing", "Tests run: X, Failures: 0").
+SubagentStop hooks extract test evidence from your transcript — no evidence = wave gate fails.

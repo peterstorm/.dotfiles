@@ -82,4 +82,17 @@ if [[ "$TASK_WAVE" -eq "$CURRENT_WAVE" && "$CURRENT_WAVE" -gt 1 ]]; then
   fi
 fi
 
+# === Store baseline SHA for per-task new-test detection ===
+# verify-new-tests.sh diffs against this SHA (not branch merge-base) to scope
+# new-test detection to changes made by THIS task, not the whole branch.
+HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
+if [[ -n "$HEAD_SHA" && -n "$TASK_ID" ]]; then
+  source ~/.claude/hooks/helpers/lock.sh
+  LOCK_FILE=".claude/state/.task_graph.lock"
+  acquire_lock "$LOCK_FILE" auto
+  jq --arg id "$TASK_ID" --arg sha "$HEAD_SHA" '
+    .tasks |= map(if .id == $id then .start_sha = $sha else . end)
+  ' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+fi
+
 exit 0

@@ -1,6 +1,6 @@
 ---
 name: task-planner
-version: "1.1.0"
+version: "2.0.0"
 description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
 ---
 
@@ -132,13 +132,18 @@ Store returned issue number.
 **C. State File**: `.claude/state/active_task_graph.json`
 
 See `templates.md` for full schema. Key fields:
-- `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, review_status)
+- `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, tests_passed, test_evidence, review_status)
 - `wave_gates[N]` (impl_complete, tests_passed, reviews_complete, blocked)
+
+**Per-task automated fields** (set by SubagentStop hooks, not manually):
+- `tests_passed` — extracted from agent transcript by `update-task-status.sh`
+- `test_evidence` — description of what test markers were found
+- `review_status` — set by `store-reviewer-findings.sh` when review agent completes
 
 **Status Transitions:**
 - `pending` → `in_progress`: Task spawned to agent
-- `in_progress` → `implemented`: Agent finished (SubagentStop hook)
-- `implemented` → `completed`: Wave gate passed (tests + review ok)
+- `in_progress` → `implemented`: Agent finished (SubagentStop hook also extracts test evidence)
+- `implemented` → `completed`: Wave gate passed (test evidence + review + no critical findings)
 
 ### 8. Orchestrate Execution
 
@@ -148,44 +153,15 @@ For each wave:
 2. Spawn ALL wave tasks in parallel (single message, multiple Task calls):
    - Update state: add to `executing_tasks`, `status = "in_progress"`
    - Build agent prompt with context (see Agent Context Template)
-   - SubagentStop hook: status → "implemented", removes from executing_tasks
+   - SubagentStop hook: status → "implemented", extracts test evidence from transcript
 3. Wait for all wave tasks to reach "implemented"
 4. Run **Wave Gate Sequence** (see 8a) before advancing
 
 ### 8a. Wave Gate Sequence
 
-After all wave tasks reach "implemented", the SubagentStop hook outputs:
+After all wave tasks reach "implemented", the SubagentStop hook outputs a prompt to run `/wave-gate`. **Invoke `/wave-gate`** — see its SKILL.md for full sequence (test verification, parallel review, gate advancement).
 
-```
-=========================================
-  Wave N implementation complete
-=========================================
-
-Run: /wave-gate
-
-(Tests + parallel code review + advance)
-```
-
-**Invoke `/wave-gate`** - it handles everything:
-1. Run integration tests
-2. Spawn task-reviewer per task (parallel, uses /review-pr)
-3. Aggregate findings (critical blocks, advisory logged)
-4. Post GH comment with review summary
-5. Advance to next wave (or block if critical findings)
-
-If blocked, fix issues and run `/wave-gate` again - it re-reviews only blocked tasks.
-
-### Helper Scripts
-
-> **Note:** These scripts are called by `/wave-gate` only, not directly by task-planner.
-
-Located in `~/.claude/hooks/helpers/`:
-
-| Script | Purpose |
-|--------|---------|
-| `mark-tests-passed.sh` | Mark wave tests passed/failed |
-| `store-review-findings.sh` | Store critical/advisory per task |
-| `complete-wave-gate.sh` | Mark complete, update GH, advance |
+If blocked, fix issues and run `/wave-gate` again — it re-reviews only blocked tasks.
 
 ---
 
@@ -210,9 +186,9 @@ Read state file and display formatted summary:
 Plan: Issue #42 - Add user authentication
 Wave 2/3 | 2 completed, 1 in progress
 
-[✓] T1: Create User model (code-implementer)
-[✓] T2: JWT service (code-implementer)
-[→] T3: Login endpoint (code-implementer)
+[✓] T1: Create User model (code-implementer) — tests: PASS
+[✓] T2: JWT service (code-implementer) — tests: PASS
+[→] T3: Login endpoint (code-implementer) — tests: pending
 
 Legend: [✓] completed  [→] in_progress  [ ] pending
 ```
@@ -227,6 +203,16 @@ Legend: [✓] completed  [→] in_progress  [ ] pending
 1. Ask: close issue or leave open?
 2. Remove `.claude/state/active_task_graph.json`
 3. Hooks deactivate
+
+### Branch Strategy
+
+Tasks execute on the **current branch**. Recommended workflow:
+- Create a feature branch before starting: `feature/{slug}`
+- All wave agents commit on this branch
+- After all waves complete, PR from feature branch to main
+- `/task-planner --complete` can trigger `/finalize` for branch + PR
+
+If already on a feature branch when invoking `/task-planner`, execution continues there.
 
 ### Modifying Plan Mid-Execution
 
@@ -252,11 +238,22 @@ See `templates.md` for full format. Key requirements:
 
 Hooks auto-activate when `active_task_graph.json` exists:
 
-| Hook | Purpose |
-|------|---------|
-| `block-direct-edits.sh` | BLOCKS Edit/Write - forces Task tool |
-| `validate-task-execution.sh` | Validates wave order + review gate |
-| `update-task-status.sh` | Marks "implemented", prompts /wave-gate |
+| Hook | Event | Purpose |
+|------|-------|---------|
+| `block-direct-edits.sh` | PreToolUse: Edit/Write | BLOCKS direct file edits — forces Task tool |
+| `guard-state-file.sh` | PreToolUse: Bash | BLOCKS writes to state files — allows reads |
+| `validate-task-execution.sh` | PreToolUse: Task | Validates wave order + dependency resolution |
+| `update-task-status.sh` | SubagentStop | Marks "implemented" + extracts test evidence |
+| `store-reviewer-findings.sh` | SubagentStop | Parses review findings + sets review_status |
+| `validate-review-invoker.sh` | SubagentStop | Verifies /review-pr transcript evidence |
+| `mark-subagent-active.sh` | SubagentStart | Flags active subagent for Edit/Write allow |
+| `cleanup-subagent-flag.sh` | SubagentStop | Cleans up subagent flag |
+
+**Enforcement chain:**
+- Test evidence: agent runs tests → `update-task-status.sh` extracts from transcript → `complete-wave-gate.sh` verifies
+- Review status: review agent runs → `store-reviewer-findings.sh` sets status → `complete-wave-gate.sh` verifies
+- State file: `guard-state-file.sh` blocks Bash writes, `block-direct-edits.sh` blocks Edit/Write
+- Only hooks (SubagentStop) and whitelisted helpers can modify state
 
 ---
 
@@ -264,7 +261,8 @@ Hooks auto-activate when `active_task_graph.json` exists:
 
 **State inspection:**
 - State file: `.claude/state/active_task_graph.json`
-- View current state: `cat .claude/state/active_task_graph.json | jq`
+- View current state: `jq '.' .claude/state/active_task_graph.json`
+- Per-task status: `jq '.tasks[] | {id, status, tests_passed, review_status}' .claude/state/active_task_graph.json`
 - Check executing tasks: `jq '.executing_tasks' .claude/state/active_task_graph.json`
 
 **Common symptoms:**
@@ -275,6 +273,9 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | Hook not triggering | State file missing | Verify `.claude/state/active_task_graph.json` exists |
 | Checkbox not updating | Task ID mismatch | Compare task ID in state vs GH issue format (`- [ ] T1:`) |
 | Wave not advancing | Gate blocked | Check `wave_gates[N].blocked` and `reviews_complete` |
+| `tests_passed` missing | SubagentStop hook didn't parse markers | Re-spawn agent; ensure tests produce recognizable output |
+| `review_status` stuck "pending" | Review agent type mismatch or hook parse failed | Check hook fired; re-spawn reviewer |
+| State write blocked | `guard-state-file.sh` active | Use helper scripts, not direct jq writes |
 
 **Debugging steps:**
 1. Run `/task-planner --status` for formatted view
@@ -290,13 +291,22 @@ Hooks auto-activate when `active_task_graph.json` exists:
 |---------|----------|
 | Agent crashes mid-task | Re-spawn same task; state shows `in_progress` |
 | Agent completes but wrong impl | Mark task `pending`, update prompt with corrections, re-spawn |
+| Agent completes but no test evidence | Re-spawn agent — must run tests with recognizable output |
 | Parallel agents edit same file | Resolve conflicts manually, mark affected tasks `pending` |
 | GH issue create fails | Retry `gh issue create`; continue without if persistent |
 | State file corrupted | Rebuild from GH issue checkboxes + local plan file |
-| Wave gate blocked | Fix issues, run `/wave-gate` again (re-reviews blocked only) |
+| Wave gate blocked | Fix issues, run `/wave-gate` again (re-reviews blocked only). See "Fixing Blocked Waves" below |
 | Tests fail repeatedly | Ask user: fix tests, skip task, or abort plan |
 | Hook script fails | Check script permissions (`chmod +x`), verify shebang |
 | Context lost between waves | Reference completed task files in new task prompts |
+
+### Fixing Blocked Waves
+
+When a wave is blocked (critical review findings), Edit/Write are also blocked by `block-direct-edits.sh`. To fix issues:
+
+1. **Re-spawn via Task tool** — create a fix agent with the blocked task context and critical findings. The agent (subagent) CAN use Edit/Write. Prompt it with the specific findings to address.
+2. **After fixes**, run `/wave-gate` again — it re-reviews only blocked tasks.
+3. **Emergency bypass** — remove `.claude/state/active_task_graph.json`, fix manually, rebuild state from GH issue + plan file.
 
 ---
 
@@ -323,6 +333,7 @@ Hooks auto-activate when `active_task_graph.json` exists:
 ## Constraints
 
 - **ALL implementation via Task tool** - Edit/Write blocked by hook
+- **ALL state writes via hooks/helpers** - Bash writes blocked by guard
 - Delegate design to /architecture-tech-lead for complex tasks
 - Must get user approval before creating issue
 - Must populate TodoWrite with task breakdown

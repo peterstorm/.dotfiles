@@ -16,25 +16,10 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 
 **Parse arguments for:**
 - `--files file1,file2,...` - Explicit file list (comma-separated)
-- `--task T1` - Task ID for wave-gate integration (writes breadcrumb)
+- `--task T1` - Task ID for wave-gate integration
 - Review aspects: code, errors, tests, types, comments, architecture, simplify, all
 
 **If --files provided:** Use those files instead of git diff
-**If --task provided:** Write breadcrumb to `.claude/state/review-invocations.json`:
-
-```bash
-# Write breadcrumb when --task provided
-TASK_ID="<extracted from args>"
-mkdir -p .claude/state
-INVOCATIONS=".claude/state/review-invocations.json"
-if [ -f "$INVOCATIONS" ]; then
-  jq --arg task "$TASK_ID" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '. + {($task): $time}' "$INVOCATIONS" > "$INVOCATIONS.tmp" && mv "$INVOCATIONS.tmp" "$INVOCATIONS"
-else
-  echo "{\"$TASK_ID\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$INVOCATIONS"
-fi
-```
-
 **Otherwise:** Check git status to identify changed files
 
 ### 2. Available Review Aspects
