@@ -65,6 +65,8 @@ if [[ -n "$TRANSCRIPT_PATH" ]]; then
 fi
 
 FULL_DIFF=""
+USE_SHA_FALLBACK=false
+
 if [[ -n "$FILES_MODIFIED" ]]; then
   # File-scoped diff: only files this task touched
   DIFF_UNSTAGED=$(echo "$FILES_MODIFIED" | xargs git diff -- 2>/dev/null)
@@ -81,7 +83,13 @@ if [[ -n "$FILES_MODIFIED" ]]; then
   FULL_DIFF="${DIFF_UNSTAGED}
 ${DIFF_STAGED}
 ${DIFF_UNTRACKED}"
-else
+  # If file-scoped diff is empty (files already committed), fall back to SHA diff
+  if [[ -z "$(echo "$FULL_DIFF" | tr -d '[:space:]')" ]]; then
+    USE_SHA_FALLBACK=true
+  fi
+fi
+
+if [[ -z "$FILES_MODIFIED" ]] || [[ "$USE_SHA_FALLBACK" == "true" ]]; then
   # Fallback: SHA-based diff (old behavior)
   START_SHA=$(jq -r ".tasks[] | select(.id==\"$TASK_ID\") | .start_sha // empty" "$TASK_GRAPH")
   DIFF=""

@@ -56,8 +56,11 @@ TESTS_PASSED=false
 TEST_EVIDENCE=""
 
 # Java/Maven: "BUILD SUCCESS" + "Tests run: X, Failures: 0, Errors: 0"
+# Also handles markdown bold: "Tests run: **128**, Failures: **0**, Errors: **0**"
 if echo "$PROMPT" | grep -q "BUILD SUCCESS"; then
-  MAVEN_RESULTS=$(echo "$PROMPT" | grep -oE 'Tests run: [0-9]+, Failures: 0, Errors: 0' | tail -1)
+  # Strip markdown bold markers for extraction
+  CLEAN_PROMPT=$(echo "$PROMPT" | sed 's/\*\*//g')
+  MAVEN_RESULTS=$(echo "$CLEAN_PROMPT" | grep -oE 'Tests run: [0-9]+, Failures: 0, Errors: 0' | tail -1)
   if [[ -n "$MAVEN_RESULTS" ]]; then
     TESTS_PASSED=true
     TEST_EVIDENCE="maven: $MAVEN_RESULTS"
