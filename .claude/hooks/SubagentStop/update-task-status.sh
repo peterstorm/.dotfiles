@@ -2,22 +2,25 @@
 # Update task status when impl agent completes
 # Marks task "implemented" (not "completed" - that happens after review gate)
 # Extracts test evidence from agent transcript for per-task test verification
-# Only active when task graph exists
+# Supports cross-repo: finds task graph via session-scoped path if not in cwd
 
-TASK_GRAPH=".claude/state/active_task_graph.json"
-LOCK_FILE=".claude/state/.task_graph.lock"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-[[ ! -f "$TASK_GRAPH" ]] && exit 0
-
-# Read hook input from stdin and extract transcript text
+# Read hook input from stdin
 INPUT=$(cat)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.agent_transcript_path // empty')
 
+# Resolve task graph path (supports cross-repo via session-scoped path)
+source ~/.claude/hooks/helpers/resolve-task-graph.sh
+TASK_GRAPH=$(resolve_task_graph "$SESSION_ID") || exit 0
+LOCK_FILE=$(task_graph_lock_file "$TASK_GRAPH")
+
 source ~/.claude/hooks/helpers/parse-transcript.sh
+source ~/.claude/hooks/helpers/parse-files-modified.sh
 PROMPT=""
+FILES_MODIFIED=""
 if [[ -n "$TRANSCRIPT_PATH" ]]; then
   PROMPT=$(parse_transcript "$TRANSCRIPT_PATH")
+  FILES_MODIFIED=$(parse_files_modified "$TRANSCRIPT_PATH")
 fi
 
 # Match "Task ID: T1" or "**Task ID:** T1" (markdown bold)
@@ -61,11 +64,11 @@ if echo "$PROMPT" | grep -q "BUILD SUCCESS"; then
   fi
 fi
 
-# Node/Mocha/Vitest: "N passing" without "N failing"
+# Node/Mocha/Vitest: "N passing" without "N failing" (where N > 0)
 if [[ "$TESTS_PASSED" == "false" ]] && echo "$PROMPT" | grep -qE '[0-9]+ passing'; then
   PASSING=$(echo "$PROMPT" | grep -oE '[0-9]+ passing' | tail -1)
-  FAILING=$(echo "$PROMPT" | grep -oE '[0-9]+ failing' | tail -1)
-  if [[ -z "$FAILING" ]]; then
+  FAIL_COUNT=$(echo "$PROMPT" | grep -oE '([0-9]+) failing' | grep -oE '[0-9]+' | tail -1)
+  if [[ -z "$FAIL_COUNT" || "$FAIL_COUNT" -eq 0 ]]; then
     TESTS_PASSED=true
     TEST_EVIDENCE="node: $PASSING"
   fi
@@ -81,27 +84,39 @@ if [[ "$TESTS_PASSED" == "false" ]] && echo "$PROMPT" | grep -qE 'Tests?\s+[0-9]
   fi
 fi
 
-# pytest: "X passed" without "X failed"
+# pytest: "X passed" without "X failed" (where X > 0)
 if [[ "$TESTS_PASSED" == "false" ]] && echo "$PROMPT" | grep -qE '[0-9]+ passed'; then
   PYTEST_PASSED=$(echo "$PROMPT" | grep -oE '[0-9]+ passed' | tail -1)
-  PYTEST_FAILED=$(echo "$PROMPT" | grep -oE '[0-9]+ failed' | tail -1)
-  if [[ -z "$PYTEST_FAILED" ]]; then
+  PYTEST_FAIL_COUNT=$(echo "$PROMPT" | grep -oE '([0-9]+) failed' | grep -oE '[0-9]+' | tail -1)
+  if [[ -z "$PYTEST_FAIL_COUNT" || "$PYTEST_FAIL_COUNT" -eq 0 ]]; then
     TESTS_PASSED=true
     TEST_EVIDENCE="pytest: $PYTEST_PASSED"
   fi
 fi
 
-# --- Mark task as "implemented" with test status ---
-jq "
+# --- Mark task as "implemented" with test status and files_modified ---
+# Convert files_modified to JSON array
+if [[ -n "$FILES_MODIFIED" ]]; then
+  FILES_JSON=$(echo "$FILES_MODIFIED" | jq -R -s 'split("\n") | map(select(length > 0))')
+else
+  FILES_JSON="[]"
+fi
+
+jq --argjson files "$FILES_JSON" "
   .tasks |= map(if .id == \"$TASK_ID\" then
     .status = \"implemented\" |
     .tests_passed = $TESTS_PASSED |
-    .test_evidence = \"$TEST_EVIDENCE\"
+    .test_evidence = \"$TEST_EVIDENCE\" |
+    .files_modified = \$files
   else . end) |
   .executing_tasks |= (. // [] | map(select(. != \"$TASK_ID\")))
 " "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
 
 echo "Task $TASK_ID implemented."
+if [[ -n "$FILES_MODIFIED" ]]; then
+  FILE_COUNT=$(echo "$FILES_MODIFIED" | wc -l | tr -d ' ')
+  echo "  Files modified: $FILE_COUNT"
+fi
 if [[ "$TESTS_PASSED" == "true" ]]; then
   echo "  Tests passed: $TEST_EVIDENCE"
 else

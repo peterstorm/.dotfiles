@@ -65,6 +65,18 @@ T3: Add login endpoint (+ tests)
 - Multiple unrelated concerns in one task
 - Description needs "and" to explain
 
+**Test requirements** - set `new_tests_required: false` for tasks matching:
+- migration, config, schema, rename, bump, version, refactor, cleanup, typo, docs
+- Patterns: `→`, `->`, `interface update`
+
+Use helper for detection:
+```bash
+~/.claude/hooks/helpers/detect-test-requirement.sh "task description"
+# Returns "false" (no tests needed) or "true" (tests required)
+```
+
+Wave gate logic: `!new_tests_required || new_tests_written`
+
 ### 4. Assign Agents
 
 Match task keywords to wrapper agents (these preload the corresponding skills):
@@ -132,7 +144,7 @@ Store returned issue number.
 **C. State File**: `.claude/state/active_task_graph.json`
 
 See `templates.md` for full schema. Key fields:
-- `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, tests_passed, test_evidence, review_status)
+- `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, tests_passed, test_evidence, review_status, new_tests_required, files_modified)
 - `wave_gates[N]` (impl_complete, tests_passed, reviews_complete, blocked)
 
 **Per-task automated fields** (set by SubagentStop hooks, not manually):
@@ -236,6 +248,8 @@ See `templates.md` for full format. Key requirements:
 
 ## Hook Integration
 
+**DO NOT call any helper scripts yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `store-review-findings.sh`, `verify-new-tests.sh`, etc.) are called **automatically** by SubagentStop hooks or by the `/wave-gate` skill. The ONLY helper you may call directly is `detect-test-requirement.sh` during planning (step 3). The table below is for reference only — these hooks run automatically, you do not invoke them.
+
 Hooks auto-activate when `active_task_graph.json` exists:
 
 | Hook | Event | Purpose |
@@ -249,7 +263,7 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | `mark-subagent-active.sh` | SubagentStart | Flags active subagent for Edit/Write allow |
 | `cleanup-subagent-flag.sh` | SubagentStop | Cleans up subagent flag |
 
-**Enforcement chain:**
+**Enforcement chain (all automatic — do not call these yourself):**
 - Test evidence: agent runs tests → `update-task-status.sh` extracts from transcript → `complete-wave-gate.sh` verifies
 - Review status: review agent runs → `store-reviewer-findings.sh` sets status → `complete-wave-gate.sh` verifies
 - State file: `guard-state-file.sh` blocks Bash writes, `block-direct-edits.sh` blocks Edit/Write
@@ -275,7 +289,7 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | Wave not advancing | Gate blocked | Check `wave_gates[N].blocked` and `reviews_complete` |
 | `tests_passed` missing | SubagentStop hook didn't parse markers | Re-spawn agent; ensure tests produce recognizable output |
 | `review_status` stuck "pending" | Review agent type mismatch or hook parse failed | Check hook fired; re-spawn reviewer |
-| State write blocked | `guard-state-file.sh` active | Use helper scripts, not direct jq writes |
+| State write blocked | `guard-state-file.sh` active | State writes happen via SubagentStop hooks automatically; read-only access (jq, cat) is allowed |
 
 **Debugging steps:**
 1. Run `/task-planner --status` for formatted view
@@ -334,6 +348,8 @@ When a wave is blocked (critical review findings), Edit/Write are also blocked b
 
 - **ALL implementation via Task tool** - Edit/Write blocked by hook
 - **ALL state writes via hooks/helpers** - Bash writes blocked by guard
+- **NEVER call helper scripts** - hooks and `/wave-gate` handle all helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `store-review-findings.sh`, `verify-new-tests.sh`, etc.). Only exception: `detect-test-requirement.sh` during planning.
+- **NEVER verify test evidence yourself** - SubagentStop hooks extract test evidence automatically. After all wave tasks reach "implemented", invoke `/wave-gate` which handles verification.
 - Delegate design to /architecture-tech-lead for complex tasks
 - Must get user approval before creating issue
 - Must populate TodoWrite with task breakdown

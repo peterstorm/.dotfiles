@@ -61,23 +61,24 @@ fi
 echo "1. Test evidence verified ($TASKS_WITH_TESTS/$WAVE_TASKS tasks):"
 jq -r ".tasks[] | select(.wave == $WAVE) | \"     \\(.id): \\(.test_evidence // \"evidence present\")\"" "$TASK_GRAPH"
 
-# --- 1b. Verify NEW tests were written (set by SubagentStop verify-new-tests.sh) ---
-TASKS_WITH_NEW_TESTS=$(jq -r "[.tasks[] | select(.wave == $WAVE and .new_tests_written == true)] | length" "$TASK_GRAPH")
+# --- 1b. Verify NEW tests were written OR not required (set by SubagentStop verify-new-tests.sh) ---
+# Logic: task passes if new_tests_required == false OR new_tests_written == true
+TASKS_NEW_TEST_OK=$(jq -r "[.tasks[] | select(.wave == $WAVE and ((.new_tests_required == false) or (.new_tests_written == true)))] | length" "$TASK_GRAPH")
 
-if [[ "$TASKS_WITH_NEW_TESTS" -ne "$WAVE_TASKS" ]]; then
-  MISSING_NEW=$(jq -r "[.tasks[] | select(.wave == $WAVE and (.new_tests_written == false or .new_tests_written == null))] | .[].id" "$TASK_GRAPH")
+if [[ "$TASKS_NEW_TEST_OK" -ne "$WAVE_TASKS" ]]; then
+  MISSING_NEW=$(jq -r "[.tasks[] | select(.wave == $WAVE and .new_tests_required != false and (.new_tests_written == false or .new_tests_written == null))] | .[].id" "$TASK_GRAPH")
   echo ""
-  echo "FAILED: Not all wave $WAVE tasks wrote new tests."
-  echo "  Tasks with new tests: $TASKS_WITH_NEW_TESTS/$WAVE_TASKS"
+  echo "FAILED: Not all wave $WAVE tasks satisfied new-test requirement."
+  echo "  Tasks satisfied: $TASKS_NEW_TEST_OK/$WAVE_TASKS"
   echo "  Missing new-test evidence: $MISSING_NEW"
   echo ""
-  echo "Agents must write NEW tests for new code, not just rerun existing ones."
+  echo "Tasks must write NEW tests unless new_tests_required=false."
   echo "Re-spawn agents that failed to write tests."
   exit 1
 fi
 
-echo "   New tests verified ($TASKS_WITH_NEW_TESTS/$WAVE_TASKS tasks):"
-jq -r ".tasks[] | select(.wave == $WAVE) | \"     \\(.id): \\(.new_test_evidence // \"new tests present\")\"" "$TASK_GRAPH"
+echo "   New tests verified ($TASKS_NEW_TEST_OK/$WAVE_TASKS tasks):"
+jq -r ".tasks[] | select(.wave == $WAVE) | \"     \\(.id): \\(.new_test_evidence // (if .new_tests_required == false then \"not required\" else \"new tests present\" end))\"" "$TASK_GRAPH"
 
 # Mark wave tests_passed (derived from per-task evidence)
 jq ".wave_gates[\"$WAVE\"].tests_passed = true" "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"

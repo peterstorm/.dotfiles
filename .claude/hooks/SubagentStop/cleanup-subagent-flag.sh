@@ -17,9 +17,11 @@ if [[ -f "$SUBAGENT_FILE" ]]; then
   grep -v "^${AGENT_ID}$" "$SUBAGENT_FILE" > "${SUBAGENT_FILE}.tmp" 2>/dev/null
   mv "${SUBAGENT_FILE}.tmp" "$SUBAGENT_FILE" 2>/dev/null
 
-  # If file is empty, remove it
+  # If file is empty, remove it and clean up session files
   if [[ ! -s "$SUBAGENT_FILE" ]]; then
     rm -f "$SUBAGENT_FILE"
+    # Clean up task graph path file when last agent in session completes
+    rm -f "/tmp/claude-subagents/${SESSION_ID}.task_graph"
   fi
 fi
 

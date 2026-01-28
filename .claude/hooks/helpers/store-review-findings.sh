@@ -13,10 +13,11 @@
 
 set -e
 
-TASK_GRAPH=".claude/state/active_task_graph.json"
-LOCK_FILE=".claude/state/.task_graph.lock"
+# Use exported TASK_GRAPH if available (cross-repo), fallback to local
+TASK_GRAPH="${TASK_GRAPH:-.claude/state/active_task_graph.json}"
+LOCK_FILE="$(dirname "$TASK_GRAPH")/.task_graph.lock"
 
-[[ ! -f "$TASK_GRAPH" ]] && { echo "ERROR: No active task graph"; exit 1; }
+[[ ! -f "$TASK_GRAPH" ]] && { echo "ERROR: No active task graph at $TASK_GRAPH"; exit 1; }
 
 TASK_ID=""
 CRITICAL=()

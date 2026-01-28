@@ -6,15 +6,18 @@
 # Handles both agent types:
 #   - review-invoker (spawned by wave-gate)
 #   - task-reviewer (spawned by task-planner)
-
-TASK_GRAPH=".claude/state/active_task_graph.json"
-
-[[ ! -f "$TASK_GRAPH" ]] && exit 0
+# Supports cross-repo: finds task graph via session-scoped path if not in cwd
 
 # Read hook input from stdin
 INPUT=$(cat)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.agent_transcript_path // empty')
+
+# Resolve task graph path (supports cross-repo via session-scoped path)
+source ~/.claude/hooks/helpers/resolve-task-graph.sh
+TASK_GRAPH=$(resolve_task_graph "$SESSION_ID") || exit 0
+export TASK_GRAPH  # Export for helper script
 
 # Get agent type from stored file (set by SubagentStart hook)
 AGENT_TYPE=""

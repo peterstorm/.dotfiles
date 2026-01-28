@@ -103,8 +103,10 @@ Issue body structure with checkbox tasks:
     "start_sha": "abc1234",
     "tests_passed": true,
     "test_evidence": "maven: Tests run: 15, Failures: 0, Errors: 0",
+    "new_tests_required": true,
     "new_tests_written": true,
     "new_test_evidence": "3 new test methods (java: 3 new @Test/@Property methods)",
+    "files_modified": ["src/main/java/Foo.java", "src/test/java/FooTest.java"],
     "review_status": "pending|passed|blocked",
     "critical_findings": [],
     "advisory_findings": []
@@ -130,17 +132,24 @@ These fields are set **automatically** by SubagentStop hooks. They cannot be set
 | `status` → "implemented" | `update-task-status.sh` | Implementation agent completes |
 | `tests_passed` | `update-task-status.sh` | Extracted from agent transcript (Maven/Node/Vitest/pytest markers) |
 | `test_evidence` | `update-task-status.sh` | Description of which markers were found |
-| `new_tests_written` | `verify-new-tests.sh` | Git diff scanned for new test method patterns |
+| `files_modified` | `update-task-status.sh` | Files touched by agent (from Write/Edit tool calls in transcript) |
+| `new_tests_written` | `verify-new-tests.sh` | Git diff scanned for new test method patterns (scoped to files_modified) |
 | `new_test_evidence` | `verify-new-tests.sh` | Count and details of new test methods found |
 | `review_status` | `store-review-findings.sh` helper (called by SubagentStop hook) | Review agent completes |
 | `critical_findings` | `store-review-findings.sh` helper | Parsed from reviewer output |
 | `advisory_findings` | `store-review-findings.sh` helper | Parsed from reviewer output |
+
+### Task Definition Fields (set during planning)
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `new_tests_required` | `true` | Set to `false` for migrations, configs, renames. Auto-detected from keywords. |
 
 ### Wave Gate Checks (by `complete-wave-gate.sh`)
 
 All four must pass before wave advances:
 
 1. **Test evidence**: ALL wave tasks have `tests_passed == true`
-2. **New tests written**: ALL wave tasks have `new_tests_written == true`
+2. **New tests written**: ALL wave tasks satisfy `!new_tests_required || new_tests_written`
 3. **Review status**: ALL wave tasks have `review_status != "pending"`
 4. **No critical findings**: `critical_findings` count is 0 across all wave tasks

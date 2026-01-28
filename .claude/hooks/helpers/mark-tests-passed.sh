@@ -24,10 +24,11 @@ done
 # Check per-task test evidence
 WAVE_TASKS=$(jq -r "[.tasks[] | select(.wave == $WAVE)] | length" "$TASK_GRAPH")
 TASKS_WITH_TESTS=$(jq -r "[.tasks[] | select(.wave == $WAVE and .tests_passed == true)] | length" "$TASK_GRAPH")
-TASKS_WITH_NEW_TESTS=$(jq -r "[.tasks[] | select(.wave == $WAVE and .new_tests_written == true)] | length" "$TASK_GRAPH")
+# Logic: task passes if new_tests_required == false OR new_tests_written == true
+TASKS_NEW_TEST_OK=$(jq -r "[.tasks[] | select(.wave == $WAVE and ((.new_tests_required == false) or (.new_tests_written == true)))] | length" "$TASK_GRAPH")
 
-echo "Wave $WAVE test evidence: $TASKS_WITH_TESTS/$WAVE_TASKS tasks passed, $TASKS_WITH_NEW_TESTS/$WAVE_TASKS wrote new tests"
-jq -r ".tasks[] | select(.wave == $WAVE) | \"  \\(.id): tests=\\(if .tests_passed then \"PASS\" else \"MISSING\" end) new=\\(if .new_tests_written then \"YES (\\(.new_test_evidence))\" else \"MISSING\" end)\"" "$TASK_GRAPH"
+echo "Wave $WAVE test evidence: $TASKS_WITH_TESTS/$WAVE_TASKS tasks passed, $TASKS_NEW_TEST_OK/$WAVE_TASKS satisfied new-test requirement"
+jq -r ".tasks[] | select(.wave == $WAVE) | \"  \\(.id): tests=\\(if .tests_passed then \"PASS\" else \"MISSING\" end) new=\\(if .new_tests_required == false then \"N/A (not required)\" elif .new_tests_written then \"YES (\\(.new_test_evidence))\" else \"MISSING\" end)\"" "$TASK_GRAPH"
 
 ALL_PASS=true
 
@@ -38,17 +39,17 @@ if [[ "$TASKS_WITH_TESTS" -ne "$WAVE_TASKS" ]]; then
   ALL_PASS=false
 fi
 
-if [[ "$TASKS_WITH_NEW_TESTS" -ne "$WAVE_TASKS" ]]; then
-  MISSING_NEW=$(jq -r "[.tasks[] | select(.wave == $WAVE and (.new_tests_written == false or .new_tests_written == null))] | .[].id" "$TASK_GRAPH")
+if [[ "$TASKS_NEW_TEST_OK" -ne "$WAVE_TASKS" ]]; then
+  MISSING_NEW=$(jq -r "[.tasks[] | select(.wave == $WAVE and .new_tests_required != false and (.new_tests_written == false or .new_tests_written == null))] | .[].id" "$TASK_GRAPH")
   echo ""
   echo "Missing new-test evidence: $MISSING_NEW"
-  echo "Agents must write NEW tests, not just rerun existing ones."
+  echo "Tasks must write NEW tests unless new_tests_required=false."
   ALL_PASS=false
 fi
 
 if [[ "$ALL_PASS" == "true" ]]; then
   echo ""
-  echo "All tasks have test evidence and wrote new tests."
+  echo "All tasks have test evidence and satisfy new-test requirement."
   exit 0
 else
   echo ""
