@@ -1,5 +1,6 @@
 result/
 result
+.DS_Store
 
 # Claude state files (runtime, not persisted)
 .claude/state/*
