@@ -78,6 +78,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/SubagentStop/store-spec-check-findings.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/SubagentStop/cleanup-subagent-flag.sh"
           },
           {

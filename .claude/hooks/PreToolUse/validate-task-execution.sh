@@ -3,6 +3,13 @@
 # Replaces: validate-wave.sh + require-review-gate.sh
 # Only active when task graph exists
 #
+# WHY LOCAL PATH (not resolve-task-graph.sh):
+# PreToolUse hooks enforce restrictions only within the orchestrated repo.
+# If cwd is a different repo, task graph won't exist → exit 0 → allow.
+# This is correct: wave validation only applies to tasks in the current
+# orchestration. Cross-repo resolution is only needed for SubagentStop
+# hooks that UPDATE the task graph from any context.
+#
 # NOTE: Exit code 2 requires stderr output, NOT stdout!
 # NOTE: Hook input comes via stdin, not env var!
 

@@ -1,58 +1,158 @@
 ---
 name: task-planner
-version: "2.0.0"
+version: "3.1.0"
 description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
 ---
 
-# Task Planner - Orchestration Skill
+# Task Planner - Full Orchestration Skill
 
-Orchestrates multi-step implementations: decomposition, agent assignment, wave scheduling, GitHub Issue tracking, hook-based execution management.
+Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify → architecture → decompose → execute.
 
-**This is an ORCHESTRATION skill** - delegates design to `/architecture-tech-lead`, implementation to appropriate agents. Never implement code directly.
+**This is the SINGLE ENTRY POINT** for multi-step features. Spawns specialized agents for each phase.
 
 ---
 
 ## Arguments
 
-- `/task-planner "description"` - Start new plan
+- `/task-planner "description"` - Start new plan (runs full flow)
+- `/task-planner --skip-specify` - Skip brainstorm/specify/clarify (use existing spec)
 - `/task-planner --status` - Show current task graph status
 - `/task-planner --complete` - Finalize, clean up state
 - `/task-planner --abort` - Cancel mid-execution, clean state
 
 ---
 
-## Workflow
+## Full Orchestration Flow
 
-### 1. Parse Intent
-
-Understand what user wants to achieve:
-- What is the goal?
-- What are success criteria?
-- What codebase areas involved?
-
-### 2. Analyze Complexity
-
-**Simple** (decompose directly):
-- Clear scope, <3 tasks
-- No architecture decisions needed
-- Single feature addition
-
-**Complex** (delegate to arch-lead):
-- Multiple components affected
-- Architecture decisions required
-- Design patterns to choose
-- >3 implementation tasks
-
-For complex tasks:
 ```
-Invoke: /architecture-tech-lead
-Result: Detailed plan with architecture, code examples, phases
-Output: .claude/plans/{YYYY-MM-DD}-{slug}.md
+/task-planner "feature description"
+        │
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│ Phase 0: BRAINSTORM (if unclear)                        │
+│   Agent: brainstorm-agent                               │
+│   Output: Refined understanding, selected approach      │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│ Phase 1: SPECIFY                                        │
+│   Agent: specify-agent                                  │
+│   Output: .claude/specs/{slug}/spec.md                  │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼ (if >3 NEEDS CLARIFICATION markers)
+┌─────────────────────────────────────────────────────────┐
+│ Phase 2: CLARIFY                                        │
+│   Agent: clarify-agent                                  │
+│   Output: Updated spec.md with resolved uncertainties   │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│ Phase 3: ARCHITECTURE                                   │
+│   Agent: architecture-agent                             │
+│   Output: .claude/plans/{slug}.md                       │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│ Phase 4: DECOMPOSE                                      │
+│   Extract tasks, assign agents, schedule waves          │
+│   Output: Task graph + GitHub Issue                     │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│ Phase 5: EXECUTE (wave by wave)                         │
+│   Spawn impl agents → wave-gate → advance               │
+│   Output: Working implementation                        │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 3. Extract Implementation Tasks
+---
 
-Parse plan into tasks. **Design = the plan itself, NOT a tracked task**. Tasks start at implementation:
+## Phase 0: Brainstorm (Optional)
+
+**When to run:** Feature description is vague, multiple approaches possible, or user says "explore" / "brainstorm".
+
+**When to skip:** Clear scope, specific requirements, or user says "just build it".
+
+**Spawn brainstorm-agent** with context from `templates/phase-brainstorm.md`.
+
+Substitute variables:
+- `{feature_description}` - User's original request
+- `{prior_context}` - Any notes from prior exploration
+
+**Wait for agent completion.** Extract:
+- Refined feature description
+- Selected approach
+- Key constraints
+
+Pass to Phase 1.
+
+---
+
+## Phase 1: Specify
+
+**Always run** (unless `--skip-specify` or spec already exists).
+
+**Spawn specify-agent** with context from `templates/phase-specify.md`.
+
+Substitute variables:
+- `{feature_description}` - Refined description (from brainstorm or original)
+- `{brainstorm_output}` - Summary from Phase 0 (or empty)
+- `{date_slug}` - `YYYY-MM-DD-feature-name` format
+
+**Wait for agent completion.** Extract:
+- Spec file path
+- Count of `[NEEDS CLARIFICATION]` markers
+
+If markers > 3: Proceed to Phase 2.
+If markers <= 3: Skip to Phase 3.
+
+---
+
+## Phase 2: Clarify (Conditional)
+
+**Run if:** spec has >3 `[NEEDS CLARIFICATION]` markers.
+
+**Spawn clarify-agent** with context from `templates/phase-clarify.md`.
+
+Substitute variables:
+- `{spec_file_path}` - Path to spec from Phase 1
+- `{marker_count}` - Number of `[NEEDS CLARIFICATION]` markers
+
+**Wait for agent completion.** Verify markers resolved.
+
+If still >3 markers: Ask user to resolve remaining, or proceed with caveats.
+
+---
+
+## Phase 3: Architecture
+
+**Always run.**
+
+**Spawn architecture-agent** with context from `templates/phase-architecture.md`.
+
+Substitute variables:
+- `{feature_description}` - Feature name/description
+- `{spec_file_path}` - Path to spec from Phase 1
+- `{date_slug}` - `YYYY-MM-DD-feature-name` format
+
+**Wait for agent completion.** Extract:
+- Plan file path
+- Implementation phases
+
+---
+
+## Phase 4: Decompose
+
+**Run inline** (no agent spawn needed).
+
+### 4a. Extract Tasks
+
+Parse plan into tasks. **Design = the plan itself, NOT a tracked task**:
 
 ```
 T1: Create User domain model (+ tests)
@@ -65,21 +165,28 @@ T3: Add login endpoint (+ tests)
 - Multiple unrelated concerns in one task
 - Description needs "and" to explain
 
-**Test requirements** - set `new_tests_required: false` for tasks matching:
+**Test requirements** - set `new_tests_required: false` for:
 - migration, config, schema, rename, bump, version, refactor, cleanup, typo, docs
 - Patterns: `→`, `->`, `interface update`
 
-Use helper for detection:
+Helper: `~/.claude/hooks/helpers/detect-test-requirement.sh "desc"` → "true"/"false"
+
+### 4b. Map Spec Anchors
+
+Use helper to suggest anchors for each task:
+
 ```bash
-~/.claude/hooks/helpers/detect-test-requirement.sh "task description"
-# Returns "false" (no tests needed) or "true" (tests required)
+~/.claude/hooks/helpers/suggest-spec-anchors.sh "task description" .claude/specs/*/spec.md
 ```
 
-Wave gate logic: `!new_tests_required || new_tests_written`
+Returns JSON with suggested anchors and confidence scores:
+```json
+[{"anchor":"FR-003","score":0.85,"text":"System MUST validate email format"},...]
+```
 
-### 4. Assign Agents
+Review suggestions, adjust as needed, store as `spec_anchors: ["FR-003", "SC-002", "US1.acceptance"]`
 
-Match task keywords to wrapper agents (these preload the corresponding skills):
+### 4c. Assign Agents
 
 | Agent (subagent_type) | Triggers |
 |-------|----------|
@@ -88,17 +195,14 @@ Match task keywords to wrapper agents (these preload the corresponding skills):
 | java-test-agent | test, junit, jqwik, property-based (Java) |
 | ts-test-agent | vitest, playwright, react test (TypeScript) |
 | security-agent | security, auth, jwt, oauth, vulnerability |
-| code-reviewer | review, quality check |
 | dotfiles-agent | nix, nixos, home-manager, sops |
-| k8s-agent | kubernetes, k8s, kubectl, helm, argocd, deploy, pod, ingress, service, external-secrets, cert-manager, metallb, cloudflared |
-| keycloak-agent | keycloak, realm, oidc, abac, authorization services |
-| frontend-agent | frontend, ui, react, next.js, component, styling |
+| k8s-agent | kubernetes, k8s, kubectl, helm, argocd |
+| keycloak-agent | keycloak, realm, oidc, abac |
+| frontend-agent | frontend, ui, react, next.js, component |
 
-Fallback: `general-purpose` (Task tool's built-in agent with all tools) if no keyword match.
+Fallback: `general-purpose`
 
-### 5. Schedule Waves
-
-Dependency-based wave scheduling:
+### 4d. Schedule Waves
 
 ```
 Wave 1: Tasks with no dependencies (run parallel)
@@ -106,196 +210,175 @@ Wave 2: Tasks depending on Wave 1
 Wave N: Tasks depending on Wave N-1
 ```
 
-Example:
-```
-Wave 1: [T1: User model + tests, T2: JWT service + tests]  (parallel)
-Wave 2: [T3: Login endpoint + tests]                       (depends on T1, T2)
-```
-
-**Note:** Each task includes its own tests (per agent template constraints). Don't create separate "write tests" tasks - tests are part of implementation.
-
-### 6. User Approval
+### 4e. User Approval
 
 Present plan summary:
+- Spec path
+- Plan path
 - Task breakdown with agents
 - Wave schedule
 - GitHub Issue will be created
 
 Ask: "Proceed with this plan?"
 
-### 7. Create Artifacts
+### 4f. Create Artifacts
 
-On approval, create three artifacts:
+On approval:
 
-**A. Local Plan** (already exists from arch-lead or step 2):
-```
-.claude/plans/{YYYY-MM-DD}-{slug}.md
-```
-
-**B. GitHub Issue**:
+**A. GitHub Issue:**
 ```bash
-gh issue create \
-  --title "Plan: {title}" \
-  --body "$(cat .claude/plans/{YYYY-MM-DD}-{slug}.md)"
+gh issue create --title "Plan: {title}" --body "$(cat .claude/plans/{slug}.md)"
 ```
 
-Store returned issue number.
+**B. State File:** `.claude/state/active_task_graph.json`
+- Include `spec_file` and `plan_file` paths
+- Include `spec_anchors` per task
 
-**C. State File**: `.claude/state/active_task_graph.json`
+---
 
-See `templates.md` for full schema. Key fields:
-- `current_wave`, `executing_tasks`, `tasks[]` (id, status, wave, tests_passed, test_evidence, review_status, new_tests_required, files_modified)
-- `wave_gates[N]` (impl_complete, tests_passed, reviews_complete, blocked)
-
-**Per-task automated fields** (set by SubagentStop hooks, not manually):
-- `tests_passed` — extracted from agent transcript by `update-task-status.sh`
-- `test_evidence` — description of what test markers were found
-- `review_status` — set by `store-reviewer-findings.sh` when review agent completes
-
-**Status Transitions:**
-- `pending` → `in_progress`: Task spawned to agent
-- `in_progress` → `implemented`: Agent finished (SubagentStop hook also extracts test evidence)
-- `implemented` → `completed`: Wave gate passed (test evidence + review + no critical findings)
-
-### 8. Orchestrate Execution
+## Phase 5: Execute
 
 For each wave:
 
 1. Get pending tasks in current wave
-2. Spawn ALL wave tasks in parallel (single message, multiple Task calls):
-   - Update state: add to `executing_tasks`, `status = "in_progress"`
-   - Build agent prompt with context (see Agent Context Template)
-   - SubagentStop hook: status → "implemented", extracts test evidence from transcript
-3. Wait for all wave tasks to reach "implemented"
-4. Run **Wave Gate Sequence** (see 8a) before advancing
+2. Spawn ALL wave tasks in parallel (single message, multiple Task calls)
+3. Wait for all to reach "implemented"
+4. Invoke `/wave-gate` (test + spec-check + review)
+5. If passed: advance to next wave
+6. If blocked: fix issues, re-run `/wave-gate`
 
-### 8a. Wave Gate Sequence
+**Agent context:** Use `templates/impl-agent-context.md` for each task.
 
-After all wave tasks reach "implemented", the SubagentStop hook outputs a prompt to run `/wave-gate`. **Invoke `/wave-gate`** — see its SKILL.md for full sequence (test verification, parallel review, gate advancement).
-
-If blocked, fix issues and run `/wave-gate` again — it re-reviews only blocked tasks.
+Substitute variables:
+- `{task_id}`, `{wave}`, `{agent_type}`, `{dependencies}`
+- `{task_description}` - From task breakdown
+- `{spec_anchors_formatted}` - Formatted anchor list with requirement text
+- `{plan_context}` - Relevant section from plan
+- `{file_list}` - Files to create/modify
+- `{plan_file_path}` - Path to full plan
 
 ---
 
-## Agent Context Template
+## Quick Start Examples
 
-See `templates.md` for full template. Key elements:
-- `**Task ID:** TX` (required for hooks to track)
-- Task description + relevant plan context
-- Constraints: follow plan, write tests, tests must pass
+### Full flow (recommended):
+```
+/task-planner "Add user authentication with email/password"
+```
+Runs: brainstorm → specify → clarify → arch → decompose → execute
+
+### Skip to architecture (spec exists):
+```
+/task-planner --skip-specify "Add user authentication"
+```
+Runs: arch → decompose → execute (uses existing spec)
+
+### Simple feature (clear scope):
+```
+/task-planner "Add logout button to navbar"
+```
+Detects simple → may skip brainstorm, minimal spec
 
 ---
 
 ## State Management
 
 ### On `/task-planner "description"`:
-1. Create `.claude/state/active_task_graph.json`
-2. Hooks become active (they check for this file)
+1. Run phases 0-4
+2. Create `.claude/state/active_task_graph.json`
+3. Hooks become active (block direct edits)
 
 ### On `/task-planner --status`:
-Read state file and display formatted summary:
 ```
-Plan: Issue #42 - Add user authentication
-Wave 2/3 | 2 completed, 1 in progress
+Plan: Issue #42 - User Authentication
+Phase: Execute (Wave 2/3)
+Spec: .claude/specs/2025-01-29-user-auth/spec.md
+Plan: .claude/plans/2025-01-29-user-auth.md
 
-[✓] T1: Create User model (code-implementer) — tests: PASS
+[✓] T1: User model (code-implementer) — tests: PASS
 [✓] T2: JWT service (code-implementer) — tests: PASS
 [→] T3: Login endpoint (code-implementer) — tests: pending
-
-Legend: [✓] completed  [→] in_progress  [ ] pending
 ```
 
 ### On `/task-planner --complete`:
 1. Verify all tasks completed
 2. Optionally close GitHub Issue
-3. Remove `.claude/state/active_task_graph.json`
-4. Hooks deactivate
+3. Remove state file
+4. Invoke `/finalize` for PR
 
 ### On `/task-planner --abort`:
 1. Ask: close issue or leave open?
-2. Remove `.claude/state/active_task_graph.json`
+2. Remove state file
 3. Hooks deactivate
-
-### Branch Strategy
-
-Tasks execute on the **current branch**. Recommended workflow:
-- Create a feature branch before starting: `feature/{slug}`
-- All wave agents commit on this branch
-- After all waves complete, PR from feature branch to main
-- `/task-planner --complete` can trigger `/finalize` for branch + PR
-
-If already on a feature branch when invoking `/task-planner`, execution continues there.
-
-### Modifying Plan Mid-Execution
-
-To add/remove/modify tasks:
-1. Edit `active_task_graph.json` - add task to `tasks[]`, set correct `wave`
-2. Update GH Issue - add/edit checkbox line matching task ID
-3. If adding to current wave, task runs in next spawn cycle
-
-Cannot modify tasks already `in_progress` or `completed`.
-
----
-
-## GitHub Issue Format
-
-See `templates.md` for full format. Key requirements:
-- Checkbox tasks: `- [ ] T1: description` (hooks update these)
-- Wave groupings with dependencies noted
-- Execution order table
 
 ---
 
 ## Hook Integration
 
-**DO NOT call any helper scripts yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `store-review-findings.sh`, `verify-new-tests.sh`, etc.) are called **automatically** by SubagentStop hooks or by the `/wave-gate` skill. The ONLY helper you may call directly is `detect-test-requirement.sh` during planning (step 3). The table below is for reference only — these hooks run automatically, you do not invoke them.
-
 Hooks auto-activate when `active_task_graph.json` exists:
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `block-direct-edits.sh` | PreToolUse: Edit/Write | BLOCKS direct file edits — forces Task tool |
-| `guard-state-file.sh` | PreToolUse: Bash | BLOCKS writes to state files — allows reads |
-| `validate-task-execution.sh` | PreToolUse: Task | Validates wave order + dependency resolution |
-| `update-task-status.sh` | SubagentStop | Marks "implemented" + extracts test evidence |
-| `store-reviewer-findings.sh` | SubagentStop | Parses review findings + sets review_status |
-| `validate-review-invoker.sh` | SubagentStop | Verifies /review-pr transcript evidence |
-| `mark-subagent-active.sh` | SubagentStart | Flags active subagent for Edit/Write allow |
-| `cleanup-subagent-flag.sh` | SubagentStop | Cleans up subagent flag |
+| `block-direct-edits.sh` | PreToolUse: Edit/Write | Forces Task tool |
+| `guard-state-file.sh` | PreToolUse: Bash | Blocks state writes |
+| `validate-task-execution.sh` | PreToolUse: Task | Validates wave order |
+| `update-task-status.sh` | SubagentStop | Marks "implemented" |
+| `store-reviewer-findings.sh` | SubagentStop | Parses review findings |
+| `store-spec-check-findings.sh` | SubagentStop | Parses spec-check findings |
 
-**Enforcement chain (all automatic — do not call these yourself):**
-- Test evidence: agent runs tests → `update-task-status.sh` extracts from transcript → `complete-wave-gate.sh` verifies
-- Review status: review agent runs → `store-reviewer-findings.sh` sets status → `complete-wave-gate.sh` verifies
-- State file: `guard-state-file.sh` blocks Bash writes, `block-direct-edits.sh` blocks Edit/Write
-- Only hooks (SubagentStop) and whitelisted helpers can modify state
+**NEVER call helpers yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `verify-new-tests.sh`, etc.) run automatically via hooks or `/wave-gate`. Only exception: `detect-test-requirement.sh` during planning.
 
 ---
 
-## Observability & Debugging
+## Operations Reference
 
-**State inspection:**
-- State file: `.claude/state/active_task_graph.json`
-- View current state: `jq '.' .claude/state/active_task_graph.json`
-- Per-task status: `jq '.tasks[] | {id, status, tests_passed, review_status}' .claude/state/active_task_graph.json`
-- Check executing tasks: `jq '.executing_tasks' .claude/state/active_task_graph.json`
+### Status Transitions
 
-**Common symptoms:**
+```
+pending → in_progress    (task spawned to agent)
+in_progress → implemented (agent completes, hook extracts test evidence)
+implemented → completed   (wave gate passed: tests + review + no critical findings)
+```
 
-| Symptom | Likely Cause | Diagnosis |
-|---------|-------------|-----------|
-| Task stuck in `in_progress` | Agent crashed/timed out | Check `executing_tasks` array; re-spawn if empty but status is `in_progress` |
-| Hook not triggering | State file missing | Verify `.claude/state/active_task_graph.json` exists |
-| Checkbox not updating | Task ID mismatch | Compare task ID in state vs GH issue format (`- [ ] T1:`) |
-| Wave not advancing | Gate blocked | Check `wave_gates[N].blocked` and `reviews_complete` |
-| `tests_passed` missing | SubagentStop hook didn't parse markers | Re-spawn agent; ensure tests produce recognizable output |
-| `review_status` stuck "pending" | Review agent type mismatch or hook parse failed | Check hook fired; re-spawn reviewer |
-| State write blocked | `guard-state-file.sh` active | State writes happen via SubagentStop hooks automatically; read-only access (jq, cat) is allowed |
+### Observability
 
-**Debugging steps:**
-1. Run `/task-planner --status` for formatted view
-2. Inspect raw state file for detailed status
-3. Check hook scripts exist in `~/.claude/hooks/`
-4. Verify GH issue matches state file task IDs
+```bash
+# Current state
+jq '.' .claude/state/active_task_graph.json
+
+# Per-task status
+jq '.tasks[] | {id, status, tests_passed, review_status}' .claude/state/active_task_graph.json
+
+# Wave gate status
+jq '.wave_gates' .claude/state/active_task_graph.json
+```
+
+### Common Issues
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Task stuck `in_progress` | Agent crashed | Re-spawn same task |
+| `tests_passed` missing | No recognizable output | Re-spawn, ensure test markers in output |
+| Wave not advancing | Gate blocked | Check `wave_gates[N].blocked`, run `/wave-gate` |
+| State write blocked | Guard hook active | State writes via hooks only; reads OK |
+
+### Fixing Blocked Waves
+
+When blocked (critical findings), Edit/Write blocked too. To fix:
+1. **Re-spawn via Task** — create fix agent with findings context (subagent CAN Edit/Write)
+2. **Run `/wave-gate`** — re-reviews only blocked tasks
+3. **Emergency**: remove state file, fix manually, rebuild from GH issue
+
+---
+
+## Constraints
+
+- **ALL phases via agents** - brainstorm, specify, clarify, architecture agents
+- **ALL implementation via Task tool** - Edit/Write blocked
+- **ALL state writes via hooks** - Bash writes blocked
+- **NEVER skip specify** unless `--skip-specify` flag or spec exists
+- **NEVER proceed with >3 unresolved markers** without user acknowledgment
+- Only ONE active plan at a time
 
 ---
 
@@ -303,63 +386,28 @@ Hooks auto-activate when `active_task_graph.json` exists:
 
 | Failure | Recovery |
 |---------|----------|
-| Agent crashes mid-task | Re-spawn same task; state shows `in_progress` |
-| Agent completes but wrong impl | Mark task `pending`, update prompt with corrections, re-spawn |
-| Agent completes but no test evidence | Re-spawn agent — must run tests with recognizable output |
-| Parallel agents edit same file | Resolve conflicts manually, mark affected tasks `pending` |
-| GH issue create fails | Retry `gh issue create`; continue without if persistent |
-| State file corrupted | Rebuild from GH issue checkboxes + local plan file |
-| Wave gate blocked | Fix issues, run `/wave-gate` again (re-reviews blocked only). See "Fixing Blocked Waves" below |
-| Tests fail repeatedly | Ask user: fix tests, skip task, or abort plan |
-| Hook script fails | Check script permissions (`chmod +x`), verify shebang |
-| Context lost between waves | Reference completed task files in new task prompts |
-
-### Fixing Blocked Waves
-
-When a wave is blocked (critical review findings), Edit/Write are also blocked by `block-direct-edits.sh`. To fix issues:
-
-1. **Re-spawn via Task tool** — create a fix agent with the blocked task context and critical findings. The agent (subagent) CAN use Edit/Write. Prompt it with the specific findings to address.
-2. **After fixes**, run `/wave-gate` again — it re-reviews only blocked tasks.
-3. **Emergency bypass** — remove `.claude/state/active_task_graph.json`, fix manually, rebuild state from GH issue + plan file.
+| Brainstorm agent unclear | Re-spawn with more specific prompt |
+| Specify agent too technical | Re-spawn with "focus on WHAT not HOW" |
+| Clarify agent stuck | Ask user to resolve remaining markers |
+| Architecture agent off-spec | Re-spawn referencing spec requirements |
+| Implementation agent fails tests | Re-spawn with error context |
+| Wave gate blocked | Fix issues, re-run `/wave-gate` |
 
 ---
 
 ## Plan Limits
 
-**Recommended boundaries:**
-- **Max tasks per plan:** 8-12 tasks (beyond this, split into sub-plans)
-- **Max waves:** 4-5 waves (deeper dependency chains = higher failure risk)
-- **Max parallel tasks per wave:** 4-6 (more = harder to track/debug)
-
-**When to split into multiple plans:**
-- Total tasks exceed 12
-- Multiple independent features bundled together
-- Different teams/owners for different parts
-- Risk of context loss in long-running orchestration
-
-**Token budget awareness:**
-- Each agent spawn consumes context tokens
-- Large plans may exhaust context before completion
-- Prefer smaller focused plans over monolithic ones
+- **Max tasks:** 8-12 (split if larger)
+- **Max waves:** 4-5
+- **Max parallel tasks per wave:** 4-6
 
 ---
 
-## Constraints
+## CRITICAL: Agent Spawning
 
-- **ALL implementation via Task tool** - Edit/Write blocked by hook
-- **ALL state writes via hooks/helpers** - Bash writes blocked by guard
-- **NEVER call helper scripts** - hooks and `/wave-gate` handle all helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `store-review-findings.sh`, `verify-new-tests.sh`, etc.). Only exception: `detect-test-requirement.sh` during planning.
-- **NEVER verify test evidence yourself** - SubagentStop hooks extract test evidence automatically. After all wave tasks reach "implemented", invoke `/wave-gate` which handles verification.
-- Delegate design to /architecture-tech-lead for complex tasks
-- Must get user approval before creating issue
-- Must populate TodoWrite with task breakdown
-- Task IDs must match `- [ ] T1:` format in issue for checkbox updates
-- Only ONE active plan at a time (state file is singleton)
+Each phase spawns ONE agent (except Execute which spawns wave tasks in parallel).
 
----
+**Sequential phases:** brainstorm → specify → clarify → architecture
+**Parallel within wave:** T1, T2, T3 in same message
 
-## CRITICAL: Parallel Execution
-
-**Multiple Task calls in ONE message** = parallel execution within wave.
-
-Each Task call needs: subagent_type, description, prompt with `**Task ID:** TX`
+Pass context forward between phases via agent outputs.

@@ -101,16 +101,44 @@ fi
 echo "2. Reviews verified ($TASKS_REVIEWED/$WAVE_TASKS tasks):"
 jq -r ".tasks[] | select(.wave == $WAVE) | \"     \\(.id): \\(.review_status)\"" "$TASK_GRAPH"
 
-# --- 3. Check no critical findings in wave tasks ---
+# --- 3. Check spec alignment (set by SubagentStop hook store-spec-check-findings.sh) ---
+SPEC_CHECK_EXISTS=$(jq -r '.spec_check // empty' "$TASK_GRAPH")
+if [[ -n "$SPEC_CHECK_EXISTS" && "$SPEC_CHECK_EXISTS" != "null" ]]; then
+  SPEC_CHECK_WAVE=$(jq -r '.spec_check.wave // -1' "$TASK_GRAPH")
+  SPEC_CRITICAL=$(jq -r '.spec_check.critical_count // 0' "$TASK_GRAPH")
+  SPEC_VERDICT=$(jq -r '.spec_check.verdict // "UNKNOWN"' "$TASK_GRAPH")
+
+  if [[ "$SPEC_CHECK_WAVE" -ne "$WAVE" ]]; then
+    echo ""
+    echo "WARNING: Spec-check was run for wave $SPEC_CHECK_WAVE, not current wave $WAVE."
+    echo "Re-run /wave-gate to spawn spec-check for this wave."
+    # Don't fail - spec-check may not have been run yet
+  elif [[ "$SPEC_CRITICAL" -gt 0 ]]; then
+    echo ""
+    echo "FAILED: Spec alignment has $SPEC_CRITICAL critical findings."
+    jq -r '.spec_check.critical_findings[]' "$TASK_GRAPH" 2>/dev/null | while read -r finding; do
+      echo "  - $finding"
+    done
+    echo ""
+    echo "Fix spec drift and re-run /wave-gate."
+    exit 1
+  else
+    echo "3. Spec alignment verified (verdict: $SPEC_VERDICT)."
+  fi
+else
+  echo "3. Spec alignment: skipped (no spec-check data - run /wave-gate to spawn)."
+fi
+
+# --- 4. Check no critical findings in code review ---
 CRITICAL_COUNT=$(jq -r "[.tasks[] | select(.wave == $WAVE) | .critical_findings // [] | length] | add // 0" "$TASK_GRAPH")
 if [[ "$CRITICAL_COUNT" -gt 0 ]]; then
   echo ""
-  echo "FAILED: Wave $WAVE has $CRITICAL_COUNT critical findings. Fix before completing."
+  echo "FAILED: Wave $WAVE code review has $CRITICAL_COUNT critical findings. Fix before completing."
   jq -r ".tasks[] | select(.wave == $WAVE) | select((.critical_findings // []) | length > 0) | \"  \\(.id): \\(.critical_findings | join(\", \"))\"" "$TASK_GRAPH"
   exit 1
 fi
 
-echo "3. No critical findings."
+echo "4. No critical code review findings."
 
 # --- All checks passed — advance wave ---
 echo ""

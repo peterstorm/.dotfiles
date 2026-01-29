@@ -2,6 +2,13 @@
 # Block direct Edit/Write during active task-planner workflow
 # EXCEPT when called from a subagent (detected via SubagentStart flag)
 #
+# WHY LOCAL PATH (not resolve-task-graph.sh):
+# PreToolUse hooks enforce restrictions only within the orchestrated repo.
+# If cwd is a different repo, task graph won't exist → exit 0 → allow.
+# This is correct: subagents working in other repos shouldn't be blocked
+# from editing files there. Cross-repo resolution (resolve-task-graph.sh)
+# is only needed for SubagentStop hooks that UPDATE the task graph.
+#
 # NOTE: Exit code 2 requires stderr output, NOT stdout!
 # NOTE: Hook input comes via stdin!
 

@@ -1,12 +1,12 @@
 ---
 name: wave-gate
-version: "2.0.0"
-description: "Run after wave implementation complete. Executes test + review gate sequence. Usage: /wave-gate"
+version: "2.1.0"
+description: "Run after wave implementation complete. Executes test + spec-check + review gate sequence. Usage: /wave-gate"
 ---
 
-# Wave Gate - Test & Review Sequence
+# Wave Gate - Test, Spec & Review Sequence
 
-Executes the gate sequence after all wave tasks reach "implemented". Verifies test evidence, spawns code reviewers, and advances waves.
+Executes the gate sequence after all wave tasks reach "implemented". Verifies test evidence, checks spec alignment, spawns code reviewers, and advances waves.
 
 **Run this after SubagentStop hook outputs "Wave N implementation complete".**
 
@@ -41,23 +41,44 @@ This prints per-task evidence status. Exit 0 = all tasks have evidence, exit 1 =
 
 **Do NOT manually run tests or set test flags.** The guard hook blocks direct state file writes. Evidence can only come from agent execution → SubagentStop hook extraction.
 
-### Step 3: Spawn Reviewers (Parallel)
+### Step 3: Spawn Verification (Parallel)
+
+Spawn **spec-check AND code reviewers** in a single message with multiple Task calls.
+
+**Get wave info:**
+```bash
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
+TASKS=$(jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json | tr '\n' ',')
+```
 
 **Get wave changes:**
 ```bash
-# Get files changed in this wave (compare to main/master)
 BASE=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || echo "main")
 git diff --name-only $BASE...HEAD
 ```
 
 **Get tasks needing review:**
 ```bash
-WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
 jq -r ".tasks[] | select(.wave == $WAVE) | select(.review_status == \"pending\" or .review_status == \"blocked\") | .id" .claude/state/active_task_graph.json
 ```
 
-**For EACH task, spawn `review-invoker` in parallel (single message, multiple Task calls):**
+**Spawn ALL in parallel (single message, multiple Task calls):**
 
+1. **Spec-check invoker** (always, once per wave):
+```markdown
+## Spec Alignment Check
+**Wave:** {wave}
+**Tasks:** {task_ids}
+
+Invoke /spec-check to verify implementation aligns with specification.
+Output format required:
+- SPEC_CHECK_WAVE: {wave}
+- CRITICAL/HIGH/MEDIUM findings
+- SPEC_CHECK_CRITICAL_COUNT: N
+- SPEC_CHECK_VERDICT: PASSED | BLOCKED
+```
+
+2. **Review invoker per task** (for each task needing review):
 ```markdown
 ## Task: {task_id}
 **Description:** {task description}
@@ -68,18 +89,14 @@ Task: {task_id}
 Call: Skill(skill: "review-pr", args: "--files {files} --task {task_id}")
 ```
 
-The `review-invoker` agent:
-- Has full tool access to execute /review-pr properly
-- MUST call `/review-pr --files X --task TN` as first action
-- Returns findings in CRITICAL/ADVISORY format
+**What happens automatically on completion:**
 
-**What happens automatically on reviewer completion:**
-1. `validate-review-invoker.sh` (SubagentStop) — verifies `/review-pr` transcript evidence
-2. `store-reviewer-findings.sh` (SubagentStop) — parses CRITICAL/ADVISORY from output, calls helper to set `review_status` per task ("passed" or "blocked")
+| Agent | SubagentStop Hook | Effect |
+|-------|-------------------|--------|
+| spec-check-invoker | `store-spec-check-findings.sh` | Sets `spec_check.critical_count`, `spec_check.verdict` |
+| review-invoker | `store-reviewer-findings.sh` | Sets `review_status` per task |
 
-Both `review-invoker` and `task-reviewer` agent types are handled.
-
-**File-to-task mapping algorithm:**
+**File-to-task mapping algorithm (for reviewers):**
 1. Get task description keywords (e.g., "JWT service" → jwt, token, auth)
 2. Filter wave changes to files matching keywords or parent directories
 3. If <3 files match, include all wave changes for that task
@@ -87,27 +104,33 @@ Both `review-invoker` and `task-reviewer` agent types are handled.
 
 ### Step 4: Post GH Comment
 
-After all reviewers complete, read review status and post summary:
+After all verification agents complete, read status and post summary:
 
 ```bash
 gh issue comment {ISSUE} --body "$(cat <<'EOF'
-## Wave {N} Review
+## Wave {N} Verification
 
-### T1: {description}
+### Spec Alignment
+**Status:** {PASSED | BLOCKED}
+{if blocked: list critical findings}
+
+### Code Review
+
+#### T1: {description}
 **Status:** PASSED | BLOCKED - {N} critical findings
 - {findings list}
 
-### T2: {description}
+#### T2: {description}
 ...
 
 ---
-**Wave Status:** PASSED - Ready to advance | BLOCKED - fix critical issues
+**Wave Status:** PASSED - Ready to advance | BLOCKED - fix issues
 EOF
 )"
 ```
 
 **If GH comment fails** (rate limit, auth, network):
-- Log review summary to `.claude/state/wave-{N}-review.md` as fallback
+- Log summary to `.claude/state/wave-{N}-review.md` as fallback
 - Proceed with gate logic - don't block on comment failure
 - Retry comment post after gate decision
 
@@ -119,11 +142,12 @@ Call `complete-wave-gate.sh` — it handles ALL verification and advancement:
 bash ~/.claude/hooks/helpers/complete-wave-gate.sh
 ```
 
-The helper performs four checks before advancing:
+The helper performs **five checks** before advancing:
 1. **Per-task test evidence** — all wave tasks must have `tests_passed == true`
 2. **New tests written** — all wave tasks must have `new_tests_written == true`
-3. **Per-task review status** — all wave tasks must have `review_status != "pending"` (set by SubagentStop hook)
-4. **No critical findings** — `critical_findings` count must be 0
+3. **Spec alignment** — `spec_check.critical_count == 0`
+4. **Per-task review status** — all wave tasks must have `review_status != "pending"`
+5. **No critical findings** — code review `critical_findings` count must be 0
 
 If any check fails, the helper exits with error and the wave does NOT advance. Fix the issue and re-run `/wave-gate`.
 
@@ -131,48 +155,60 @@ On success: marks tasks "completed", updates GH issue checkboxes, advances to ne
 
 ---
 
-## Re-review After Fixes
+## Re-run After Fixes
 
-When user fixes critical issues, run `/wave-gate` again. It will:
+When issues fixed, run `/wave-gate` again. It will:
 - Skip test verification if evidence already present
+- Re-run spec-check (always runs, overwrites previous)
 - Re-review ONLY tasks with `review_status == "blocked"`
 - Advance when all clear
 
 ---
 
-## Handling Review Failures
+## Handling Failures
 
-If a reviewer agent fails to complete:
+### Spec-Check Failures
+
+| Symptom | Cause | Recovery |
+|---------|-------|----------|
+| No SPEC_CHECK_CRITICAL_COUNT | Output malformed | Re-spawn spec-check-invoker |
+| spec_check.verdict missing | Hook parse failed | Check hook output, re-spawn |
+| CRITICAL findings | Spec drift detected | Fix drift, re-run /wave-gate |
+
+**Debugging:**
+```bash
+# Check spec-check status
+jq '.spec_check' .claude/state/active_task_graph.json
+```
+
+### Review Failures
 
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
 | No output from reviewer | Agent crashed/timed out | Re-spawn that specific reviewer |
-| Malformed output (no CRITICAL/ADVISORY) | Skill parsing issue | Re-spawn with explicit format reminder |
-| Partial output | Context exhaustion | Split files across multiple reviewer calls |
-| Hook validation failed | /review-pr not called | Check agent received correct args |
-| review_status still "pending" | SubagentStop hook didn't fire or parse failed | Check hook output, re-spawn reviewer |
+| Malformed output | Skill parsing issue | Re-spawn with explicit format reminder |
+| review_status still "pending" | Hook didn't fire/parse | Check hook output, re-spawn reviewer |
 
 **Debugging:**
 ```bash
 # Check per-task review status
 jq '.tasks[] | {id, review_status, tests_passed}' .claude/state/active_task_graph.json
 
-# Compare to expected tasks
+# Check wave tasks
 WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
 jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json
 ```
-
-Task with `review_status == "pending"` after reviewer ran = transcript-based validation failed, re-spawn reviewer.
 
 ---
 
 ## Constraints
 
-- MUST spawn all reviewers in parallel (single message)
+- MUST spawn spec-check AND reviewers in parallel (single message)
+- MUST use `spec-check-invoker` agent for spec alignment
 - MUST use `review-invoker` agent with `--files` and `--task` args
 - MUST post GH comment before advancing
-- NEVER advance if critical findings exist
+- NEVER advance if spec-check has critical findings
+- NEVER advance if code review has critical findings
 - NEVER manually write to state file (guard hook blocks it)
-- Test evidence comes from SubagentStop hook — cannot be set manually
-- Review status comes from SubagentStop hook — cannot be set manually
+- All status comes from SubagentStop hooks — cannot be set manually
 - `complete-wave-gate.sh` is the ONLY path to advance waves

@@ -2,45 +2,25 @@
 
 Reference templates for task-planner skill. Load on demand, not part of core workflow.
 
-## Agent Context Template
+## Template Files
 
-When spawning impl agents, use this format:
+Phase and agent context templates are in `templates/` directory:
 
-```markdown
-## Task Assignment
+| File | Purpose |
+|------|---------|
+| `templates/phase-brainstorm.md` | Context for brainstorm-agent |
+| `templates/phase-specify.md` | Context for specify-agent |
+| `templates/phase-clarify.md` | Context for clarify-agent |
+| `templates/phase-architecture.md` | Context for architecture-agent |
+| `templates/impl-agent-context.md` | Context for implementation agents |
 
-**Task ID:** T2
-**Wave:** 1
-**Agent:** code-implementer-agent
-**Dependencies:** None
+## Spec Anchor Helper
 
-## Your Task
+Use `~/.claude/hooks/helpers/suggest-spec-anchors.sh` to auto-suggest anchors:
 
-{task description}
-
-## Context from Plan
-
-> **Architecture Decision:**
-> {relevant section from plan}
-
-> **Files to Create/Modify:**
-> {file list}
-
-## Full Plan
-
-Available at: {plan_file path from state}
-
-## Constraints
-
-- Follow patterns in plan
-- Do not modify scope
-- MUST write NEW tests for your implementation — rerunning existing tests is NOT sufficient
-- MUST run tests and ensure they pass before completing
-- Task is NOT complete until tests pass
-- Test output must contain recognizable pass markers (e.g., "BUILD SUCCESS", "X passing")
-  so the SubagentStop hook can extract test evidence from your transcript
-- A SubagentStop hook will git-diff for new test method patterns (@Test, it(, test(, describe()
-- If no new test patterns found in your diff, wave advancement is BLOCKED
+```bash
+suggest-spec-anchors.sh "Implement email validation" .claude/specs/*/spec.md
+# Returns: [{"anchor":"FR-003","score":0.85,"text":"..."},...]
 ```
 
 ## GitHub Issue Format
@@ -86,6 +66,7 @@ Issue body structure with checkbox tasks:
 {
   "plan_title": "Feature name",
   "plan_file": ".claude/plans/YYYY-MM-DD-slug.md",
+  "spec_file": ".claude/specs/YYYY-MM-DD-slug/spec.md",
   "github_issue": 42,
   "github_repo": "org/repo",
   "created_at": "2025-01-23T10:00:00Z",
@@ -99,6 +80,7 @@ Issue body structure with checkbox tasks:
     "agent": "code-implementer-agent",
     "wave": 1,
     "depends_on": [],
+    "spec_anchors": ["FR-003", "SC-002", "US1.acceptance[2]"],
     "status": "pending|in_progress|implemented|completed",
     "start_sha": "abc1234",
     "tests_passed": true,
@@ -118,6 +100,16 @@ Issue body structure with checkbox tasks:
       "reviews_complete": false,
       "blocked": false
     }
+  },
+  "spec_check": {
+    "wave": 1,
+    "run_at": "2025-01-23T12:00:00Z",
+    "critical_count": 0,
+    "high_count": 1,
+    "critical_findings": [],
+    "high_findings": ["SC-002 not tested"],
+    "medium_findings": [],
+    "verdict": "PASSED"
   }
 }
 ```
@@ -145,11 +137,18 @@ These fields are set **automatically** by SubagentStop hooks. They cannot be set
 |-------|---------|-------------|
 | `new_tests_required` | `true` | Set to `false` for migrations, configs, renames. Auto-detected from keywords. |
 
+### Task Definition Fields (set during planning)
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `spec_anchors` | `[]` | Requirement IDs this task must satisfy (FR-xxx, SC-xxx, US-x.acceptance[N]) |
+
 ### Wave Gate Checks (by `complete-wave-gate.sh`)
 
-All four must pass before wave advances:
+All five must pass before wave advances:
 
 1. **Test evidence**: ALL wave tasks have `tests_passed == true`
 2. **New tests written**: ALL wave tasks satisfy `!new_tests_required || new_tests_written`
-3. **Review status**: ALL wave tasks have `review_status != "pending"`
-4. **No critical findings**: `critical_findings` count is 0 across all wave tasks
+3. **Spec alignment**: `spec_check.critical_count == 0`
+4. **Review status**: ALL wave tasks have `review_status != "pending"`
+5. **No critical findings**: code review `critical_findings` count is 0 across all wave tasks

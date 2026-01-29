@@ -3,6 +3,13 @@
 # Allows reads (jq, cat) but blocks writes (>, mv, cp, tee, sed -i, perl -i)
 # Hooks (SubagentStop etc.) bypass PreToolUse entirely, so they can still write
 # Only active when task graph exists
+#
+# WHY LOCAL PATH (not resolve-task-graph.sh):
+# PreToolUse hooks enforce restrictions only within the orchestrated repo.
+# If cwd is a different repo, task graph won't exist → exit 0 → allow.
+# This is correct: state file protection only matters in the repo where
+# the orchestration is happening. Cross-repo resolution is only needed
+# for SubagentStop hooks that UPDATE the task graph from any context.
 
 TASK_GRAPH=".claude/state/active_task_graph.json"
 
