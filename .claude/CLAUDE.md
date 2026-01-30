@@ -2,16 +2,6 @@
 
 ## Skill Invocation - CRITICAL
 
-BEFORE writing code, MUST check if a relevant skill exists and invoke it FIRST:
-
-| Trigger | Skill |
-|---------|-------|
-| "implement", "write code", "build", "create function" | `/code-implementer` |
-| done implementing, ready to commit/push/PR | `/finalize` |
-| review code, check PR, before merging | `/pr-review-toolkit:review-pr` |
-| architectural decisions, design review | `/architecture-tech-lead` |
-| multi-step tasks, "plan this", "orchestrate", complex features | `/task-planner` |
-
 Do NOT skip skills because you "know how" - skills ensure consistency and best practices.
 
 ## PR comments
