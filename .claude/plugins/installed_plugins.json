@@ -1,0 +1,95 @@
+{
+  "version": 2,
+  "plugins": {
+    "frontend-design@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/frontend-design/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-09T10:47:46.249Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "code-review@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/code-review/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-09T10:48:41.024Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "typescript-lsp@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-01-09T10:48:41.046Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "security-guidance@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/security-guidance/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-09T10:48:41.066Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "pr-review-toolkit@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/pr-review-toolkit/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-09T10:48:41.085Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "agent-sdk-dev@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-09T10:48:41.104Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "jdtls-lsp@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/jdtls-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-01-09T10:48:41.120Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z"
+      }
+    ],
+    "plugin-dev@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "/Users/hansen142",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/plugin-dev/f1be96f0fb58",
+        "version": "f1be96f0fb58",
+        "installedAt": "2026-01-21T20:29:02.313Z",
+        "lastUpdated": "2026-01-21T20:29:02.313Z",
+        "gitCommitSha": "f1be96f0fb58d5aaf2840ca7d7036d5c0923742c"
+      }
+    ],
+    "marketing-skills@marketingskills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/marketingskills/marketing-skills/unknown",
+        "version": "unknown",
+        "installedAt": "2026-01-30T07:20:02.917Z",
+        "lastUpdated": "2026-01-30T07:20:02.917Z"
+      }
+    ]
+  }
+}

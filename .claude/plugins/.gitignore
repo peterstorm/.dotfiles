@@ -1,0 +1,4 @@
+cache/
+marketplaces/
+.DS_Store
+install-counts-cache.json
