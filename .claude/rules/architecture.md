@@ -46,6 +46,18 @@ Each step independently testable. Business logic lives in "transform".
 - Avoid `any` and type assertions
 - **Use ts-pattern** for exhaustive pattern matching on discriminated unions
 
+## Error Handling Strategy
+
+**Functional Core (pure functions):**
+- Business logic errors → return `Either<Error, T>`, never throw
+- Constructor invariants → may throw (guards type's validity)
+- Enables composition, explicit control flow, trivial testing
+
+**Imperative Shell (I/O orchestration):**
+- Infrastructure failures (DB, network) → may throw at boundary
+- Converts `Either.left` → thrown exception / error response as needed
+- Single place for exception-to-response mapping
+
 ## Anti-Patterns to Flag
 
 - Business logic mixed with I/O

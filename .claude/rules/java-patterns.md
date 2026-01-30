@@ -170,6 +170,18 @@ public Either<List<ValidationError>, Order> validateOrder(OrderRequest req) {
     ).collect(Eithers.allFailures())
      .map(results -> buildOrder(req));
 }
+
+// Combining multiple Eithers (applicative style)
+public Either<OrderError, OrderLine> parseLine(LineRequest req) {
+    return Eithers.combine(
+        ProductId.of(req.productId()),
+        Quantity.of(req.quantity()),
+        Money.of(req.price())
+    ).map(OrderLine::new);  // maps (productId, quantity, price) -> OrderLine
+}
+
+// Eithers.combine supports 2-5 arguments
+// Fails fast on first Left encountered
 ```
 
 ## Parse, Don't Validate
