@@ -6,7 +6,7 @@ let
   platformInfo = {
     "aarch64-darwin" = {
       os = "darwin-arm64";
-      sha256 = "0nf0wn93h9p27mb9hhaa8j7cjyarrjxi5l2ph5mbm7vnzpv77acl";
+      sha256 = "1909ldq5n418mh89y7ihf76zgzz25zxwxparlpi064p3pja7mhx3";
       archive = "zip";
     };
     "x86_64-darwin" = {

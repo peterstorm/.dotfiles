@@ -33,7 +33,7 @@ detect_phase() {
     specify-agent) echo "specify" ;;
     clarify-agent) echo "clarify" ;;
     architecture-agent) echo "architecture" ;;
-    code-implementer-agent|java-test-agent|ts-test-agent|frontend-agent|security-agent|k8s-agent|keycloak-agent|dotfiles-agent) echo "execute" ;;
+    code-implementer-agent|java-test-agent|ts-test-agent|frontend-agent|security-agent|k8s-agent|keycloak-agent|dotfiles-agent|spec-check-invoker|review-invoker|task-reviewer) echo "execute" ;;
     *)
       # Check prompt for phase indicators
       if echo "$prompt" | grep -qiE 'brainstorm|explore.*intent|refine.*idea'; then

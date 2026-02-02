@@ -39,10 +39,23 @@ Available at: {plan_file_path}
 - Follow patterns defined in plan
 - Do not modify scope beyond this task
 - MUST satisfy spec anchors listed above
-- MUST write NEW tests for your implementation - rerunning existing tests is NOT sufficient
-- MUST run tests and ensure they pass before completing
-- Task is NOT complete until tests pass
-- Test output must contain recognizable pass markers (e.g., "BUILD SUCCESS", "X passing")
-  so the SubagentStop hook can extract test evidence from your transcript
-- A SubagentStop hook will git-diff for new test method patterns (@Test, it(, test(, describe()
-- If no new test patterns found in your diff, wave advancement is BLOCKED
+
+## CRITICAL: Test Execution Required
+
+**You MUST run the project's test suite before completing this task.**
+
+1. Run the appropriate test command for this project (e.g., `mvn test`, `npm test`, `pytest`, etc.)
+2. Include the FULL test output in your response
+3. Tests MUST pass - if they fail, fix the issues and re-run
+4. Your task is NOT complete until tests pass and output is shown
+
+The SubagentStop hook extracts test evidence from your output to update the task graph.
+Without visible test output showing pass markers (e.g., "BUILD SUCCESS", "X passing", "OK"),
+the task will NOT be marked as having tests passed.
+
+## New Tests Required
+
+- You MUST write NEW tests for your implementation
+- Rerunning existing tests alone is NOT sufficient
+- A hook will git-diff for new test patterns (@Test, it(, test(, describe()
+- If no new test patterns found, wave advancement is BLOCKED

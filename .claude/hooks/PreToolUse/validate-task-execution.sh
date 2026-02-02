@@ -25,27 +25,14 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 
 # Extract task ID from prompt using flexible helper
 PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')
+DESCRIPTION=$(echo "$INPUT" | jq -r '.tool_input.description // empty')
 
 source ~/.claude/hooks/helpers/extract-task-id.sh
-TASK_ID=$(extract_task_id "$PROMPT")
-[[ -z "$TASK_ID" ]] && exit 0  # Not a planned task, allow
 
-# Enforce canonical format: **Task ID:** T1
-validate_task_id_format "$PROMPT"
-FORMAT_STATUS=$?
-if [[ "$FORMAT_STATUS" -eq 1 ]]; then
-  # Non-canonical format detected - BLOCK and show correct format
-  echo "BLOCKED: Non-canonical Task ID format detected." >&2
-  echo "" >&2
-  echo "Found task: $TASK_ID" >&2
-  echo "Required format: $(canonical_format "$TASK_ID")" >&2
-  echo "" >&2
-  echo "The prompt MUST use exactly:" >&2
-  echo "  **Task ID:** $TASK_ID" >&2
-  echo "" >&2
-  echo "This ensures test capture and status tracking work correctly." >&2
-  exit 2
-fi
+# Try prompt first, fall back to description (Task tool short desc)
+TASK_ID=$(extract_task_id "$PROMPT")
+[[ -z "$TASK_ID" ]] && TASK_ID=$(extract_task_id "$DESCRIPTION")
+[[ -z "$TASK_ID" ]] && exit 0  # Not a planned task, allow
 
 # Single jq query to get all needed data
 read -r CURRENT_WAVE TASK_WAVE TASK_STATUS TASK_DEPS < <(

@@ -1,6 +1,6 @@
 ---
 name: task-planner
-version: "3.1.0"
+version: "3.2.0"
 description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
 ---
 
@@ -168,6 +168,15 @@ T2: Implement JWT service (+ tests)
 T3: Add login endpoint (+ tests)
 ```
 
+**CRITICAL: Implementation tasks INCLUDE tests.** Do NOT create separate test tasks for new code. The `code-implementer-agent` writes both implementation AND tests (per impl-agent-context.md). Separate test tasks cause circular dependencies:
+- Test task depends on impl task (can't test what doesn't exist)
+- Impl task already writes tests
+- Test task blocked waiting for impl "completed", but wave-gate needs test task evidence → deadlock
+
+**When to use test-only agents (`java-test-agent`, `ts-test-agent`):**
+- Adding tests to EXISTING code that lacks coverage
+- Task description: "Add missing tests for X" (not "Write tests for new X")
+
 **Sizing heuristics** - decompose further if:
 - Task touches >5 files
 - Multiple unrelated concerns in one task
@@ -198,17 +207,19 @@ Review suggestions, adjust as needed, store as `spec_anchors: ["FR-003", "SC-002
 
 | Agent (subagent_type) | Triggers |
 |-------|----------|
-| code-implementer-agent | implement, create, build, add, write code, model |
+| code-implementer-agent | implement, create, build, add, write code, model — **writes tests too** |
 | architecture-agent | design, architecture, pattern, refactor |
-| java-test-agent | test, junit, jqwik, property-based (Java) |
-| ts-test-agent | vitest, playwright, react test (TypeScript) |
+| java-test-agent | add missing tests to EXISTING Java code only |
+| ts-test-agent | add missing tests to EXISTING TypeScript code only |
 | security-agent | security, auth, jwt, oauth, vulnerability |
 | dotfiles-agent | nix, nixos, home-manager, sops |
 | k8s-agent | kubernetes, k8s, kubectl, helm, argocd |
 | keycloak-agent | keycloak, realm, oidc, abac |
-| frontend-agent | frontend, ui, react, next.js, component |
+| frontend-agent | frontend, ui, react, next.js, component — **writes tests too** |
 
 Fallback: `general-purpose`
+
+**Note:** `java-test-agent` and `ts-test-agent` are for backfilling tests on existing code, NOT for testing new implementations. New code gets tests from impl agents.
 
 ### 4d. Schedule Waves
 
@@ -369,6 +380,7 @@ jq '.wave_gates' .claude/state/active_task_graph.json
 | `tests_passed` missing | No recognizable output | Re-spawn, ensure test markers in output |
 | Wave not advancing | Gate blocked | Check `wave_gates[N].blocked`, run `/wave-gate` |
 | State write blocked | Guard hook active | State writes via hooks only; reads OK |
+| Test task blocked, impl wrote tests | Separate test task for new code | Don't create separate test tasks; mark superseded or merge |
 
 ### Fixing Blocked Waves
 

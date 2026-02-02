@@ -3,9 +3,16 @@
 # Also stores agent_type for SubagentStop hooks to read
 # Also stores task_graph absolute path for cross-repo access
 INPUT=$(cat)
+
+# DEBUG: Log raw input
+echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart INPUT: $INPUT" >> /tmp/claude-hooks-debug.log
+
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
+
+# DEBUG: Log parsed values
+echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart PARSED: session=$SESSION_ID agent=$AGENT_ID type=$AGENT_TYPE" >> /tmp/claude-hooks-debug.log
 
 # Create flag file for this session (restrictive permissions)
 umask 077
@@ -15,6 +22,7 @@ if [[ -n "$AGENT_ID" ]]; then
   # Store agent type for SubagentStop hooks
   if [[ -n "$AGENT_TYPE" ]]; then
     echo "$AGENT_TYPE" > "/tmp/claude-subagents/${AGENT_ID}.type"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart FILE_WRITTEN=/tmp/claude-subagents/${AGENT_ID}.type EXISTS=$(test -f "/tmp/claude-subagents/${AGENT_ID}.type" && echo YES || echo NO)" >> /tmp/claude-hooks-debug.log
   fi
 fi
 

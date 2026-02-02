@@ -10,6 +10,11 @@
 
 # Read hook input from stdin
 INPUT=$(cat)
+
+# DEBUG: Log hook invocation
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings START" >> /tmp/claude-hooks-debug.log
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings INPUT=$INPUT" >> /tmp/claude-hooks-debug.log
+
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.agent_transcript_path // empty')
@@ -25,6 +30,9 @@ if [[ -n "$AGENT_ID" && -f "/tmp/claude-subagents/${AGENT_ID}.type" ]]; then
   AGENT_TYPE=$(cat "/tmp/claude-subagents/${AGENT_ID}.type")
 fi
 
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings AGENT_ID=$AGENT_ID TYPE=$AGENT_TYPE" >> /tmp/claude-hooks-debug.log
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings TYPE_FILE_EXISTS=$(test -f "/tmp/claude-subagents/${AGENT_ID}.type" && echo YES || echo NO)" >> /tmp/claude-hooks-debug.log
+
 # Only process review agents (both types)
 case "$AGENT_TYPE" in
   task-reviewer|review-invoker) ;;
@@ -34,11 +42,16 @@ esac
 # Read full transcript text from JSONL file
 source ~/.claude/hooks/helpers/parse-transcript.sh
 AGENT_OUTPUT=""
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings TRANSCRIPT_PATH=$TRANSCRIPT_PATH" >> /tmp/claude-hooks-debug.log
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings TRANSCRIPT_EXISTS=$(test -f "$TRANSCRIPT_PATH" && echo YES || echo NO)" >> /tmp/claude-hooks-debug.log
 if [[ -n "$TRANSCRIPT_PATH" ]]; then
   AGENT_OUTPUT=$(parse_transcript "$TRANSCRIPT_PATH")
 fi
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings PARSE_RESULT_LENGTH=${#AGENT_OUTPUT}" >> /tmp/claude-hooks-debug.log
 
 [[ -z "$AGENT_OUTPUT" ]] && exit 0
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings AGENT_OUTPUT_LENGTH=${#AGENT_OUTPUT}" >> /tmp/claude-hooks-debug.log
 
 # Extract task ID from output — try multiple patterns
 # Pattern 1: "--task T1" (review-invoker format)
@@ -56,6 +69,8 @@ if [[ -z "$TASK_ID" ]]; then
 fi
 
 [[ -z "$TASK_ID" ]] && exit 0
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings TASK_ID=$TASK_ID" >> /tmp/claude-hooks-debug.log
 
 echo "Processing review findings for $TASK_ID ($AGENT_TYPE)..."
 
@@ -85,8 +100,12 @@ while IFS= read -r line; do
 done <<< "$ADVISORY_SECTION"
 
 # Check for explicit Summary counts
-CRITICAL_COUNT=$(echo "$AGENT_OUTPUT" | grep -oE 'CRITICAL_COUNT: ([0-9]+)' | grep -oE '[0-9]+')
-ADVISORY_COUNT=$(echo "$AGENT_OUTPUT" | grep -oE 'ADVISORY_COUNT: ([0-9]+)' | grep -oE '[0-9]+')
+CRITICAL_COUNT=$(echo "$AGENT_OUTPUT" | grep -oE 'CRITICAL_COUNT: ([0-9]+)' | grep -oE '[0-9]+' | tail -1)
+ADVISORY_COUNT=$(echo "$AGENT_OUTPUT" | grep -oE 'ADVISORY_COUNT: ([0-9]+)' | grep -oE '[0-9]+' | tail -1)
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings CRITICAL_COUNT=$CRITICAL_COUNT ADVISORY_COUNT=$ADVISORY_COUNT" >> /tmp/claude-hooks-debug.log
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings FINDINGS_LENGTH=${#FINDINGS}" >> /tmp/claude-hooks-debug.log
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings FINDINGS_CONTENT='$(echo "$FINDINGS" | head -c 200 | tr '\n' '|')'" >> /tmp/claude-hooks-debug.log
 
 # SAFETY: If no CRITICAL_COUNT found, DON'T assume passed - output is malformed
 if [[ -z "$CRITICAL_COUNT" ]]; then
@@ -96,14 +115,20 @@ if [[ -z "$CRITICAL_COUNT" ]]; then
   exit 0
 fi
 
+# DEBUG: Log decision conditions
+echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings DECISION: FINDINGS_NON_EMPTY=$([[ -n "$FINDINGS" ]] && echo YES || echo NO) CRITICAL_COUNT_IS_ZERO=$([[ "$CRITICAL_COUNT" -eq 0 ]] && echo YES || echo NO)" >> /tmp/claude-hooks-debug.log
+
 # Store findings via helper script (which sets review_status)
 if [[ -n "$FINDINGS" ]]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings BRANCH=has_findings" >> /tmp/claude-hooks-debug.log
   echo "$FINDINGS" | bash ~/.claude/hooks/helpers/store-review-findings.sh --task "$TASK_ID"
 elif [[ "$CRITICAL_COUNT" -eq 0 ]]; then
   # Explicit CRITICAL_COUNT: 0 - safe to mark as passed
+  echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings BRANCH=zero_critical_passed" >> /tmp/claude-hooks-debug.log
   echo "No critical findings for $TASK_ID (CRITICAL_COUNT: 0) - marking as passed"
   bash ~/.claude/hooks/helpers/store-review-findings.sh --task "$TASK_ID" <<< ""
 else
+  echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings BRANCH=parsing_failed_blocked" >> /tmp/claude-hooks-debug.log
   echo "ERROR: CRITICAL_COUNT: $CRITICAL_COUNT but no findings parsed for $TASK_ID"
   echo "Marking as BLOCKED to be safe."
   echo "CRITICAL: Review output parsing failed - $CRITICAL_COUNT findings not captured" | \

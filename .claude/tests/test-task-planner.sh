@@ -82,6 +82,26 @@ PROMPT5='Some random text without task ID'
 TASK_ID5=$(extract_task_id "$PROMPT5" || true)
 [[ -z "$TASK_ID5" ]] && pass "Returns empty for no task ID" || fail "Returns empty for no task ID" "" "$TASK_ID5"
 
+# Pattern: Task T6 (no colon, common from main context)
+PROMPT6='Task T6 create new component'
+TASK_ID6=$(extract_task_id "$PROMPT6")
+[[ "$TASK_ID6" == "T6" ]] && pass "Extracts from Task T6 (no colon)" || fail "Extracts from Task T6" "T6" "$TASK_ID6"
+
+# Pattern: T7 Description (task ID at start)
+PROMPT7='T7 - Implement user auth'
+TASK_ID7=$(extract_task_id "$PROMPT7")
+[[ "$TASK_ID7" == "T7" ]] && pass "Extracts from T7 - desc (ID at start)" || fail "Extracts from T7 -" "T7" "$TASK_ID7"
+
+# Pattern: implement T8 (verb + task)
+PROMPT8='implement T8 user service'
+TASK_ID8=$(extract_task_id "$PROMPT8")
+[[ "$TASK_ID8" == "T8" ]] && pass "Extracts from implement T8 (verb)" || fail "Extracts from implement T8" "T8" "$TASK_ID8"
+
+# Pattern: T9 with uppercase desc (common agent desc format)
+PROMPT9='T9 Create validation layer'
+TASK_ID9=$(extract_task_id "$PROMPT9")
+[[ "$TASK_ID9" == "T9" ]] && pass "Extracts from T9 Desc (uppercase)" || fail "Extracts from T9 Desc" "T9" "$TASK_ID9"
+
 # ============================================
 # Test 1b: Format validation (validate_task_id_format)
 # ============================================

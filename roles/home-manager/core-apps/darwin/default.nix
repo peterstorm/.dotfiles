@@ -33,19 +33,14 @@
       kubectl
       discord
       ripgrep
-      # inputs.nixpkgs-claude-pr.legacyPackages.${pkgs.system}.claude-code-bin
       claude-code
       gh
       git
-      (colima.override {
-        lima = lima.override { withAdditionalGuestAgents = true; };
-      })
       podman-compose
       postman
       bruno
       bytecode-viewer
       azure-cli
-      element-desktop
       kubeseal
       gemini-cli
       github-copilot-cli

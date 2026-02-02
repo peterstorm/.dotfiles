@@ -25,7 +25,7 @@ if [[ -f "$SUBAGENT_FILE" ]]; then
   fi
 fi
 
-# Clean up agent type file
-rm -f "/tmp/claude-subagents/${AGENT_ID}.type"
+# Keep .type file for other hooks - periodic cleanup handles old files
+# rm -f "/tmp/claude-subagents/${AGENT_ID}.type"
 
 exit 0
