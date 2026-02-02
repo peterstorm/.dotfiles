@@ -49,14 +49,10 @@ if [[ -z "$TASK_ID" ]]; then
   TASK_ID=$(echo "$AGENT_OUTPUT" | grep -oE '## Review: (T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
 fi
 
-# Pattern 3: "**Task ID:** T1" or "Task ID: T1" (generic)
+# Pattern 3+: Use flexible helper (handles many formats)
 if [[ -z "$TASK_ID" ]]; then
-  TASK_ID=$(echo "$AGENT_OUTPUT" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
-fi
-
-# Pattern 4: "Task: T1" (from agent prompt)
-if [[ -z "$TASK_ID" ]]; then
-  TASK_ID=$(echo "$AGENT_OUTPUT" | grep -oE 'Task: T[0-9]+' | head -1 | grep -oE 'T[0-9]+')
+  source ~/.claude/hooks/helpers/extract-task-id.sh
+  TASK_ID=$(extract_task_id "$AGENT_OUTPUT")
 fi
 
 [[ -z "$TASK_ID" ]] && exit 0

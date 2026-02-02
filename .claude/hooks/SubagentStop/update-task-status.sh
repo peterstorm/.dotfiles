@@ -23,8 +23,9 @@ if [[ -n "$TRANSCRIPT_PATH" ]]; then
   FILES_MODIFIED=$(parse_files_modified "$TRANSCRIPT_PATH")
 fi
 
-# Match "Task ID: T1" or "**Task ID:** T1" (markdown bold)
-TASK_ID=$(echo "$PROMPT" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
+# Extract task ID using flexible helper (handles multiple formats)
+source ~/.claude/hooks/helpers/extract-task-id.sh
+TASK_ID=$(extract_task_id "$PROMPT")
 
 [[ -z "$TASK_ID" ]] && exit 0  # Not a tracked task, ignore
 

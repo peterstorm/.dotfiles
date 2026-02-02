@@ -25,8 +25,9 @@ if [[ -n "$TRANSCRIPT_PATH" ]]; then
   PROMPT=$(parse_transcript "$TRANSCRIPT_PATH")
 fi
 
-# Extract task ID
-TASK_ID=$(echo "$PROMPT" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
+# Extract task ID using flexible helper
+source ~/.claude/hooks/helpers/extract-task-id.sh
+TASK_ID=$(extract_task_id "$PROMPT")
 [[ -z "$TASK_ID" ]] && exit 0
 
 # Skip review agents — gate on agent field, not status (avoids ordering issues)

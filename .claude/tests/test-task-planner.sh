@@ -40,32 +40,74 @@ echo "=== Task Planner Test Suite ==="
 echo ""
 
 # ============================================
-# Test 1: Task ID extraction patterns
+# Test 1: Task ID extraction patterns (using helper)
 # ============================================
-echo "--- Test: Task ID Extraction ---"
+echo "--- Test: Task ID Extraction (extract-task-id.sh) ---"
 
-# Pattern: **Task ID:** T1
+source "$REPO_ROOT/.claude/hooks/helpers/extract-task-id.sh"
+
+# Pattern: **Task ID:** T1 (canonical)
 PROMPT1='## Task Assignment
 
 **Task ID:** T1
 **Wave:** 1'
 
-TASK_ID1=$(echo "$PROMPT1" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
-[[ "$TASK_ID1" == "T1" ]] && pass "Extracts from **Task ID:** T1" || fail "Extracts from **Task ID:** T1" "T1" "$TASK_ID1"
+TASK_ID1=$(extract_task_id "$PROMPT1")
+[[ "$TASK_ID1" == "T1" ]] && pass "Extracts from **Task ID:** T1 (canonical)" || fail "Extracts from **Task ID:** T1" "T1" "$TASK_ID1"
 
-# Pattern: Task ID: T2 (no markdown)
+# Pattern: Task ID: T2 (plain, non-canonical)
 PROMPT2='Task ID: T2
 Wave: 1'
 
-TASK_ID2=$(echo "$PROMPT2" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+')
-[[ "$TASK_ID2" == "T2" ]] && pass "Extracts from Task ID: T2 (plain)" || fail "Extracts from Task ID: T2 (plain)" "T2" "$TASK_ID2"
+TASK_ID2=$(extract_task_id "$PROMPT2")
+[[ "$TASK_ID2" == "T2" ]] && pass "Extracts from Task ID: T2 (plain)" || fail "Extracts from Task ID: T2" "T2" "$TASK_ID2"
 
-# Pattern: ## Task: T3 (task-reviewer format - should NOT match)
-PROMPT3='## Task: T3
-**Description:** test'
+# Pattern: TASK: T3 (common error format)
+PROMPT3='TASK: T3
+Description: test'
 
-TASK_ID=$(echo "$PROMPT3" | grep -oE '(\*\*)?Task ID:(\*\*)? ?(T[0-9]+)' | head -1 | grep -oE 'T[0-9]+' || echo "")
-[[ -z "$TASK_ID" ]] && pass "Does NOT extract from ## Task: T3 (reviewer format)" || fail "Does NOT extract from ## Task: T3" "" "$TASK_ID"
+TASK_ID3=$(extract_task_id "$PROMPT3")
+[[ "$TASK_ID3" == "T3" ]] && pass "Extracts from TASK: T3 (error format)" || fail "Extracts from TASK: T3" "T3" "$TASK_ID3"
+
+# Pattern: Task: T4 (missing "ID")
+PROMPT4='Task: T4
+Wave: 1'
+
+TASK_ID4=$(extract_task_id "$PROMPT4")
+[[ "$TASK_ID4" == "T4" ]] && pass "Extracts from Task: T4 (missing ID)" || fail "Extracts from Task: T4" "T4" "$TASK_ID4"
+
+# Pattern: No task ID
+PROMPT5='Some random text without task ID'
+
+TASK_ID5=$(extract_task_id "$PROMPT5" || true)
+[[ -z "$TASK_ID5" ]] && pass "Returns empty for no task ID" || fail "Returns empty for no task ID" "" "$TASK_ID5"
+
+# ============================================
+# Test 1b: Format validation (validate_task_id_format)
+# ============================================
+echo ""
+echo "--- Test: Task ID Format Validation ---"
+
+# Canonical format should return 0 (use if to avoid set -e exit)
+if validate_task_id_format "$PROMPT1"; then
+  pass "Canonical format returns 0"
+else
+  fail "Canonical format returns 0" "0" "$?"
+fi
+
+# Non-canonical format should return 1
+validate_task_id_format "$PROMPT2" || EXIT_CODE=$?
+[[ "$EXIT_CODE" -eq 1 ]] && pass "Plain format returns 1 (non-canonical)" || fail "Plain format returns 1" "1" "$EXIT_CODE"
+
+# Error format (TASK: T3) should return 1
+EXIT_CODE=0
+validate_task_id_format "$PROMPT3" || EXIT_CODE=$?
+[[ "$EXIT_CODE" -eq 1 ]] && pass "TASK: format returns 1 (non-canonical)" || fail "TASK: format returns 1" "1" "$EXIT_CODE"
+
+# No task ID should return 2
+EXIT_CODE=0
+validate_task_id_format "$PROMPT5" || EXIT_CODE=$?
+[[ "$EXIT_CODE" -eq 2 ]] && pass "No task ID returns 2" || fail "No task ID returns 2" "2" "$EXIT_CODE"
 
 # ============================================
 # Test 2: store-review-findings.sh with stdin
@@ -233,6 +275,27 @@ if echo '{"tool_name": "Task", "tool_input": {"prompt": "Run some tests"}}' | ba
   pass "Allows non-planned tasks (no Task ID)"
 else
   fail "Allows non-planned tasks" "exit 0" "exit non-zero"
+fi
+
+# Test: Block non-canonical format (TASK: T1 instead of **Task ID:** T1)
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "TASK: T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>/dev/null; then
+  fail "Blocks non-canonical format (TASK: T1)" "exit 2" "exit 0"
+else
+  pass "Blocks non-canonical format (TASK: T1)"
+fi
+
+# Test: Block non-canonical format (Task ID: T1 without bold)
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Task ID: T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>/dev/null; then
+  fail "Blocks non-canonical format (Task ID: T1)" "exit 2" "exit 0"
+else
+  pass "Blocks non-canonical format (Task ID: T1)"
+fi
+
+# Test: Block non-canonical format (Task: T1 missing ID)
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Task: T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>/dev/null; then
+  fail "Blocks non-canonical format (Task: T1)" "exit 2" "exit 0"
+else
+  pass "Blocks non-canonical format (Task: T1)"
 fi
 
 # ============================================
