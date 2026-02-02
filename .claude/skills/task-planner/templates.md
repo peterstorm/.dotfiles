@@ -71,6 +71,14 @@ Issue body structure with checkbox tasks:
   "github_repo": "org/repo",
   "created_at": "2025-01-23T10:00:00Z",
   "updated_at": "2025-01-23T12:30:00Z",
+  "current_phase": "execute",
+  "phase_artifacts": {
+    "brainstorm": "completed",
+    "specify": ".claude/specs/YYYY-MM-DD-slug/spec.md",
+    "clarify": "skipped",
+    "architecture": ".claude/plans/YYYY-MM-DD-slug.md"
+  },
+  "skipped_phases": ["clarify"],
   "current_wave": 1,
   "total_waves": 2,
   "executing_tasks": [],

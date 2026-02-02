@@ -18,6 +18,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/PreToolUse/validate-phase-order.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/PreToolUse/validate-task-execution.sh"
           }
         ]
@@ -53,6 +57,10 @@
     "SubagentStop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/SubagentStop/advance-phase.sh"
+          },
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/SubagentStop/update-task-status.sh"

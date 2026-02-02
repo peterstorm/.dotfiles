@@ -713,6 +713,338 @@ echo '{"session_id": "cleanup-graph-session", "agent_id": "agent-last"}' | \
 rm -rf /tmp/claude-subagents
 
 # ============================================
+# Test 20: validate-phase-order.sh - phase enforcement
+# ============================================
+echo ""
+echo "--- Test: validate-phase-order.sh ---"
+
+cd "$TEST_DIR"
+
+# Setup: state at init phase (no brainstorm yet)
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "init",
+  "phase_artifacts": {},
+  "skipped_phases": [],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+# Test: brainstorm-agent allowed from init
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Explore feature", "subagent_type": "brainstorm-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: allows brainstorm from init"
+else
+  fail "validate-phase-order: allows brainstorm from init" "exit 0" "exit 2"
+fi
+
+# Test: specify-agent BLOCKED from init (brainstorm not done)
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Create spec", "subagent_type": "specify-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
+  fail "validate-phase-order: blocks specify from init" "exit 2" "exit 0"
+else
+  pass "validate-phase-order: blocks specify from init"
+fi
+
+# Test: specify-agent allowed when brainstorm skipped
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "init",
+  "phase_artifacts": {},
+  "skipped_phases": ["brainstorm"],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Create spec", "subagent_type": "specify-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: allows specify when brainstorm skipped"
+else
+  fail "validate-phase-order: allows specify when brainstorm skipped" "exit 0" "exit 2"
+fi
+
+# Test: architecture-agent BLOCKED when spec missing
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "specify",
+  "phase_artifacts": {"brainstorm": "completed"},
+  "skipped_phases": [],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Design architecture", "subagent_type": "architecture-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
+  fail "validate-phase-order: blocks architecture without spec" "exit 2" "exit 0"
+else
+  pass "validate-phase-order: blocks architecture without spec"
+fi
+
+# Test: architecture-agent allowed when spec exists with few markers
+mkdir -p "$TEST_DIR/.claude/specs/test-feature"
+cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
+# Test Spec
+Some requirements here.
+[NEEDS CLARIFICATION]: One marker
+[NEEDS CLARIFICATION]: Two markers
+EOF
+
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "specify",
+  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md"},
+  "skipped_phases": [],
+  "spec_file": ".claude/specs/test-feature/spec.md",
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Design architecture", "subagent_type": "architecture-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: allows architecture with spec (markers <= 3)"
+else
+  fail "validate-phase-order: allows architecture with spec" "exit 0" "exit 2"
+fi
+
+# Test: architecture-agent BLOCKED when too many markers
+cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
+# Test Spec
+[NEEDS CLARIFICATION]: One
+[NEEDS CLARIFICATION]: Two
+[NEEDS CLARIFICATION]: Three
+[NEEDS CLARIFICATION]: Four
+[NEEDS CLARIFICATION]: Five
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Design architecture", "subagent_type": "architecture-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
+  fail "validate-phase-order: blocks architecture when markers > 3" "exit 2" "exit 0"
+else
+  pass "validate-phase-order: blocks architecture when markers > 3"
+fi
+
+# Test: architecture-agent allowed when clarify skipped
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "specify",
+  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md"},
+  "skipped_phases": ["clarify"],
+  "spec_file": ".claude/specs/test-feature/spec.md",
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Design architecture", "subagent_type": "architecture-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: allows architecture when clarify skipped"
+else
+  fail "validate-phase-order: allows architecture when clarify skipped" "exit 0" "exit 2"
+fi
+
+# Test: impl-agent BLOCKED without plan
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "architecture",
+  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md"},
+  "skipped_phases": [],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Implement feature", "subagent_type": "code-implementer-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
+  fail "validate-phase-order: blocks impl without plan" "exit 2" "exit 0"
+else
+  pass "validate-phase-order: blocks impl without plan"
+fi
+
+# Test: impl-agent allowed with plan
+mkdir -p "$TEST_DIR/.claude/plans"
+echo "# Architecture Plan" > "$TEST_DIR/.claude/plans/test-feature.md"
+
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "execute",
+  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md", "architecture": ".claude/plans/test-feature.md"},
+  "skipped_phases": [],
+  "plan_file": ".claude/plans/test-feature.md",
+  "current_wave": 1,
+  "tasks": []
+}
+EOF
+
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Implement feature", "subagent_type": "code-implementer-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: allows impl with plan"
+else
+  fail "validate-phase-order: allows impl with plan" "exit 0" "exit 2"
+fi
+
+# Test: non-Task tool calls pass through
+if echo '{"tool_name": "Read", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: ignores non-Task tools"
+else
+  fail "validate-phase-order: ignores non-Task tools" "exit 0" "exit 2"
+fi
+
+# Test: unknown agent types pass through
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Run tests", "subagent_type": "general-purpose"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
+  pass "validate-phase-order: allows unknown agent types"
+else
+  fail "validate-phase-order: allows unknown agent types" "exit 0" "exit 2"
+fi
+
+# ============================================
+# Test 21: advance-phase.sh - phase advancement
+# ============================================
+echo ""
+echo "--- Test: advance-phase.sh ---"
+
+cd "$TEST_DIR"
+
+# Need to mock resolve-task-graph for these tests
+mkdir -p /tmp/claude-subagents
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/advance-test-session.task_graph
+
+# Setup: brainstorm complete, should advance to specify
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "init",
+  "phase_artifacts": {},
+  "skipped_phases": [],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+# Create transcript with brainstorm agent type indicator
+mkdir -p /tmp/claude-subagents
+echo "brainstorm-agent" > /tmp/claude-subagents/agent-brainstorm-123.type
+
+echo '{"session_id": "advance-test-session", "agent_id": "agent-brainstorm-123", "agent_type": "brainstorm-agent", "agent_transcript_path": "/tmp/fake-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+BRAINSTORM_ARTIFACT=$(jq -r '.phase_artifacts.brainstorm // "missing"' "$TEST_DIR/.claude/state/active_task_graph.json")
+
+[[ "$NEW_PHASE" == "specify" ]] && pass "advance-phase: brainstorm → specify" || fail "advance-phase: brainstorm → specify" "specify" "$NEW_PHASE"
+[[ "$BRAINSTORM_ARTIFACT" == "completed" ]] && pass "advance-phase: sets brainstorm artifact" || fail "advance-phase: sets brainstorm artifact" "completed" "$BRAINSTORM_ARTIFACT"
+
+# Test: specify complete with few markers → architecture (skip clarify)
+cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
+# Spec
+[NEEDS CLARIFICATION]: One marker only
+EOF
+
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "specify",
+  "phase_artifacts": {"brainstorm": "completed"},
+  "skipped_phases": [],
+  "spec_file": ".claude/specs/test-feature/spec.md",
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+echo "specify-agent" > /tmp/claude-subagents/agent-specify-123.type
+
+echo '{"session_id": "advance-test-session", "agent_id": "agent-specify-123", "agent_type": "specify-agent", "agent_transcript_path": "/tmp/fake-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+SKIPPED=$(jq -r '.skipped_phases | join(",")' "$TEST_DIR/.claude/state/active_task_graph.json")
+
+[[ "$NEW_PHASE" == "architecture" ]] && pass "advance-phase: specify → architecture (markers <= 3)" || fail "advance-phase: specify → architecture" "architecture" "$NEW_PHASE"
+[[ "$SKIPPED" == *"clarify"* ]] && pass "advance-phase: auto-skips clarify" || fail "advance-phase: auto-skips clarify" "contains clarify" "$SKIPPED"
+
+# Test: specify complete with many markers → clarify
+cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
+# Spec
+[NEEDS CLARIFICATION]: One
+[NEEDS CLARIFICATION]: Two
+[NEEDS CLARIFICATION]: Three
+[NEEDS CLARIFICATION]: Four
+[NEEDS CLARIFICATION]: Five
+EOF
+
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "specify",
+  "phase_artifacts": {"brainstorm": "completed"},
+  "skipped_phases": [],
+  "spec_file": ".claude/specs/test-feature/spec.md",
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+echo '{"session_id": "advance-test-session", "agent_id": "agent-specify-456", "agent_type": "specify-agent", "agent_transcript_path": "/tmp/fake-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$NEW_PHASE" == "clarify" ]] && pass "advance-phase: specify → clarify (markers > 3)" || fail "advance-phase: specify → clarify" "clarify" "$NEW_PHASE"
+
+# Test: clarify complete → architecture
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "clarify",
+  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md"},
+  "skipped_phases": [],
+  "spec_file": ".claude/specs/test-feature/spec.md",
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+echo "clarify-agent" > /tmp/claude-subagents/agent-clarify-123.type
+
+echo '{"session_id": "advance-test-session", "agent_id": "agent-clarify-123", "agent_type": "clarify-agent", "agent_transcript_path": "/tmp/fake-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$NEW_PHASE" == "architecture" ]] && pass "advance-phase: clarify → architecture" || fail "advance-phase: clarify → architecture" "architecture" "$NEW_PHASE"
+
+# Test: architecture complete → decompose
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "architecture",
+  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md", "clarify": "completed"},
+  "skipped_phases": [],
+  "plan_file": ".claude/plans/test-feature.md",
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+echo "architecture-agent" > /tmp/claude-subagents/agent-arch-123.type
+
+echo '{"session_id": "advance-test-session", "agent_id": "agent-arch-123", "agent_type": "architecture-agent", "agent_transcript_path": "/tmp/fake-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$NEW_PHASE" == "decompose" ]] && pass "advance-phase: architecture → decompose" || fail "advance-phase: architecture → decompose" "decompose" "$NEW_PHASE"
+
+# Test: non-phase agents don't advance
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "execute",
+  "phase_artifacts": {},
+  "skipped_phases": [],
+  "current_wave": 1,
+  "tasks": []
+}
+EOF
+
+echo "code-implementer-agent" > /tmp/claude-subagents/agent-impl-123.type
+
+echo '{"session_id": "advance-test-session", "agent_id": "agent-impl-123", "agent_type": "code-implementer-agent", "agent_transcript_path": "/tmp/fake-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+STILL_EXECUTE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$STILL_EXECUTE" == "execute" ]] && pass "advance-phase: impl agents don't advance phase" || fail "advance-phase: impl agents don't advance" "execute" "$STILL_EXECUTE"
+
+# Cleanup
+rm -rf /tmp/claude-subagents
+
+# ============================================
 # Summary
 # ============================================
 echo ""

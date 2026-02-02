@@ -15,10 +15,14 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 ## Arguments
 
 - `/task-planner "description"` - Start new plan (runs full flow)
+- `/task-planner --skip-brainstorm` - Skip brainstorm phase (scope already clear)
+- `/task-planner --skip-clarify` - Skip clarify phase (accept markers as-is)
 - `/task-planner --skip-specify` - Skip brainstorm/specify/clarify (use existing spec)
 - `/task-planner --status` - Show current task graph status
 - `/task-planner --complete` - Finalize, clean up state
 - `/task-planner --abort` - Cancel mid-execution, clean state
+
+**Note:** All phases are MANDATORY by default. Skip flags allow explicit bypass with user acknowledgment.
 
 ---
 
@@ -29,23 +33,25 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
         │
         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Phase 0: BRAINSTORM (if unclear)                        │
+│ Phase 0: BRAINSTORM [MANDATORY]                         │
 │   Agent: brainstorm-agent                               │
 │   Output: Refined understanding, selected approach      │
+│   Skip: --skip-brainstorm                               │
 └─────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Phase 1: SPECIFY                                        │
+│ Phase 1: SPECIFY [MANDATORY]                            │
 │   Agent: specify-agent                                  │
 │   Output: .claude/specs/{slug}/spec.md                  │
 └─────────────────────────────────────────────────────────┘
         │
-        ▼ (if >3 NEEDS CLARIFICATION markers)
+        ▼ (if >3 markers, else skip to ARCHITECTURE)
 ┌─────────────────────────────────────────────────────────┐
-│ Phase 2: CLARIFY                                        │
+│ Phase 2: CLARIFY [MANDATORY if markers > 3]             │
 │   Agent: clarify-agent                                  │
 │   Output: Updated spec.md with resolved uncertainties   │
+│   Skip: --skip-clarify                                  │
 └─────────────────────────────────────────────────────────┘
         │
         ▼
@@ -72,11 +78,11 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 
 ---
 
-## Phase 0: Brainstorm (Optional)
+## Phase 0: Brainstorm (MANDATORY)
 
-**When to run:** Feature description is vague, multiple approaches possible, or user says "explore" / "brainstorm".
+**Always run** unless `--skip-brainstorm` flag provided.
 
-**When to skip:** Clear scope, specific requirements, or user says "just build it".
+**Hook enforcement:** `validate-phase-order.sh` blocks specify-agent if brainstorm not complete (unless skipped).
 
 **Spawn brainstorm-agent** with context from `templates/phase-brainstorm.md`.
 
@@ -113,9 +119,11 @@ If markers <= 3: Skip to Phase 3.
 
 ---
 
-## Phase 2: Clarify (Conditional)
+## Phase 2: Clarify (MANDATORY if markers > 3)
 
-**Run if:** spec has >3 `[NEEDS CLARIFICATION]` markers.
+**Run if:** spec has >3 `[NEEDS CLARIFICATION]` markers. Skip via `--skip-clarify` if accepting markers as-is.
+
+**Hook enforcement:** `validate-phase-order.sh` blocks architecture-agent if markers > 3 (unless clarify skipped).
 
 **Spawn clarify-agent** with context from `templates/phase-clarify.md`.
 
@@ -376,9 +384,56 @@ When blocked (critical findings), Edit/Write blocked too. To fix:
 - **ALL phases via agents** - brainstorm, specify, clarify, architecture agents
 - **ALL implementation via Task tool** - Edit/Write blocked
 - **ALL state writes via hooks** - Bash writes blocked
-- **NEVER skip specify** unless `--skip-specify` flag or spec exists
-- **NEVER proceed with >3 unresolved markers** without user acknowledgment
+- **NEVER skip phases** unless explicit `--skip-X` flag provided
+- **NEVER proceed with >3 unresolved markers** without user acknowledgment or `--skip-clarify`
 - Only ONE active plan at a time
+
+---
+
+## Phase Enforcement (Hooks)
+
+Two hooks enforce phase ordering:
+
+### PreToolUse: `validate-phase-order.sh`
+Blocks agent spawns if prerequisite phases not complete.
+
+| Target Agent | Requires |
+|--------------|----------|
+| specify-agent | brainstorm complete OR `--skip-brainstorm` |
+| clarify-agent | spec.md exists |
+| architecture-agent | spec.md exists + markers ≤ 3 OR `--skip-clarify` |
+| impl agents | plan.md exists |
+
+### SubagentStop: `advance-phase.sh`
+Advances `current_phase` when phase agents complete.
+
+| Agent Completes | Next Phase |
+|-----------------|------------|
+| brainstorm-agent | specify |
+| specify-agent | clarify (if markers > 3) OR architecture |
+| clarify-agent | architecture |
+| architecture-agent | decompose |
+
+### State Tracking
+
+```json
+{
+  "current_phase": "specify",
+  "phase_artifacts": {
+    "brainstorm": "completed",
+    "specify": null,
+    "clarify": null,
+    "architecture": null
+  },
+  "skipped_phases": ["clarify"]
+}
+```
+
+### Skip Flags
+
+- `--skip-brainstorm` - Adds "brainstorm" to `skipped_phases`, starts at specify
+- `--skip-clarify` - Adds "clarify" to `skipped_phases`, proceeds to architecture regardless of markers
+- `--skip-specify` - Adds brainstorm, specify, clarify to skipped; requires existing spec.md
 
 ---
 
