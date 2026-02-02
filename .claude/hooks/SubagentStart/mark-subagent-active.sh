@@ -14,17 +14,15 @@ AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 # DEBUG: Log parsed values
 echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart PARSED: session=$SESSION_ID agent=$AGENT_ID type=$AGENT_TYPE" >> /tmp/claude-hooks-debug.log
 
-# Create flag file for this session (restrictive permissions)
+# Create session tracking directory (restrictive permissions)
 umask 077
 mkdir -p /tmp/claude-subagents
+
+# Track active agents for cleanup purposes (optional, not critical)
 if [[ -n "$AGENT_ID" ]]; then
   echo "$AGENT_ID" >> "/tmp/claude-subagents/${SESSION_ID}.active"
-  # Store agent type for SubagentStop hooks
-  if [[ -n "$AGENT_TYPE" ]]; then
-    echo "$AGENT_TYPE" > "/tmp/claude-subagents/${AGENT_ID}.type"
-    echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart FILE_WRITTEN=/tmp/claude-subagents/${AGENT_ID}.type EXISTS=$(test -f "/tmp/claude-subagents/${AGENT_ID}.type" && echo YES || echo NO)" >> /tmp/claude-hooks-debug.log
-  fi
 fi
+# NOTE: agent_type no longer stored in temp file - SubagentStop reads it from JSON input
 
 # Store task graph absolute path for cross-repo access
 # SubagentStart runs in orchestrator's cwd where task graph exists

@@ -25,7 +25,6 @@ if [[ -f "$SUBAGENT_FILE" ]]; then
   fi
 fi
 
-# Keep .type file for other hooks - periodic cleanup handles old files
-# rm -f "/tmp/claude-subagents/${AGENT_ID}.type"
+# NOTE: .type files no longer written - SubagentStop reads agent_type from JSON input
 
 exit 0

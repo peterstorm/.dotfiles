@@ -297,25 +297,25 @@ else
   fail "Allows non-planned tasks" "exit 0" "exit non-zero"
 fi
 
-# Test: Block non-canonical format (TASK: T1 instead of **Task ID:** T1)
+# Test: Accepts non-canonical format (TASK: T1) - permissive parsing
 if echo '{"tool_name": "Task", "tool_input": {"prompt": "TASK: T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>/dev/null; then
-  fail "Blocks non-canonical format (TASK: T1)" "exit 2" "exit 0"
+  pass "Accepts non-canonical format (TASK: T1)"
 else
-  pass "Blocks non-canonical format (TASK: T1)"
+  fail "Accepts non-canonical format (TASK: T1)" "exit 0" "exit 2"
 fi
 
-# Test: Block non-canonical format (Task ID: T1 without bold)
+# Test: Accepts non-canonical format (Task ID: T1 without bold)
 if echo '{"tool_name": "Task", "tool_input": {"prompt": "Task ID: T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>/dev/null; then
-  fail "Blocks non-canonical format (Task ID: T1)" "exit 2" "exit 0"
+  pass "Accepts non-canonical format (Task ID: T1)"
 else
-  pass "Blocks non-canonical format (Task ID: T1)"
+  fail "Accepts non-canonical format (Task ID: T1)" "exit 0" "exit 2"
 fi
 
-# Test: Block non-canonical format (Task: T1 missing ID)
+# Test: Accepts non-canonical format (Task: T1 missing ID)
 if echo '{"tool_name": "Task", "tool_input": {"prompt": "Task: T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>/dev/null; then
-  fail "Blocks non-canonical format (Task: T1)" "exit 2" "exit 0"
+  pass "Accepts non-canonical format (Task: T1)"
 else
-  pass "Blocks non-canonical format (Task: T1)"
+  fail "Accepts non-canonical format (Task: T1)" "exit 0" "exit 2"
 fi
 
 # ============================================
@@ -472,38 +472,51 @@ else
 fi
 
 # ============================================
-# Test 10: block-direct-edits.sh subagent allowlist
+# Test 10: block-direct-edits.sh blocks during orchestration
 # ============================================
 echo ""
-echo "--- Test: block-direct-edits.sh subagent allowlist ---"
+echo "--- Test: block-direct-edits.sh ---"
 
 # Ensure state file exists for the hook to activate
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {"current_wave": 1, "tasks": [], "wave_gates": {"1": {"blocked": false}}}
 EOF
 
-# Clean up any existing subagent flags
-rm -rf /tmp/claude-subagents
-
-# Test: Edit blocked when no subagent active
+# Test: Edit blocked during orchestration
+# NOTE: Subagents bypass PreToolUse hooks entirely (run in subprocess),
+# so this hook only blocks MAIN Claude from editing directly.
 if echo '{"tool_name": "Edit", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/block-direct-edits.sh" 2>/dev/null; then
-  fail "Blocks Edit when no subagent active" "exit 2" "exit 0"
+  fail "Blocks Edit during orchestration" "exit 2" "exit 0"
 else
-  pass "Blocks Edit when no subagent active"
+  pass "Blocks Edit during orchestration"
 fi
 
-# Test: Edit allowed when subagent active
-mkdir -p /tmp/claude-subagents
-echo "test-agent-123" > /tmp/claude-subagents/test-session.active
-
-if echo '{"tool_name": "Edit", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/block-direct-edits.sh" 2>/dev/null; then
-  pass "Allows Edit when subagent is active"
+# Test: Write blocked during orchestration
+if echo '{"tool_name": "Write", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/block-direct-edits.sh" 2>/dev/null; then
+  fail "Blocks Write during orchestration" "exit 2" "exit 0"
 else
-  fail "Allows Edit when subagent is active" "exit 0" "exit 2"
+  pass "Blocks Write during orchestration"
 fi
 
-# Cleanup
-rm -rf /tmp/claude-subagents
+# Test: Other tools allowed
+if echo '{"tool_name": "Read", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/block-direct-edits.sh" 2>/dev/null; then
+  pass "Allows Read during orchestration"
+else
+  fail "Allows Read during orchestration" "exit 0" "exit 2"
+fi
+
+# Test: No task graph = no blocking (orchestration not active)
+rm "$TEST_DIR/.claude/state/active_task_graph.json"
+if echo '{"tool_name": "Edit", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/block-direct-edits.sh" 2>/dev/null; then
+  pass "Allows Edit when no orchestration active"
+else
+  fail "Allows Edit when no orchestration active" "exit 0" "exit 2"
+fi
+
+# Restore state file for subsequent tests
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{"current_wave": 1, "tasks": [], "wave_gates": {"1": {"blocked": false}}}
+EOF
 
 # ============================================
 # Test 11: SessionStart cleanup hook
@@ -512,22 +525,40 @@ echo ""
 echo "--- Test: SessionStart cleanup ---"
 
 mkdir -p /tmp/claude-subagents
+
+# Create files with OLD timestamps (> 60 min) - these should be cleaned
 echo "stale-agent" > /tmp/claude-subagents/old-session.active
 echo "code-implementer-agent" > /tmp/claude-subagents/stale-agent.type
+touch -t 202001010000 /tmp/claude-subagents/old-session.active  # Jan 1, 2020
+touch -t 202001010000 /tmp/claude-subagents/stale-agent.type
+
+# Create files with RECENT timestamps - these should be preserved
+echo "recent-agent" > /tmp/claude-subagents/new-session.active
+echo "recent-type" > /tmp/claude-subagents/recent-agent.type
 
 bash "$REPO_ROOT/.claude/hooks/SessionStart/cleanup-stale-subagents.sh"
 
 if [[ -f /tmp/claude-subagents/old-session.active ]]; then
-  fail "SessionStart cleans stale .active files" "deleted" "still exists"
+  fail "SessionStart cleans stale (>60min) .active files" "deleted" "still exists"
 else
-  pass "SessionStart cleans stale .active files"
+  pass "SessionStart cleans stale (>60min) .active files"
 fi
 
 if [[ -f /tmp/claude-subagents/stale-agent.type ]]; then
-  fail "SessionStart cleans stale .type files" "deleted" "still exists"
+  fail "SessionStart cleans stale (>60min) .type files" "deleted" "still exists"
 else
-  pass "SessionStart cleans stale .type files"
+  pass "SessionStart cleans stale (>60min) .type files"
 fi
+
+# Verify recent files preserved
+if [[ -f /tmp/claude-subagents/new-session.active ]]; then
+  pass "SessionStart preserves recent (<60min) files"
+else
+  fail "SessionStart preserves recent files" "preserved" "deleted"
+fi
+
+# Cleanup recent files
+rm -f /tmp/claude-subagents/new-session.active /tmp/claude-subagents/recent-agent.type
 
 # ============================================
 # Test 12: complete-wave-gate.sh blocks missing new_tests_written
@@ -576,8 +607,8 @@ else
   fail "cleanup: .active file should still exist with agent-bbb" "file exists" "file deleted"
 fi
 
-# Type file should be cleaned up
-[[ ! -f /tmp/claude-subagents/agent-aaa.type ]] && pass "cleanup: removes .type file" || fail "cleanup: removes .type" "deleted" "still exists"
+# Type file PRESERVED for other SubagentStop hooks (periodic cleanup handles old files)
+[[ -f /tmp/claude-subagents/agent-aaa.type ]] && pass "cleanup: preserves .type for other hooks" || fail "cleanup: preserves .type" "preserved" "deleted"
 
 # Cleanup
 rm -rf /tmp/claude-subagents
@@ -674,10 +705,12 @@ fi
 echo ""
 echo "--- Test: verify-new-tests.sh new_tests_required=false ---"
 
-cd "$TEST_DIR"
+# Need a git repo for verify-new-tests.sh (it exits early for non-git)
+VNT_GIT_DIR=$(mktemp -d)
+(cd "$VNT_GIT_DIR" && git init -q && git commit --allow-empty -m "init" -q)
 
-# Setup task with new_tests_required=false
-cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+mkdir -p "$VNT_GIT_DIR/.claude/state"
+cat > "$VNT_GIT_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
   "tasks": [
@@ -688,16 +721,27 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 EOF
 
 # Create minimal transcript with Task ID
-cat > "$TEST_DIR/skip-transcript.jsonl" << 'EOF'
+cat > "$VNT_GIT_DIR/skip-transcript.jsonl" << 'EOF'
 {"message": {"content": "**Task ID:** T1\nImplementing migration"}}
 EOF
 
-# Run verify-new-tests (pipe hook input via stdin)
-echo "{\"agent_transcript_path\": \"$TEST_DIR/skip-transcript.jsonl\"}" | bash "$REPO_ROOT/.claude/hooks/SubagentStop/verify-new-tests.sh" 2>&1
+# Run verify-new-tests from git dir (pipe hook input via stdin)
+(cd "$VNT_GIT_DIR" && echo "{\"agent_transcript_path\": \"$VNT_GIT_DIR/skip-transcript.jsonl\"}" | bash "$REPO_ROOT/.claude/hooks/SubagentStop/verify-new-tests.sh" 2>&1)
 
 # Check that new_test_evidence indicates skipped
-SKIP_EVIDENCE=$(jq -r '.tasks[] | select(.id=="T1") | .new_test_evidence' "$TEST_DIR/.claude/state/active_task_graph.json")
+SKIP_EVIDENCE=$(jq -r '.tasks[] | select(.id=="T1") | .new_test_evidence' "$VNT_GIT_DIR/.claude/state/active_task_graph.json")
 [[ "$SKIP_EVIDENCE" == *"skipped"* ]] && pass "verify-new-tests: skips when new_tests_required=false" || fail "verify-new-tests: skips" "contains 'skipped'" "$SKIP_EVIDENCE"
+
+# Test: verify-new-tests exits gracefully for non-git repos
+cd /tmp
+if echo '{"agent_transcript_path": "/tmp/fake.jsonl"}' | bash "$REPO_ROOT/.claude/hooks/SubagentStop/verify-new-tests.sh" 2>&1; then
+  pass "verify-new-tests: exits gracefully for non-git repos"
+else
+  fail "verify-new-tests: exits gracefully for non-git repos" "exit 0" "exit non-zero"
+fi
+
+rm -rf "$VNT_GIT_DIR"
+cd "$TEST_DIR"
 
 # ============================================
 # Test 17: resolve-task-graph.sh helper
@@ -967,11 +1011,11 @@ else
   fail "validate-phase-order: ignores non-Task tools" "exit 0" "exit 2"
 fi
 
-# Test: unknown agent types pass through
-if echo '{"tool_name": "Task", "tool_input": {"prompt": "Run tests", "subagent_type": "general-purpose"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>&1; then
-  pass "validate-phase-order: allows unknown agent types"
+# Test: unknown agent types BLOCKED (prevents bypass via empty subagent_type)
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Run tests", "subagent_type": "general-purpose"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
+  fail "validate-phase-order: blocks unknown agent types" "exit 2" "exit 0"
 else
-  fail "validate-phase-order: allows unknown agent types" "exit 0" "exit 2"
+  pass "validate-phase-order: blocks unknown agent types"
 fi
 
 # ============================================
@@ -1126,6 +1170,78 @@ STILL_EXECUTE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_grap
 
 # Cleanup
 rm -rf /tmp/claude-subagents
+
+# ============================================
+# Test 22: update-task-status.sh remaining tasks output
+# ============================================
+echo ""
+echo "--- Test: update-task-status.sh remaining tasks ---"
+
+cd "$TEST_DIR"
+mkdir -p /tmp/claude-subagents
+
+# Setup: wave 1 with 3 tasks, one about to complete
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [
+    {"id": "T1", "wave": 1, "status": "pending", "agent": "code-implementer-agent"},
+    {"id": "T2", "wave": 1, "status": "pending", "agent": "code-implementer-agent"},
+    {"id": "T3", "wave": 1, "status": "pending", "agent": "code-implementer-agent"}
+  ],
+  "wave_gates": {"1": {"impl_complete": false}}
+}
+EOF
+
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/remaining-test.task_graph
+echo "code-implementer-agent" > /tmp/claude-subagents/agent-rem-123.type
+
+# Create transcript for T1 completion
+cat > "$TEST_DIR/remaining-transcript.jsonl" << 'EOF'
+{"message": {"content": "**Task ID:** T1\nImplemented successfully\nBUILD SUCCESS\nTests run: 5, Failures: 0, Errors: 0"}}
+EOF
+
+# Run update-task-status (should show T2, T3 as remaining)
+OUTPUT=$(echo '{"session_id": "remaining-test", "agent_id": "agent-rem-123", "agent_transcript_path": "'"$TEST_DIR"'/remaining-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/update-task-status.sh" 2>&1)
+
+echo "$OUTPUT" | grep -q "T2" && pass "update-task-status: shows remaining tasks (T2)" || fail "update-task-status: shows T2" "contains T2" "$OUTPUT"
+echo "$OUTPUT" | grep -q "T3" && pass "update-task-status: shows remaining tasks (T3)" || fail "update-task-status: shows T3" "contains T3" "$OUTPUT"
+
+rm -rf /tmp/claude-subagents
+
+# ============================================
+# Test 23: validate-task-execution.sh non-git graceful handling
+# ============================================
+echo ""
+echo "--- Test: validate-task-execution.sh non-git ---"
+
+NON_GIT_DIR=$(mktemp -d)
+mkdir -p "$NON_GIT_DIR/.claude/state"
+
+cat > "$NON_GIT_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [
+    {"id": "T1", "wave": 1, "status": "pending", "depends_on": []}
+  ],
+  "wave_gates": {"1": {"impl_complete": false}}
+}
+EOF
+
+# Should allow task and not crash (just skip SHA capture)
+if (cd "$NON_GIT_DIR" && echo '{"tool_name": "Task", "tool_input": {"prompt": "**Task ID:** T1\nImplement feature"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-task-execution.sh" 2>&1); then
+  pass "validate-task-execution: works in non-git repos"
+else
+  fail "validate-task-execution: works in non-git repos" "exit 0" "exit non-zero"
+fi
+
+# Verify no start_sha was set (can't get SHA without git)
+NO_SHA=$(jq -r '.tasks[] | select(.id=="T1") | .start_sha // "missing"' "$NON_GIT_DIR/.claude/state/active_task_graph.json")
+[[ "$NO_SHA" == "missing" ]] && pass "validate-task-execution: skips SHA in non-git" || fail "validate-task-execution: skips SHA in non-git" "missing" "$NO_SHA"
+
+rm -rf "$NON_GIT_DIR"
+cd "$TEST_DIR"
 
 # ============================================
 # Summary

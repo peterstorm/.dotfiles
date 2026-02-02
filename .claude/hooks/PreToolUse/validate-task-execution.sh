@@ -98,14 +98,21 @@ fi
 # === Store baseline SHA for per-task new-test detection ===
 # verify-new-tests.sh diffs against this SHA (not branch merge-base) to scope
 # new-test detection to changes made by THIS task, not the whole branch.
-HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
-if [[ -n "$HEAD_SHA" && -n "$TASK_ID" ]]; then
+#
+# RACE CONDITION FIX: Capture HEAD SHA *inside* lock, not before.
+# Otherwise, parallel tasks could commit between SHA capture and lock acquisition,
+# giving us an outdated baseline that includes another task's changes.
+if [[ -n "$TASK_ID" ]] && git rev-parse --git-dir &>/dev/null; then
   source ~/.claude/hooks/helpers/lock.sh
   LOCK_FILE=".claude/state/.task_graph.lock"
   acquire_lock "$LOCK_FILE" auto
-  jq --arg id "$TASK_ID" --arg sha "$HEAD_SHA" '
-    .tasks |= map(if .id == $id then .start_sha = $sha else . end)
-  ' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+  # Capture SHA after lock - now guaranteed stable
+  HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
+  if [[ -n "$HEAD_SHA" ]]; then
+    jq --arg id "$TASK_ID" --arg sha "$HEAD_SHA" '
+      .tasks |= map(if .id == $id then .start_sha = $sha else . end)
+    ' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+  fi
 fi
 
 exit 0

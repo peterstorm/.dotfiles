@@ -9,10 +9,9 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.agent_transcript_path // empty')
 
-# Also check stored agent type (from SubagentStart)
-AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
-if [[ -z "$AGENT_TYPE" && -n "$AGENT_ID" && -f "/tmp/claude-subagents/${AGENT_ID}.type" ]]; then
-  AGENT_TYPE=$(cat "/tmp/claude-subagents/${AGENT_ID}.type")
+# Get agent type directly from SubagentStop input if not already set
+if [[ -z "$AGENT_TYPE" ]]; then
+  AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 fi
 
 # Map agent type to phase

@@ -16,11 +16,8 @@ source ~/.claude/hooks/helpers/resolve-task-graph.sh
 TASK_GRAPH=$(resolve_task_graph "$SESSION_ID") || exit 0
 export TASK_GRAPH  # Export for helper script
 
-# Get agent type from stored file (set by SubagentStart hook)
-AGENT_TYPE=""
-if [[ -n "$AGENT_ID" && -f "/tmp/claude-subagents/${AGENT_ID}.type" ]]; then
-  AGENT_TYPE=$(cat "/tmp/claude-subagents/${AGENT_ID}.type")
-fi
+# Get agent type directly from SubagentStop input (always available, no temp file needed)
+AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 
 # Only process spec-check-invoker agent
 [[ "$AGENT_TYPE" != "spec-check-invoker" ]] && exit 0
@@ -62,11 +59,26 @@ CRITICAL_COUNT=$(echo "$AGENT_OUTPUT" | grep -oE 'SPEC_CHECK_CRITICAL_COUNT: ([0
 HIGH_COUNT=$(echo "$AGENT_OUTPUT" | grep -oE 'SPEC_CHECK_HIGH_COUNT: ([0-9]+)' | grep -oE '[0-9]+')
 VERDICT=$(echo "$AGENT_OUTPUT" | grep -oE 'SPEC_CHECK_VERDICT: (PASSED|BLOCKED)' | sed 's/SPEC_CHECK_VERDICT: //')
 
-# SAFETY: If no CRITICAL_COUNT found, output is malformed
+# SAFETY: If no CRITICAL_COUNT found, mark as evidence_capture_failed (not silent exit!)
 if [[ -z "$CRITICAL_COUNT" ]]; then
   echo "WARNING: No SPEC_CHECK_CRITICAL_COUNT found in spec-check output"
-  echo "Output may be malformed. NOT updating state."
-  echo "Review the output manually and run /wave-gate again."
+  echo "Marking as evidence_capture_failed so /wave-gate can surface the issue."
+
+  # Acquire lock and write explicit failure state
+  LOCK_FILE="$(dirname "$TASK_GRAPH")/.task_graph.lock"
+  source ~/.claude/hooks/helpers/lock.sh
+  acquire_lock "$LOCK_FILE" auto
+
+  jq --arg wave "$WAVE" '
+    .spec_check = {
+      wave: ($wave | tonumber),
+      run_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
+      verdict: "EVIDENCE_CAPTURE_FAILED",
+      error: "SPEC_CHECK_CRITICAL_COUNT marker not found in agent output - re-run /wave-gate"
+    }
+  ' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+
+  echo "Spec-check verdict set to EVIDENCE_CAPTURE_FAILED"
   exit 0
 fi
 

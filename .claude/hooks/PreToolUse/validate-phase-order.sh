@@ -52,7 +52,17 @@ detect_phase() {
 }
 
 TARGET_PHASE=$(detect_phase "$SUBAGENT_TYPE" "$PROMPT")
-[[ "$TARGET_PHASE" == "unknown" ]] && exit 0  # Not a phase agent, allow
+# Block unrecognized agents during orchestration - prevents bypass via empty subagent_type
+if [[ "$TARGET_PHASE" == "unknown" ]]; then
+  echo "BLOCKED: Unrecognized agent type during task-planner orchestration." >&2
+  echo "" >&2
+  echo "Agent: $SUBAGENT_TYPE" >&2
+  echo "" >&2
+  echo "Use a recognized phase agent:" >&2
+  echo "  brainstorm-agent, specify-agent, clarify-agent, architecture-agent," >&2
+  echo "  code-implementer-agent, java-test-agent, ts-test-agent, etc." >&2
+  exit 2
+fi
 
 CURRENT_PHASE=$(jq -r '.current_phase // "init"' "$TASK_GRAPH")
 SKIPPED=$(jq -r '.skipped_phases // [] | join(",")' "$TASK_GRAPH")

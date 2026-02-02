@@ -110,13 +110,15 @@ done < <(grep -E '^\s*-\s*SC-[0-9]+' "$SPEC_FILE")
 
 # Extract US acceptance scenarios: "- Given X, When Y, Then Z"
 US_NUM=""
+US_COUNTER=0
 while IFS= read -r line; do
   # Track current user scenario number
   if echo "$line" | grep -qE '^###\s*US[0-9]+|^###.*\[P[123]\]'; then
     US_NUM=$(echo "$line" | grep -oE 'US[0-9]+' | head -1)
     if [[ -z "$US_NUM" ]]; then
-      # Extract from pattern like "### [P1] Account Creation"
-      US_NUM="US$((${US_NUM:-0} + 1))"
+      # No explicit US# in heading - generate sequential number
+      US_COUNTER=$((US_COUNTER + 1))
+      US_NUM="US${US_COUNTER}"
     fi
   fi
 

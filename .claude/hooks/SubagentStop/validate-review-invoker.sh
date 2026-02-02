@@ -4,12 +4,8 @@
 
 INPUT=$(cat)
 
-# Read agent_id from stdin and get agent type from stored file (set by SubagentStart hook)
-AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
-AGENT_TYPE=""
-if [[ -n "$AGENT_ID" && -f "/tmp/claude-subagents/${AGENT_ID}.type" ]]; then
-  AGENT_TYPE=$(cat "/tmp/claude-subagents/${AGENT_ID}.type")
-fi
+# Get agent type directly from SubagentStop input (always available, no temp file needed)
+AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 
 # Only validate review-invoker agents
 if [ "$AGENT_TYPE" != "review-invoker" ]; then

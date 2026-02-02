@@ -24,14 +24,10 @@ source ~/.claude/hooks/helpers/resolve-task-graph.sh
 TASK_GRAPH=$(resolve_task_graph "$SESSION_ID") || exit 0
 export TASK_GRAPH  # Export for helper script
 
-# Get agent type from stored file (set by SubagentStart hook)
-AGENT_TYPE=""
-if [[ -n "$AGENT_ID" && -f "/tmp/claude-subagents/${AGENT_ID}.type" ]]; then
-  AGENT_TYPE=$(cat "/tmp/claude-subagents/${AGENT_ID}.type")
-fi
+# Get agent type directly from SubagentStop input (always available, no temp file needed)
+AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings AGENT_ID=$AGENT_ID TYPE=$AGENT_TYPE" >> /tmp/claude-hooks-debug.log
-echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings TYPE_FILE_EXISTS=$(test -f "/tmp/claude-subagents/${AGENT_ID}.type" && echo YES || echo NO)" >> /tmp/claude-hooks-debug.log
 
 # Only process review agents (both types)
 case "$AGENT_TYPE" in
@@ -107,11 +103,24 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings CRITICAL_COUNT=$CRITI
 echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings FINDINGS_LENGTH=${#FINDINGS}" >> /tmp/claude-hooks-debug.log
 echo "$(date '+%Y-%m-%d %H:%M:%S') store-reviewer-findings FINDINGS_CONTENT='$(echo "$FINDINGS" | head -c 200 | tr '\n' '|')'" >> /tmp/claude-hooks-debug.log
 
-# SAFETY: If no CRITICAL_COUNT found, DON'T assume passed - output is malformed
+# SAFETY: If no CRITICAL_COUNT found, mark as evidence_capture_failed (not silent exit!)
 if [[ -z "$CRITICAL_COUNT" ]]; then
   echo "WARNING: No CRITICAL_COUNT found in $AGENT_TYPE output for $TASK_ID"
-  echo "Output may be malformed. NOT marking as passed."
-  echo "Review the output manually and run /wave-gate again."
+  echo "Marking as evidence_capture_failed so /wave-gate can surface the issue."
+
+  # Acquire lock and write explicit failure state
+  source ~/.claude/hooks/helpers/lock.sh
+  LOCK_FILE="$(dirname "$TASK_GRAPH")/.task_graph.lock"
+  acquire_lock "$LOCK_FILE" auto
+
+  jq "
+    .tasks |= map(if .id == \"$TASK_ID\" then
+      .review_status = \"evidence_capture_failed\" |
+      .review_error = \"CRITICAL_COUNT marker not found in agent output - re-run /wave-gate\"
+    else . end)
+  " "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+
+  echo "Task $TASK_ID review_status set to evidence_capture_failed"
   exit 0
 fi
 

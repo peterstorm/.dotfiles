@@ -30,11 +30,8 @@ TASK_ID=$(extract_task_id "$PROMPT")
 [[ -z "$TASK_ID" ]] && exit 0  # Not a tracked task, ignore
 
 # Skip review agents — they don't implement tasks
-AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
-AGENT_TYPE=""
-if [[ -n "$AGENT_ID" && -f "/tmp/claude-subagents/${AGENT_ID}.type" ]]; then
-  AGENT_TYPE=$(cat "/tmp/claude-subagents/${AGENT_ID}.type")
-fi
+# Get agent type directly from SubagentStop input (always available, no temp file needed)
+AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 case "$AGENT_TYPE" in
   *review*|*reviewer*) exit 0 ;;
 esac
@@ -130,6 +127,12 @@ fi
 # Check if all wave tasks are now "implemented" or "completed"
 CURRENT_WAVE=$(jq -r '.current_wave' "$TASK_GRAPH")
 NOT_IMPL=$(jq -r "[.tasks[] | select(.wave == $CURRENT_WAVE and .status != \"implemented\" and .status != \"completed\")] | length" "$TASK_GRAPH")
+
+# Show remaining tasks to help Claude remember what's left in this wave
+if [[ "$NOT_IMPL" -gt 0 ]]; then
+  REMAINING=$(jq -r "[.tasks[] | select(.wave == $CURRENT_WAVE and .status != \"implemented\" and .status != \"completed\")] | .[].id" "$TASK_GRAPH" | tr '\n' ', ' | sed 's/,$//')
+  echo "Remaining in wave $CURRENT_WAVE: $REMAINING"
+fi
 
 if [[ "$NOT_IMPL" -eq 0 ]]; then
   # Mark wave impl_complete

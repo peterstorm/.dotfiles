@@ -8,6 +8,12 @@
 # preventing cumulative test counts when multiple tasks run in parallel.
 # Supports cross-repo: finds task graph via session-scoped path if not in cwd
 
+# Git availability check - graceful degradation for non-git repos
+if ! git rev-parse --git-dir &>/dev/null; then
+  # Not a git repo - skip verification (can't diff without git)
+  exit 0
+fi
+
 # Read hook input and extract transcript
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
