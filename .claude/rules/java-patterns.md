@@ -217,3 +217,117 @@ public ProcessedOrder process(ValidatedOrder order) {
 
 Key principle: Return the validated data itself, not a success indicator.
 The type system then enforces that validation occurred before processing.
+
+## Primitive Wrappers (dk.oister.util.primitives)
+Type-safe wrappers with factory methods returning Either. Use instead of raw primitives.
+
+```java
+import dk.oister.util.primitives.*;
+
+// PositiveInt: int > 0
+Either<String, PositiveInt> qty = PositiveInt.of(5);   // Right(PositiveInt(5))
+Either<String, PositiveInt> bad = PositiveInt.of(0);   // Left("must be positive (> 0)")
+
+// NonEmptyString: trims whitespace, rejects blank
+Either<String, NonEmptyString> name = NonEmptyString.of("  hello  ");  // Right("hello")
+Either<String, NonEmptyString> blank = NonEmptyString.of("");          // Left("must not be empty")
+
+// NonNegativeLong: long >= 0
+Either<String, NonNegativeLong> price = NonNegativeLong.of(100);  // Right(100)
+Either<String, NonNegativeLong> neg = NonNegativeLong.of(-1);     // Left("must be non-negative")
+
+// Compose with Eithers.combine - fail fast
+record OrderLine(PositiveInt qty, NonEmptyString name, NonNegativeLong price) {}
+
+Either<String, OrderLine> parseLine(LineRequest req) {
+    return Eithers.combine(
+        PositiveInt.of(req.quantity()),
+        NonEmptyString.of(req.productName()),
+        NonNegativeLong.of(req.priceInCents())
+    ).map(OrderLine::new);
+}
+```
+
+## Validation for Error Accumulation (dk.oister.util.validation)
+Unlike Either (fail-fast), Validation collects ALL errors. Use for form validation.
+
+```java
+import dk.oister.util.validation.*;
+
+// Validation<E, A> - sealed with Valid/Invalid
+Validation<String, Integer> valid = Validation.valid(42);
+Validation<String, Integer> invalid = Validation.invalid("error");
+Validation<String, Integer> multi = Validation.invalid(NonEmptyList.of("err1", "err2"));
+
+// Pattern matching (Java 21)
+String result = switch (validation) {
+    case Valid(var value) -> "Success: " + value;
+    case Invalid(var errors) -> "Errors: " + errors.toList();
+};
+
+// Field validators return Validation
+Validation<String, String> validateName(String name) {
+    return name.isBlank()
+        ? Validation.invalid("name required")
+        : Validation.valid(name.trim());
+}
+
+Validation<String, String> validateEmail(String email) {
+    return !email.contains("@")
+        ? Validation.invalid("invalid email")
+        : Validation.valid(email);
+}
+
+// Validations.combine - accumulates ALL errors
+record User(String name, String email, int age) {}
+
+Validation<String, User> validateUser(String name, String email, int age) {
+    return Validations.combine(
+        validateName(name),
+        validateEmail(email),
+        validateAge(age)
+    ).map(User::new);
+}
+
+// Multiple errors collected
+var result = validateUser("", "invalid", -5);
+// → Invalid(NonEmptyList("name required", "invalid email", "age must be 0-150"))
+
+// Sequence stream of validations
+Validation<String, List<Integer>> sequenced = Stream.of(
+    Validation.valid(1),
+    Validation.invalid("bad"),
+    Validation.valid(3)
+).collect(Validations.sequence());
+// → Invalid(NonEmptyList("bad"))
+
+// Traverse: map + sequence
+Validation<String, List<User>> users = Validations.traverse(
+    requests,
+    req -> validateUser(req.name(), req.email(), req.age())
+);
+```
+
+## Either vs Validation
+
+| Use Case | Type | Reason |
+|----------|------|--------|
+| Parsing/deserialization | Either | Fail fast on first error |
+| Sequential operations | Either | Later steps depend on earlier |
+| Form validation | Validation | Show ALL errors to user |
+| Batch validation | Validation | Collect all problems |
+
+```java
+// Either: parsing (fail fast is fine)
+Either<String, Config> config = Eithers.combine(
+    NonEmptyString.of(req.host()),
+    PositiveInt.of(req.port())
+).map(Config::new);
+
+// Validation: user input (show all errors)
+Validation<String, UserForm> form = Validations.combine(
+    validateUsername(input.username()),
+    validatePassword(input.password()),
+    validateEmail(input.email())
+).map(UserForm::new);
+```
