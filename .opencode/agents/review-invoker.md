@@ -1,13 +1,6 @@
 ---
 name: review-invoker
 description: Invokes /review-pr skill for task reviews with full tool access
-tools:
-  - Skill
-  - Bash
-  - Read
-  - Grep
-  - Glob
-  - Task
 ---
 
 # Review Invoker Agent

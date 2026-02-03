@@ -1,7 +1,6 @@
 ---
 name: keycloak-agent
 description: Keycloak agent for ABAC, realms, OIDC, authorization services, federation
-model: sonnet
 color: "#FFFF00"
 skills:
   - keycloak-skill

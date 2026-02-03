@@ -1,7 +1,6 @@
 ---
 name: k8s-agent
 description: Kubernetes agent for kubectl, helm, ArgoCD, external-secrets, cert-manager
-model: sonnet
 color: "#FFA500"
 skills:
   - k8s-expert

@@ -1,12 +1,6 @@
 ---
 name: spec-check-invoker
-description: Invokes /opencode-spec-check skill for wave-gate spec alignment verification
-tools:
-  - Skill
-  - Bash
-  - Read
-  - Grep
-  - Glob
+description: Invokes /spec-check skill for wave-gate spec alignment verification
 ---
 
 # Spec-Check Invoker Agent

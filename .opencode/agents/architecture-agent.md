@@ -1,7 +1,6 @@
 ---
 name: architecture-agent
 description: Use as a subagent for architectural design tasks. Preloads architecture-tech-lead skill for domain knowledge. Produces design output, not code.
-model: opus
 color: "#800080"
 skills:
   - architecture-tech-lead
