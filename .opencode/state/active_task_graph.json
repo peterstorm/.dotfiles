@@ -1,0 +1,122 @@
+{
+  "title": "Phase 2: Phase Enforcement for OpenCode Task-Planner Plugin",
+  "spec_file": ".opencode/specs/2025-02-03-phase-enforcement/spec.md",
+  "plan_file": ".opencode/plans/2025-02-03-phase-enforcement.md",
+  "github_issue": null,
+  "current_phase": "execute",
+  "phase_artifacts": {
+    "brainstorm": "completed",
+    "specify": ".opencode/specs/2025-02-03-phase-enforcement/spec.md",
+    "clarify": "completed",
+    "architecture": ".opencode/plans/2025-02-03-phase-enforcement.md",
+    "decompose": "completed"
+  },
+  "skipped_phases": [],
+  "current_wave": 5,
+  "tasks": [
+    {
+      "id": "T1",
+      "description": "Add Phase 2 constants: SKILL_TO_PHASE, PHASE_EXEMPT_SKILLS, VALID_TRANSITIONS, PHASE_COMPLETION_PATTERNS, and new ERRORS to constants.ts",
+      "wave": 1,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": [],
+      "spec_anchors": ["FR-002", "FR-003", "FR-005", "FR-008", "FR-009"],
+      "new_tests_required": false
+    },
+    {
+      "id": "T2",
+      "description": "Add Phase 2 types: PhaseAdvancement, ArtifactPrerequisiteResult, PhaseTransitionResult interfaces to types.ts",
+      "wave": 1,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": [],
+      "spec_anchors": ["TR-002"],
+      "new_tests_required": false
+    },
+    {
+      "id": "T3",
+      "description": "Extend StateManager with Phase 2 methods: getSkippedPhases(), addSkippedPhase(), advancePhase(), getPhaseArtifact(), checkArtifactExists()",
+      "wave": 2,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": ["T1", "T2"],
+      "spec_anchors": ["TR-003", "TR-006"],
+      "new_tests_required": true
+    },
+    {
+      "id": "T4",
+      "description": "Create utils/debounce.ts with PhaseAdvancementDebouncer class for session.idle debouncing",
+      "wave": 2,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": ["T1"],
+      "spec_anchors": ["TR-005"],
+      "new_tests_required": true
+    },
+    {
+      "id": "T5",
+      "description": "Create hooks/validate-phase-order.ts with validatePhaseOrder(), isValidTransition(), checkArtifactPrerequisites() functions",
+      "wave": 3,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": ["T1", "T2", "T3"],
+      "spec_anchors": ["FR-001", "FR-002", "FR-003", "FR-004", "FR-008", "FR-009", "FR-010", "SC-002"],
+      "new_tests_required": true
+    },
+    {
+      "id": "T6",
+      "description": "Create hooks/advance-phase.ts with advancePhase(), detectCompletedPhase(), extractArtifactPath(), countClarificationMarkers() functions",
+      "wave": 3,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": ["T1", "T2", "T3"],
+      "spec_anchors": ["FR-005", "FR-006", "FR-007", "SC-003"],
+      "new_tests_required": true
+    },
+    {
+      "id": "T7",
+      "description": "Update index.ts to integrate validatePhaseOrder and advancePhase hooks into event handlers",
+      "wave": 4,
+      "status": "completed",
+      "agent": "code-implementer-agent",
+      "depends_on": ["T4", "T5", "T6"],
+      "spec_anchors": ["TR-004"],
+      "new_tests_required": false
+    },
+    {
+      "id": "T8",
+      "description": "Write unit tests for validate-phase-order.ts covering all transition scenarios",
+      "wave": 4,
+      "status": "completed",
+      "agent": "ts-test-agent",
+      "depends_on": ["T5"],
+      "spec_anchors": ["AC-1", "AC-3", "AC-4"],
+      "new_tests_required": true
+    },
+    {
+      "id": "T9",
+      "description": "Write unit tests for advance-phase.ts covering completion detection and auto-skip logic",
+      "wave": 4,
+      "status": "completed",
+      "agent": "ts-test-agent",
+      "depends_on": ["T6"],
+      "spec_anchors": ["AC-2", "AC-3"],
+      "new_tests_required": true
+    },
+    {
+      "id": "T10",
+      "description": "Write integration tests verifying end-to-end phase enforcement workflow",
+      "wave": 5,
+      "status": "completed",
+      "agent": "ts-test-agent",
+      "depends_on": ["T7", "T8", "T9"],
+      "spec_anchors": ["AC-5"],
+      "new_tests_required": true
+    }
+  ],
+  "executing_tasks": [],
+  "wave_gates": {},
+  "created_at": "2025-02-03T12:00:00.000Z",
+  "updated_at": "2025-02-04T14:33:00.000Z"
+}

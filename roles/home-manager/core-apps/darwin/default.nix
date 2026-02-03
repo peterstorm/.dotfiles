@@ -33,7 +33,7 @@
       kubectl
       discord
       ripgrep
-      claude-code
+      inputs.llm-agents.packages.${pkgs.system}.claude-code
       gh
       git
       podman-compose
@@ -45,6 +45,7 @@
       gemini-cli
       github-copilot-cli
       jq
+      inputs.llm-agents.packages.${pkgs.system}.opencode
     ];
 
     programs.zsh = {

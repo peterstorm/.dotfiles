@@ -13,6 +13,7 @@
     neovim-nightly-overlay.url = "github:nix-community/neovim-nightly-overlay";
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
     nix-vscode-extensions.inputs.nixpkgs.follows = "nixpkgs";
+    llm-agents.url = "github:numtide/llm-agents.nix";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:

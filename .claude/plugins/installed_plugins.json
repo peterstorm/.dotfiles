@@ -73,6 +73,16 @@
         "lastUpdated": "2026-02-02T20:17:14.174Z",
         "gitCommitSha": "f1be96f0fb58d5aaf2840ca7d7036d5c0923742c"
       }
+    ],
+    "marketing-skills@marketingskills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/marketingskills/marketing-skills/a04cb61a577a",
+        "version": "a04cb61a577a",
+        "installedAt": "2026-02-03T08:34:26.079Z",
+        "lastUpdated": "2026-02-03T08:34:26.079Z",
+        "gitCommitSha": "a04cb61a577a20d9ab0f3da2a2d99c17a0476ded"
+      }
     ]
   }
 }

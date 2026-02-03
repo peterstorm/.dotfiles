@@ -104,3 +104,126 @@ Fork strategy:
 - Store per-project or global? Current is per-project (`.memory/` in project dir). Cross-project memory could be valuable but complex.
 - Should consciousness adapt per-session or stay static? Adaptive is smarter but harder to debug.
 - Worth adding a `memory_pin` MCP tool or just a `pinned` field on `memory_save`?
+- Three-tier geometric dedup vs hybrid Jaccard+LLM — which cheaper/better?
+- Graph edges: store in state.json or separate graph file?
+- Hot/cold: surface cold memories via MCP tool or include IDs in CLAUDE.md for on-demand fetch?
+- Checkpoint storage: same file with version suffix, or separate checkpoint dir?
+
+---
+
+## Neumann-Inspired Enhancements
+
+Analysis of [Shadylukin/Neumann](https://github.com/Shadylukin/Neumann) — a unified tensor DB combining relational, graph, and vector storage with semantic conflict resolution.
+
+### Key Patterns Worth Adopting
+
+#### 1. Geometric Conflict Classification (replaces binary dedup)
+
+Neumann classifies changes by embedding similarity:
+```
+< 0.1  → orthogonal (auto-merge, completely different)
+0.1-0.5 → partial overlap (review, related but distinct)
+> 0.5  → direct conflict (merge/dedupe)
+```
+
+**Application**: Instead of "is duplicate? yes/no", classify memory pairs:
+- `< 0.1`: Keep both, no relation
+- `0.1-0.5`: Keep both, add `related_to` edge
+- `> 0.5`: Dedupe via LLM consolidation
+
+More nuanced than current "escalate 0.3-0.6 to LLM" plan.
+
+#### 2. Three-Tier Caching for Consciousness
+
+Neumann's cache lookup:
+```
+1. Exact match (O(1) hash) — tried first
+2. Semantic similarity (O(log n) HNSW) — fallback
+3. Embedding lookup (O(1)) — final fallback
+```
+
+**Application** for session-adaptive consciousness:
+1. **Exact**: Has this cwd/branch been seen? Use cached surface.
+2. **Semantic**: Find memories related to current context via embedding.
+3. **Fallback**: Generic top-N by recency/priority.
+
+#### 3. Delta Vectors for Change Tracking
+
+Neumann stores `before → after` with delta vectors, threshold `> 0.01`:
+> "Only capture differences > 0.01"
+
+**Application**: Store memory updates as deltas from original:
+- Initial memory = base
+- Updates = deltas (what changed)
+- Consolidation merges deltas into new base
+
+Reduces storage, improves dedup — similar memories have similar delta patterns.
+
+#### 4. Pre-Consolidation Checkpoints
+
+> "Manual and automatic checkpoints before destructive operations"
+
+**Application**: Before any consolidation/prune, snapshot `state.json`. Enables rollback if consolidation goes wrong. Simple: `state.json.checkpoint.{timestamp}`.
+
+#### 5. Hot/Cold Memory Tiers
+
+Neumann's tiered storage:
+```
+Hot: In-memory (fast, frequently accessed)
+Cold: mmap-backed files (slower, rarely accessed)
+```
+
+**Application**:
+- Hot: Recent, pinned, high-priority → always in CLAUDE.md
+- Cold: Older, low-priority → state.json only, surfaced via MCP tool on-demand
+
+#### 6. Memory Graph Edges (not just tags)
+
+Neumann uses typed graph edges for relationships + permissions.
+
+**Application**: Add `edges` field to memories:
+```json
+{
+  "id": "mem_123",
+  "edges": [
+    { "type": "related_to", "target": "mem_456" },
+    { "type": "supersedes", "target": "mem_789" }
+  ]
+}
+```
+
+Auto-populate during extraction: ask Haiku "which existing memories relate to this?"
+
+#### 7. Dynamic Metric Selection
+
+Neumann switches similarity metric based on sparsity:
+- Dense embeddings → Cosine
+- Sparse (>50% zeros) → Jaccard
+
+**Application**: If using embeddings for dedup, detect sparsity and adjust. Haiku-generated fingerprints may be sparse.
+
+### Implementation Priority
+
+**Tier 1 (High Impact):**
+1. Geometric three-tier dedup (orthogonal/partial/conflict)
+2. Memory graph edges with `related_to`
+3. Pre-consolidation checkpoints
+
+**Tier 2 (Medium Impact):**
+4. Hot/cold memory split
+5. Delta-based memory updates
+6. Dynamic metric selection
+
+**Tier 3 (Lower Priority):**
+7. Memory state machine (enforce valid transitions)
+8. Archetype clustering (store as deltas from category centroid)
+
+### Comparison: Original Plan vs Enhanced
+
+| Gap | Original Approach | Neumann-Enhanced |
+|-----|-------------------|------------------|
+| Weak dedup | Hybrid Jaccard + LLM escalation | Three-tier geometric (0.1/0.5 thresholds) |
+| No relationships | Tags only | Graph edges with typed relationships |
+| Static consciousness | Session-adaptive rendering | Three-tier cache (exact/semantic/fallback) |
+| No rollback | None | Checkpoint before consolidation |
+| All memories equal | Pinning/priority | Hot/cold tiers + archetype compression |
