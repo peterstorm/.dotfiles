@@ -2,7 +2,7 @@
  * Task Planner Plugin for OpenCode
  *
  * This plugin enforces structured task execution following the task-planner
- * workflow: brainstorm → specify → clarify → architecture → decompose → execute
+ * workflow: brainstorm -> specify -> clarify -> architecture -> decompose -> execute
  *
  * It provides:
  * - Blocking of direct Edit/Write during orchestration (Phase 1)
@@ -26,6 +26,9 @@ import { updateTaskStatus } from "./hooks/update-task-status.js";
 import { verifyNewTests } from "./hooks/verify-new-tests.js";
 import { storeReviewFindings, isReviewContent, } from "./hooks/store-review-findings.js";
 import { parseSpecCheck, isSpecCheckContent, } from "./hooks/parse-spec-check.js";
+// Wave gate functions are used by the /wave-gate skill, not plugin hooks
+// Re-exported for skill access
+export { completeWaveGate, isWaveImplementationComplete, } from "./hooks/complete-wave-gate.js";
 import { PhaseAdvancementDebouncer, MessageBuffer, } from "./utils/debounce.js";
 import { extractTaskIdFromArgs } from "./utils/task-id-extractor.js";
 // ============================================================================
@@ -65,13 +68,17 @@ let currentTaskContext = null;
  * Task Planner Plugin factory function.
  *
  * This is the main entry point that OpenCode calls to initialize the plugin.
+ * Uses the official @opencode-ai/plugin types.
  */
-export const TaskPlannerPlugin = async (ctx) => {
-    console.log("[task-planner] Initializing plugin for:", ctx.directory);
+export const TaskPlannerPlugin = async ({ directory, worktree,
+// client and $ available for future use
+ }) => {
+    console.log("[task-planner] Initializing plugin for:", directory);
+    console.log("[task-planner] Worktree:", worktree);
     // Store project directory for use in hooks
-    projectDir = ctx.directory;
+    projectDir = directory;
     // Create state manager for this project
-    stateManager = new StateManager(ctx.directory);
+    stateManager = new StateManager(directory);
     // Initialize Phase 2 utilities
     phaseDebouncer = new PhaseAdvancementDebouncer();
     messageBuffer = new MessageBuffer();
@@ -81,24 +88,36 @@ export const TaskPlannerPlugin = async (ctx) => {
          *
          * Checks all tool invocations and blocks those that violate
          * the orchestration rules.
+         *
+         * OpenCode signature: (input, output) => Promise<void>
+         * - input: { tool, sessionID, callID }
+         * - output: { args } (mutable)
          */
-        "tool.execute.before": async (input) => {
+        "tool.execute.before": async (input, output) => {
             const taskGraph = await getTaskGraph();
+            // Convert to legacy format for existing hooks
+            const legacyInput = {
+                tool: input.tool,
+                args: output.args,
+            };
             // Check 1: Block direct edits during orchestration (Phase 1)
-            blockDirectEdits(input, taskGraph);
+            blockDirectEdits(legacyInput, taskGraph);
             // Check 2: Guard state files from Bash writes (Phase 1)
-            guardStateFile(input, taskGraph);
+            guardStateFile(legacyInput, taskGraph);
             // Check 3: Validate phase order for skill invocations (Phase 2)
-            validatePhaseOrder(input, taskGraph, projectDir);
+            validatePhaseOrder(legacyInput, taskGraph, projectDir);
             // Check 4: Validate task execution (wave order, dependencies, review gate) (Phase 3)
             if (input.tool.toLowerCase() === "task") {
-                const taskInput = input;
+                const taskInput = {
+                    tool: input.tool,
+                    args: output.args,
+                };
                 validateTaskExecution(taskInput, taskGraph);
                 // Track current task for status updates on completion
                 const taskId = extractTaskIdFromArgs(taskInput.args);
                 if (taskId && stateManager) {
                     currentTaskContext = {
-                        sessionId: "", // Will be populated on session.idle
+                        sessionId: input.sessionID,
                         taskId,
                         agentType: taskInput.args.subagent_type,
                         transcript: "", // Will be populated from message buffer
@@ -117,154 +136,152 @@ export const TaskPlannerPlugin = async (ctx) => {
          * Currently unused, but available for:
          * - Tracking successful operations
          * - Immediate post-task processing
+         *
+         * OpenCode signature: (input, output) => Promise<void>
+         * - input: { tool, sessionID, callID }
+         * - output: { title, output, metadata } (mutable)
          */
-        "tool.execute.after": async (_input, _result) => {
+        "tool.execute.after": async (_input, _output) => {
             // Reserved for future functionality
         },
         /**
-         * Session idle hook.
+         * Event handler for OpenCode events.
          *
-         * Triggered when the session has no active work.
-         * Used to:
-         * - Detect agent completion and advance phases
-         * - Update task status with test evidence
-         * - Verify new tests were written
+         * Handles session.idle and file.edited events.
          */
-        "session.idle": async ({ sessionId }) => {
-            const taskGraph = await getTaskGraph();
-            if (!taskGraph)
-                return;
-            if (!stateManager || !phaseDebouncer || !messageBuffer)
-                return;
-            // Get last assistant message for detection
-            const lastMessage = messageBuffer.getLastAssistantMessage();
-            if (!lastMessage)
-                return;
-            // Debounce rapid idle events
-            if (!phaseDebouncer.shouldProcess(lastMessage)) {
-                return;
-            }
-            console.log("[task-planner] Session idle detected:", sessionId);
-            // Phase 2: Check for phase completion and advance
-            try {
-                const phaseResult = await advancePhase(lastMessage, taskGraph, stateManager, projectDir);
-                if (phaseResult) {
-                    invalidateCache();
-                    console.log(`[task-planner] Phase advanced: ${phaseResult.completedPhase} → ${phaseResult.newPhase}`);
+        event: async ({ event }) => {
+            // Handle session.idle event
+            if (event.type === "session.idle") {
+                const taskGraph = await getTaskGraph();
+                if (!taskGraph)
+                    return;
+                if (!stateManager || !phaseDebouncer || !messageBuffer)
+                    return;
+                // Get last assistant message for detection
+                const lastMessage = messageBuffer.getLastAssistantMessage();
+                if (!lastMessage)
+                    return;
+                // Debounce rapid idle events
+                if (!phaseDebouncer.shouldProcess(lastMessage)) {
+                    return;
                 }
-            }
-            catch (error) {
-                console.error("[task-planner] Phase advancement error:", error);
-            }
-            // Phase 3: Update task status if a task was executing
-            if (currentTaskContext && taskGraph.current_phase === "execute") {
+                console.log("[task-planner] Session idle detected");
+                // Phase 2: Check for phase completion and advance
                 try {
-                    // Build completion context from buffered messages
-                    const completionContext = {
-                        ...currentTaskContext,
-                        sessionId,
-                        transcript: messageBuffer.getFullTranscript(),
-                        filesModified: stateManager.getFilesModified(),
-                    };
-                    // Update task status with test evidence
-                    const statusResult = await updateTaskStatus(completionContext, taskGraph, stateManager);
-                    if (statusResult) {
+                    const phaseResult = await advancePhase(lastMessage, taskGraph, stateManager, projectDir);
+                    if (phaseResult) {
                         invalidateCache();
-                        console.log(`[task-planner] Task ${statusResult.taskId} status updated`);
-                        // Verify new tests were written (if required)
-                        // Note: This would need git diff - simplified for now
-                        await verifyNewTests(completionContext, taskGraph, stateManager, "" // Would be git diff output in full implementation
-                        );
-                        if (statusResult.waveComplete) {
-                            console.log(`[task-planner] Wave ${taskGraph.current_wave} implementation complete!`);
-                            console.log("[task-planner] Run /wave-gate to proceed");
+                        console.log(`[task-planner] Phase advanced: ${phaseResult.completedPhase} -> ${phaseResult.newPhase}`);
+                    }
+                }
+                catch (error) {
+                    console.error("[task-planner] Phase advancement error:", error);
+                }
+                // Phase 3: Update task status if a task was executing
+                if (currentTaskContext && taskGraph.current_phase === "execute") {
+                    try {
+                        // Build completion context from buffered messages
+                        const completionContext = {
+                            ...currentTaskContext,
+                            transcript: messageBuffer.getFullTranscript(),
+                            filesModified: stateManager.getFilesModified(),
+                        };
+                        // Update task status with test evidence
+                        const statusResult = await updateTaskStatus(completionContext, taskGraph, stateManager);
+                        if (statusResult) {
+                            invalidateCache();
+                            console.log(`[task-planner] Task ${statusResult.taskId} status updated`);
+                            // Verify new tests were written (if required)
+                            // Note: This would need git diff - simplified for now
+                            await verifyNewTests(completionContext, taskGraph, stateManager, "" // Would be git diff output in full implementation
+                            );
+                            if (statusResult.waveComplete) {
+                                console.log(`[task-planner] Wave ${taskGraph.current_wave} implementation complete!`);
+                                console.log("[task-planner] Run /wave-gate to proceed");
+                                // Mark wave implementation as complete in wave_gates
+                                await stateManager.updateWaveGate(taskGraph.current_wave, {
+                                    impl_complete: true,
+                                });
+                                invalidateCache();
+                            }
+                        }
+                        // Clear task context after processing
+                        currentTaskContext = null;
+                        stateManager.clearFilesModified();
+                    }
+                    catch (error) {
+                        console.error("[task-planner] Task status update error:", error);
+                    }
+                }
+                phaseDebouncer.markProcessed();
+            }
+            // Handle file.edited event
+            if (event.type === "file.edited") {
+                const fileEvent = event;
+                const path = fileEvent.properties?.file;
+                if (!stateManager || !path)
+                    return;
+                // Track the edit
+                stateManager.trackFileEdit(path);
+                // Invalidate cache if state file was edited externally
+                if (path.includes(".opencode/state/")) {
+                    cacheValid = false;
+                }
+                console.log("[task-planner] File edited:", path);
+            }
+            // Handle message.updated event
+            if (event.type === "message.updated") {
+                const msgEvent = event;
+                const role = msgEvent.properties?.role;
+                const content = msgEvent.properties?.content;
+                // Only process assistant messages
+                if (role !== "assistant" || !content)
+                    return;
+                // Buffer the message for session.idle fallback
+                if (messageBuffer) {
+                    messageBuffer.push(role, content);
+                }
+                const taskGraph = await getTaskGraph();
+                if (!taskGraph)
+                    return;
+                if (!stateManager)
+                    return;
+                // Phase 2: Check for phase completion and advance
+                try {
+                    const phaseResult = await advancePhase(content, taskGraph, stateManager, projectDir);
+                    if (phaseResult) {
+                        invalidateCache();
+                        console.log(`[task-planner] Phase advanced: ${phaseResult.completedPhase} -> ${phaseResult.newPhase}`);
+                    }
+                }
+                catch (error) {
+                    console.error("[task-planner] Phase advancement error:", error);
+                }
+                // Phase 4: Check for review findings
+                if (isReviewContent(content)) {
+                    try {
+                        const reviewResult = await storeReviewFindings(content, taskGraph, stateManager, currentTaskContext?.taskId);
+                        if (reviewResult) {
+                            invalidateCache();
+                            console.log(`[task-planner] Review findings stored for ${reviewResult.taskId}: ${reviewResult.verdict}`);
                         }
                     }
-                    // Clear task context after processing
-                    currentTaskContext = null;
-                    stateManager.clearFilesModified();
-                }
-                catch (error) {
-                    console.error("[task-planner] Task status update error:", error);
-                }
-            }
-            phaseDebouncer.markProcessed();
-        },
-        /**
-         * File edited hook.
-         *
-         * Tracks files modified during task execution.
-         * Used for:
-         * - Verifying new tests were written
-         * - Associating file changes with tasks
-         */
-        "file.edited": async ({ path }) => {
-            if (!stateManager)
-                return;
-            // Track the edit
-            stateManager.trackFileEdit(path);
-            // Invalidate cache if state file was edited externally
-            if (path.includes(".opencode/state/")) {
-                cacheValid = false;
-            }
-            console.log("[task-planner] File edited:", path);
-        },
-        /**
-         * Message updated hook.
-         *
-         * Monitors messages for:
-         * - Phase completion signals (Phase 2)
-         * - Review findings (CRITICAL/ADVISORY markers) (Phase 4)
-         * - Spec-check findings (Phase 4)
-         */
-        "message.updated": async ({ role, content }) => {
-            // Only process assistant messages
-            if (role !== "assistant")
-                return;
-            // Buffer the message for session.idle fallback
-            if (messageBuffer) {
-                messageBuffer.push(role, content);
-            }
-            const taskGraph = await getTaskGraph();
-            if (!taskGraph)
-                return;
-            if (!stateManager)
-                return;
-            // Phase 2: Check for phase completion and advance
-            try {
-                const phaseResult = await advancePhase(content, taskGraph, stateManager, projectDir);
-                if (phaseResult) {
-                    invalidateCache();
-                    console.log(`[task-planner] Phase advanced: ${phaseResult.completedPhase} → ${phaseResult.newPhase}`);
-                }
-            }
-            catch (error) {
-                console.error("[task-planner] Phase advancement error:", error);
-            }
-            // Phase 4: Check for review findings
-            if (isReviewContent(content)) {
-                try {
-                    const reviewResult = await storeReviewFindings(content, taskGraph, stateManager, currentTaskContext?.taskId);
-                    if (reviewResult) {
-                        invalidateCache();
-                        console.log(`[task-planner] Review findings stored for ${reviewResult.taskId}: ${reviewResult.verdict}`);
+                    catch (error) {
+                        console.error("[task-planner] Review findings error:", error);
                     }
                 }
-                catch (error) {
-                    console.error("[task-planner] Review findings error:", error);
-                }
-            }
-            // Phase 4: Check for spec-check findings
-            if (isSpecCheckContent(content)) {
-                try {
-                    const specResult = await parseSpecCheck(content, taskGraph, stateManager);
-                    if (specResult) {
-                        invalidateCache();
-                        console.log(`[task-planner] Spec-check results: ${specResult.verdict} (${specResult.criticalCount} critical)`);
+                // Phase 4: Check for spec-check findings
+                if (isSpecCheckContent(content)) {
+                    try {
+                        const specResult = await parseSpecCheck(content, taskGraph, stateManager);
+                        if (specResult) {
+                            invalidateCache();
+                            console.log(`[task-planner] Spec-check results: ${specResult.verdict} (${specResult.criticalCount} critical)`);
+                        }
                     }
-                }
-                catch (error) {
-                    console.error("[task-planner] Spec-check parsing error:", error);
+                    catch (error) {
+                        console.error("[task-planner] Spec-check parsing error:", error);
+                    }
                 }
             }
         },

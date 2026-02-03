@@ -227,8 +227,67 @@ export interface AgentContext {
 
 // ============================================================================
 // Plugin Event Types (OpenCode-specific)
+// These types match the @opencode-ai/plugin API
 // ============================================================================
 
+/**
+ * Input for tool.execute.before hook.
+ * This is the first parameter passed by OpenCode.
+ */
+export interface ToolExecuteBeforeInput {
+  /** Tool name being invoked */
+  tool: string;
+
+  /** Session ID */
+  sessionID: string;
+
+  /** Call ID for this invocation */
+  callID: string;
+}
+
+/**
+ * Output for tool.execute.before hook.
+ * This is the second parameter passed by OpenCode - mutable.
+ */
+export interface ToolExecuteBeforeOutput {
+  /** Tool arguments (can be modified) */
+  args: Record<string, unknown>;
+}
+
+/**
+ * Input for tool.execute.after hook.
+ * This is the first parameter passed by OpenCode.
+ */
+export interface ToolExecuteAfterInput {
+  /** Tool name being invoked */
+  tool: string;
+
+  /** Session ID */
+  sessionID: string;
+
+  /** Call ID for this invocation */
+  callID: string;
+}
+
+/**
+ * Output for tool.execute.after hook.
+ * This is the second parameter passed by OpenCode - mutable.
+ */
+export interface ToolExecuteAfterOutput {
+  /** Title of the tool execution */
+  title: string;
+
+  /** Tool output */
+  output: string;
+
+  /** Additional metadata */
+  metadata: unknown;
+}
+
+/**
+ * Legacy type for internal hook functions.
+ * Used by existing hook implementations that take combined input.
+ */
 export interface ToolExecuteInput {
   /** Tool name being invoked */
   tool: string;

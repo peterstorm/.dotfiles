@@ -26,24 +26,41 @@ export function validatePhaseOrder(input, taskGraph, projectDir) {
     if (!taskGraph) {
         return;
     }
-    // 2. Only check "skill" tool invocations
-    if (input.tool.toLowerCase() !== "skill") {
+    // 2. Check for skill tool invocations (OpenCode uses "skill" tool)
+    const toolName = input.tool.toLowerCase();
+    // Handle "skill" tool invocations (skill loading)
+    if (toolName === "skill") {
+        const skillName = input.args.name;
+        if (typeof skillName !== "string" || !skillName) {
+            return;
+        }
+        validateSkillPhase(skillName, taskGraph, projectDir);
         return;
     }
-    // 3. Extract skill name from args
-    const skillName = input.args.name;
-    if (typeof skillName !== "string" || !skillName) {
+    // Handle "task" tool invocations (agent spawning) - check for phase-related agents
+    if (toolName === "task") {
+        const subagentType = input.args.subagent_type;
+        const prompt = input.args.prompt;
+        // Try to detect phase from agent type or prompt
+        if (typeof subagentType === "string" && subagentType) {
+            validateAgentPhase(subagentType, String(prompt || ""), taskGraph, projectDir);
+        }
         return;
     }
-    // 4. Normalize skill name for comparison (case-insensitive)
+}
+/**
+ * Validate skill invocation against phase order.
+ */
+function validateSkillPhase(skillName, taskGraph, projectDir) {
+    // Normalize skill name for comparison (case-insensitive)
     const normalizedSkillName = skillName.toLowerCase();
-    // 5. Check if skill is phase-exempt (utility skills)
+    // Check if skill is phase-exempt (utility skills)
     if (isPhaseExempt(normalizedSkillName)) {
         return;
     }
-    // 6. Map skill to target phase
+    // Map skill to target phase
     const targetPhase = getPhaseForSkill(normalizedSkillName);
-    // 7. Handle unknown skills
+    // Handle unknown skills
     if (!targetPhase) {
         // Allow unknown skills during execute phase (e.g., custom domain skills)
         if (taskGraph.current_phase === "execute") {
@@ -51,18 +68,85 @@ export function validatePhaseOrder(input, taskGraph, projectDir) {
         }
         throw new Error(ERRORS.UNKNOWN_SKILL_BLOCKED(skillName));
     }
-    // 8. Check transition validity
+    // Check transition validity
     const currentPhase = taskGraph.current_phase;
     if (!isValidTransition(currentPhase, targetPhase, taskGraph.skipped_phases)) {
         throw new Error(ERRORS.PHASE_ORDER_VIOLATION(currentPhase, targetPhase));
     }
-    // 9. Check artifact prerequisites
+    // Check artifact prerequisites
     const prereq = checkArtifactPrerequisites(targetPhase, taskGraph, projectDir);
     if (!prereq.valid) {
         throw new Error(ERRORS.MISSING_ARTIFACT(targetPhase, prereq.missing ?? "unknown prerequisite"));
     }
-    // Validation passed - skill invocation is allowed
+    // Validation passed
     console.log(`[task-planner] Phase validation passed: ${currentPhase} → ${targetPhase} (skill: ${skillName})`);
+}
+/**
+ * Validate agent spawn against phase order.
+ * Maps agent types to their corresponding phases.
+ */
+function validateAgentPhase(agentType, prompt, taskGraph, projectDir) {
+    // Map agent type to phase
+    const targetPhase = getPhaseForAgent(agentType, prompt);
+    // Unknown agents are allowed (might be custom/domain-specific)
+    if (!targetPhase) {
+        return;
+    }
+    // Check transition validity
+    const currentPhase = taskGraph.current_phase;
+    if (!isValidTransition(currentPhase, targetPhase, taskGraph.skipped_phases)) {
+        throw new Error(ERRORS.PHASE_ORDER_VIOLATION(currentPhase, targetPhase));
+    }
+    // Check artifact prerequisites
+    const prereq = checkArtifactPrerequisites(targetPhase, taskGraph, projectDir);
+    if (!prereq.valid) {
+        throw new Error(ERRORS.MISSING_ARTIFACT(targetPhase, prereq.missing ?? "unknown prerequisite"));
+    }
+    console.log(`[task-planner] Phase validation passed: ${currentPhase} → ${targetPhase} (agent: ${agentType})`);
+}
+/**
+ * Map agent type to workflow phase.
+ */
+function getPhaseForAgent(agentType, prompt) {
+    const normalizedAgent = agentType.toLowerCase();
+    // Direct agent type mapping
+    const agentPhaseMap = {
+        "brainstorm-agent": "brainstorm",
+        "specify-agent": "specify",
+        "clarify-agent": "clarify",
+        "architecture-agent": "architecture",
+        // Implementation agents
+        "code-implementer-agent": "execute",
+        "java-test-agent": "execute",
+        "ts-test-agent": "execute",
+        "frontend-agent": "execute",
+        "security-agent": "execute",
+        "k8s-agent": "execute",
+        "keycloak-agent": "execute",
+        "dotfiles-agent": "execute",
+        // Review agents
+        "spec-check-invoker": "execute",
+        "review-invoker": "execute",
+        "task-reviewer": "execute",
+    };
+    if (agentPhaseMap[normalizedAgent]) {
+        return agentPhaseMap[normalizedAgent];
+    }
+    // Fallback: try to detect phase from prompt content
+    const promptLower = prompt.toLowerCase();
+    if (/brainstorm|explore.*intent|refine.*idea/i.test(promptLower)) {
+        return "brainstorm";
+    }
+    if (/specify|specification|requirements|spec\.md/i.test(promptLower)) {
+        return "specify";
+    }
+    if (/clarify|resolve.*markers|needs clarification/i.test(promptLower)) {
+        return "clarify";
+    }
+    if (/architecture|design|plan\.md/i.test(promptLower)) {
+        return "architecture";
+    }
+    return undefined;
 }
 // ============================================================================
 // Phase Transition Validation

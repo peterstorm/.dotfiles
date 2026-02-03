@@ -2,7 +2,7 @@
  * Task Planner Plugin for OpenCode
  *
  * This plugin enforces structured task execution following the task-planner
- * workflow: brainstorm → specify → clarify → architecture → decompose → execute
+ * workflow: brainstorm -> specify -> clarify -> architecture -> decompose -> execute
  *
  * It provides:
  * - Blocking of direct Edit/Write during orchestration (Phase 1)
@@ -16,47 +16,15 @@
  *
  * Converted from Claude Code hooks to OpenCode plugin system.
  */
+import type { Plugin } from "@opencode-ai/plugin";
 import { StateManager } from "./utils/state-manager.js";
-import type { ToolExecuteInput, TaskCompletionContext } from "./types.js";
-/**
- * OpenCode plugin context passed to the plugin factory.
- */
-interface PluginContext {
-    /** Current project directory */
-    directory: string;
-    /** OpenCode version */
-    version?: string;
-}
-/**
- * OpenCode plugin event handlers.
- */
-interface PluginEventHandlers {
-    /** Called before a tool executes */
-    "tool.execute.before"?: (input: ToolExecuteInput) => Promise<void> | void;
-    /** Called after a tool executes */
-    "tool.execute.after"?: (input: ToolExecuteInput, result: unknown) => Promise<void> | void;
-    /** Called when session becomes idle */
-    "session.idle"?: (context: {
-        sessionId: string;
-    }) => Promise<void> | void;
-    /** Called when a file is edited */
-    "file.edited"?: (context: {
-        path: string;
-    }) => Promise<void> | void;
-    /** Called when a message is updated */
-    "message.updated"?: (context: {
-        role: string;
-        content: string;
-    }) => Promise<void> | void;
-}
-/**
- * OpenCode plugin type.
- */
-type Plugin = (ctx: PluginContext) => Promise<PluginEventHandlers>;
+export { completeWaveGate, isWaveImplementationComplete, } from "./hooks/complete-wave-gate.js";
+import type { TaskCompletionContext } from "./types.js";
 /**
  * Task Planner Plugin factory function.
  *
  * This is the main entry point that OpenCode calls to initialize the plugin.
+ * Uses the official @opencode-ai/plugin types.
  */
 export declare const TaskPlannerPlugin: Plugin;
 /**

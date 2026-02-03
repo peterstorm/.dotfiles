@@ -49,14 +49,17 @@ export const ARTIFACT_PHASES = [
 export const SKILL_TO_PHASE = {
     // Brainstorm phase
     brainstorming: "brainstorm",
-    // Specify phase
+    // Specify phase (Claude and OpenCode variants)
     specify: "specify",
-    // Clarify phase
+    "opencode-specify": "specify",
+    // Clarify phase (Claude and OpenCode variants)
     clarify: "clarify",
+    "opencode-clarify": "clarify",
     // Architecture phase
     "architecture-tech-lead": "architecture",
-    // Decompose phase
+    // Decompose phase (Claude and OpenCode variants)
     "task-planner": "decompose",
+    "opencode-task-planner": "decompose",
     // Execute phase (implementation skills)
     "code-implementer": "execute",
     "java-test-engineer": "execute",
@@ -68,10 +71,12 @@ export const SKILL_TO_PHASE = {
     "dotfiles-expert": "execute",
     "remotion-best-practices": "execute",
     "vercel-react-best-practices": "execute",
-    // Execute phase (review/validation skills)
+    // Execute phase (review/validation skills - Claude and OpenCode variants)
     "spec-check": "execute",
+    "opencode-spec-check": "execute",
     "review-skill": "execute",
     "wave-gate": "execute",
+    "opencode-wave-gate": "execute",
 };
 /** Skills exempt from phase validation (utility skills) */
 export const PHASE_EXEMPT_SKILLS = [
