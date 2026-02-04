@@ -125,6 +125,9 @@ export function isSpecCheckContent(content) {
         /alignment\s+(?:analysis|check|verification)/i,
         /spec-check\s+(?:results|findings|complete)/i,
         /verifying\s+(?:spec(?:ification)?\s+)?alignment/i,
+        /SPEC_CHECK_WAVE:/i,
+        /SPEC_CHECK_VERDICT:/i,
+        /SPEC_CHECK_CRITICAL_COUNT:/i,
     ];
     return specCheckPatterns.some((pattern) => pattern.test(content));
 }
@@ -133,10 +136,11 @@ export function isSpecCheckContent(content) {
  */
 export function determineVerdict(content, criticalCount) {
     // Explicit verdict in content takes precedence
-    if (/verdict[:\s]+PASSED/i.test(content)) {
+    // Match both "verdict: PASSED" and "SPEC_CHECK_VERDICT: PASSED"
+    if (/(?:SPEC_CHECK_)?verdict[:\s]+PASSED/i.test(content)) {
         return "PASSED";
     }
-    if (/verdict[:\s]+BLOCKED/i.test(content)) {
+    if (/(?:SPEC_CHECK_)?verdict[:\s]+BLOCKED/i.test(content)) {
         return "BLOCKED";
     }
     // Otherwise, based on critical count

@@ -145,6 +145,9 @@ export function isReviewContent(content) {
         /##?\s*(?:Code\s+)?Review/i,
         /##?\s*Review\s+(?:Summary|Findings|Results)/i,
         /Review\s+(?:complete|finished|done)/i,
+        /REVIEW_TASK:/i,
+        /REVIEW_VERDICT:/i,
+        /REVIEW_CRITICAL_COUNT:/i,
     ];
     return reviewPatterns.some((pattern) => pattern.test(content));
 }
@@ -161,6 +164,8 @@ export function isReviewPassMessage(content) {
         /looks\s+good\s+to\s+me/i,
         /code\s+(?:looks\s+)?good/i,
         /approved\s+(?:for\s+merge|to\s+proceed)/i,
+        /REVIEW_VERDICT:\s*PASSED/i,
+        /REVIEW_CRITICAL_COUNT:\s*0/i,
     ];
     return passPatterns.some((pattern) => pattern.test(content));
 }

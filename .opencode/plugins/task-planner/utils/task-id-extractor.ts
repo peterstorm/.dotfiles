@@ -24,6 +24,12 @@
 const CANONICAL_PATTERN = /\*\*Task ID:\*\*\s?(T\d+)/i;
 
 /**
+ * Pattern 1b: REVIEW_TASK: T1 (review agent output format)
+ * Handles optional bold markers: **REVIEW_TASK:** T1
+ */
+const REVIEW_TASK_PATTERN = /\*{0,2}REVIEW_TASK:\*{0,2}\s*(T\d+)/i;
+
+/**
  * Pattern 2: Plain Task ID: T1 (case insensitive)
  */
 const PLAIN_TASK_ID_PATTERN = /Task ID:?\s?(T\d+)/i;
@@ -73,6 +79,10 @@ export function extractTaskId(text: string): string | null {
   // Pattern 1: Canonical **Task ID:** T1
   const canonical = text.match(CANONICAL_PATTERN);
   if (canonical?.[1]) return canonical[1].toUpperCase();
+
+  // Pattern 1b: REVIEW_TASK: T1 (review agent output)
+  const reviewTask = text.match(REVIEW_TASK_PATTERN);
+  if (reviewTask?.[1]) return reviewTask[1].toUpperCase();
 
   // Pattern 2: Plain Task ID: T1
   const plainTaskId = text.match(PLAIN_TASK_ID_PATTERN);

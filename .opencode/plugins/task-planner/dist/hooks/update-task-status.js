@@ -142,17 +142,29 @@ export function extractTestEvidence(transcript) {
             testCount: parseInt(vitestPassed[1], 10),
         };
     }
-    // Try Mocha (Node)
-    const mochaPassing = cleanTranscript.match(TEST_EVIDENCE_PATTERNS.mocha.passing);
+    // Try Mocha (Node) - use flexible pattern that matches "N ... passing"
+    // First try exact match, then flexible match taking largest number
+    const exactMocha = cleanTranscript.match(/(\d+)\s+passing/i);
+    const flexibleMochaMatches = [...cleanTranscript.matchAll(/(\d+)(?:\s+\w+)*\s+passing/gi)];
+    // Find best mocha match (largest count)
+    let bestMochaMatch = exactMocha;
+    if (!bestMochaMatch && flexibleMochaMatches.length > 0) {
+        bestMochaMatch = flexibleMochaMatches[0];
+        for (const m of flexibleMochaMatches) {
+            if (parseInt(m[1] ?? "0", 10) > parseInt(bestMochaMatch[1] ?? "0", 10)) {
+                bestMochaMatch = m;
+            }
+        }
+    }
     const mochaFailing = cleanTranscript.match(TEST_EVIDENCE_PATTERNS.mocha.failing);
-    if (mochaPassing?.[0] && mochaPassing[1]) {
+    if (bestMochaMatch?.[0] && bestMochaMatch[1]) {
         const failCount = mochaFailing?.[1] ? parseInt(mochaFailing[1], 10) : 0;
         if (failCount === 0) {
             return {
                 passed: true,
                 framework: "mocha",
-                evidence: `node: ${mochaPassing[0]}`,
-                testCount: parseInt(mochaPassing[1], 10),
+                evidence: `node: ${bestMochaMatch[0]}`,
+                testCount: parseInt(bestMochaMatch[1], 10),
             };
         }
     }

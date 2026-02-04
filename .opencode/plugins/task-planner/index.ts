@@ -17,7 +17,7 @@
  * Converted from Claude Code hooks to OpenCode plugin system.
  */
 
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import { StateManager } from "./utils/state-manager.js";
 import { blockDirectEdits } from "./hooks/block-direct-edits.js";
 import { guardStateFile } from "./hooks/guard-state-file.js";
@@ -93,6 +93,75 @@ let cacheValid = false;
  */
 let currentTaskContext: TaskCompletionContext | null = null;
 
+/**
+ * Set of session IDs that have active task executions.
+ * Used to allow subagent edits during orchestration.
+ */
+let activeTaskSessions: Set<string> = new Set();
+
+/**
+ * Shell instance for running git commands.
+ * Set during plugin initialization.
+ */
+let shell: PluginInput["$"] | null = null;
+
+// ============================================================================
+// Git Diff Helper
+// ============================================================================
+
+/**
+ * Get git diff for the specified files.
+ * Returns the diff content showing added/removed lines.
+ * Handles both tracked (modified) and untracked (new) files.
+ */
+async function getGitDiff(files: string[]): Promise<string> {
+  if (!shell || files.length === 0) {
+    return "";
+  }
+
+  const diffs: string[] = [];
+
+  try {
+    for (const file of files) {
+      // Check if file is tracked or untracked
+      const isTracked = await shell`git ls-files --error-unmatch ${file}`
+        .quiet()
+        .nothrow();
+      
+      if (isTracked.exitCode === 0) {
+        // File is tracked - get normal diff
+        const diff = await shell`git diff HEAD -- ${file}`.quiet().nothrow().text();
+        if (diff) {
+          diffs.push(diff);
+        }
+      } else {
+        // File is untracked (new) - simulate diff by prefixing all lines with +
+        try {
+          const content = await Bun.file(file).text();
+          const lines = content.split("\n");
+          const simulatedDiff = [
+            `diff --git a/${file} b/${file}`,
+            `new file mode 100644`,
+            `--- /dev/null`,
+            `+++ b/${file}`,
+            `@@ -0,0 +1,${lines.length} @@`,
+            ...lines.map((line: string) => `+${line}`),
+          ].join("\n");
+          diffs.push(simulatedDiff);
+        } catch {
+          // File might not exist, skip
+          console.log(`[task-planner] Could not read untracked file: ${file}`);
+        }
+      }
+    }
+
+    return diffs.join("\n");
+  } catch (error) {
+    console.error("[task-planner] Git diff error:", error);
+    return "";
+  }
+}
+
 // ============================================================================
 // Plugin Factory
 // ============================================================================
@@ -106,13 +175,16 @@ let currentTaskContext: TaskCompletionContext | null = null;
 export const TaskPlannerPlugin: Plugin = async ({
   directory,
   worktree,
-  // client and $ available for future use
+  $,
 }) => {
   console.log("[task-planner] Initializing plugin for:", directory);
   console.log("[task-planner] Worktree:", worktree);
 
   // Store project directory for use in hooks
   projectDir = directory;
+
+  // Store shell for git commands
+  shell = $;
 
   // Create state manager for this project
   stateManager = new StateManager(directory);
@@ -145,7 +217,18 @@ export const TaskPlannerPlugin: Plugin = async ({
       };
 
       // Check 1: Block direct edits during orchestration (Phase 1)
-      blockDirectEdits(legacyInput, taskGraph);
+      // BUT allow edits when:
+      // - A task is currently executing (currentTaskContext is set), OR
+      // - This session is part of an active task execution, OR  
+      // - Any task sessions are active (subagents share plugin but different session), OR
+      // - Tasks are marked as executing in persisted state (subagents in separate processes)
+      const isTaskSession = 
+        activeTaskSessions.size > 0 || 
+        currentTaskContext !== null ||
+        (taskGraph?.executing_tasks?.length ?? 0) > 0;
+      if (!isTaskSession) {
+        blockDirectEdits(legacyInput, taskGraph);
+      }
 
       // Check 2: Guard state files from Bash writes (Phase 1)
       guardStateFile(legacyInput, taskGraph);
@@ -162,14 +245,22 @@ export const TaskPlannerPlugin: Plugin = async ({
         validateTaskExecution(taskInput, taskGraph);
 
         // Track current task for status updates on completion
+        // BUT skip for review/spec-check agents - they don't update task status
+        const agentType = taskInput.args.subagent_type?.toLowerCase() ?? "";
+        const isReviewAgent = 
+          agentType.includes("review") || 
+          agentType.includes("spec-check") ||
+          agentType === "general"; // general agents used for verification don't track
+        
         const taskId = extractTaskIdFromArgs(taskInput.args);
-        if (taskId && stateManager) {
+        if (taskId && stateManager && !isReviewAgent) {
           currentTaskContext = {
             sessionId: input.sessionID,
             taskId,
             agentType: taskInput.args.subagent_type,
             transcript: "", // Will be populated from message buffer
           };
+          activeTaskSessions.add(input.sessionID);
 
           // Mark task as executing in state
           await stateManager.markTaskExecuting(taskId);
@@ -177,6 +268,10 @@ export const TaskPlannerPlugin: Plugin = async ({
           invalidateCache();
 
           console.log(`[task-planner] Task ${taskId} execution started`);
+        } else if (taskId && isReviewAgent) {
+          // Still track session for edit blocking, but don't update task status
+          activeTaskSessions.add(input.sessionID);
+          console.log(`[task-planner] Review/verification agent for ${taskId} (no status update)`);
         }
       }
     },
@@ -184,19 +279,128 @@ export const TaskPlannerPlugin: Plugin = async ({
     /**
      * Post-tool execution hook.
      *
-     * Currently unused, but available for:
-     * - Tracking successful operations
-     * - Immediate post-task processing
-     *
-     * OpenCode signature: (input, output) => Promise<void>
-     * - input: { tool, sessionID, callID }
-     * - output: { title, output, metadata } (mutable)
+     * Captures Task tool output and updates task status immediately.
+     * This is more reliable than session.idle for test evidence extraction
+     * because we have direct access to the agent's output.
      */
     "tool.execute.after": async (
-      _input: ToolExecuteAfterInput,
-      _output: ToolExecuteAfterOutput
+      input: ToolExecuteAfterInput,
+      output: ToolExecuteAfterOutput
     ) => {
-      // Reserved for future functionality
+      // Only process Task tool completions
+      if (input.tool.toLowerCase() !== "task") return;
+      if (!stateManager) return;
+
+      const taskGraph = await getTaskGraph();
+      if (!taskGraph) return;
+
+      const taskOutput = output.output ?? "";
+
+      // Phase 4: Check Task output for review/spec-check content
+      // This handles subagent outputs that don't trigger message.updated events
+      try {
+        // Check for review findings in Task output
+        if (isReviewContent(taskOutput)) {
+          console.log("[task-planner] Review content detected in Task output");
+          const reviewResult = await storeReviewFindings(
+            taskOutput,
+            taskGraph,
+            stateManager,
+            undefined // Let the parser extract task ID from content
+          );
+
+          if (reviewResult) {
+            invalidateCache();
+            console.log(
+              `[task-planner] Review findings stored for ${reviewResult.taskId}: ${reviewResult.verdict}`
+            );
+          }
+        }
+
+        // Check for spec-check findings in Task output
+        if (isSpecCheckContent(taskOutput)) {
+          console.log("[task-planner] Spec-check content detected in Task output");
+          const specResult = await parseSpecCheck(
+            taskOutput,
+            taskGraph,
+            stateManager
+          );
+
+          if (specResult) {
+            invalidateCache();
+            console.log(
+              `[task-planner] Spec-check results: ${specResult.verdict} (${specResult.criticalCount} critical)`
+            );
+          }
+        }
+      } catch (error) {
+        console.error("[task-planner] Review/spec-check parsing error:", error);
+      }
+
+      // Phase 3: Update task status for implementation agents
+      // Only process if we have a tracked task context (implementation agents only)
+      if (!currentTaskContext) return;
+      if (taskGraph.current_phase !== "execute") return;
+
+      console.log(
+        `[task-planner] Task tool completed for ${currentTaskContext.taskId}`
+      );
+
+      try {
+        // Build completion context from Task output
+        const completionContext: TaskCompletionContext = {
+          ...currentTaskContext,
+          transcript: taskOutput, // Use Task tool's output directly
+          filesModified: stateManager.getFilesModified(),
+        };
+
+        // Update task status with test evidence
+        const statusResult = await updateTaskStatus(
+          completionContext,
+          taskGraph,
+          stateManager
+        );
+
+        if (statusResult) {
+          invalidateCache();
+          console.log(
+            `[task-planner] Task ${statusResult.taskId} status updated via tool.execute.after`
+          );
+
+          // Verify new tests were written (if required)
+          // Get git diff for modified files to detect new test methods
+          const testFiles = (completionContext.filesModified ?? []).filter(
+            (f) => f.includes(".test.") || f.includes(".spec.") || f.includes("/test/")
+          );
+          const diffContent = await getGitDiff(testFiles);
+          await verifyNewTests(
+            completionContext,
+            taskGraph,
+            stateManager,
+            diffContent
+          );
+
+          if (statusResult.waveComplete) {
+            console.log(
+              `[task-planner] Wave ${taskGraph.current_wave} implementation complete!`
+            );
+            console.log("[task-planner] Run /wave-gate to proceed");
+
+            await stateManager.updateWaveGate(taskGraph.current_wave, {
+              impl_complete: true,
+            });
+            invalidateCache();
+          }
+        }
+
+        // Remove from active sessions before clearing context
+        activeTaskSessions.delete(currentTaskContext.sessionId);
+        // Clear task context after processing
+        currentTaskContext = null;
+        stateManager.clearFilesModified();
+      } catch (error) {
+        console.error("[task-planner] Task status update error:", error);
+      }
     },
 
     /**
@@ -265,12 +469,16 @@ export const TaskPlannerPlugin: Plugin = async ({
               );
 
               // Verify new tests were written (if required)
-              // Note: This would need git diff - simplified for now
+              // Get git diff for modified files to detect new test methods
+              const testFiles = (completionContext.filesModified ?? []).filter(
+                (f) => f.includes(".test.") || f.includes(".spec.") || f.includes("/test/")
+              );
+              const diffContent = await getGitDiff(testFiles);
               await verifyNewTests(
                 completionContext,
                 taskGraph,
                 stateManager,
-                "" // Would be git diff output in full implementation
+                diffContent
               );
 
               if (statusResult.waveComplete) {
@@ -287,6 +495,10 @@ export const TaskPlannerPlugin: Plugin = async ({
               }
             }
 
+            // Remove from active sessions before clearing context
+            if (currentTaskContext?.sessionId) {
+              activeTaskSessions.delete(currentTaskContext.sessionId);
+            }
             // Clear task context after processing
             currentTaskContext = null;
             stateManager.clearFilesModified();
@@ -407,14 +619,26 @@ export const TaskPlannerPlugin: Plugin = async ({
 
 /**
  * Get the current task graph, using cache when valid.
+ * 
+ * IMPORTANT: Always checks file existence before returning cached data,
+ * because external processes (like manual `rm`) can delete the file
+ * without triggering a file.edited event.
  */
 async function getTaskGraph(): Promise<TaskGraph | null> {
-  if (cacheValid && cachedTaskGraph !== undefined) {
-    return cachedTaskGraph;
-  }
-
   if (!stateManager) {
     return null;
+  }
+
+  // Always check file existence - cache can be stale if file deleted externally
+  const hasGraph = await stateManager.hasActiveTaskGraph();
+  if (!hasGraph) {
+    cachedTaskGraph = null;
+    cacheValid = false;
+    return null;
+  }
+
+  if (cacheValid && cachedTaskGraph !== undefined) {
+    return cachedTaskGraph;
   }
 
   cachedTaskGraph = await stateManager.load();

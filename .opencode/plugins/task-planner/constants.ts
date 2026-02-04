@@ -216,6 +216,7 @@ export const BASH_WRITE_PATTERNS: readonly RegExp[] = [
   /\bcp\b/,
   /\bmv\b/,
   /\brm\b/,
+  /\bunlink\b/,
   /\bsed\b.*-i/,
   /\bawk\b.*>/,
 ] as const;
@@ -253,13 +254,13 @@ export const TASK_ID_GLOBAL_PATTERN = /\b(?:T|Task\s*)(\d+)\b/gi;
 // ============================================================================
 
 /** Pattern to identify CRITICAL findings in review output */
-export const CRITICAL_FINDING_PATTERN = /^\s*(?:CRITICAL|🚨\s*CRITICAL):\s*(.+)$/gm;
+export const CRITICAL_FINDING_PATTERN = /^\s*\*{0,2}(?:CRITICAL|🚨\s*CRITICAL):\*{0,2}\s*(.+)$/gm;
 
 /** Pattern to identify ADVISORY findings in review output */
-export const ADVISORY_FINDING_PATTERN = /^\s*(?:ADVISORY|💡\s*ADVISORY):\s*(.+)$/gm;
+export const ADVISORY_FINDING_PATTERN = /^\s*\*{0,2}(?:ADVISORY|💡\s*ADVISORY):\*{0,2}\s*(.+)$/gm;
 
 /** Pattern to identify spec-check findings */
-export const SPEC_CHECK_FINDING_PATTERN = /^\s*\[(\w+)\]\s*(.+)$/gm;
+export const SPEC_CHECK_FINDING_PATTERN = /^\s*[-*]?\s*\*{0,2}\[(\w+)\]\*{0,2}\s*(.+)$/gm;
 
 // ============================================================================
 // Test Detection Patterns
@@ -331,8 +332,8 @@ export const TEST_EVIDENCE_PATTERNS = {
    * Vitest: "Tests X passed" or "Test Files X passed"
    */
   vitest: {
-    passed: /Tests?\s+(\d+)\s+passed/i,
-    failed: /Tests?\s+(\d+)\s+failed/i,
+    passed: /(?:Tests?|Test Files)\s+(\d+)\s+passed/i,
+    failed: /(?:Tests?|Test Files)\s+(\d+)\s+failed/i,
   },
 
   /**
