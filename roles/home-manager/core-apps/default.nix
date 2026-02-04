@@ -1,4 +1,4 @@
-{pkgs, config, lib, ...}:
+{pkgs, config, lib, inputs, ...}:
 {
 
   home.sessionVariables = {
@@ -24,6 +24,23 @@
     ./nix-direnv
   ];
 
+  programs.bash = {
+    enable = true;
+    initExtra = ''
+      if [ -z "$SSH_AUTH_SOCK" ] ; then
+        eval `ssh-agent -s`
+        ssh-add
+      fi
+    '';
+    shellAliases = {
+      lock = "i3lock -c 000000";
+      sus = "systemctl suspend";
+      warpc = "warp-cli connect";
+      warpd = "warp-cli disconnect";
+      claude = "claude --plugin-dir ~/.claude/plugins/obsidian";
+    };
+  };
+
   home.packages = with pkgs;[
     gh
     vscode
@@ -41,7 +58,8 @@
     obsidian
     docker-compose
     light
-    claude-code
+    inputs.llm-agents.packages.${pkgs.system}.claude-code
+    inputs.llm-agents.packages.${pkgs.system}.opencode
   ];
 
 }

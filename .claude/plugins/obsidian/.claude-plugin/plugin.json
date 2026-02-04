@@ -1,0 +1,8 @@
+{
+  "name": "obsidian",
+  "version": "0.1.0",
+  "description": "Obsidian vault management with Zettelkasten methodology, MOCs, atomic notes, and cross-domain linking",
+  "author": {
+    "name": "peterstorm"
+  }
+}

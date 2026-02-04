@@ -30,18 +30,6 @@
 
   virtualisation.docker.enable = true;
 
-  environment.interactiveShellInit = ''
-    if [ -z "$SSH_AUTH_SOCK" ] ; then
-      eval `ssh-agent -s`
-      ssh-add
-    fi
-    eval "$(direnv hook bash)"
-    eval "$(starship init bash)"
-    alias lock='i3lock -c 000000'
-    alias sus='systemctl suspend'
-    alias warpc='warp-cli connect'
-    alias warpd='warp-cli disconnect'
-  '';
 
   environment.systemPackages = with pkgs; [
     # Core utilities that need to be on every machine
