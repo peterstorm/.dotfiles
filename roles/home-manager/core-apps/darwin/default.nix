@@ -27,6 +27,9 @@
   
   # Configuration
   {
+    # Fix: sops-nix launchd agent needs /usr/bin in PATH for getconf
+    launchd.agents.sops-nix.config.EnvironmentVariables.PATH = lib.mkForce "/usr/bin:/bin:/usr/sbin:/sbin";
+
     home.packages = with pkgs;[
       wget
       openshift

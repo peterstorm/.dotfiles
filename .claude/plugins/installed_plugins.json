@@ -83,6 +83,16 @@
         "lastUpdated": "2026-02-03T08:34:26.079Z",
         "gitCommitSha": "a04cb61a577a20d9ab0f3da2a2d99c17a0476ded"
       }
+    ],
+    "atlassian@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/atlassian/7caef65e1070",
+        "version": "7caef65e1070",
+        "installedAt": "2026-02-04T11:27:37.778Z",
+        "lastUpdated": "2026-02-04T11:27:37.778Z",
+        "gitCommitSha": "7caef65e1070f5219efa018fa0b1023738dbd56b"
+      }
     ]
   }
 }
