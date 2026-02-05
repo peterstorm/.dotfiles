@@ -819,10 +819,10 @@ rm -rf /tmp/claude-subagents
 cd "$TEST_DIR"
 
 # ============================================
-# Test 19: cleanup removes .task_graph on last agent
+# Test 19: cleanup preserves .task_graph on last agent (for parallel SubagentStop hooks)
 # ============================================
 echo ""
-echo "--- Test: cleanup removes .task_graph on last agent ---"
+echo "--- Test: cleanup preserves .task_graph on last agent ---"
 
 mkdir -p /tmp/claude-subagents
 echo "agent-last" > /tmp/claude-subagents/cleanup-graph-session.active
@@ -834,7 +834,9 @@ echo '{"session_id": "cleanup-graph-session", "agent_id": "agent-last"}' | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/cleanup-subagent-flag.sh"
 
 [[ ! -f /tmp/claude-subagents/cleanup-graph-session.active ]] && pass "cleanup: removes .active on last agent" || fail "cleanup: removes .active" "deleted" "still exists"
-[[ ! -f /tmp/claude-subagents/cleanup-graph-session.task_graph ]] && pass "cleanup: removes .task_graph on last agent" || fail "cleanup: removes .task_graph" "deleted" "still exists"
+# .task_graph is now preserved for parallel SubagentStop hooks (advance-phase, update-task-status)
+# cleanup-stale-subagents.sh handles stale files (>60min)
+[[ -f /tmp/claude-subagents/cleanup-graph-session.task_graph ]] && pass "cleanup: preserves .task_graph for parallel hooks" || fail "cleanup: preserves .task_graph" "preserved" "deleted"
 
 # Cleanup
 rm -rf /tmp/claude-subagents

@@ -85,16 +85,22 @@ jq ".wave_gates[\"$WAVE\"].tests_passed = true" "$TASK_GRAPH" > "${TASK_GRAPH}.t
 
 # --- 2. Verify reviews were conducted (set by SubagentStop hook) ---
 TASKS_REVIEWED=$(jq -r "[.tasks[] | select(.wave == $WAVE and (.review_status == \"passed\" or .review_status == \"blocked\"))] | length" "$TASK_GRAPH")
+TASKS_EVIDENCE_FAILED=$(jq -r "[.tasks[] | select(.wave == $WAVE and .review_status == \"evidence_capture_failed\")] | length" "$TASK_GRAPH")
 
 if [[ "$TASKS_REVIEWED" -ne "$WAVE_TASKS" ]]; then
-  UNREVIEWED=$(jq -r "[.tasks[] | select(.wave == $WAVE and .review_status == \"pending\")] | .[].id" "$TASK_GRAPH")
+  UNREVIEWED=$(jq -r "[.tasks[] | select(.wave == $WAVE and (.review_status == \"pending\" or .review_status == null))] | .[].id" "$TASK_GRAPH")
+  EVIDENCE_FAILED=$(jq -r "[.tasks[] | select(.wave == $WAVE and .review_status == \"evidence_capture_failed\")] | .[].id" "$TASK_GRAPH")
   echo ""
   echo "FAILED: Not all wave $WAVE tasks have been reviewed."
   echo "  Tasks reviewed: $TASKS_REVIEWED/$WAVE_TASKS"
-  echo "  Unreviewed: $UNREVIEWED"
+  if [[ -n "$EVIDENCE_FAILED" ]]; then
+    echo "  Evidence capture failed: $EVIDENCE_FAILED (re-run /wave-gate to re-spawn reviewers)"
+  fi
+  if [[ -n "$UNREVIEWED" ]]; then
+    echo "  Unreviewed: $UNREVIEWED (spawn review-invoker agents)"
+  fi
   echo ""
   echo "Review status is set by SubagentStop hook when review agents complete."
-  echo "Spawn review-invoker agents for unreviewed tasks."
   exit 1
 fi
 

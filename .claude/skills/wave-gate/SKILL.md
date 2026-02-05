@@ -97,10 +97,10 @@ Call: Skill(skill: "review-pr", args: "--files {files} --task {task_id}")
 | review-invoker | `store-reviewer-findings.sh` | Sets `review_status` per task |
 
 **File-to-task mapping algorithm (for reviewers):**
-1. Get task description keywords (e.g., "JWT service" → jwt, token, auth)
-2. Filter wave changes to files matching keywords or parent directories
-3. If <3 files match, include all wave changes for that task
-4. If ambiguous, prefer over-inclusion (review more rather than miss files)
+1. Read `task.files_modified` from state (set by `update-task-status.sh` hook via transcript parsing)
+2. If `files_modified` is non-empty: use those files directly
+3. Fallback (empty `files_modified`): use all wave changes from `git diff`
+4. Pass to review-invoker: `--files {files_modified}`
 
 ### Step 4: Post GH Comment
 

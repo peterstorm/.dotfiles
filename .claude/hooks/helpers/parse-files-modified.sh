@@ -29,6 +29,8 @@ with open(os.environ['TRANSCRIPT_PATH']) as f:
                         inp = block.get('input', {})
                         if name in ('Write', 'Edit') and 'file_path' in inp:
                             files.add(inp['file_path'])
+                        elif name == 'MultiEdit' and 'file_path' in inp:
+                            files.add(inp['file_path'])
         except:
             pass
 for f in sorted(files):

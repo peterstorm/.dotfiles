@@ -20,8 +20,8 @@ if [[ -f "$SUBAGENT_FILE" ]]; then
   # If file is empty, remove it and clean up session files
   if [[ ! -s "$SUBAGENT_FILE" ]]; then
     rm -f "$SUBAGENT_FILE"
-    # Clean up task graph path file when last agent in session completes
-    rm -f "/tmp/claude-subagents/${SESSION_ID}.task_graph"
+    # NOTE: .task_graph left for cleanup-stale-subagents.sh (>60min)
+    # Parallel SubagentStop hooks (advance-phase, update-task-status) may still need it
   fi
 fi
 

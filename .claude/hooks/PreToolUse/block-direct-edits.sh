@@ -17,7 +17,7 @@ INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 
 case "$TOOL_NAME" in
-  Edit|Write)
+  Edit|Write|MultiEdit)
     echo "BLOCKED: Direct edits not allowed during task-planner orchestration." >&2
     echo "" >&2
     echo "Use Task tool with appropriate agent for implementation:" >&2

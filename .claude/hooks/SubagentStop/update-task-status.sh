@@ -23,18 +23,49 @@ if [[ -n "$TRANSCRIPT_PATH" ]]; then
   FILES_MODIFIED=$(parse_files_modified "$TRANSCRIPT_PATH")
 fi
 
+# Get agent type early — needed for crash detection and review filtering
+AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
+
+# Skip review agents — they don't implement tasks
+case "$AGENT_TYPE" in
+  *review*|*reviewer*|spec-check-invoker) exit 0 ;;
+esac
+
 # Extract task ID using flexible helper (handles multiple formats)
 source ~/.claude/hooks/helpers/extract-task-id.sh
 TASK_ID=$(extract_task_id "$PROMPT")
 
-[[ -z "$TASK_ID" ]] && exit 0  # Not a tracked task, ignore
+# Crash detection: impl agent completed but no parseable task ID
+# Mark all executing tasks as failed (aggressive but recoverable via retry)
+if [[ -z "$TASK_ID" ]]; then
+  # Only trigger for impl-type agents
+  case "$AGENT_TYPE" in
+    code-implementer-agent|java-test-agent|ts-test-agent|frontend-agent|security-agent|k8s-agent|keycloak-agent|dotfiles-agent)
+      source ~/.claude/hooks/helpers/lock.sh
+      acquire_lock "$LOCK_FILE" auto
 
-# Skip review agents — they don't implement tasks
-# Get agent type directly from SubagentStop input (always available, no temp file needed)
-AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
-case "$AGENT_TYPE" in
-  *review*|*reviewer*) exit 0 ;;
-esac
+      EXECUTING=$(jq -r '.executing_tasks // [] | .[]' "$TASK_GRAPH" 2>/dev/null)
+      if [[ -n "$EXECUTING" ]]; then
+        echo "CRASH DETECTED: impl agent ($AGENT_TYPE) completed without task ID"
+        echo "Marking executing tasks as failed: $EXECUTING"
+
+        # Mark all executing tasks as failed, increment retry_count
+        jq '
+          (.executing_tasks // []) as $exec |
+          .tasks |= map(
+            if .id as $id | $exec | index($id) then
+              .status = "failed" |
+              .failure_reason = "agent_crash: no task ID in output" |
+              .retry_count = ((.retry_count // 0) + 1)
+            else . end
+          ) |
+          .executing_tasks = []
+        ' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+      fi
+      ;;
+  esac
+  exit 0
+fi
 
 # Use cross-platform file locking
 source ~/.claude/hooks/helpers/lock.sh

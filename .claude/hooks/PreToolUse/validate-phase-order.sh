@@ -33,6 +33,7 @@ detect_phase() {
     specify-agent) echo "specify" ;;
     clarify-agent) echo "clarify" ;;
     architecture-agent) echo "architecture" ;;
+    decompose-agent) echo "decompose" ;;
     code-implementer-agent|java-test-agent|ts-test-agent|frontend-agent|security-agent|k8s-agent|keycloak-agent|dotfiles-agent|spec-check-invoker|review-invoker|task-reviewer) echo "execute" ;;
     *)
       # Check prompt for phase indicators
@@ -135,7 +136,7 @@ check_artifacts() {
 if ! is_valid_transition "$CURRENT_PHASE" "$TARGET_PHASE"; then
   echo "BLOCKED: Invalid phase transition: $CURRENT_PHASE → $TARGET_PHASE" >&2
   echo "" >&2
-  echo "Expected flow: brainstorm → specify → clarify → architecture → execute" >&2
+  echo "Expected flow: brainstorm → specify → clarify → architecture → decompose → execute" >&2
   echo "Current phase: $CURRENT_PHASE" >&2
   echo "" >&2
   case "$CURRENT_PHASE" in
