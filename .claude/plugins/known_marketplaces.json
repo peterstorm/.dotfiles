@@ -1,0 +1,18 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/claude-plugins-official",
+    "lastUpdated": "2026-02-04T11:26:45.837Z"
+  },
+  "marketingskills": {
+    "source": {
+      "source": "github",
+      "repo": "coreyhaines31/marketingskills"
+    },
+    "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/marketingskills",
+    "lastUpdated": "2026-02-03T07:37:42.627Z"
+  }
+}
