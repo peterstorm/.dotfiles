@@ -3,11 +3,82 @@
  *
  * Handles reading, writing, and locking of the task graph state file.
  * Provides atomic operations with file-based locking for concurrent access.
+ * Supports cross-repo orchestration via session-scoped path resolution.
  */
 import { readFile, writeFile, mkdir, unlink, stat } from "fs/promises";
 import { existsSync } from "fs";
 import { join, dirname } from "path";
 import { STATE_DIR, TASK_GRAPH_FILENAME, LOCK_FILENAME, LOCK_TIMEOUT_MS, LOCK_RETRY_INTERVAL_MS, MAX_LOCK_ATTEMPTS, ERRORS, } from "../constants.js";
+// ============================================================================
+// Cross-Repo Session Support
+// ============================================================================
+/** Directory for session-scoped task graph path files */
+const SESSION_STATE_DIR = "/tmp/opencode-subagents";
+/**
+ * Resolve task graph path for cross-repo access.
+ *
+ * Priority:
+ * 1. Session-scoped path (enables cross-repo access)
+ * 2. Local path (same repo as orchestrator)
+ *
+ * This matches Claude Code's resolve-task-graph.sh behavior.
+ *
+ * @param sessionId - Current session ID
+ * @param projectDir - Project directory to check for local path
+ * @returns Resolved task graph path, or null if not found
+ */
+export async function resolveTaskGraphPath(sessionId, projectDir) {
+    // Priority 1: Session-scoped path (enables cross-repo access)
+    if (sessionId) {
+        const sessionFile = join(SESSION_STATE_DIR, `${sessionId}.task_graph`);
+        if (existsSync(sessionFile)) {
+            try {
+                const absPath = (await readFile(sessionFile, "utf-8")).trim();
+                if (existsSync(absPath)) {
+                    return absPath;
+                }
+            }
+            catch {
+                // Fall through to local path
+            }
+        }
+    }
+    // Priority 2: Local path (same repo as orchestrator)
+    const localPath = join(projectDir, STATE_DIR, TASK_GRAPH_FILENAME);
+    if (existsSync(localPath)) {
+        return localPath;
+    }
+    return null;
+}
+/**
+ * Register a task graph path for cross-repo session access.
+ *
+ * Creates a session-scoped file that maps session ID to task graph path,
+ * allowing subagents in different repos to find the orchestrator's state.
+ *
+ * @param sessionId - Current session ID
+ * @param taskGraphPath - Absolute path to task graph
+ */
+export async function registerSessionTaskGraph(sessionId, taskGraphPath) {
+    if (!existsSync(SESSION_STATE_DIR)) {
+        await mkdir(SESSION_STATE_DIR, { recursive: true });
+    }
+    const sessionFile = join(SESSION_STATE_DIR, `${sessionId}.task_graph`);
+    await writeFile(sessionFile, taskGraphPath);
+}
+/**
+ * Unregister a session task graph path.
+ *
+ * Called when orchestration completes to clean up session state.
+ *
+ * @param sessionId - Session ID to unregister
+ */
+export async function unregisterSessionTaskGraph(sessionId) {
+    const sessionFile = join(SESSION_STATE_DIR, `${sessionId}.task_graph`);
+    if (existsSync(sessionFile)) {
+        await unlink(sessionFile);
+    }
+}
 // ============================================================================
 // State Manager Class
 // ============================================================================
@@ -411,39 +482,51 @@ export class StateManager {
     }
     /**
      * Acquire the state file lock.
+     *
+     * Uses atomic mkdir for lock acquisition - this is cross-platform safe
+     * and matches Claude Code's lock.sh behavior on macOS.
+     * mkdir fails atomically if directory exists, preventing race conditions.
      */
     async acquireLock() {
         const maxAttempts = MAX_LOCK_ATTEMPTS;
         let attempt = 0;
-        // Ensure lock directory exists
+        // Ensure parent directory exists
         const lockDir = dirname(this.lockPath);
         if (!existsSync(lockDir)) {
             await mkdir(lockDir, { recursive: true });
         }
+        // Use .lock suffix on lockPath for atomic mkdir
+        const atomicLockDir = `${this.lockPath}.d`;
         while (attempt < maxAttempts) {
             // Check if lock exists and is stale
-            if (existsSync(this.lockPath)) {
+            if (existsSync(atomicLockDir)) {
                 try {
-                    const lockStat = await stat(this.lockPath);
-                    const lockAge = Date.now() - lockStat.mtimeMs;
-                    // If lock is older than timeout, consider it stale and remove
-                    if (lockAge > this.lockTimeout) {
-                        console.warn("[task-planner] Removing stale lock file");
-                        await unlink(this.lockPath);
+                    const pidFile = join(atomicLockDir, "pid");
+                    if (existsSync(pidFile)) {
+                        const lockStat = await stat(pidFile);
+                        const lockAge = Date.now() - lockStat.mtimeMs;
+                        // If lock is older than timeout, consider it stale and remove
+                        if (lockAge > this.lockTimeout) {
+                            console.warn("[task-planner] Removing stale lock directory");
+                            await this.rmdir(atomicLockDir);
+                        }
                     }
                 }
                 catch {
-                    // Lock file may have been removed by another process
+                    // Lock directory may have been removed by another process
                 }
             }
-            // Try to acquire lock
-            if (!existsSync(this.lockPath)) {
-                try {
-                    await writeFile(this.lockPath, `${process.pid}\n${Date.now()}`);
-                    return; // Lock acquired
-                }
-                catch {
-                    // Another process may have grabbed the lock
+            // Try to acquire lock using atomic mkdir
+            try {
+                await mkdir(atomicLockDir); // Fails atomically if exists
+                // Store PID for stale lock detection
+                await writeFile(join(atomicLockDir, "pid"), `${process.pid}`);
+                return; // Lock acquired
+            }
+            catch (err) {
+                // EEXIST means another process has the lock
+                if (err.code !== "EEXIST") {
+                    throw err;
                 }
             }
             attempt++;
@@ -455,14 +538,22 @@ export class StateManager {
      * Release the state file lock.
      */
     async releaseLock() {
+        const atomicLockDir = `${this.lockPath}.d`;
         try {
-            if (existsSync(this.lockPath)) {
-                await unlink(this.lockPath);
-            }
+            await this.rmdir(atomicLockDir);
         }
         catch (error) {
             console.warn("[task-planner] Failed to release lock:", error);
         }
+    }
+    /**
+     * Recursively remove a directory.
+     */
+    async rmdir(dir) {
+        if (!existsSync(dir))
+            return;
+        const { rm } = await import("fs/promises");
+        await rm(dir, { recursive: true, force: true });
     }
     /**
      * Load without acquiring lock (for use within withLock).
@@ -505,5 +596,30 @@ export class StateManager {
  */
 export function createStateManager(projectDir) {
     return new StateManager({ projectDir });
+}
+/**
+ * Create a state manager with cross-repo session resolution.
+ *
+ * This factory function first resolves the task graph path using
+ * session-scoped resolution, enabling subagents in different repos
+ * to access the orchestrator's state.
+ *
+ * @param sessionId - Current session ID (for cross-repo resolution)
+ * @param projectDir - Project directory (fallback for local resolution)
+ * @returns StateManager if task graph found, null otherwise
+ */
+export async function createStateManagerForSession(sessionId, projectDir) {
+    const resolvedPath = await resolveTaskGraphPath(sessionId, projectDir);
+    if (!resolvedPath) {
+        return null;
+    }
+    // Extract the project dir from the resolved path
+    // e.g., /foo/bar/.opencode/state/active_task_graph.json -> /foo/bar
+    const stateDir = dirname(resolvedPath); // .../state
+    const configDir = dirname(stateDir); // .../.opencode
+    const resolvedProjectDir = dirname(configDir); // ...
+    return new StateManager({
+        projectDir: resolvedProjectDir,
+    });
 }
 //# sourceMappingURL=state-manager.js.map

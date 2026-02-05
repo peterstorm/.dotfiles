@@ -14,6 +14,7 @@ export type TaskStatus =
   | "in_progress"
   | "implemented"
   | "completed"
+  | "failed"
   | "cancelled";
 
 export type Phase =
@@ -97,6 +98,12 @@ export interface Task {
 
   /** Files modified during this task's execution */
   files_modified?: string[];
+
+  /** Reason for task failure (set by crash detection or review) */
+  failure_reason?: string;
+
+  /** Number of retry attempts (incremented on failure) */
+  retry_count?: number;
 }
 
 export interface WaveGate {
