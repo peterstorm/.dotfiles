@@ -7,12 +7,12 @@ description: >
   "reduce MCP tool count", "audit MCP server", "MCP resources vs tools",
   or mentions designing tools for AI agents following
   Model Context Protocol patterns.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # MCP Server Design & Review
 
-Guide the user through designing new MCP servers or reviewing existing ones against established best practices. All guidance is language-agnostic but applies principles from the official MCP specification, Block Engineering's production playbook (60+ servers), and FastMCP creator insights.
+Guide the user through designing new MCP servers or reviewing existing ones against established best practices. All guidance is language-agnostic but applies principles from the official MCP specification (through 2025-06-18), Block Engineering's production playbook (60+ servers), FastMCP creator insights, and community learnings from the broader ecosystem.
 
 ## Core Philosophy
 
@@ -40,18 +40,30 @@ Determine which mode to operate in based on user intent:
 
 MCP defines four server primitives. Choosing the wrong primitive is a fundamental design error.
 
-| Primitive | Purpose | When to Use |
-|-----------|---------|-------------|
-| **Tools** | Functions the agent executes (side effects) | Actions: create, update, delete, query with parameters |
-| **Resources** | Read-only data the agent or user consumes | Static/semi-static data: schemas, configs, documentation, file contents |
-| **Prompts** | Reusable prompt templates for users | Standardized workflows the user triggers (e.g., "summarize this repo") |
-| **Sampling** | Server requests LLM completions from client | Server needs AI reasoning mid-operation (agentic loops) |
+| Primitive | Purpose | Controlled By | Side Effects? |
+|-----------|---------|---------------|---------------|
+| **Tools** | Executable actions (API calls, DB writes, computations) | The model decides when to invoke | Yes |
+| **Resources** | Read-only data and context (files, schemas, configs, logs) | The client application fetches explicitly | No |
+| **Prompts** | Reusable instruction templates (like slash commands) | The user selects explicitly | No |
+| **Sampling** | Server requests LLM completions from client | Server initiates via `sampling/complete` | Depends |
 
 **Rule of thumb:**
 - Read-only data with no side effects → **Resource** (cheaper, subscribable, cacheable)
 - Action with side effects → **Tool**
 - Reusable user-facing workflow template → **Prompt**
 - Server needs to "think" → **Sampling**
+
+**Anti-pattern: wrong primitive.** Using a tool for read-only data wastes a tool call, requires model decision-making, and muddies your permission model. Use a Resource instead.
+
+**Resource design tips:**
+- Use URI templates (RFC 6570) for dynamic content: `file://{path}`, `issue://{id}`
+- Keep resources lightweight -- they're fetched into context
+- Use subscriptions (`resources/subscribe`) for live data that changes
+
+**Prompt design tips:**
+- Clear, actionable names (`summarize-errors`, not `get-summarized-error-log-output`)
+- Keep prompts stateless -- same input = same output
+- Embed resource references when the prompt needs context
 
 Most servers are tool-heavy, but modeling read-only data as Resources instead of Tools reduces tool count, improves token efficiency, and enables client-side caching.
 
@@ -105,6 +117,8 @@ Apply **Instructions Are Context** principle.
 - Examples are contracts -- LLMs treat them as strong templates
 - Actionable error messages that guide recovery, not cryptic failures
 - Tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`) for permission systems
+- Consider `outputSchema` for structured tool output (spec 2025-06-18)
+- Use elicitation (`ctx.elicit()`) for destructive operations requiring user confirmation
 
 ### Step 5: Token Budget Check
 
@@ -122,18 +136,37 @@ Guidelines:
 | ~50 | Performance degradation begins |
 | 100+ | Requires sophisticated routing |
 
-### Step 6: Security Posture
+### Step 6: Idempotency & Reliability
+
+Apply **Idempotency & Retry Safety** principle. Agents may retry or parallelize tool calls.
+
+- Make write tools idempotent -- accept optional `idempotency_key` parameter
+- Use cursor-based pagination for list operations
+- Annotate with `idempotentHint: true` when safe to retry
+
+### Step 7: Security Posture
 
 Consult `references/security-checklist.md` for comprehensive guidance.
 
 Key decisions:
-- Auth method: OAuth 2.1 (preferred), token-based, or env vars
+- Auth method: OAuth 2.1 (mandatory for HTTP), token-based, or env vars
 - Separate read-only vs write/mutate tools (one tool = one risk level)
 - Input validation strategy
 - Session security (non-deterministic IDs, user binding)
 - Scope minimization (progressive, least-privilege)
+- Elicitation for destructive operations (human-in-the-loop confirmation)
 
-### Step 7: Output Design Document
+### Step 8: Transport & Deployment
+
+Consult `references/transport-deployment.md` for detailed guidance.
+
+Key decisions:
+- Transport: stdio (local) vs Streamable HTTP (remote)
+- Containerization strategy (Docker for production remote servers)
+- Observability: structured logging, usage metrics
+- Testing plan: unit, integration, security, client compatibility
+
+### Step 9: Output Design Document
 
 Produce a structured design document using `examples/design-review-template.md` as template. Include:
 - Server purpose and scope
@@ -166,6 +199,8 @@ Score each dimension 1-5 using criteria from `references/review-rubric.md`:
 | Curation | No redundant tools, focused scope? |
 | Security | Auth, read/write separation, validation? |
 | LLM alignment | Leverages agent strengths? |
+| Reliability | Idempotent writes, pagination, structured output? |
+| Operations | Logging, containerization, versioning? |
 
 ### Step 3: Generate Findings
 
@@ -188,10 +223,11 @@ Output a structured report:
 ### Reference Files
 
 Consult these for detailed guidance:
-- **`references/design-principles.md`** -- The 5 foundational principles with examples and anti-patterns
-- **`references/security-checklist.md`** -- MCP spec security, OWASP guidance, auth patterns
+- **`references/design-principles.md`** -- The 5 foundational principles, plus idempotency, structured output, elicitation, and resource links
+- **`references/security-checklist.md`** -- MCP spec security, OWASP guidance, auth patterns, elicitation security
 - **`references/review-rubric.md`** -- Detailed scoring criteria for each review dimension
 - **`references/llm-alignment.md`** -- Token budget math, LLM strengths/weaknesses, caching
+- **`references/transport-deployment.md`** -- Transport selection, containerization, testing, observability, versioning, MCP registry
 
 ### Examples
 

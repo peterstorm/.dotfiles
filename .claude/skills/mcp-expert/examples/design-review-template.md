@@ -54,6 +54,30 @@ Error scenarios:
 | Read/write separation | [yes/no] | [how tools are split] |
 | Input validation | [schema validation / ...] | [what's validated] |
 | Scope model | [progressive / static] | [elevation strategy] |
+| Elicitation | [yes/no] | [which destructive operations use human-in-the-loop] |
+
+---
+
+## Transport & Deployment
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Transport | [stdio / Streamable HTTP] | [why] |
+| Containerization | [Docker / bare process] | [isolation strategy] |
+| Logging | [stderr JSON / MCP logging cap] | [what's logged] |
+| Versioning | [semver / ...] | [evolution strategy] |
+| Registry | [MCP Registry / Docker Catalog / private] | [distribution plan] |
+
+---
+
+## Reliability
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Idempotency | [idempotency keys / dedup check / n/a] | [strategy for write tools] |
+| Pagination | [cursor-based / offset / n/a] | [for list operations] |
+| Structured output | [outputSchema / plain text] | [which tools use it] |
+| Resource links | [yes / no] | [for large payloads] |
 
 ---
 
@@ -68,7 +92,9 @@ Error scenarios:
 | Curation | /5 | |
 | Security | /5 | |
 | LLM alignment | /5 | |
-| **Overall** | /35 | |
+| Reliability | /5 | |
+| Operations | /5 | |
+| **Overall** | /45 | |
 
 ---
 

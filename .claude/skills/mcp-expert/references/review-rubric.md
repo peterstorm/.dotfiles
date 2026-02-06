@@ -186,6 +186,60 @@ Scoring criteria for each review dimension. Rate 1-5, where 1 = critical issues 
 
 ---
 
+---
+
+## 8. Reliability & Idempotency
+
+**Question:** Are tools safe to retry and is output predictable?
+
+| Score | Criteria |
+|-------|----------|
+| 1 | Write tools create duplicates on retry. No pagination. No size limits on output. |
+| 2 | Some idempotency awareness but inconsistent. Limited pagination. |
+| 3 | Most write tools handle retries. Basic pagination. Output sizes controlled. |
+| 4 | Idempotency keys on write tools. Cursor-based pagination. Structured output where appropriate. |
+| 5 | All write tools idempotent. Cursor pagination everywhere. `outputSchema` used. Resource links for large data. Tool annotations set on all tools. |
+
+**Red flags:**
+- Write tools without idempotency protection
+- List operations without pagination
+- Tools returning unbounded data
+- Missing tool annotations (`readOnlyHint`, etc.)
+
+**Good signs:**
+- `idempotency_key` parameter on create/update tools
+- Cursor-based pagination with clear continuation tokens
+- `outputSchema` for structured responses
+- Resource links for large payloads
+
+---
+
+## 9. Operations & Deployment
+
+**Question:** Is the server production-ready from an operational perspective?
+
+| Score | Criteria |
+|-------|----------|
+| 1 | No logging. No containerization. No health checks. Runs as raw process with full host access. |
+| 2 | Basic logging. Manual deployment. No monitoring. |
+| 3 | Structured logging. Docker container. Basic health checks. |
+| 4 | JSON-structured logs. Container with non-root user. Health/ready endpoints. Usage metrics tracked. |
+| 5 | Full observability (structured logs, usage metrics, error rates, latency). Containerized with resource limits. Versioned. Published to MCP Registry if public. |
+
+**Red flags:**
+- Logging to stdout on stdio servers (conflicts with JSON-RPC)
+- Running as root in container
+- No health checks for remote servers
+- No way to track tool usage for curation decisions
+
+**Good signs:**
+- Logging to stderr for stdio, structured JSON format
+- Non-root container user, resource limits
+- Usage frequency tracking per tool
+- Semantic versioning with backward-compatible evolution
+
+---
+
 ## Scoring Summary Template
 
 ```
@@ -198,11 +252,13 @@ Scoring criteria for each review dimension. Rate 1-5, where 1 = critical issues 
 | Curation             |  /5   |       |
 | Security             |  /5   |       |
 | LLM alignment        |  /5   |       |
-| **Overall**          |  /35  |       |
+| Reliability          |  /5   |       |
+| Operations           |  /5   |       |
+| **Overall**          |  /45  |       |
 ```
 
 **Interpretation:**
-- 30-35: Excellent -- ready for production
-- 22-29: Good -- minor improvements needed
-- 15-21: Fair -- significant improvements before production
-- Below 15: Needs redesign -- fundamental issues present
+- 38-45: Excellent -- ready for production
+- 28-37: Good -- minor improvements needed
+- 18-27: Fair -- significant improvements before production
+- Below 18: Needs redesign -- fundamental issues present

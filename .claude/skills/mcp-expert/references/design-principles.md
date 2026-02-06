@@ -213,6 +213,8 @@ If file > MAX_FILE_SIZE:
 3. **Paginate** -- let model request pages (trade-off: more tool calls)
 4. **Summarize** -- run summarizer on large content before returning
 5. **"Verbose" tools** -- separate tool or resource for full details (progressive disclosure)
+6. **Structured output** (`outputSchema`) -- declare output schema so clients parse `structuredContent` programmatically, only feeding the LLM what it needs. Always provide both `structuredContent` AND `content` for backward compatibility
+7. **Resource links** -- return `resource_link` references instead of inlining large data; client fetches on demand
 
 ### Prompt Caching Consideration
 
@@ -256,3 +258,116 @@ Track tool usage in production logs. Remove tools that are never or rarely calle
 - query_database(sql, time_min, time_max)
 - Leverages LLM's SQL strength
 - Finding common meeting times = one call with a SQL query
+
+---
+
+## Idempotency & Retry Safety
+
+Agents may retry or parallelize tool calls. Design for this reality.
+
+### Make Tools Idempotent
+
+Same tool call with same arguments should produce same result without unintended side effects.
+
+```
+BAD: Creates duplicate on retry
+  create_issue(title, body) -> always creates new
+
+GOOD: Idempotent -- checks for existing, uses idempotency key
+  create_issue(title, body, idempotency_key=None) -> deduplicates
+```
+
+- Accept optional `idempotency_key` parameter for create/write tools
+- Check for existing resources before creating duplicates
+- Annotate with `idempotentHint: true` when safe to retry
+
+### Cursor-Based Pagination
+
+Use cursor-based pagination for list operations to keep responses small and predictable:
+
+```
+list_issues(
+    status: Literal["open", "closed", "all"] = "open",
+    limit: int = 20,
+    cursor: str | None = None
+) -> str
+
+Returns up to `limit` issues. If more exist, includes cursor for next page.
+```
+
+---
+
+## Structured Tool Output (Spec 2025-06-18)
+
+The `outputSchema` and `structuredContent` feature allows tools to declare their output structure and return typed, validated data.
+
+```python
+@mcp.tool(
+    output_schema={
+        "type": "object",
+        "properties": {
+            "order_id": {"type": "string"},
+            "status": {"type": "string"},
+            "eta": {"type": "string", "format": "date-time"}
+        },
+        "required": ["order_id", "status"]
+    }
+)
+def track_order(email: str) -> tuple[list, dict]:
+    content = [{"type": "text", "text": f"Order {order.id}: {order.status}"}]
+    structured = {"order_id": order.id, "status": order.status, "eta": order.eta.isoformat()}
+    return content, structured
+```
+
+**Why this matters:**
+- Clients parse `structuredContent` programmatically, only feed LLM what it needs
+- Output validated against declared schema -- catches errors early
+- Backward compatible: clients that don't understand `structuredContent` still get `content`
+
+**Best practice:** Always provide both `structuredContent` AND `content` for backward compatibility.
+
+### Resource Links in Tool Results
+
+Tools can return `resource_link` references instead of inlining large data:
+
+```python
+return {
+    "type": "resource_link",
+    "uri": "report://quarterly/2025-Q3",
+    "name": "Q3 2025 Report",
+    "mimeType": "application/json"
+}
+```
+
+Client subscribes to or fetches the resource on demand -- another progressive disclosure mechanism.
+
+---
+
+## Elicitation: Human-in-the-Loop (Spec 2025-06-18)
+
+Servers can request additional information from users mid-session via `ctx.elicit()`.
+
+```python
+@mcp.tool()
+async def delete_project(project_id: str, ctx: Context) -> str:
+    project = get_project(project_id)
+    result = await ctx.elicit(
+        message=f"Delete '{project.name}'? This cannot be undone.",
+        schema={
+            "type": "object",
+            "properties": {
+                "confirm": {"type": "boolean", "description": "Confirm deletion"}
+            }
+        }
+    )
+    if result.action == "accept" and result.content.get("confirm"):
+        api.delete_project(project_id)
+        return f"Project '{project.name}' deleted."
+    return "Deletion cancelled."
+```
+
+**Rules:**
+- Only primitive types (string, number, boolean) -- no nested objects
+- NEVER use for sensitive data (passwords, tokens, PII)
+- Use for: confirming destructive operations, collecting missing parameters, clarifying ambiguous requests
+- User can `accept`, `decline`, or `cancel`

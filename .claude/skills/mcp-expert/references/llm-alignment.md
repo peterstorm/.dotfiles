@@ -76,12 +76,18 @@ Return partial content with clear indication.
 Let agent request pages. Trade-off: more tool calls, but controlled output size.
 
 **5. Progressive disclosure ("verbose" tools)**
-Default tool returns summary. Separate tool or parameter for full details.
+Default tool returns summary. Separate tool or resource for full details.
 
 ```
 get_issues(project, limit) -> summaries
 get_issue_details(issue_id) -> full content
 ```
+
+**6. Structured output (`outputSchema`)**
+Declare output schema so clients parse `structuredContent` programmatically, only feeding the LLM necessary data. Output is validated against declared schema. Always provide both `structuredContent` AND `content` for backward compatibility.
+
+**7. Resource links**
+Return `resource_link` references instead of inlining large data. Client fetches resource URI on demand. Ideal for reports, logs, and large datasets.
 
 ---
 
