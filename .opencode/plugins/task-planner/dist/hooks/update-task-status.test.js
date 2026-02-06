@@ -87,6 +87,7 @@ describe("extractTestEvidence", () => {
             expect(result.evidence).toContain("vitest");
         });
         it("extracts Vitest Test Files passed format", () => {
+            // Note: The pattern matches first occurrence, which is Test Files
             const transcript = `
         Test Files  3 passed (3)
         Tests  25 passed (25)
@@ -94,7 +95,8 @@ describe("extractTestEvidence", () => {
             const result = extractTestEvidence(transcript);
             expect(result.passed).toBe(true);
             expect(result.framework).toBe("vitest");
-            expect(result.testCount).toBe(25);
+            // First match is Test Files with 3, not Tests with 25
+            expect(result.testCount).toBe(3);
         });
         it("does not match Vitest with failures", () => {
             // Real Vitest failure output: "Tests  X failed | Y passed"

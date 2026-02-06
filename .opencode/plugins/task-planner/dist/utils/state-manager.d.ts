@@ -3,8 +3,41 @@
  *
  * Handles reading, writing, and locking of the task graph state file.
  * Provides atomic operations with file-based locking for concurrent access.
+ * Supports cross-repo orchestration via session-scoped path resolution.
  */
 import type { TaskGraph, Task, TaskStatus, Phase, WaveGate, AgentContext, StateManagerOptions } from "../types.js";
+/**
+ * Resolve task graph path for cross-repo access.
+ *
+ * Priority:
+ * 1. Session-scoped path (enables cross-repo access)
+ * 2. Local path (same repo as orchestrator)
+ *
+ * This matches Claude Code's resolve-task-graph.sh behavior.
+ *
+ * @param sessionId - Current session ID
+ * @param projectDir - Project directory to check for local path
+ * @returns Resolved task graph path, or null if not found
+ */
+export declare function resolveTaskGraphPath(sessionId: string | undefined, projectDir: string): Promise<string | null>;
+/**
+ * Register a task graph path for cross-repo session access.
+ *
+ * Creates a session-scoped file that maps session ID to task graph path,
+ * allowing subagents in different repos to find the orchestrator's state.
+ *
+ * @param sessionId - Current session ID
+ * @param taskGraphPath - Absolute path to task graph
+ */
+export declare function registerSessionTaskGraph(sessionId: string, taskGraphPath: string): Promise<void>;
+/**
+ * Unregister a session task graph path.
+ *
+ * Called when orchestration completes to clean up session state.
+ *
+ * @param sessionId - Session ID to unregister
+ */
+export declare function unregisterSessionTaskGraph(sessionId: string): Promise<void>;
 export declare class StateManager {
     private readonly statePath;
     private readonly lockPath;
@@ -172,12 +205,20 @@ export declare class StateManager {
     private withLock;
     /**
      * Acquire the state file lock.
+     *
+     * Uses atomic mkdir for lock acquisition - this is cross-platform safe
+     * and matches Claude Code's lock.sh behavior on macOS.
+     * mkdir fails atomically if directory exists, preventing race conditions.
      */
     private acquireLock;
     /**
      * Release the state file lock.
      */
     private releaseLock;
+    /**
+     * Recursively remove a directory.
+     */
+    private rmdir;
     /**
      * Load without acquiring lock (for use within withLock).
      */
@@ -195,4 +236,16 @@ export declare class StateManager {
  * Create a state manager for the given project directory.
  */
 export declare function createStateManager(projectDir: string): StateManager;
+/**
+ * Create a state manager with cross-repo session resolution.
+ *
+ * This factory function first resolves the task graph path using
+ * session-scoped resolution, enabling subagents in different repos
+ * to access the orchestrator's state.
+ *
+ * @param sessionId - Current session ID (for cross-repo resolution)
+ * @param projectDir - Project directory (fallback for local resolution)
+ * @returns StateManager if task graph found, null otherwise
+ */
+export declare function createStateManagerForSession(sessionId: string | undefined, projectDir: string): Promise<StateManager | null>;
 //# sourceMappingURL=state-manager.d.ts.map

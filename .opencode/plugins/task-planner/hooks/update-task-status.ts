@@ -18,6 +18,7 @@ import { extractTaskId } from "../utils/task-id-extractor.js";
 import {
   TEST_EVIDENCE_PATTERNS,
   TASK_REVIEW_AGENTS,
+  CRASH_DETECTION_AGENTS,
 } from "../constants.js";
 
 // ============================================================================
@@ -32,6 +33,7 @@ import {
  * - Marks task as "implemented"
  * - Updates executing_tasks list
  * - Checks if wave implementation is complete
+ * - Handles crash detection for impl agents without task ID
  *
  * @param context - Task completion context with transcript and agent info
  * @param taskGraph - Current task graph state
@@ -51,14 +53,19 @@ export async function updateTaskStatus(
   // Extract task ID from transcript
   const taskId = context.taskId ?? extractTaskId(context.transcript ?? "");
 
-  if (!taskId) {
-    // Not a tracked task
+  // Skip review agents — they don't implement tasks
+  if (isReviewAgent(context.agentType)) {
+    console.log(`[task-planner] Skipping review agent for task ${taskId ?? "unknown"}`);
     return null;
   }
 
-  // Skip review agents - they don't implement tasks
-  if (isReviewAgent(context.agentType)) {
-    console.log(`[task-planner] Skipping review agent for task ${taskId}`);
+  // Crash detection: impl agent completed but no parseable task ID
+  // Mark all executing tasks as failed (aggressive but recoverable via retry)
+  if (!taskId) {
+    if (isCrashDetectionAgent(context.agentType)) {
+      return await handleCrashDetection(context.agentType, taskGraph, stateManager);
+    }
+    // Not a tracked task and not an impl agent
     return null;
   }
 
@@ -331,4 +338,79 @@ export function parseFilesModified(transcript: string): string[] {
   }
 
   return [...files];
+}
+
+// ============================================================================
+// Crash Detection
+// ============================================================================
+
+/**
+ * Check if an agent type triggers crash detection.
+ *
+ * Only implementation agents (not review/utility agents) trigger crash detection.
+ * If an impl agent completes without a parseable task ID, it likely crashed or
+ * was killed mid-execution.
+ */
+export function isCrashDetectionAgent(agentType?: string): boolean {
+  if (!agentType) return false;
+  return CRASH_DETECTION_AGENTS.includes(agentType);
+}
+
+/**
+ * Handle crash detection for an impl agent that completed without a task ID.
+ *
+ * Marks all currently executing tasks as "failed" with:
+ * - failure_reason: "agent_crash: no task ID in output"
+ * - retry_count: incremented by 1
+ *
+ * This is aggressive but recoverable — tasks can be retried and the retry_count
+ * helps identify persistent issues.
+ *
+ * @param agentType - The agent type that crashed
+ * @param taskGraph - Current task graph state
+ * @param stateManager - State manager for persisting updates
+ * @returns null (no task was successfully completed)
+ */
+async function handleCrashDetection(
+  agentType: string | undefined,
+  taskGraph: TaskGraph,
+  stateManager: StateManager
+): Promise<null> {
+  const executingTasks = taskGraph.executing_tasks ?? [];
+
+  if (executingTasks.length === 0) {
+    console.log(
+      `[task-planner] Crash detection: impl agent (${agentType}) completed without task ID, but no executing tasks`
+    );
+    return null;
+  }
+
+  console.log("");
+  console.log("=========================================");
+  console.log("  CRASH DETECTED");
+  console.log("=========================================");
+  console.log(`  Agent type: ${agentType}`);
+  console.log(`  Completed without parseable task ID in output`);
+  console.log(`  Marking executing tasks as failed: ${executingTasks.join(", ")}`);
+  console.log("");
+
+  // Mark all executing tasks as failed with retry_count increment
+  for (const taskId of executingTasks) {
+    const task = taskGraph.tasks.find((t) => t.id === taskId);
+    const currentRetryCount = task?.retry_count ?? 0;
+
+    await stateManager.updateTask(taskId, {
+      status: "failed",
+      failure_reason: "agent_crash: no task ID in output",
+      retry_count: currentRetryCount + 1,
+    });
+
+    // Remove from executing_tasks
+    await stateManager.unmarkTaskExecuting(taskId);
+  }
+
+  console.log("  Tasks can be retried. Check agent output for issues.");
+  console.log("");
+
+  return null;
 }

@@ -318,6 +318,25 @@ export const TASK_EXECUTION_AGENTS = [
     "general",
 ];
 /**
+ * Agent types that trigger crash detection.
+ *
+ * If these agents complete without a parseable task ID in their output,
+ * all executing_tasks are marked as "failed" with retry_count incremented.
+ * This is aggressive but recoverable via retry.
+ *
+ * Matches Claude Code's update-task-status.sh crash detection.
+ */
+export const CRASH_DETECTION_AGENTS = [
+    "code-implementer-agent",
+    "java-test-agent",
+    "ts-test-agent",
+    "frontend-agent",
+    "security-agent",
+    "k8s-agent",
+    "keycloak-agent",
+    "dotfiles-agent",
+];
+/**
  * Agent types that perform review work.
  *
  * These agents do NOT mark tasks as implemented.

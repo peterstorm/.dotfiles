@@ -4,7 +4,7 @@
  * These types mirror the Claude Code task-planner state structure
  * to ensure compatibility during migration.
  */
-export type TaskStatus = "pending" | "in_progress" | "implemented" | "completed" | "cancelled";
+export type TaskStatus = "pending" | "in_progress" | "implemented" | "completed" | "failed" | "cancelled";
 export type Phase = "init" | "brainstorm" | "specify" | "clarify" | "architecture" | "decompose" | "execute";
 export type ReviewVerdict = "PASSED" | "BLOCKED" | "EVIDENCE_CAPTURE_FAILED" | "UNKNOWN";
 export type AgentType = "code-implementer-agent" | "java-test-agent" | "ts-test-agent" | "frontend-agent" | "reviewer-agent" | "spec-check-agent" | "general";
@@ -43,6 +43,10 @@ export interface Task {
     advisory_findings?: string[];
     /** Files modified during this task's execution */
     files_modified?: string[];
+    /** Reason for task failure (set by crash detection or review) */
+    failure_reason?: string;
+    /** Number of retry attempts (incremented on failure) */
+    retry_count?: number;
 }
 export interface WaveGate {
     /** All tasks in this wave have status "implemented" */

@@ -17,6 +17,7 @@ import { StateManager } from "../utils/state-manager.js";
  * - Marks task as "implemented"
  * - Updates executing_tasks list
  * - Checks if wave implementation is complete
+ * - Handles crash detection for impl agents without task ID
  *
  * @param context - Task completion context with transcript and agent info
  * @param taskGraph - Current task graph state
@@ -60,4 +61,12 @@ export declare function getRemainingTaskIds(taskGraph: TaskGraph, wave: number):
  * - "Created: path/to/file.ts"
  */
 export declare function parseFilesModified(transcript: string): string[];
+/**
+ * Check if an agent type triggers crash detection.
+ *
+ * Only implementation agents (not review/utility agents) trigger crash detection.
+ * If an impl agent completes without a parseable task ID, it likely crashed or
+ * was killed mid-execution.
+ */
+export declare function isCrashDetectionAgent(agentType?: string): boolean;
 //# sourceMappingURL=update-task-status.d.ts.map

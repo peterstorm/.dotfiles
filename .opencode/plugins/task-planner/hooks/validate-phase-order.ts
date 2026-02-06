@@ -121,6 +121,9 @@ function validateSkillPhase(
 /**
  * Validate agent spawn against phase order.
  * Maps agent types to their corresponding phases.
+ * 
+ * SECURITY: Blocks unknown agents during non-execute phases to prevent
+ * bypassing workflow via empty/unknown subagent_type.
  */
 function validateAgentPhase(
   agentType: string,
@@ -131,8 +134,13 @@ function validateAgentPhase(
   // Map agent type to phase
   const targetPhase = getPhaseForAgent(agentType, prompt);
   
-  // Unknown agents are allowed (might be custom/domain-specific)
+  // Block unknown agents during non-execute phases
+  // This prevents bypassing workflow by using empty/unknown agent types
   if (!targetPhase) {
+    if (taskGraph.current_phase !== "execute") {
+      throw new Error(ERRORS.UNKNOWN_SKILL_BLOCKED(agentType));
+    }
+    // Allow unknown agents during execute phase (might be custom domain agents)
     return;
   }
 
