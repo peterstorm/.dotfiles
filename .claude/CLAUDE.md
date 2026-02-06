@@ -29,13 +29,13 @@ For deep architectural review: `/architecture-tech-lead`
 Make the questions extremely concise. Sacrifice grammer for the sake of concision.
 
 ## Multi-phase plans
-Use `/task-planner` for automated orchestration:
+Use `/loom` for automated orchestration:
 - Decomposes tasks, assigns agents, schedules waves
 - Creates GitHub Issue with full plan + checkboxes
 - Hooks auto-update checkboxes on task completion
 - Hooks auto-link PRs to issue
 
-Manual fallback (if not using task-planner):
+Manual fallback (if not using loom):
 - Create Github Issue with FULL detailed plan
 - Update issue checkboxes as phases complete
 - Link PRs to the issue

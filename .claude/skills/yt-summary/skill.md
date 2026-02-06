@@ -72,6 +72,7 @@ for entry in transcript:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎬 [Video Title — inferred from content]
+🔗 [YouTube URL]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **TL;DR:** [2-3 sentence summary of the entire video]

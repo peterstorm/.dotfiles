@@ -1,10 +1,10 @@
 ---
-name: task-planner
+name: loom
 version: "3.2.0"
 description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
 ---
 
-# Task Planner - Full Orchestration Skill
+# Loom - Full Orchestration Skill
 
 Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify → architecture → decompose → execute.
 
@@ -14,13 +14,13 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 
 ## Arguments
 
-- `/task-planner "description"` - Start new plan (runs full flow)
-- `/task-planner --skip-brainstorm` - Skip brainstorm phase (scope already clear)
-- `/task-planner --skip-clarify` - Skip clarify phase (accept markers as-is)
-- `/task-planner --skip-specify` - Skip brainstorm/specify/clarify (use existing spec)
-- `/task-planner --status` - Show current task graph status *(planned — use jq commands in Observability section)*
-- `/task-planner --complete` - Finalize, clean up state *(planned — manually remove state file for now)*
-- `/task-planner --abort` - Cancel mid-execution, clean state *(planned — manually remove state file for now)*
+- `/loom "description"` - Start new plan (runs full flow)
+- `/loom --skip-brainstorm` - Skip brainstorm phase (scope already clear)
+- `/loom --skip-clarify` - Skip clarify phase (accept markers as-is)
+- `/loom --skip-specify` - Skip brainstorm/specify/clarify (use existing spec)
+- `/loom --status` - Show current task graph status *(planned — use jq commands in Observability section)*
+- `/loom --complete` - Finalize, clean up state *(planned — manually remove state file for now)*
+- `/loom --abort` - Cancel mid-execution, clean state *(planned — manually remove state file for now)*
 
 **Note:** All phases are MANDATORY by default. Skip flags allow explicit bypass with user acknowledgment.
 
@@ -29,7 +29,7 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 ## Full Orchestration Flow
 
 ```
-/task-planner "feature description"
+/loom "feature description"
         │
         ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -267,19 +267,19 @@ Substitute variables:
 
 ### Full flow (recommended):
 ```
-/task-planner "Add user authentication with email/password"
+/loom "Add user authentication with email/password"
 ```
 Runs: brainstorm → specify → clarify → arch → decompose → execute
 
 ### Skip to architecture (spec exists):
 ```
-/task-planner --skip-specify "Add user authentication"
+/loom --skip-specify "Add user authentication"
 ```
 Runs: arch → decompose → execute (uses existing spec)
 
 ### Simple feature (clear scope):
 ```
-/task-planner "Add logout button to navbar"
+/loom "Add logout button to navbar"
 ```
 Detects simple → may skip brainstorm, minimal spec
 
@@ -315,13 +315,13 @@ After Phase 4 (Decompose), the task graph is populated with tasks, waves, and Gi
 - Phase agents complete → SubagentStop hooks fire (advance-phase updates current_phase)
 - Execute phase → full wave enforcement active
 
-### On `/task-planner "description"`:
+### On `/loom "description"`:
 1. Create minimal state file (hooks activate)
 2. Run phases 0-4 (hooks enforce order, advance-phase tracks progress)
 3. Populate state with tasks after decompose
 4. Execute waves with full enforcement
 
-### On `/task-planner --status`:
+### On `/loom --status`:
 ```
 Plan: Issue #42 - User Authentication
 Phase: Execute (Wave 2/3)
@@ -333,13 +333,13 @@ Plan: .claude/plans/2025-01-29-user-auth.md
 [→] T3: Login endpoint (code-implementer) — tests: pending
 ```
 
-### On `/task-planner --complete`:
+### On `/loom --complete`:
 1. Verify all tasks completed
 2. Optionally close GitHub Issue
 3. Remove state file
 4. Invoke `/finalize` for PR
 
-### On `/task-planner --abort`:
+### On `/loom --abort`:
 1. Ask: close issue or leave open?
 2. Remove state file
 3. Hooks deactivate

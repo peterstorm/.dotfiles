@@ -396,25 +396,25 @@ else
 fi
 
 # ============================================
-# Test 15: task-planner mentions spec_anchors
+# Test 15: loom mentions spec_anchors
 # ============================================
 echo ""
-echo "--- Test: task-planner includes spec_anchors ---"
+echo "--- Test: loom includes spec_anchors ---"
 
-if grep -q "spec_anchors" "$REPO_ROOT/.claude/skills/task-planner/SKILL.md"; then
-  pass "task-planner SKILL.md mentions spec_anchors"
+if grep -q "spec_anchors" "$REPO_ROOT/.claude/skills/loom/SKILL.md"; then
+  pass "loom SKILL.md mentions spec_anchors"
 else
-  fail "task-planner mentions spec_anchors" "spec_anchors" "missing"
+  fail "loom mentions spec_anchors" "spec_anchors" "missing"
 fi
 
-if grep -q "spec_anchors" "$REPO_ROOT/.claude/skills/task-planner/templates.md"; then
-  pass "task-planner templates.md mentions spec_anchors"
+if grep -q "spec_anchors" "$REPO_ROOT/.claude/skills/loom/templates.md"; then
+  pass "loom templates.md mentions spec_anchors"
 else
   fail "templates.md mentions spec_anchors" "spec_anchors" "missing"
 fi
 
-if grep -q "spec_file" "$REPO_ROOT/.claude/skills/task-planner/templates.md"; then
-  pass "task-planner templates.md mentions spec_file"
+if grep -q "spec_file" "$REPO_ROOT/.claude/skills/loom/templates.md"; then
+  pass "loom templates.md mentions spec_file"
 else
   fail "templates.md mentions spec_file" "spec_file" "missing"
 fi

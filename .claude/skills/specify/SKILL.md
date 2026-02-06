@@ -8,7 +8,7 @@ description: "This skill should be used when the user asks to 'specify a feature
 
 Formalize requirements into structured specifications before architecture/planning. Focus exclusively on WHAT and WHY - never HOW.
 
-**Position in flow:** `/brainstorming` → `/specify` → `/clarify` (auto) → `/architecture-tech-lead` → `/task-planner`
+**Position in flow:** `/brainstorming` → `/specify` → `/clarify` (auto) → `/architecture-tech-lead` → `/loom`
 
 ---
 

@@ -31,7 +31,7 @@ STATE_FILES="active_task_graph|review-invocations"
 if echo "$COMMAND" | grep -qE "$STATE_FILES"; then
   # Block write patterns targeting state files
   if echo "$COMMAND" | grep -qE '(>>?|mv |cp |tee |sed -i|perl -i|dd |sponge |chmod |python3? .*(open|write)|node .*(writeFile|fs\.))'; then
-    echo "BLOCKED: Write to state file not allowed during task-planner workflow." >&2
+    echo "BLOCKED: Write to state file not allowed during loom workflow." >&2
     echo "State is managed by SubagentStop hooks and helper scripts only." >&2
     echo "Read access (jq, cat) is allowed." >&2
     exit 2

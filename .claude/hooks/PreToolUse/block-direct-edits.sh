@@ -1,5 +1,5 @@
 #!/bin/bash
-# Block Edit/Write during task-planner orchestration
+# Block Edit/Write during loom orchestration
 # Forces use of Task tool with appropriate agents for implementation
 #
 # WHY THIS IS CRITICAL:
@@ -18,7 +18,7 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 
 case "$TOOL_NAME" in
   Edit|Write|MultiEdit)
-    echo "BLOCKED: Direct edits not allowed during task-planner orchestration." >&2
+    echo "BLOCKED: Direct edits not allowed during loom orchestration." >&2
     echo "" >&2
     echo "Use Task tool with appropriate agent for implementation:" >&2
     echo "  - code-implementer-agent for production code" >&2

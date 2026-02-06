@@ -41,7 +41,7 @@ Start by understanding the current project context, then ask questions one at a 
 
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"
-- Use `/task-planner` for structured multi-phase implementation
+- Use `/loom` for structured multi-phase implementation
 
 ## Key Principles
 

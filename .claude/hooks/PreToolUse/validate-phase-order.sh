@@ -55,7 +55,7 @@ detect_phase() {
 TARGET_PHASE=$(detect_phase "$SUBAGENT_TYPE" "$PROMPT")
 # Block unrecognized agents during orchestration - prevents bypass via empty subagent_type
 if [[ "$TARGET_PHASE" == "unknown" ]]; then
-  echo "BLOCKED: Unrecognized agent type during task-planner orchestration." >&2
+  echo "BLOCKED: Unrecognized agent type during loom orchestration." >&2
   echo "" >&2
   echo "Agent: $SUBAGENT_TYPE" >&2
   echo "" >&2

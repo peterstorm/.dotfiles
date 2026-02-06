@@ -12,7 +12,7 @@ Runs 3 specialized review agents in parallel against a skill and all its associa
 
 ## Arguments
 
-- `/review-skill {skill-name}` — Review a specific skill (e.g., `task-planner`)
+- `/review-skill {skill-name}` — Review a specific skill (e.g., `loom`)
 - `/review-skill {skill-name} --structure-only` — Only run Agent A (structural review)
 - `/review-skill {skill-name} --content-only` — Only run Agent B (content quality)
 - `/review-skill {skill-name} --hooks-only` — Only run Agent C (hooks best practices)

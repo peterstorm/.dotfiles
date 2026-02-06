@@ -1,6 +1,6 @@
-# Task Planner Templates
+# Loom Templates
 
-Reference templates for task-planner skill. Load on demand, not part of core workflow.
+Reference templates for loom skill. Load on demand, not part of core workflow.
 
 ## Template Files
 

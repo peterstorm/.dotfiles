@@ -1,6 +1,6 @@
 #!/bin/bash
-# Test suite for task-planner hooks and helpers
-# Run from repo root: bash .claude/tests/test-task-planner.sh
+# Test suite for loom hooks and helpers
+# Run from repo root: bash .claude/tests/test-loom.sh
 
 set -e
 

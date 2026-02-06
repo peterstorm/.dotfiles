@@ -488,7 +488,7 @@ fi
 echo ""
 echo "--- Test: phase-decompose.md template ---"
 
-TEMPLATE="$REPO_ROOT/.claude/skills/task-planner/templates/phase-decompose.md"
+TEMPLATE="$REPO_ROOT/.claude/skills/loom/templates/phase-decompose.md"
 
 [[ -f "$TEMPLATE" ]] && pass "phase-decompose.md exists" || fail "Template exists" "file exists" "not found"
 
@@ -507,7 +507,7 @@ grep -q "Pure JSON" "$TEMPLATE" && pass "Template requires pure JSON output" || 
 echo ""
 echo "--- Test: SKILL.md consistency ---"
 
-SKILL="$REPO_ROOT/.claude/skills/task-planner/SKILL.md"
+SKILL="$REPO_ROOT/.claude/skills/loom/SKILL.md"
 
 grep -q "failed" "$SKILL" && pass "SKILL.md documents failed status" || fail "SKILL.md" "failed status" "missing"
 grep -q "retry_count" "$SKILL" && pass "SKILL.md documents retry_count" || fail "SKILL.md" "retry_count" "missing"

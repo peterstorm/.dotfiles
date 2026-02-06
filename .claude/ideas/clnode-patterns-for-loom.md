@@ -1,6 +1,6 @@
 # clnode Patterns for Task-Planner
 
-Analysis of [SierraDevsec/clnode](https://github.com/SierraDevsec/clnode) — a Claude Code swarm intelligence plugin — and how its patterns apply to our existing task-planner orchestration system.
+Analysis of [SierraDevsec/clnode](https://github.com/SierraDevsec/clnode) — a Claude Code swarm intelligence plugin — and how its patterns apply to our existing loom orchestration system.
 
 ## What clnode Is
 
@@ -26,10 +26,10 @@ clnode and the memory-mcp-fork solve **different axes** of the same meta-problem
 
 | Axis | Problem | Solution |
 |------|---------|----------|
-| **Intra-session** | Agents within a task-planner run can't see siblings' work | clnode's shared memory pattern |
-| **Cross-session** | Each `/task-planner` invocation starts fresh, no learning | memory-mcp-fork's persistent memory |
+| **Intra-session** | Agents within a loom run can't see siblings' work | clnode's shared memory pattern |
+| **Cross-session** | Each `/loom` invocation starts fresh, no learning | memory-mcp-fork's persistent memory |
 
-Our task-planner currently has **neither**.
+Our loom currently has **neither**.
 
 ## Current Task-Planner Gaps (clnode-relevant)
 
@@ -153,7 +153,7 @@ clnode uses DuckDB for structured queries across agent data. Our `active_task_gr
 - Migration path for existing hooks (all bash/jq)
 - Complexity for ~5-15 agents per run
 
-**Verdict**: Not worth it. JSON + jq scales fine for task-planner's scope. If we hit 50+ agents per run, revisit.
+**Verdict**: Not worth it. JSON + jq scales fine for loom's scope. If we hit 50+ agents per run, revisit.
 
 ### Web UI Dashboard
 
@@ -173,7 +173,7 @@ clnode's `idea → planned → active → review → completed → archived`. Ou
 
 ### Model Allocation Recommendations
 
-clnode suggests Opus for leaders, Sonnet for implementation, Haiku for routine. Our task-planner already assigns models per agent type in the skill definition.
+clnode suggests Opus for leaders, Sonnet for implementation, Haiku for routine. Our loom already assigns models per agent type in the skill definition.
 
 **Verdict**: Already handled.
 
@@ -233,7 +233,7 @@ See `memory-mcp-fork.md` for full plan. Key integration point: SubagentStop summ
 
 ### Phase 3: Compression Skill (optional)
 
-Promote `compress-agent-output.sh` to a dedicated Claude Code skill if the pattern proves valuable. Enables reuse beyond task-planner hooks.
+Promote `compress-agent-output.sh` to a dedicated Claude Code skill if the pattern proves valuable. Enables reuse beyond loom hooks.
 
 ## Cost Analysis
 

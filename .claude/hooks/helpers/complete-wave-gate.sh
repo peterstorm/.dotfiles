@@ -201,7 +201,7 @@ if [[ "$NEXT_WAVE" -le "$MAX_WAVE" ]]; then
 else
   echo ""
   echo "=== All waves complete! ==="
-  echo "Run /task-planner --complete to finalize."
+  echo "Run /loom --complete to finalize."
 fi
 
 exit 0
