@@ -10,6 +10,14 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 
 **This is the SINGLE ENTRY POINT** for multi-step features. Spawns specialized agents for each phase.
 
+## Prerequisites
+
+**BEFORE starting any phase**, run this check:
+```bash
+command -v bun || echo "FATAL: bun not found. Install: curl -fsSL https://bun.sh/install | bash"
+```
+If `bun` is missing, **STOP and tell the user**. Loom hooks require bun for TypeScript transcript parsing.
+
 ---
 
 ## Arguments
@@ -364,8 +372,9 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | `guard-state-file.sh` | PreToolUse: Bash | Blocks state writes (whitelisted helpers only) |
 | `validate-task-execution.sh` | PreToolUse: Task | Validates wave order |
 | `validate-phase-order.sh` | PreToolUse: Task | Enforces phase sequencing |
+| `validate-template-substitution.sh` | PreToolUse: Task | Blocks unsubstituted `{variable}` patterns |
 | `dispatch.sh` | SubagentStop | Routes to hooks below by agent type |
-| ↳ `advance-phase.sh` | via dispatch | Advances phase + verifies artifacts on disk |
+| ↳ `advance-phase.sh` | via dispatch | Advances phase + captures spec_file/plan_file from transcript |
 | ↳ `update-task-status.sh` | via dispatch | Marks "implemented" or "failed" + test evidence + new-test verification |
 | ↳ `store-reviewer-findings.sh` | via dispatch | Parses review findings |
 | ↳ `store-spec-check-findings.sh` | via dispatch | Parses spec-check findings |

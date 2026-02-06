@@ -52,7 +52,7 @@ export function parseTranscript(content: string): string {
 }
 
 // CLI entry point
-if (process.argv[1]?.endsWith("parse-transcript.js")) {
+if (/parse-transcript\.[jt]s$/.test(process.argv[1] ?? "")) {
   const transcriptPath = process.argv[2];
   if (!transcriptPath) {
     process.exit(0);

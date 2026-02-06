@@ -89,7 +89,7 @@ export function parseBashTestOutput(content: string): string {
 }
 
 // CLI entry point
-if (process.argv[1]?.endsWith("parse-bash-test-output.js")) {
+if (/parse-bash-test-output\.[jt]s$/.test(process.argv[1] ?? "")) {
   const transcriptPath = process.argv[2];
   if (!transcriptPath) {
     process.exit(0);

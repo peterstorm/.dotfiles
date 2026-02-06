@@ -46,7 +46,7 @@
       azure-cli
       kubeseal
       gemini-cli
-      github-copilot-cli
+      inputs.llm-agents.packages.${pkgs.system}.copilot-cli
       jq
       inputs.llm-agents.packages.${pkgs.system}.opencode
     ];

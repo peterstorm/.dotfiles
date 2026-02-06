@@ -25,6 +25,11 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')
 SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
 
+# Allow utility agents through — orchestrator needs these for research
+case "$SUBAGENT_TYPE" in
+  Explore|Plan|haiku) exit 0 ;;
+esac
+
 # Map agent to phase
 detect_phase() {
   local agent="$1"

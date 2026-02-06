@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { parseTranscript } from "./parse-transcript.js";
 import { parseFilesModified } from "./parse-files-modified.js";
 import { parseBashTestOutput } from "./parse-bash-test-output.js";
+import { parsePhaseArtifacts } from "./parse-phase-artifacts.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "..", "src", "fixtures");
@@ -102,5 +103,94 @@ describe("parseBashTestOutput", () => {
       const result = parseBashTestOutput(content);
       assert.ok(result.includes("OK"), `Failed for: ${cmd}`);
     }
+  });
+});
+
+describe("parsePhaseArtifacts", () => {
+  it("extracts spec_file from Write to .claude/specs/", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(
+      result.spec_file,
+      "/project/.claude/specs/2025-01-15-auth/spec.md"
+    );
+    assert.strictEqual(result.plan_file, undefined);
+  });
+
+  it("extracts plan_file from Write to .claude/plans/", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/plans/2025-01-15-auth.md"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(
+      result.plan_file,
+      "/project/.claude/plans/2025-01-15-auth.md"
+    );
+    assert.strictEqual(result.spec_file, undefined);
+  });
+
+  it("extracts both spec_file and plan_file from multi-phase transcript", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/plans/2025-01-15-auth.md"}}]}}',
+    ].join("\n");
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(
+      result.spec_file,
+      "/project/.claude/specs/2025-01-15-auth/spec.md"
+    );
+    assert.strictEqual(
+      result.plan_file,
+      "/project/.claude/plans/2025-01-15-auth.md"
+    );
+  });
+
+  it("ignores Write to non-artifact paths", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/src/auth.ts"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(result.spec_file, undefined);
+    assert.strictEqual(result.plan_file, undefined);
+  });
+
+  it("ignores non-.md files in .claude/specs/", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/data.json"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(result.spec_file, undefined);
+  });
+
+  it("prefers deeper spec path (more specific)", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/spec.md"}}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}',
+    ].join("\n");
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(
+      result.spec_file,
+      "/project/.claude/specs/2025-01-15-auth/spec.md"
+    );
+  });
+
+  it("handles filePath variant (different casing)", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"filePath":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    assert.strictEqual(
+      result.spec_file,
+      "/project/.claude/specs/2025-01-15-auth/spec.md"
+    );
+  });
+
+  it("returns empty object for empty transcript", () => {
+    const result = parsePhaseArtifacts("");
+    assert.deepStrictEqual(result, {});
+  });
+
+  it("returns empty object for transcript with no Write calls", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    assert.deepStrictEqual(result, {});
   });
 });

@@ -34,7 +34,7 @@ export function parseFilesModified(content: string): string[] {
 }
 
 // CLI entry point
-if (process.argv[1]?.endsWith("parse-files-modified.js")) {
+if (/parse-files-modified\.[jt]s$/.test(process.argv[1] ?? "")) {
   const transcriptPath = process.argv[2];
   if (!transcriptPath) {
     process.exit(0);

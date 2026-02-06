@@ -5,6 +5,7 @@
 # Phases: brainstorm → specify → clarify → architecture → decompose → execute
 
 source ~/.claude/hooks/helpers/loom-config.sh
+source ~/.claude/hooks/helpers/parse-phase-artifacts.sh
 
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
@@ -35,6 +36,51 @@ export SESSION_ID
 
 CURRENT_PHASE=$(jq -r '.current_phase // "init"' "$TASK_GRAPH")
 
+# Brainstorm: only advance if agent produced the summary (not mid-conversation)
+if [[ "$COMPLETED_PHASE" == "brainstorm" ]]; then
+  if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+    if ! grep -q "BRAINSTORM SUMMARY" "$TRANSCRIPT_PATH" 2>/dev/null; then
+      echo "Brainstorm agent returned without summary — not advancing (mid-conversation)"
+      exit 0
+    fi
+  else
+    echo "No transcript — not advancing brainstorm"
+    exit 0
+  fi
+fi
+
+# ===== Extract and store phase artifacts from transcript =====
+if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+  ARTIFACTS=$(parse_phase_artifacts "$TRANSCRIPT_PATH")
+  EXTRACTED_SPEC=$(echo "$ARTIFACTS" | jq -r '.spec_file // empty')
+  EXTRACTED_PLAN=$(echo "$ARTIFACTS" | jq -r '.plan_file // empty')
+
+  # Store spec_file if extracted and valid
+  if [[ -n "$EXTRACTED_SPEC" && -f "$EXTRACTED_SPEC" && "$EXTRACTED_SPEC" == *".claude/specs/"* ]]; then
+    CURRENT_SPEC=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
+    if [[ -z "$CURRENT_SPEC" || "$CURRENT_SPEC" == "null" ]]; then
+      bash ~/.claude/hooks/helpers/state-file-write.sh \
+        --arg spec "$EXTRACTED_SPEC" \
+        '.spec_file = $spec'
+      echo "Captured spec_file: $EXTRACTED_SPEC"
+    fi
+  fi
+
+  # Store plan_file if extracted and valid
+  if [[ -n "$EXTRACTED_PLAN" && -f "$EXTRACTED_PLAN" && "$EXTRACTED_PLAN" == *".claude/plans/"* ]]; then
+    CURRENT_PLAN=$(jq -r '.plan_file // empty' "$TASK_GRAPH")
+    if [[ -z "$CURRENT_PLAN" || "$CURRENT_PLAN" == "null" ]]; then
+      bash ~/.claude/hooks/helpers/state-file-write.sh \
+        --arg plan "$EXTRACTED_PLAN" \
+        '.plan_file = $plan'
+      echo "Captured plan_file: $EXTRACTED_PLAN"
+    fi
+  fi
+
+  # Refresh state after potential writes
+  TASK_GRAPH=$(resolve_task_graph "$SESSION_ID") || exit 0
+fi
+
 # Determine next phase and artifact
 NEXT_PHASE=""
 ARTIFACT=""
@@ -49,7 +95,7 @@ case "$COMPLETED_PHASE" in
     # spec_file must be in .claude/specs/ — reject pre-populated non-spec paths
     SPEC_FILE=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
     if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" && "$SPEC_FILE" == *".claude/specs/"* ]]; then
-      MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || echo 0)
+      MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || true)
       if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
         NEXT_PHASE="clarify"
       else

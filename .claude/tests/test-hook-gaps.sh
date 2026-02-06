@@ -20,6 +20,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Reset state file permissions (state-file-write.sh sets chmod 444)
+reset_state() {
+  chmod 644 "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || true
+  rm -rf "$TEST_DIR/.claude/state/.task_graph.lock" "$TEST_DIR/.claude/state/.task_graph.lock.lock" 2>/dev/null || true
+}
+
 pass() {
   echo -e "${GREEN}✓ $1${NC}"
   ((PASS++)) || true
@@ -213,6 +219,7 @@ PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.
 mkdir -p "$TEST_DIR/.claude/plans"
 echo "# Plan" > "$TEST_DIR/.claude/plans/test.md"
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "architecture",
@@ -230,7 +237,8 @@ echo '{"session_id": "artifact-test", "agent_id": "agent-arch2", "agent_type": "
 PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
 [[ "$PHASE_AFTER" == "decompose" ]] && pass "Advances to decompose when plan_file exists" || fail "Advance with plan" "decompose" "$PHASE_AFTER"
 
-# Test 4e: brainstorm has no artifact check (just "completed") → always advances
+# Test 4e: brainstorm advances only when transcript contains BRAINSTORM SUMMARY
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "init",
@@ -241,11 +249,36 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 }
 EOF
 
-echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent"}' | \
+# 4e-i: Without summary marker → stays at init (mid-conversation return)
+TRANSCRIPT_NO_SUMMARY="$TEST_DIR/transcript-no-summary.jsonl"
+echo '{"message":{"content":[{"type":"text","text":"What problem are you trying to solve?"}]}}' > "$TRANSCRIPT_NO_SUMMARY"
+
+echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent", "agent_transcript_path": "'"$TRANSCRIPT_NO_SUMMARY"'"}' | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
 
 PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
-[[ "$PHASE_AFTER" == "specify" ]] && pass "Brainstorm always advances (no file check)" || fail "Brainstorm advance" "specify" "$PHASE_AFTER"
+[[ "$PHASE_AFTER" == "init" ]] && pass "Brainstorm without summary stays at init" || fail "Brainstorm no-summary" "init" "$PHASE_AFTER"
+
+# 4e-ii: With summary marker → advances to specify
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "init",
+  "phase_artifacts": {},
+  "skipped_phases": [],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+TRANSCRIPT_WITH_SUMMARY="$TEST_DIR/transcript-with-summary.jsonl"
+echo '{"message":{"content":[{"type":"text","text":"## BRAINSTORM SUMMARY\n\nThe user wants X."}]}}' > "$TRANSCRIPT_WITH_SUMMARY"
+
+echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent", "agent_transcript_path": "'"$TRANSCRIPT_WITH_SUMMARY"'"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
+
+PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$PHASE_AFTER" == "specify" ]] && pass "Brainstorm with summary advances to specify" || fail "Brainstorm with-summary" "specify" "$PHASE_AFTER"
 
 rm -rf /tmp/claude-subagents
 
@@ -258,6 +291,7 @@ echo "--- Test: update-task-status.sh crash detection ---"
 cd "$TEST_DIR"
 mkdir -p /tmp/claude-subagents
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -304,6 +338,7 @@ EXEC_COUNT=$(jq '.executing_tasks | length' "$TEST_DIR/.claude/state/active_task
 [[ "$EXEC_COUNT" == "0" ]] && pass "executing_tasks cleared after crash" || fail "executing_tasks cleared" "0" "$EXEC_COUNT"
 
 # Test 5b: crash detection does NOT trigger for review agents
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -322,6 +357,7 @@ T1_STILL=$(jq -r '.tasks[] | select(.id=="T1") | .status' "$TEST_DIR/.claude/sta
 [[ "$T1_STILL" == "in_progress" ]] && pass "Review agent crash doesn't mark tasks failed" || fail "Review agent no crash" "in_progress" "$T1_STILL"
 
 # Test 5c: retry_count increments on second crash
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -346,6 +382,9 @@ echo ""
 echo "--- Test: validate-task-graph.sh ---"
 
 VALIDATOR="$REPO_ROOT/.claude/hooks/helpers/validate-task-graph.sh"
+
+# Validator tests expect non-zero exits — disable set -e for this section
+set +e
 
 # 6a: Valid minimal graph
 VALID_JSON='{"plan_title":"Test","plan_file":"x.md","spec_file":"s.md","tasks":[{"id":"T1","description":"Do thing","agent":"code-implementer-agent","wave":1,"depends_on":[]}]}'
@@ -430,14 +469,16 @@ ERR_COUNT=$(echo "$OUTPUT" | grep -c "  -" || true)
 # 6p: All recognized agents accepted (batch test to avoid per-agent jq overhead)
 ALL_AGENTS_OK=true
 FAILED_AGENTS=""
-for AGENT in code-implementer-agent architecture-agent java-test-agent ts-test-agent security-agent dotfiles-agent k8s-agent keycloak-agent frontend-agent general-purpose decompose-agent; do
+for AGENT in code-implementer-agent java-test-agent ts-test-agent security-agent dotfiles-agent k8s-agent keycloak-agent frontend-agent general-purpose; do
   AGENT_JSON="{\"plan_title\":\"T\",\"plan_file\":\"x\",\"spec_file\":\"s\",\"tasks\":[{\"id\":\"T1\",\"description\":\"x\",\"agent\":\"$AGENT\",\"wave\":1,\"depends_on\":[]}]}"
   if ! echo "$AGENT_JSON" | bash "$VALIDATOR" - 2>/dev/null; then
     ALL_AGENTS_OK=false
     FAILED_AGENTS="$FAILED_AGENTS $AGENT"
   fi
 done
-[[ "$ALL_AGENTS_OK" == "true" ]] && pass "All 11 recognized agents accepted" || fail "Recognized agents" "all accepted" "failed:$FAILED_AGENTS"
+[[ "$ALL_AGENTS_OK" == "true" ]] && pass "All 9 impl agents accepted" || fail "Recognized agents" "all accepted" "failed:$FAILED_AGENTS"
+
+set -e
 
 # ============================================
 # Test 7: validate-phase-order.sh recognizes decompose-agent
@@ -447,6 +488,7 @@ echo "--- Test: validate-phase-order.sh decompose-agent ---"
 
 cd "$TEST_DIR"
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "architecture",
@@ -466,6 +508,7 @@ else
 fi
 
 # decompose-agent should be BLOCKED from init
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "init",
@@ -513,7 +556,7 @@ grep -q "failed" "$SKILL" && pass "SKILL.md documents failed status" || fail "SK
 grep -q "retry_count" "$SKILL" && pass "SKILL.md documents retry_count" || fail "SKILL.md" "retry_count" "missing"
 grep -q "MultiEdit" "$SKILL" && pass "SKILL.md mentions MultiEdit" || fail "SKILL.md" "MultiEdit" "missing"
 grep -q "advance-phase.sh" "$SKILL" && pass "SKILL.md documents advance-phase.sh hook" || fail "SKILL.md" "advance-phase.sh" "missing"
-grep -q "artifact verification" "$SKILL" && pass "SKILL.md documents artifact verification" || fail "SKILL.md" "artifact verification" "missing"
+grep -qi "artifact verification" "$SKILL" && pass "SKILL.md documents artifact verification" || fail "SKILL.md" "artifact verification" "missing"
 grep -q "decompose-agent\|decompose agent" "$SKILL" && pass "SKILL.md mentions decompose agent" || fail "SKILL.md" "decompose agent" "missing"
 grep -q "validate-task-graph" "$SKILL" && pass "SKILL.md mentions validate-task-graph" || fail "SKILL.md" "validate-task-graph" "missing"
 

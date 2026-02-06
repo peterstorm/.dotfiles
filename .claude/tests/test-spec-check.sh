@@ -21,6 +21,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Helper: reset state file (chmod 644 so cat > works, clears stale locks)
+reset_state() {
+  chmod 644 "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || true
+  rm -rf "$TEST_DIR/.claude/state/.task_graph.lock" "$TEST_DIR/.claude/state/.task_graph.lock.lock" 2>/dev/null || true
+}
+
 pass() {
   echo -e "${GREEN}✓ $1${NC}"
   ((PASS++)) || true
@@ -69,7 +75,7 @@ echo "spec-check-invoker" > /tmp/claude-subagents/test-agent-123.type
 echo "test-session-123" > /tmp/claude-subagents/test-session.active
 
 # Run hook (pipe input via stdin)
-echo "{\"session_id\": \"test-session\", \"agent_id\": \"test-agent-123\", \"agent_transcript_path\": \"$TEST_DIR/spec-check-transcript.jsonl\"}" | \
+echo "{\"session_id\": \"test-session\", \"agent_id\": \"test-agent-123\", \"agent_type\": \"spec-check-invoker\", \"agent_transcript_path\": \"$TEST_DIR/spec-check-transcript.jsonl\"}" | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/store-spec-check-findings.sh" 2>&1
 
 # Verify spec_check was stored
@@ -95,6 +101,7 @@ CRITICAL_FINDINGS=$(jq -r '.spec_check.critical_findings | length' "$TEST_DIR/.c
 echo ""
 echo "--- Test: store-spec-check-findings.sh PASSED ---"
 
+reset_state
 # Reset state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
@@ -111,7 +118,7 @@ EOF
 
 echo "spec-check-invoker" > /tmp/claude-subagents/pass-agent.type
 
-echo "{\"session_id\": \"test-session\", \"agent_id\": \"pass-agent\", \"agent_transcript_path\": \"$TEST_DIR/spec-check-pass.jsonl\"}" | \
+echo "{\"session_id\": \"test-session\", \"agent_id\": \"pass-agent\", \"agent_type\": \"spec-check-invoker\", \"agent_transcript_path\": \"$TEST_DIR/spec-check-pass.jsonl\"}" | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/store-spec-check-findings.sh" 2>&1
 
 PASS_VERDICT=$(jq -r '.spec_check.verdict' "$TEST_DIR/.claude/state/active_task_graph.json")
@@ -126,6 +133,7 @@ PASS_BLOCKED=$(jq -r '.wave_gates["1"].blocked' "$TEST_DIR/.claude/state/active_
 echo ""
 echo "--- Test: Hook ignores non-spec-check agents ---"
 
+reset_state
 # Reset state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
@@ -138,7 +146,7 @@ EOF
 # Different agent type
 echo "code-implementer-agent" > /tmp/claude-subagents/impl-agent.type
 
-echo "{\"session_id\": \"test-session\", \"agent_id\": \"impl-agent\", \"agent_transcript_path\": \"$TEST_DIR/spec-check-transcript.jsonl\"}" | \
+echo "{\"session_id\": \"test-session\", \"agent_id\": \"impl-agent\", \"agent_type\": \"code-implementer-agent\", \"agent_transcript_path\": \"$TEST_DIR/spec-check-transcript.jsonl\"}" | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/store-spec-check-findings.sh" 2>&1
 
 # spec_check should NOT be added
@@ -151,6 +159,7 @@ SPEC_CHECK_EXISTS=$(jq -r '.spec_check // "missing"' "$TEST_DIR/.claude/state/ac
 echo ""
 echo "--- Test: complete-wave-gate.sh spec_check gate ---"
 
+reset_state
 # Setup: spec_check has critical findings
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
@@ -181,6 +190,7 @@ fi
 echo ""
 echo "--- Test: complete-wave-gate.sh passes with clean spec_check ---"
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -211,6 +221,7 @@ fi
 echo ""
 echo "--- Test: complete-wave-gate.sh skips when no spec_check ---"
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -231,6 +242,7 @@ echo "$OUTPUT" | grep -q "All checks passed" && pass "Still passes without spec_
 echo ""
 echo "--- Test: complete-wave-gate.sh warns on wrong wave ---"
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 2,
@@ -255,6 +267,7 @@ echo "$OUTPUT" | grep -q "WARNING" && pass "Warns when spec_check wave != curren
 echo ""
 echo "--- Test: Hook requires SPEC_CHECK_CRITICAL_COUNT ---"
 
+reset_state
 # Reset state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
@@ -271,14 +284,14 @@ EOF
 
 echo "spec-check-invoker" > /tmp/claude-subagents/malformed-agent.type
 
-OUTPUT=$(echo "{\"session_id\": \"test-session\", \"agent_id\": \"malformed-agent\", \"agent_transcript_path\": \"$TEST_DIR/malformed-transcript.jsonl\"}" | \
+OUTPUT=$(echo "{\"session_id\": \"test-session\", \"agent_id\": \"malformed-agent\", \"agent_type\": \"spec-check-invoker\", \"agent_transcript_path\": \"$TEST_DIR/malformed-transcript.jsonl\"}" | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/store-spec-check-findings.sh" 2>&1)
 
 echo "$OUTPUT" | grep -q "WARNING" && pass "Warns on malformed output (missing count)" || fail "Warns on malformed" "contains WARNING" "$OUTPUT"
 
-# spec_check should NOT be added when malformed
-SPEC_CHECK_EXISTS=$(jq -r '.spec_check // "missing"' "$TEST_DIR/.claude/state/active_task_graph.json")
-[[ "$SPEC_CHECK_EXISTS" == "missing" ]] && pass "Does NOT store malformed spec_check" || fail "Does NOT store malformed" "missing" "$SPEC_CHECK_EXISTS"
+# Malformed → stores EVIDENCE_CAPTURE_FAILED (not silently ignored)
+SPEC_VERDICT=$(jq -r '.spec_check.verdict // "missing"' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$SPEC_VERDICT" == "EVIDENCE_CAPTURE_FAILED" ]] && pass "Stores EVIDENCE_CAPTURE_FAILED verdict" || fail "Stores EVIDENCE_CAPTURE_FAILED" "EVIDENCE_CAPTURE_FAILED" "$SPEC_VERDICT"
 
 # ============================================
 # Test 9: spec-check-invoker agent file exists
@@ -369,12 +382,12 @@ fi
 # Test 13: settings.json has spec-check hook
 # ============================================
 echo ""
-echo "--- Test: settings.json has spec-check hook ---"
+echo "--- Test: dispatch.sh routes spec-check hook ---"
 
-if grep -q "store-spec-check-findings.sh" "$REPO_ROOT/.claude/settings.json"; then
-  pass "settings.json includes store-spec-check-findings.sh"
+if grep -q "store-spec-check-findings.sh" "$REPO_ROOT/.claude/hooks/SubagentStop/dispatch.sh"; then
+  pass "dispatch.sh routes to store-spec-check-findings.sh"
 else
-  fail "settings.json includes hook" "store-spec-check-findings.sh" "missing"
+  fail "dispatch.sh routes hook" "store-spec-check-findings.sh" "missing"
 fi
 
 # ============================================
