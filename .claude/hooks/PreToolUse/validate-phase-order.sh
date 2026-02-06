@@ -13,6 +13,8 @@
 # NOTE: Exit code 2 requires stderr output!
 # NOTE: Hook input comes via stdin!
 
+source ~/.claude/hooks/helpers/loom-config.sh
+
 TASK_GRAPH=".claude/state/active_task_graph.json"
 [[ ! -f "$TASK_GRAPH" ]] && exit 0
 
@@ -114,8 +116,8 @@ check_artifacts() {
       fi
       if ! echo "$SKIPPED" | grep -q "clarify"; then
         MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC" 2>/dev/null || echo 0)
-        if [[ "$MARKERS" -gt 3 ]]; then
-          echo "clarify ($MARKERS markers > 3)"
+        if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
+          echo "clarify ($MARKERS markers > $CLARIFY_THRESHOLD)"
           return 1
         fi
       fi

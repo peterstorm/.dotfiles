@@ -24,6 +24,8 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 
 **Note:** All phases are MANDATORY by default. Skip flags allow explicit bypass with user acknowledgment.
 
+**Clarify threshold:** Markers > 3 triggers mandatory clarify phase. Source of truth: `hooks/helpers/loom-config.sh`
+
 ---
 
 ## Full Orchestration Flow
@@ -90,12 +92,18 @@ Substitute variables:
 - `{feature_description}` - User's original request
 - `{prior_context}` - Any notes from prior exploration
 
-**Wait for agent completion.** Extract:
-- Refined feature description
+**Wait for agent completion.** Extract the `BRAINSTORM SUMMARY` block:
+- Building (what + why)
 - Selected approach
 - Key constraints
+- In/out of scope
+- Open questions
 
-Pass to Phase 1.
+**User checkpoint:** Present the brainstorm summary and ask:
+> "Approach: {selected approach}. Proceed to specification?"
+
+If user wants changes → re-spawn brainstorm-agent with feedback.
+If approved → pass summary as `{brainstorm_output}` to Phase 1.
 
 ---
 

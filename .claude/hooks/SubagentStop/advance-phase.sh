@@ -4,6 +4,8 @@
 #
 # Phases: brainstorm → specify → clarify → architecture → decompose → execute
 
+source ~/.claude/hooks/helpers/loom-config.sh
+
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
@@ -43,15 +45,15 @@ case "$COMPLETED_PHASE" in
     ARTIFACT="completed"
     ;;
   specify)
-    # Check if clarify needed (markers > 3)
+    # Check if clarify needed (markers > CLARIFY_THRESHOLD)
     SPEC_FILE=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
     if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" ]]; then
       MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || echo 0)
-      if [[ "$MARKERS" -gt 3 ]]; then
+      if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
         NEXT_PHASE="clarify"
       else
         NEXT_PHASE="architecture"
-        # Auto-skip clarify if markers ≤ 3
+        # Auto-skip clarify if markers ≤ CLARIFY_THRESHOLD
         bash ~/.claude/hooks/helpers/state-file-write.sh '.skipped_phases = ((.skipped_phases // []) + ["clarify"] | unique)'
       fi
       ARTIFACT="$SPEC_FILE"
@@ -106,7 +108,7 @@ bash ~/.claude/hooks/helpers/state-file-write.sh \
 
 echo "Phase advanced: $COMPLETED_PHASE → $NEXT_PHASE"
 if [[ "$COMPLETED_PHASE" == "specify" && "$NEXT_PHASE" == "architecture" ]]; then
-  echo "  (clarify auto-skipped: markers ≤ 3)"
+  echo "  (clarify auto-skipped: markers ≤ $CLARIFY_THRESHOLD)"
 fi
 
 exit 0
