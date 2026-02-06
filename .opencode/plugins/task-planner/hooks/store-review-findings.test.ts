@@ -12,8 +12,8 @@ import {
   countWaveCriticalFindings,
   getBlockedTasks,
   areAllTasksReviewed,
-} from "./store-review-findings.js";
-import type { TaskGraph, Task } from "../types.js";
+} from "./store-review-findings";
+import type { TaskGraph, Task } from "../types";
 
 // ============================================================================
 // Test Fixtures

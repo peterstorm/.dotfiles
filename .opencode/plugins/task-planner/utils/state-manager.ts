@@ -17,7 +17,7 @@ import type {
   WaveGate,
   AgentContext,
   StateManagerOptions,
-} from "../types.js";
+} from "../types";
 import {
   STATE_DIR,
   TASK_GRAPH_FILENAME,
@@ -26,7 +26,7 @@ import {
   LOCK_RETRY_INTERVAL_MS,
   MAX_LOCK_ATTEMPTS,
   ERRORS,
-} from "../constants.js";
+} from "../constants";
 
 // ============================================================================
 // Cross-Repo Session Support

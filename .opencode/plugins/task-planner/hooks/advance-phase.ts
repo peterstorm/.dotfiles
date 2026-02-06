@@ -11,15 +11,15 @@
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
-import type { TaskGraph, Phase, PhaseAdvancement } from "../types.js";
+import type { TaskGraph, Phase, PhaseAdvancement } from "../types";
 import {
   PHASE_COMPLETION_PATTERNS,
   ARTIFACT_PATH_PATTERN,
   CLARIFICATION_MARKER_PATTERN,
   CLARIFY_MARKER_THRESHOLD,
   PHASE_ORDER,
-} from "../constants.js";
-import type { StateManager } from "../utils/state-manager.js";
+} from "../constants";
+import type { StateManager } from "../utils/state-manager";
 
 // ============================================================================
 // Main Advancement Function

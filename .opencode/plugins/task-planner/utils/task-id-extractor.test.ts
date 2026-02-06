@@ -12,7 +12,7 @@ import {
   getCanonicalFormat,
   validateTaskIdFormat,
   extractAllTaskIds,
-} from "./task-id-extractor.js";
+} from "./task-id-extractor";
 
 // ============================================================================
 // extractTaskId Tests

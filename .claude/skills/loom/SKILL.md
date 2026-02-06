@@ -14,9 +14,9 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 
 **BEFORE starting any phase**, run this check:
 ```bash
-command -v bun || echo "FATAL: bun not found. Install: curl -fsSL https://bun.sh/install | bash"
+command -v bun || echo "FATAL: bun not found. Run: nix develop ./.claude"
 ```
-If `bun` is missing, **STOP and tell the user**. Loom hooks require bun for TypeScript transcript parsing.
+If `bun` is missing, **STOP and tell the user**. Loom hooks require bun for TypeScript transcript parsing. Dev shell: `nix develop ./.claude`
 
 ---
 
@@ -45,7 +45,7 @@ If `bun` is missing, **STOP and tell the user**. Loom hooks require bun for Type
 ┌─────────────────────────────────────────────────────────┐
 │ Phase 0: BRAINSTORM [MANDATORY]                         │
 │   Agent: brainstorm-agent                               │
-│   Output: Refined understanding, selected approach      │
+│   Output: .claude/specs/{slug}/brainstorm.md            │
 │   Skip: --skip-brainstorm                               │
 └─────────────────────────────────────────────────────────┘
         │
@@ -100,18 +100,14 @@ Substitute variables:
 - `{feature_description}` - User's original request
 - `{prior_context}` - Any notes from prior exploration
 
-**Wait for agent completion.** Extract the `BRAINSTORM SUMMARY` block:
-- Building (what + why)
-- Selected approach
-- Key constraints
-- In/out of scope
-- Open questions
+**Wait for agent completion.** Agent writes `.claude/specs/{date_slug}/brainstorm.md`.
+Hook detects the file and advances phase to `specify`.
 
-**User checkpoint:** Present the brainstorm summary and ask:
+**User checkpoint:** Read brainstorm.md, present summary, ask:
 > "Approach: {selected approach}. Proceed to specification?"
 
 If user wants changes → re-spawn brainstorm-agent with feedback.
-If approved → pass summary as `{brainstorm_output}` to Phase 1.
+If approved → pass brainstorm.md path as `{brainstorm_file}` to Phase 1.
 
 ---
 
@@ -123,7 +119,7 @@ If approved → pass summary as `{brainstorm_output}` to Phase 1.
 
 Substitute variables:
 - `{feature_description}` - Refined description (from brainstorm or original)
-- `{brainstorm_output}` - Summary from Phase 0 (or empty)
+- `{date_slug}` - Same slug as brainstorm (agent reads brainstorm.md from this dir)
 - `{date_slug}` - `YYYY-MM-DD-feature-name` format
 
 **Wait for agent completion.** Extract:

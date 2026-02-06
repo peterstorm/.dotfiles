@@ -135,7 +135,7 @@ test_allows_missing_prompt() {
 
 test_real_loom_template_unsubstituted() {
   # Simulate real loom template with unsubstituted variables
-  local input='{"tool_name":"Task","tool_input":{"prompt":"## Specify: {feature_description}\n\n{brainstorm_output}\n\nCreate formal specification.\n\n**Output location:** `.claude/specs/{date_slug}/spec.md`"}}'
+  local input='{"tool_name":"Task","tool_input":{"prompt":"## Specify: {feature_description}\n\n**Brainstorm output:** Read `.claude/specs/{date_slug}/brainstorm.md`\n\nCreate formal specification.\n\n**Output location:** `.claude/specs/{date_slug}/spec.md`"}}'
   local exit_code stderr
   stderr=$(echo "$input" | bash "$HOOK" 2>&1 >/dev/null) && exit_code=0 || exit_code=$?
   assert_exit 2 "$exit_code" "blocks real loom template with unsubstituted vars"

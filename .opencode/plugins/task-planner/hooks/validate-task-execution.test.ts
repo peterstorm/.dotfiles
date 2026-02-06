@@ -11,8 +11,8 @@ import {
   isTaskReady,
   getReadyTasks,
   getRemainingTasks,
-} from "./validate-task-execution.js";
-import type { TaskGraph, Task, TaskToolInput } from "../types.js";
+} from "./validate-task-execution";
+import type { TaskGraph, Task, TaskToolInput } from "../types";
 
 // ============================================================================
 // Test Fixtures

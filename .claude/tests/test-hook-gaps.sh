@@ -237,7 +237,7 @@ echo '{"session_id": "artifact-test", "agent_id": "agent-arch2", "agent_type": "
 PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
 [[ "$PHASE_AFTER" == "decompose" ]] && pass "Advances to decompose when plan_file exists" || fail "Advance with plan" "decompose" "$PHASE_AFTER"
 
-# Test 4e: brainstorm advances only when transcript contains BRAINSTORM SUMMARY
+# Test 4e: brainstorm advances only when brainstorm.md file exists
 reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
@@ -249,17 +249,14 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 }
 EOF
 
-# 4e-i: Without summary marker → stays at init (mid-conversation return)
-TRANSCRIPT_NO_SUMMARY="$TEST_DIR/transcript-no-summary.jsonl"
-echo '{"message":{"content":[{"type":"text","text":"What problem are you trying to solve?"}]}}' > "$TRANSCRIPT_NO_SUMMARY"
-
-echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent", "agent_transcript_path": "'"$TRANSCRIPT_NO_SUMMARY"'"}' | \
+# 4e-i: Without brainstorm.md → stays at init
+echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent"}' | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
 
 PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
-[[ "$PHASE_AFTER" == "init" ]] && pass "Brainstorm without summary stays at init" || fail "Brainstorm no-summary" "init" "$PHASE_AFTER"
+[[ "$PHASE_AFTER" == "init" ]] && pass "Brainstorm without file stays at init" || fail "Brainstorm no-file" "init" "$PHASE_AFTER"
 
-# 4e-ii: With summary marker → advances to specify
+# 4e-ii: With brainstorm.md → advances to specify
 reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
@@ -271,14 +268,14 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 }
 EOF
 
-TRANSCRIPT_WITH_SUMMARY="$TEST_DIR/transcript-with-summary.jsonl"
-echo '{"message":{"content":[{"type":"text","text":"## BRAINSTORM SUMMARY\n\nThe user wants X."}]}}' > "$TRANSCRIPT_WITH_SUMMARY"
+mkdir -p "$TEST_DIR/.claude/specs/2026-01-01-test"
+echo "# Brainstorm Summary" > "$TEST_DIR/.claude/specs/2026-01-01-test/brainstorm.md"
 
-echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent", "agent_transcript_path": "'"$TRANSCRIPT_WITH_SUMMARY"'"}' | \
+echo '{"session_id": "artifact-test", "agent_id": "agent-brain", "agent_type": "brainstorm-agent"}' | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/advance-phase.sh" 2>&1
 
 PHASE_AFTER=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
-[[ "$PHASE_AFTER" == "specify" ]] && pass "Brainstorm with summary advances to specify" || fail "Brainstorm with-summary" "specify" "$PHASE_AFTER"
+[[ "$PHASE_AFTER" == "specify" ]] && pass "Brainstorm with file advances to specify" || fail "Brainstorm with-file" "specify" "$PHASE_AFTER"
 
 rm -rf /tmp/claude-subagents
 

@@ -8,8 +8,8 @@ import {
   isReviewAgent,
   getRemainingTaskIds,
   parseFilesModified,
-} from "./update-task-status.js";
-import type { TaskGraph, Task } from "../types.js";
+} from "./update-task-status";
+import type { TaskGraph, Task } from "../types";
 
 // ============================================================================
 // Test Fixtures

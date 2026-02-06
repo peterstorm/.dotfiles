@@ -11,9 +11,9 @@
  * This hook is called by the /wave-gate skill.
  */
 
-import type { TaskGraph, Task, WaveGateResult } from "../types.js";
-import { StateManager } from "../utils/state-manager.js";
-import { ERRORS } from "../constants.js";
+import type { TaskGraph, Task, WaveGateResult } from "../types";
+import { StateManager } from "../utils/state-manager";
+import { ERRORS } from "../constants";
 
 // ============================================================================
 // Main Gate Verification

@@ -15,9 +15,9 @@ import type {
   TaskToolInput,
   TaskExecutionResult,
   WaveGate,
-} from "../types.js";
-import { extractTaskIdFromArgs } from "../utils/task-id-extractor.js";
-import { COMPLETED_TASK_STATUSES, ERRORS } from "../constants.js";
+} from "../types";
+import { extractTaskIdFromArgs } from "../utils/task-id-extractor";
+import { COMPLETED_TASK_STATUSES, ERRORS } from "../constants";
 
 // ============================================================================
 // Main Validation Function

@@ -9,8 +9,8 @@ import {
   blockDirectEdits,
   isOrchestrationActive,
   getBlockedTools,
-} from "./block-direct-edits.js";
-import type { TaskGraph, ToolExecuteInput } from "../types.js";
+} from "./block-direct-edits";
+import type { TaskGraph, ToolExecuteInput } from "../types";
 
 // ============================================================================
 // Test Fixtures

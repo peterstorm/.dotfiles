@@ -6,7 +6,7 @@ Template for spawning specify-agent. Variables in `{braces}` must be substituted
 
 ## CRITICAL: You CAN Write Files
 
-**You are a subagent. PreToolUse hooks DO NOT apply to subagents (they bypass hooks entirely).**
+**You are a subagent. The block-direct-edits hook detects subagents and allows Edit/Write.**
 - You MUST use Write/Edit tools to create the spec file — this WILL work
 - Do NOT read `.claude/hooks/` or `.claude/state/` files — they are irrelevant to you
 - Do NOT check if you are "allowed" to write — you are. Just write.
@@ -16,7 +16,7 @@ Template for spawning specify-agent. Variables in `{braces}` must be substituted
 
 ## Specify: {feature_description}
 
-{brainstorm_output}
+**Brainstorm output:** Read `.claude/specs/{date_slug}/brainstorm.md` for the brainstorm summary (approach, constraints, scope).
 
 Create formal specification for this feature.
 

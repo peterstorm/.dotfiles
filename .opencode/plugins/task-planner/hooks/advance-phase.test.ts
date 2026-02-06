@@ -16,7 +16,7 @@ import {
   countClarificationMarkers,
   detectAnyPhaseCompletion,
   detectTaskCompletion,
-} from "./advance-phase.js";
+} from "./advance-phase";
 
 // ============================================================================
 // detectCompletedPhase Tests

@@ -36,15 +36,12 @@ export SESSION_ID
 
 CURRENT_PHASE=$(jq -r '.current_phase // "init"' "$TASK_GRAPH")
 
-# Brainstorm: only advance if agent produced the summary (not mid-conversation)
+# Brainstorm: only advance if agent wrote brainstorm.md to .claude/specs/
+# File-based check — same pattern as specify (spec.md) and architecture (plan.md)
 if [[ "$COMPLETED_PHASE" == "brainstorm" ]]; then
-  if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
-    if ! grep -q "BRAINSTORM SUMMARY" "$TRANSCRIPT_PATH" 2>/dev/null; then
-      echo "Brainstorm agent returned without summary — not advancing (mid-conversation)"
-      exit 0
-    fi
-  else
-    echo "No transcript — not advancing brainstorm"
+  BRAINSTORM_FILE=$(find .claude/specs -name "brainstorm.md" -type f 2>/dev/null | head -1)
+  if [[ -z "$BRAINSTORM_FILE" ]]; then
+    echo "Brainstorm agent returned without writing brainstorm.md — not advancing"
     exit 0
   fi
 fi
@@ -88,7 +85,8 @@ ARTIFACT=""
 case "$COMPLETED_PHASE" in
   brainstorm)
     NEXT_PHASE="specify"
-    ARTIFACT="completed"
+    BRAINSTORM_FILE=$(find .claude/specs -name "brainstorm.md" -type f 2>/dev/null | head -1)
+    ARTIFACT="${BRAINSTORM_FILE:-completed}"
     ;;
   specify)
     # Check if clarify needed (markers > CLARIFY_THRESHOLD)
@@ -110,9 +108,16 @@ case "$COMPLETED_PHASE" in
     fi
     ;;
   clarify)
-    NEXT_PHASE="architecture"
-    # Artifact is the updated spec file
+    # Only advance if markers actually resolved (≤ threshold) in spec.md
     SPEC_FILE=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
+    if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" ]]; then
+      MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || echo 0)
+      if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
+        echo "Clarify agent returned but $MARKERS markers remain (> $CLARIFY_THRESHOLD) — not advancing"
+        exit 0
+      fi
+    fi
+    NEXT_PHASE="architecture"
     ARTIFACT="${SPEC_FILE:-completed}"
     ;;
   architecture)
@@ -130,6 +135,12 @@ esac
 
 # Verify expected artifact exists on disk before advancing
 case "$COMPLETED_PHASE" in
+  brainstorm)
+    if [[ -z "$BRAINSTORM_FILE" || ! -f "$BRAINSTORM_FILE" ]]; then
+      echo "ERROR: brainstorm.md not found in .claude/specs/. Phase not advanced." >&2
+      exit 0
+    fi
+    ;;
   specify)
     SPEC_CHECK=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
     if [[ -z "$SPEC_CHECK" || ! -f "$SPEC_CHECK" ]]; then

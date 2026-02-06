@@ -500,8 +500,8 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 EOF
 
 # Test: Edit blocked during orchestration
-# NOTE: Subagents bypass PreToolUse hooks entirely (run in subprocess),
-# so this hook only blocks MAIN Claude from editing directly.
+# NOTE: block-direct-edits checks /tmp/claude-subagents/ flag to allow subagent writes.
+# This test verifies main agent (no flag) is blocked.
 if echo '{"tool_name": "Edit", "tool_input": {"file_path": "test.ts"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/block-direct-edits.sh" 2>/dev/null; then
   fail "Blocks Edit during orchestration" "exit 2" "exit 0"
 else

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { detectNewTests, isTestFile, analyzeFilesForTests } from "./verify-new-tests.js";
+import { detectNewTests, isTestFile, analyzeFilesForTests } from "./verify-new-tests";
 
 // ============================================================================
 // detectNewTests Tests

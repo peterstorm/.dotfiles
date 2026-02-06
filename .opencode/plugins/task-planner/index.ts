@@ -18,33 +18,33 @@
  */
 
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
-import { StateManager } from "./utils/state-manager.js";
-import { blockDirectEdits } from "./hooks/block-direct-edits.js";
-import { guardStateFile } from "./hooks/guard-state-file.js";
-import { validatePhaseOrder } from "./hooks/validate-phase-order.js";
-import { advancePhase } from "./hooks/advance-phase.js";
-import { validateTaskExecution } from "./hooks/validate-task-execution.js";
-import { updateTaskStatus } from "./hooks/update-task-status.js";
-import { verifyNewTests } from "./hooks/verify-new-tests.js";
+import { StateManager } from "./utils/state-manager";
+import { blockDirectEdits } from "./hooks/block-direct-edits";
+import { guardStateFile } from "./hooks/guard-state-file";
+import { validatePhaseOrder } from "./hooks/validate-phase-order";
+import { advancePhase } from "./hooks/advance-phase";
+import { validateTaskExecution } from "./hooks/validate-task-execution";
+import { updateTaskStatus } from "./hooks/update-task-status";
+import { verifyNewTests } from "./hooks/verify-new-tests";
 import {
   storeReviewFindings,
   isReviewContent,
-} from "./hooks/store-review-findings.js";
+} from "./hooks/store-review-findings";
 import {
   parseSpecCheck,
   isSpecCheckContent,
-} from "./hooks/parse-spec-check.js";
+} from "./hooks/parse-spec-check";
 // Wave gate functions are used by the /wave-gate skill, not plugin hooks
 // Re-exported for skill access
 export {
   completeWaveGate,
   isWaveImplementationComplete,
-} from "./hooks/complete-wave-gate.js";
+} from "./hooks/complete-wave-gate";
 import {
   PhaseAdvancementDebouncer,
   MessageBuffer,
-} from "./utils/debounce.js";
-import { extractTaskIdFromArgs } from "./utils/task-id-extractor.js";
+} from "./utils/debounce";
+import { extractTaskIdFromArgs } from "./utils/task-id-extractor";
 import type {
   TaskGraph,
   ToolExecuteInput,
@@ -54,7 +54,7 @@ import type {
   ToolExecuteBeforeOutput,
   ToolExecuteAfterInput,
   ToolExecuteAfterOutput,
-} from "./types.js";
+} from "./types";
 
 // ============================================================================
 // Plugin State

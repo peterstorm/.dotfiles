@@ -1,11 +1,9 @@
 #!/bin/bash
-# Block Edit/Write during loom orchestration
-# Forces use of Task tool with appropriate agents for implementation
+# Block Edit/Write from the MAIN agent during loom orchestration
+# Subagent Edit/Write is allowed — detected via /tmp/claude-subagents/ flag
 #
-# WHY THIS IS CRITICAL:
-# Without this hook, Claude can bypass the entire orchestration by editing
-# files directly, skipping phases like brainstorm/specify/architecture.
-# Subagents bypass PreToolUse hooks, so they CAN edit - this is intentional.
+# WHY: Without this, the orchestrator can bypass phases by editing directly.
+# Subagents SHOULD edit — that's their job.
 #
 # NOTE: Exit code 2 requires stderr output!
 # NOTE: Hook input comes via stdin!
@@ -18,6 +16,12 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 
 case "$TOOL_NAME" in
   Edit|Write|MultiEdit)
+    # Allow if a subagent is active (SubagentStart sets flag, SubagentStop clears it)
+    SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
+    if [[ -n "$SESSION_ID" && -s "/tmp/claude-subagents/${SESSION_ID}.active" ]]; then
+      exit 0
+    fi
+
     echo "BLOCKED: Direct edits not allowed during loom orchestration." >&2
     echo "" >&2
     echo "Use Task tool with appropriate agent for implementation:" >&2

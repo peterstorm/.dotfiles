@@ -45,12 +45,14 @@ YAGNI ruthlessly — remove unnecessary features from scope.
 
 ---
 
-## Required Output Format
+## Required Output
 
-When complete, output this structured summary (specify-agent parses this):
+When complete, **write** the summary to: `.claude/specs/{date_slug}/brainstorm.md`
 
-```
-## BRAINSTORM SUMMARY
+Use this format:
+
+```markdown
+# Brainstorm Summary
 
 **Building:** {1-2 sentences: what we're building and why}
 
@@ -73,4 +75,5 @@ When complete, output this structured summary (specify-agent parses this):
 - {any unresolved questions for specify/clarify phases}
 ```
 
-This summary is passed as `{brainstorm_output}` to the specify phase template.
+The file path is used by loom hooks to detect brainstorm completion and by specify-agent as input.
+Also output the file path in your final message so the orchestrator can pass it forward.

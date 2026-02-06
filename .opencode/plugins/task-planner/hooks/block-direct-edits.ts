@@ -8,8 +8,8 @@
  * Equivalent to: ~/.claude/hooks/PreToolUse/block-direct-edits.sh
  */
 
-import type { TaskGraph, ToolExecuteInput } from "../types.js";
-import { BLOCKED_TOOLS, ERRORS } from "../constants.js";
+import type { TaskGraph, ToolExecuteInput } from "../types";
+import { BLOCKED_TOOLS, ERRORS } from "../constants";
 
 // ============================================================================
 // Hook Function

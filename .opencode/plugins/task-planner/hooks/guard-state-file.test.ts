@@ -10,8 +10,8 @@ import {
   isProtectedPath,
   getProtectedPatterns,
   extractPathsFromCommand,
-} from "./guard-state-file.js";
-import type { TaskGraph, ToolExecuteInput } from "../types.js";
+} from "./guard-state-file";
+import type { TaskGraph, ToolExecuteInput } from "../types";
 
 // ============================================================================
 // Test Fixtures

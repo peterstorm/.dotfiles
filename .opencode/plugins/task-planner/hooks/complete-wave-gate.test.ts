@@ -13,8 +13,8 @@ import {
   getWaveGateStatus,
   getMaxWave,
   areAllWavesComplete,
-} from "./complete-wave-gate.js";
-import type { TaskGraph, Task } from "../types.js";
+} from "./complete-wave-gate";
+import type { TaskGraph, Task } from "../types";
 
 // ============================================================================
 // Test Fixtures

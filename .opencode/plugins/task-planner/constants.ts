@@ -4,7 +4,7 @@
  * Centralized configuration values for the task-planner plugin.
  */
 
-import type { Phase, AgentType } from "./types.js";
+import type { Phase, AgentType } from "./types";
 
 // ============================================================================
 // File Paths

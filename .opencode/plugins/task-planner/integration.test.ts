@@ -13,11 +13,11 @@ import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { existsSync } from "fs";
-import { StateManager } from "./utils/state-manager.js";
-import { validatePhaseOrder } from "./hooks/validate-phase-order.js";
-import { advancePhase } from "./hooks/advance-phase.js";
-import { PhaseAdvancementDebouncer, MessageBuffer } from "./utils/debounce.js";
-import type { TaskGraph, ToolExecuteInput } from "./types.js";
+import { StateManager } from "./utils/state-manager";
+import { validatePhaseOrder } from "./hooks/validate-phase-order";
+import { advancePhase } from "./hooks/advance-phase";
+import { PhaseAdvancementDebouncer, MessageBuffer } from "./utils/debounce";
+import type { TaskGraph, ToolExecuteInput } from "./types";
 
 // ============================================================================
 // Test Fixtures

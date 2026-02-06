@@ -17,8 +17,8 @@ import {
   isPhaseExempt,
   getPhaseForSkill,
   isValidArtifactPath,
-} from "./validate-phase-order.js";
-import type { TaskGraph, ToolExecuteInput, Phase } from "../types.js";
+} from "./validate-phase-order";
+import type { TaskGraph, ToolExecuteInput, Phase } from "../types";
 
 // ============================================================================
 // Test Fixtures

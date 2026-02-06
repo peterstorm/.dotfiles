@@ -194,3 +194,6 @@ describe("parsePhaseArtifacts", () => {
     assert.deepStrictEqual(result, {});
   });
 });
+
+// checkBrainstormComplete tests removed — brainstorm detection is now file-based
+// (checks for .claude/specs/{slug}/brainstorm.md existence instead of transcript parsing)

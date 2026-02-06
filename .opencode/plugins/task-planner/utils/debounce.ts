@@ -5,7 +5,7 @@
  * to prevent rapid re-triggering of phase advancement checks.
  */
 
-import { PHASE_ADVANCEMENT_DEBOUNCE_MS } from "../constants.js";
+import { PHASE_ADVANCEMENT_DEBOUNCE_MS } from "../constants";
 
 // ============================================================================
 // Hash Function

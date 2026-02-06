@@ -82,11 +82,11 @@ is_valid_transition() {
 
   case "$from:$to" in
     init:brainstorm|init:specify) return 0 ;;
-    brainstorm:specify) return 0 ;;
-    specify:clarify|specify:architecture) return 0 ;;
-    clarify:architecture) return 0 ;;
-    architecture:decompose) return 0 ;;
-    decompose:execute) return 0 ;;
+    brainstorm:brainstorm|brainstorm:specify) return 0 ;;
+    specify:specify|specify:clarify|specify:architecture) return 0 ;;
+    clarify:clarify|clarify:architecture) return 0 ;;
+    architecture:architecture|architecture:decompose) return 0 ;;
+    decompose:decompose|decompose:execute) return 0 ;;
     execute:execute) return 0 ;;  # Multiple impl tasks OK
     *) return 1 ;;
   esac
@@ -98,10 +98,13 @@ check_artifacts() {
 
   case "$phase" in
     specify)
-      # Brainstorm must be complete (or skipped)
-      if [[ "$CURRENT_PHASE" == "init" ]] && ! echo "$SKIPPED" | grep -q "brainstorm"; then
-        echo "brainstorm"
-        return 1
+      # Brainstorm must be complete (or skipped) — check for brainstorm.md file
+      if ! echo "$SKIPPED" | grep -q "brainstorm"; then
+        BRAINSTORM_FILE=$(find .claude/specs -name "brainstorm.md" -type f 2>/dev/null | head -1)
+        if [[ -z "$BRAINSTORM_FILE" ]]; then
+          echo "brainstorm (no brainstorm.md found in .claude/specs/)"
+          return 1
+        fi
       fi
       ;;
     clarify)

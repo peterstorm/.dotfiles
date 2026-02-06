@@ -17,8 +17,8 @@ import {
   resolveTaskGraphPath,
   registerSessionTaskGraph,
   unregisterSessionTaskGraph,
-} from "./state-manager.js";
-import type { TaskGraph, Task } from "../types.js";
+} from "./state-manager";
+import type { TaskGraph, Task } from "../types";
 
 // ============================================================================
 // Test Fixtures

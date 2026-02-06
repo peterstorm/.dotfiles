@@ -9,8 +9,8 @@ import {
   determineVerdict,
   isSpecCheckPassed,
   getSpecCheckSummary,
-} from "./parse-spec-check.js";
-import type { TaskGraph, SpecCheck } from "../types.js";
+} from "./parse-spec-check";
+import type { TaskGraph, SpecCheck } from "../types";
 
 // ============================================================================
 // Test Fixtures

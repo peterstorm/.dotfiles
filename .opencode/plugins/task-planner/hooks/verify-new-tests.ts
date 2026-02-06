@@ -10,10 +10,10 @@
  * This hook is called when an agent completes (SubagentStop equivalent).
  */
 
-import type { TaskGraph, TaskCompletionContext, NewTestEvidence } from "../types.js";
-import { StateManager } from "../utils/state-manager.js";
-import { extractTaskId } from "../utils/task-id-extractor.js";
-import { NEW_TEST_PATTERNS, TASK_REVIEW_AGENTS } from "../constants.js";
+import type { TaskGraph, TaskCompletionContext, NewTestEvidence } from "../types";
+import { StateManager } from "../utils/state-manager";
+import { extractTaskId } from "../utils/task-id-extractor";
+import { NEW_TEST_PATTERNS, TASK_REVIEW_AGENTS } from "../constants";
 
 // ============================================================================
 // Main Verification Function

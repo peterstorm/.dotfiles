@@ -4,8 +4,10 @@
 
 export interface TranscriptLine {
   message?: {
+    role?: string;
     content?: string | ContentBlock[];
   };
+  type?: string; // "human" | "assistant" (alternate format)
 }
 
 export interface ContentBlock {

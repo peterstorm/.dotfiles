@@ -8,12 +8,12 @@
  * Equivalent to: ~/.claude/hooks/PreToolUse/guard-state-file.sh
  */
 
-import type { TaskGraph, ToolExecuteInput } from "../types.js";
+import type { TaskGraph, ToolExecuteInput } from "../types";
 import {
   PROTECTED_STATE_PATTERNS,
   BASH_WRITE_PATTERNS,
   ERRORS,
-} from "../constants.js";
+} from "../constants";
 
 // ============================================================================
 // Hook Function

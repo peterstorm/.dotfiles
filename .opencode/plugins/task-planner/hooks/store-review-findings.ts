@@ -10,14 +10,14 @@
  * This hook is called from message.updated when review content is detected.
  */
 
-import type { TaskGraph, Task } from "../types.js";
-import { StateManager } from "../utils/state-manager.js";
-import { extractTaskId } from "../utils/task-id-extractor.js";
+import type { TaskGraph, Task } from "../types";
+import { StateManager } from "../utils/state-manager";
+import { extractTaskId } from "../utils/task-id-extractor";
 import {
   CRITICAL_FINDING_PATTERN,
   ADVISORY_FINDING_PATTERN,
   TASK_REVIEW_AGENTS,
-} from "../constants.js";
+} from "../constants";
 
 // ============================================================================
 // Types

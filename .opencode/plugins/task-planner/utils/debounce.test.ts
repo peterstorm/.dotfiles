@@ -9,7 +9,7 @@ import {
   simpleHash,
   PhaseAdvancementDebouncer,
   MessageBuffer,
-} from "./debounce.js";
+} from "./debounce";
 
 // ============================================================================
 // simpleHash Tests

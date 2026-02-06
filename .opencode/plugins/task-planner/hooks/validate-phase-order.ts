@@ -12,14 +12,14 @@ import type {
   ToolExecuteInput,
   Phase,
   ArtifactPrerequisiteResult,
-} from "../types.js";
+} from "../types";
 import {
   SKILL_TO_PHASE,
   PHASE_EXEMPT_SKILLS,
   VALID_TRANSITIONS,
   ALLOWED_ARTIFACT_PATHS,
   ERRORS,
-} from "../constants.js";
+} from "../constants";
 
 // ============================================================================
 // Main Validation Function

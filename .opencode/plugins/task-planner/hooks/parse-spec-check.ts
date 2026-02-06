@@ -10,9 +10,9 @@
  * This hook is called from message.updated when spec-check content is detected.
  */
 
-import type { TaskGraph, SpecCheck, ReviewVerdict } from "../types.js";
-import { StateManager } from "../utils/state-manager.js";
-import { SPEC_CHECK_FINDING_PATTERN } from "../constants.js";
+import type { TaskGraph, SpecCheck, ReviewVerdict } from "../types";
+import { StateManager } from "../utils/state-manager";
+import { SPEC_CHECK_FINDING_PATTERN } from "../constants";
 
 // ============================================================================
 // Types

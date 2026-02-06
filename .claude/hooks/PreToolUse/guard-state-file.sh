@@ -1,7 +1,7 @@
 #!/bin/bash
 # Guard state files from direct modification via Bash tool
 # Allows reads (jq, cat) but blocks writes (>, mv, cp, tee, sed -i, perl -i)
-# Hooks (SubagentStop etc.) bypass PreToolUse entirely, so they can still write
+# SubagentStop hooks write via helper scripts called from bash (not via Edit/Write tools)
 # Only active when task graph exists
 #
 # WHY LOCAL PATH (not resolve-task-graph.sh):

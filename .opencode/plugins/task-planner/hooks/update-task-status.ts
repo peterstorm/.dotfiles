@@ -12,14 +12,14 @@ import type {
   TaskGraph,
   TaskCompletionContext,
   TestEvidence,
-} from "../types.js";
-import { StateManager } from "../utils/state-manager.js";
-import { extractTaskId } from "../utils/task-id-extractor.js";
+} from "../types";
+import { StateManager } from "../utils/state-manager";
+import { extractTaskId } from "../utils/task-id-extractor";
 import {
   TEST_EVIDENCE_PATTERNS,
   TASK_REVIEW_AGENTS,
   CRASH_DETECTION_AGENTS,
-} from "../constants.js";
+} from "../constants";
 
 // ============================================================================
 // Main Update Function
