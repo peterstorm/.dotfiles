@@ -11,6 +11,13 @@ Template for spawning architecture-agent. Variables in `{braces}` must be substi
 **IMPORTANT: You are designing architecture from a specification, not reviewing existing code.**
 You are running inside `/loom`. Your plan feeds into the decompose phase, which parses it into a parallel task graph for implementation agents. Plan structure matters.
 
+## CRITICAL: You CAN Write Files
+
+**You are a subagent. PreToolUse hooks DO NOT apply to subagents (they bypass hooks entirely).**
+- You MUST use Write/Edit tools to create the plan file — this WILL work
+- Do NOT read `.claude/hooks/` or `.claude/state/` files — they are irrelevant to you
+- Do NOT check if you are "allowed" to write — you are. Just write.
+
 ---
 
 ## Process

@@ -46,8 +46,9 @@ case "$COMPLETED_PHASE" in
     ;;
   specify)
     # Check if clarify needed (markers > CLARIFY_THRESHOLD)
+    # spec_file must be in .claude/specs/ — reject pre-populated non-spec paths
     SPEC_FILE=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
-    if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" ]]; then
+    if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" && "$SPEC_FILE" == *".claude/specs/"* ]]; then
       MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || echo 0)
       if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
         NEXT_PHASE="clarify"
@@ -85,8 +86,12 @@ esac
 case "$COMPLETED_PHASE" in
   specify)
     SPEC_CHECK=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
-    if [[ -n "$SPEC_CHECK" && ! -f "$SPEC_CHECK" ]]; then
-      echo "ERROR: spec_file '$SPEC_CHECK' not found on disk. Phase not advanced." >&2
+    if [[ -z "$SPEC_CHECK" || ! -f "$SPEC_CHECK" ]]; then
+      echo "ERROR: spec_file '${SPEC_CHECK:-null}' not found on disk. Phase not advanced." >&2
+      exit 0
+    fi
+    if [[ "$SPEC_CHECK" != *".claude/specs/"* ]]; then
+      echo "ERROR: spec_file '$SPEC_CHECK' not in .claude/specs/. Phase not advanced." >&2
       exit 0
     fi
     ;;
