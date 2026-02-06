@@ -20,6 +20,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Helper: reset state file (chmod 644 so cat > works, clears stale locks)
+reset_state() {
+  chmod 644 "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || true
+  rm -rf "$TEST_DIR/.claude/state/.task_graph.lock" "$TEST_DIR/.claude/state/.task_graph.lock.lock" 2>/dev/null || true
+}
+
 pass() {
   echo -e "${GREEN}✓ $1${NC}"
   ((PASS++)) || true
@@ -136,6 +142,7 @@ echo ""
 echo "--- Test: store-review-findings.sh ---"
 
 # Create test state
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -174,6 +181,7 @@ echo ""
 echo "--- Test: mark-tests-passed.sh (read-only) ---"
 
 # Test: all tasks have evidence → exit 0
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -195,6 +203,7 @@ TESTS_PASSED=$(jq -r '.wave_gates["1"].tests_passed' "$TEST_DIR/.claude/state/ac
 [[ "$TESTS_PASSED" == "null" ]] && pass "mark-tests-passed does NOT modify state (read-only)" || fail "mark-tests-passed read-only" "null" "$TESTS_PASSED"
 
 # Test: missing test evidence → exit 1
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -218,6 +227,7 @@ echo ""
 echo "--- Test: complete-wave-gate.sh ---"
 
 # Setup: wave 1 complete, no critical findings, all test evidence present
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -244,6 +254,7 @@ WAVE2_EXISTS=$(jq -r '.wave_gates["2"] // "missing"' "$TEST_DIR/.claude/state/ac
 [[ "$WAVE2_EXISTS" != "missing" ]] && pass "Initializes wave 2 gate" || fail "Initializes wave 2 gate" "object" "$WAVE2_EXISTS"
 
 # Test blocking when critical findings exist
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -265,6 +276,7 @@ echo ""
 echo "--- Test: validate-task-execution.sh ---"
 
 # Setup state
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -325,6 +337,7 @@ echo ""
 echo "--- Test: File Locking ---"
 
 # Verify lock mechanism works (file on Linux, directory on macOS)
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {"current_wave": 1, "tasks": [{"id":"T1","wave":1,"tests_passed":true,"new_tests_written":true}], "wave_gates": {"1": {"tests_passed": null}}}
 EOF
@@ -409,6 +422,8 @@ STORED_SHA=$(jq -r '.tasks[] | select(.id=="T1") | .start_sha // "missing"' "$GI
 [[ "$STORED_SHA" == "$EXPECTED_SHA" ]] && pass "validate-task-execution stores HEAD SHA as start_sha" || fail "validate-task-execution stores start_sha" "$EXPECTED_SHA" "$STORED_SHA"
 
 # Non-planned task (no Task ID) should NOT store SHA
+chmod 644 "$GIT_TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || true
+rm -rf "$GIT_TEST_DIR/.claude/state/.task_graph.lock"* 2>/dev/null || true
 cat > "$GIT_TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -432,6 +447,7 @@ echo "--- Test: guard-state-file.sh write patterns ---"
 cd "$TEST_DIR"
 
 # Recreate state for guard hook
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {"current_wave": 1, "tasks": [], "wave_gates": {}}
 EOF
@@ -478,6 +494,7 @@ echo ""
 echo "--- Test: block-direct-edits.sh ---"
 
 # Ensure state file exists for the hook to activate
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {"current_wave": 1, "tasks": [], "wave_gates": {"1": {"blocked": false}}}
 EOF
@@ -514,6 +531,7 @@ else
 fi
 
 # Restore state file for subsequent tests
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {"current_wave": 1, "tasks": [], "wave_gates": {"1": {"blocked": false}}}
 EOF
@@ -569,6 +587,7 @@ echo "--- Test: complete-wave-gate.sh new_tests_written gate ---"
 cd "$TEST_DIR"
 
 # Tests pass but no new tests written
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -648,6 +667,7 @@ echo "--- Test: complete-wave-gate.sh new_tests_required=false ---"
 cd "$TEST_DIR"
 
 # Task with new_tests_required=false should pass even with new_tests_written=false
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -665,6 +685,7 @@ else
 fi
 
 # Mixed: one task with new_tests_required=false, one with true and written
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -683,6 +704,7 @@ else
 fi
 
 # new_tests_required=true but new_tests_written=false should still fail
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -700,47 +722,46 @@ else
 fi
 
 # ============================================
-# Test 16: verify-new-tests.sh new_tests_required=false skip
+# Test 16: update-task-status.sh new_tests_required=false skip (merged from verify-new-tests)
 # ============================================
 echo ""
-echo "--- Test: verify-new-tests.sh new_tests_required=false ---"
+echo "--- Test: update-task-status.sh new_tests_required=false ---"
 
-# Need a git repo for verify-new-tests.sh (it exits early for non-git)
+# Need a git repo for new-test detection
 VNT_GIT_DIR=$(mktemp -d)
 (cd "$VNT_GIT_DIR" && git init -q && git commit --allow-empty -m "init" -q)
 
 mkdir -p "$VNT_GIT_DIR/.claude/state"
+mkdir -p /tmp/claude-subagents
 cat > "$VNT_GIT_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
   "tasks": [
-    {"id": "T1", "wave": 1, "status": "implemented", "agent": "code-implementer-agent", "new_tests_required": false}
+    {"id": "T1", "wave": 1, "status": "pending", "agent": "code-implementer-agent", "new_tests_required": false}
   ],
-  "wave_gates": {"1": {"impl_complete": true}}
+  "executing_tasks": [],
+  "wave_gates": {"1": {"impl_complete": false}}
 }
 EOF
+echo "$VNT_GIT_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/vnt-skip-session.task_graph
 
-# Create minimal transcript with Task ID
+# Create transcript with Task ID (text content only — no Bash tool output)
 cat > "$VNT_GIT_DIR/skip-transcript.jsonl" << 'EOF'
 {"message": {"content": "**Task ID:** T1\nImplementing migration"}}
 EOF
 
-# Run verify-new-tests from git dir (pipe hook input via stdin)
-(cd "$VNT_GIT_DIR" && echo "{\"agent_transcript_path\": \"$VNT_GIT_DIR/skip-transcript.jsonl\"}" | bash "$REPO_ROOT/.claude/hooks/SubagentStop/verify-new-tests.sh" 2>&1)
+# Run update-task-status from git dir
+(cd "$VNT_GIT_DIR" && echo "{\"session_id\": \"vnt-skip-session\", \"agent_type\": \"code-implementer-agent\", \"agent_transcript_path\": \"$VNT_GIT_DIR/skip-transcript.jsonl\"}" | bash "$REPO_ROOT/.claude/hooks/SubagentStop/update-task-status.sh" 2>&1)
 
-# Check that new_test_evidence indicates skipped
+# Check new_test_evidence indicates skipped
 SKIP_EVIDENCE=$(jq -r '.tasks[] | select(.id=="T1") | .new_test_evidence' "$VNT_GIT_DIR/.claude/state/active_task_graph.json")
-[[ "$SKIP_EVIDENCE" == *"skipped"* ]] && pass "verify-new-tests: skips when new_tests_required=false" || fail "verify-new-tests: skips" "contains 'skipped'" "$SKIP_EVIDENCE"
+[[ "$SKIP_EVIDENCE" == *"skipped"* ]] && pass "update-task-status: skips new-test when new_tests_required=false" || fail "update-task-status: skips" "contains 'skipped'" "$SKIP_EVIDENCE"
 
-# Test: verify-new-tests exits gracefully for non-git repos
-cd /tmp
-if echo '{"agent_transcript_path": "/tmp/fake.jsonl"}' | bash "$REPO_ROOT/.claude/hooks/SubagentStop/verify-new-tests.sh" 2>&1; then
-  pass "verify-new-tests: exits gracefully for non-git repos"
-else
-  fail "verify-new-tests: exits gracefully for non-git repos" "exit 0" "exit non-zero"
-fi
+# Verify task was marked implemented
+TASK_STATUS=$(jq -r '.tasks[] | select(.id=="T1") | .status' "$VNT_GIT_DIR/.claude/state/active_task_graph.json")
+[[ "$TASK_STATUS" == "implemented" ]] && pass "update-task-status: marks implemented with skip" || fail "update-task-status: marks implemented" "implemented" "$TASK_STATUS"
 
-rm -rf "$VNT_GIT_DIR"
+rm -rf "$VNT_GIT_DIR" /tmp/claude-subagents
 cd "$TEST_DIR"
 
 # ============================================
@@ -850,6 +871,7 @@ echo "--- Test: validate-phase-order.sh ---"
 cd "$TEST_DIR"
 
 # Setup: state at init phase (no brainstorm yet)
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "init",
@@ -875,6 +897,7 @@ else
 fi
 
 # Test: specify-agent allowed when brainstorm skipped
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "init",
@@ -892,6 +915,7 @@ else
 fi
 
 # Test: architecture-agent BLOCKED when spec missing
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "specify",
@@ -917,6 +941,7 @@ Some requirements here.
 [NEEDS CLARIFICATION]: Two markers
 EOF
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "specify",
@@ -951,6 +976,7 @@ else
 fi
 
 # Test: architecture-agent allowed when clarify skipped
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "specify",
@@ -969,6 +995,7 @@ else
 fi
 
 # Test: impl-agent BLOCKED without plan
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "architecture",
@@ -989,6 +1016,7 @@ fi
 mkdir -p "$TEST_DIR/.claude/plans"
 echo "# Architecture Plan" > "$TEST_DIR/.claude/plans/test-feature.md"
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "execute",
@@ -1014,7 +1042,7 @@ else
 fi
 
 # Test: unknown agent types BLOCKED (prevents bypass via empty subagent_type)
-if echo '{"tool_name": "Task", "tool_input": {"prompt": "Run tests", "subagent_type": "general-purpose"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
+if echo '{"tool_name": "Task", "tool_input": {"prompt": "Run tests", "subagent_type": "rogue-agent"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/validate-phase-order.sh" 2>/dev/null; then
   fail "validate-phase-order: blocks unknown agent types" "exit 2" "exit 0"
 else
   pass "validate-phase-order: blocks unknown agent types"
@@ -1033,6 +1061,7 @@ mkdir -p /tmp/claude-subagents
 echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/advance-test-session.task_graph
 
 # Setup: brainstorm complete, should advance to specify
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "init",
@@ -1062,6 +1091,7 @@ cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
 [NEEDS CLARIFICATION]: One marker only
 EOF
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "specify",
@@ -1094,6 +1124,7 @@ cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
 [NEEDS CLARIFICATION]: Five
 EOF
 
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "specify",
@@ -1112,6 +1143,7 @@ NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.js
 [[ "$NEW_PHASE" == "clarify" ]] && pass "advance-phase: specify → clarify (markers > 3)" || fail "advance-phase: specify → clarify" "clarify" "$NEW_PHASE"
 
 # Test: clarify complete → architecture
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "clarify",
@@ -1132,6 +1164,7 @@ NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.js
 [[ "$NEW_PHASE" == "architecture" ]] && pass "advance-phase: clarify → architecture" || fail "advance-phase: clarify → architecture" "architecture" "$NEW_PHASE"
 
 # Test: architecture complete → decompose
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "architecture",
@@ -1152,6 +1185,7 @@ NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.js
 [[ "$NEW_PHASE" == "decompose" ]] && pass "advance-phase: architecture → decompose" || fail "advance-phase: architecture → decompose" "decompose" "$NEW_PHASE"
 
 # Test: non-phase agents don't advance
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "execute",
@@ -1174,15 +1208,16 @@ STILL_EXECUTE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_grap
 rm -rf /tmp/claude-subagents
 
 # ============================================
-# Test 22: update-task-status.sh remaining tasks output
+# Test 22: update-task-status.sh remaining tasks + anti-spoofing
 # ============================================
 echo ""
-echo "--- Test: update-task-status.sh remaining tasks ---"
+echo "--- Test: update-task-status.sh remaining tasks + anti-spoofing ---"
 
 cd "$TEST_DIR"
 mkdir -p /tmp/claude-subagents
 
 # Setup: wave 1 with 3 tasks, one about to complete
+reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_wave": 1,
@@ -1191,24 +1226,58 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
     {"id": "T2", "wave": 1, "status": "pending", "agent": "code-implementer-agent"},
     {"id": "T3", "wave": 1, "status": "pending", "agent": "code-implementer-agent"}
   ],
+  "executing_tasks": [],
   "wave_gates": {"1": {"impl_complete": false}}
 }
 EOF
 
 echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/remaining-test.task_graph
-echo "code-implementer-agent" > /tmp/claude-subagents/agent-rem-123.type
 
-# Create transcript for T1 completion
+# Create transcript with REAL Bash tool_use/tool_result (anti-spoof format)
 cat > "$TEST_DIR/remaining-transcript.jsonl" << 'EOF'
-{"message": {"content": "**Task ID:** T1\nImplemented successfully\nBUILD SUCCESS\nTests run: 5, Failures: 0, Errors: 0"}}
+{"message": {"content": "**Task ID:** T1\nImplemented successfully"}}
+{"message": {"content": [{"type": "tool_use", "id": "tool_123", "name": "Bash", "input": {"command": "mvn test"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_123", "content": "BUILD SUCCESS\nTests run: 5, Failures: 0, Errors: 0"}]}}
 EOF
 
 # Run update-task-status (should show T2, T3 as remaining)
-OUTPUT=$(echo '{"session_id": "remaining-test", "agent_id": "agent-rem-123", "agent_transcript_path": "'"$TEST_DIR"'/remaining-transcript.jsonl"}' | \
+OUTPUT=$(echo '{"session_id": "remaining-test", "agent_type": "code-implementer-agent", "agent_transcript_path": "'"$TEST_DIR"'/remaining-transcript.jsonl"}' | \
   bash "$REPO_ROOT/.claude/hooks/SubagentStop/update-task-status.sh" 2>&1)
 
 echo "$OUTPUT" | grep -q "T2" && pass "update-task-status: shows remaining tasks (T2)" || fail "update-task-status: shows T2" "contains T2" "$OUTPUT"
 echo "$OUTPUT" | grep -q "T3" && pass "update-task-status: shows remaining tasks (T3)" || fail "update-task-status: shows T3" "contains T3" "$OUTPUT"
+
+# Verify test evidence came from Bash tool output
+T1_EVIDENCE=$(jq -r '.tasks[] | select(.id=="T1") | .test_evidence' "$TEST_DIR/.claude/state/active_task_graph.json")
+T1_PASSED=$(jq -r '.tasks[] | select(.id=="T1") | .tests_passed' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$T1_PASSED" == "true" ]] && pass "update-task-status: tests_passed from real Bash output" || fail "update-task-status: tests_passed" "true" "$T1_PASSED"
+[[ "$T1_EVIDENCE" == *"maven"* ]] && pass "update-task-status: maven evidence extracted" || fail "update-task-status: maven evidence" "contains maven" "$T1_EVIDENCE"
+
+# ANTI-SPOOFING: Text-only "BUILD SUCCESS" (no Bash tool_use) → tests_passed=false
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [
+    {"id": "T1", "wave": 1, "status": "pending", "agent": "code-implementer-agent"}
+  ],
+  "executing_tasks": [],
+  "wave_gates": {"1": {"impl_complete": false}}
+}
+EOF
+
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/spoof-test.task_graph
+
+# Transcript with BUILD SUCCESS as plain text (agent prose) — NOT in a Bash tool result
+cat > "$TEST_DIR/spoof-transcript.jsonl" << 'EOF'
+{"message": {"content": "**Task ID:** T1\nI ran the tests and they passed.\nBUILD SUCCESS\nTests run: 5, Failures: 0, Errors: 0\nAll good!"}}
+EOF
+
+echo '{"session_id": "spoof-test", "agent_type": "code-implementer-agent", "agent_transcript_path": "'"$TEST_DIR"'/spoof-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/update-task-status.sh" 2>&1 >/dev/null
+
+SPOOF_PASSED=$(jq -r '.tasks[] | select(.id=="T1") | .tests_passed' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$SPOOF_PASSED" == "false" ]] && pass "ANTI-SPOOF: text-only BUILD SUCCESS → tests_passed=false" || fail "ANTI-SPOOF: text-only" "false" "$SPOOF_PASSED"
 
 rm -rf /tmp/claude-subagents
 
@@ -1244,6 +1313,462 @@ NO_SHA=$(jq -r '.tasks[] | select(.id=="T1") | .start_sha // "missing"' "$NON_GI
 
 rm -rf "$NON_GIT_DIR"
 cd "$TEST_DIR"
+
+# ============================================
+# Test 24: parse-bash-test-output.sh (anti-spoofing helper)
+# ============================================
+echo ""
+echo "--- Test: parse-bash-test-output.sh ---"
+
+cd "$TEST_DIR"
+source "$REPO_ROOT/.claude/hooks/helpers/parse-bash-test-output.sh"
+
+# Test: extracts output from Bash tool_use with test command
+cat > "$TEST_DIR/bash-test-transcript.jsonl" << 'EOF'
+{"message": {"content": "I will run the tests now"}}
+{"message": {"content": [{"type": "tool_use", "id": "tool_mvn", "name": "Bash", "input": {"command": "mvn test -pl api"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_mvn", "content": "BUILD SUCCESS\nTests run: 12, Failures: 0, Errors: 0"}]}}
+{"message": {"content": "All tests passed! BUILD SUCCESS"}}
+EOF
+
+BASH_RESULT=$(parse_bash_test_output "$TEST_DIR/bash-test-transcript.jsonl")
+echo "$BASH_RESULT" | grep -q "BUILD SUCCESS" && pass "parse-bash-test-output: extracts Bash test result" || fail "parse-bash-test-output: extracts test result" "contains BUILD SUCCESS" "$BASH_RESULT"
+echo "$BASH_RESULT" | grep -q "Tests run: 12" && pass "parse-bash-test-output: extracts test counts" || fail "parse-bash-test-output: test counts" "contains Tests run: 12" "$BASH_RESULT"
+
+# Test: ignores non-Bash tools
+cat > "$TEST_DIR/no-bash-transcript.jsonl" << 'EOF'
+{"message": {"content": [{"type": "tool_use", "id": "tool_read", "name": "Read", "input": {"file_path": "/test.java"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_read", "content": "BUILD SUCCESS\nTests run: 5, Failures: 0, Errors: 0"}]}}
+EOF
+
+NO_BASH_RESULT=$(parse_bash_test_output "$TEST_DIR/no-bash-transcript.jsonl")
+[[ -z "$NO_BASH_RESULT" || ! "$NO_BASH_RESULT" =~ "BUILD SUCCESS" ]] && pass "parse-bash-test-output: ignores non-Bash tools" || fail "parse-bash-test-output: ignores non-Bash" "empty" "$NO_BASH_RESULT"
+
+# Test: ignores Bash commands that aren't test runners
+cat > "$TEST_DIR/non-test-bash-transcript.jsonl" << 'EOF'
+{"message": {"content": [{"type": "tool_use", "id": "tool_ls", "name": "Bash", "input": {"command": "ls -la"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_ls", "content": "total 42\ndrwxr-xr-x 5 user staff"}]}}
+EOF
+
+NON_TEST_RESULT=$(parse_bash_test_output "$TEST_DIR/non-test-bash-transcript.jsonl")
+[[ -z "$NON_TEST_RESULT" || "$NON_TEST_RESULT" =~ ^[[:space:]]*$ ]] && pass "parse-bash-test-output: ignores non-test commands" || fail "parse-bash-test-output: ignores non-test" "empty" "$NON_TEST_RESULT"
+
+# Test: handles multiple test runners (npm test, pytest)
+cat > "$TEST_DIR/multi-runner-transcript.jsonl" << 'EOF'
+{"message": {"content": [{"type": "tool_use", "id": "tool_npm", "name": "Bash", "input": {"command": "npm test"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_npm", "content": "5 passing\n0 failing"}]}}
+{"message": {"content": [{"type": "tool_use", "id": "tool_py", "name": "Bash", "input": {"command": "pytest tests/"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_py", "content": "3 passed in 0.5s"}]}}
+EOF
+
+MULTI_RESULT=$(parse_bash_test_output "$TEST_DIR/multi-runner-transcript.jsonl")
+echo "$MULTI_RESULT" | grep -q "5 passing" && pass "parse-bash-test-output: captures npm test output" || fail "parse-bash-test-output: npm test" "contains '5 passing'" "$MULTI_RESULT"
+echo "$MULTI_RESULT" | grep -q "3 passed" && pass "parse-bash-test-output: captures pytest output" || fail "parse-bash-test-output: pytest" "contains '3 passed'" "$MULTI_RESULT"
+
+# Test: empty transcript returns empty
+EMPTY_RESULT=$(parse_bash_test_output "$TEST_DIR/empty-tools.jsonl")
+[[ -z "$EMPTY_RESULT" || "$EMPTY_RESULT" =~ ^[[:space:]]*$ ]] && pass "parse-bash-test-output: empty for no test commands" || fail "parse-bash-test-output: empty" "empty" "$EMPTY_RESULT"
+
+# ============================================
+# Test 25: state-file-write.sh chmod protection
+# ============================================
+echo ""
+echo "--- Test: state-file-write.sh ---"
+
+cd "$TEST_DIR"
+
+# Create state file
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{"current_wave": 1, "tasks": [{"id": "T1", "status": "pending"}]}
+EOF
+
+# Set chmod 444 (simulates runtime protection)
+chmod 444 "$TEST_DIR/.claude/state/active_task_graph.json"
+
+# Verify direct write fails
+if echo "HACKED" > "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null; then
+  fail "chmod 444: direct write blocked" "EACCES" "write succeeded"
+else
+  pass "chmod 444: direct write blocked (EACCES)"
+fi
+
+# Verify state-file-write.sh can write (toggles chmod)
+export TASK_GRAPH="$TEST_DIR/.claude/state/active_task_graph.json"
+bash "$REPO_ROOT/.claude/hooks/helpers/state-file-write.sh" '.tasks[0].status = "implemented"'
+
+WRITTEN_STATUS=$(jq -r '.tasks[0].status' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$WRITTEN_STATUS" == "implemented" ]] && pass "state-file-write: jq transform succeeds through chmod" || fail "state-file-write: jq transform" "implemented" "$WRITTEN_STATUS"
+
+# Verify file is back to 444 after write
+PERMS=$(stat -f '%Lp' "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || stat -c '%a' "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null)
+[[ "$PERMS" == "444" ]] && pass "state-file-write: restores chmod 444 after write" || fail "state-file-write: restores 444" "444" "$PERMS"
+
+# Test --arg passing
+bash "$REPO_ROOT/.claude/hooks/helpers/state-file-write.sh" --arg id "T1" '.tasks |= map(if .id == $id then .status = "completed" else . end)'
+COMPLETED_STATUS=$(jq -r '.tasks[0].status' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$COMPLETED_STATUS" == "completed" ]] && pass "state-file-write: --arg works" || fail "state-file-write: --arg" "completed" "$COMPLETED_STATUS"
+
+# Test --replace mode
+echo '{"fresh": true}' | bash "$REPO_ROOT/.claude/hooks/helpers/state-file-write.sh" --replace
+FRESH=$(jq -r '.fresh' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$FRESH" == "true" ]] && pass "state-file-write: --replace mode works" || fail "state-file-write: --replace" "true" "$FRESH"
+
+# Restore normal perms for later tests
+chmod 644 "$TEST_DIR/.claude/state/active_task_graph.json"
+unset TASK_GRAPH
+
+# ============================================
+# Test 26: populate-task-graph.sh
+# ============================================
+echo ""
+echo "--- Test: populate-task-graph.sh ---"
+
+cd "$TEST_DIR"
+
+# Create initial state (phase tracking only)
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "execute",
+  "phase_artifacts": {"brainstorm": "completed", "specify": "spec.md", "architecture": "plan.md"},
+  "skipped_phases": [],
+  "spec_file": "spec.md",
+  "plan_file": "plan.md"
+}
+EOF
+
+# Feed decompose JSON via stdin
+export TASK_GRAPH="$TEST_DIR/.claude/state/active_task_graph.json"
+echo '{
+  "plan_title": "Test Feature",
+  "plan_file": "plan.md",
+  "spec_file": "spec.md",
+  "tasks": [
+    {"id": "T1", "description": "First task", "wave": 1, "agent": "code-implementer-agent", "depends_on": []},
+    {"id": "T2", "description": "Second task", "wave": 1, "agent": "code-implementer-agent", "depends_on": []},
+    {"id": "T3", "description": "Third task", "wave": 2, "agent": "code-implementer-agent", "depends_on": ["T1"]}
+  ]
+}' | bash "$REPO_ROOT/.claude/hooks/helpers/populate-task-graph.sh" --issue 42 --repo owner/repo
+
+# Verify merge
+TASK_COUNT=$(jq '.tasks | length' "$TEST_DIR/.claude/state/active_task_graph.json")
+CURRENT_WAVE=$(jq -r '.current_wave' "$TEST_DIR/.claude/state/active_task_graph.json")
+ISSUE=$(jq -r '.github_issue' "$TEST_DIR/.claude/state/active_task_graph.json")
+REPO=$(jq -r '.github_repo' "$TEST_DIR/.claude/state/active_task_graph.json")
+PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+WAVE1_GATE=$(jq -r '.wave_gates["1"].impl_complete' "$TEST_DIR/.claude/state/active_task_graph.json")
+WAVE2_GATE=$(jq -r '.wave_gates["2"].impl_complete' "$TEST_DIR/.claude/state/active_task_graph.json")
+
+[[ "$TASK_COUNT" == "3" ]] && pass "populate-task-graph: 3 tasks merged" || fail "populate-task-graph: task count" "3" "$TASK_COUNT"
+[[ "$CURRENT_WAVE" == "1" ]] && pass "populate-task-graph: current_wave=1" || fail "populate-task-graph: wave" "1" "$CURRENT_WAVE"
+[[ "$ISSUE" == "42" ]] && pass "populate-task-graph: github_issue set" || fail "populate-task-graph: issue" "42" "$ISSUE"
+[[ "$REPO" == "owner/repo" ]] && pass "populate-task-graph: github_repo set" || fail "populate-task-graph: repo" "owner/repo" "$REPO"
+[[ "$PHASE" == "execute" ]] && pass "populate-task-graph: preserves current_phase" || fail "populate-task-graph: phase preserved" "execute" "$PHASE"
+[[ "$WAVE1_GATE" == "false" ]] && pass "populate-task-graph: initializes wave 1 gate" || fail "populate-task-graph: wave 1 gate" "false" "$WAVE1_GATE"
+[[ "$WAVE2_GATE" == "false" ]] && pass "populate-task-graph: initializes wave 2 gate" || fail "populate-task-graph: wave 2 gate" "false" "$WAVE2_GATE"
+
+unset TASK_GRAPH
+
+# ============================================
+# Test 27: Assertion density check (merged into update-task-status.sh)
+# ============================================
+echo ""
+echo "--- Test: Assertion density check ---"
+
+cd "$TEST_DIR"
+
+# Need git repo for diff-based assertion detection
+AD_GIT_DIR=$(mktemp -d)
+(cd "$AD_GIT_DIR" && git init -q && git commit --allow-empty -m "init" -q)
+mkdir -p "$AD_GIT_DIR/.claude/state" "$AD_GIT_DIR/src/test"
+mkdir -p /tmp/claude-subagents
+
+# Test: empty test stubs (test methods but no assertions) → new_tests_written=false
+cat > "$AD_GIT_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [{"id": "T1", "wave": 1, "status": "pending", "agent": "code-implementer-agent"}],
+  "executing_tasks": [],
+  "wave_gates": {"1": {"impl_complete": false}}
+}
+EOF
+echo "$AD_GIT_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/assert-test.task_graph
+
+# Create test file with empty stubs (no assertions)
+cat > "$AD_GIT_DIR/src/test/FooTest.java" << 'JAVA'
+import org.junit.jupiter.api.Test;
+public class FooTest {
+    @Test
+    void testSomething() {
+        // empty - no assertions
+    }
+    @Test
+    void testAnother() {
+        System.out.println("no assertions here");
+    }
+}
+JAVA
+
+# Create transcript (Bash tool output for test pass + Write for the file)
+cat > "$AD_GIT_DIR/assert-transcript.jsonl" << 'EOF'
+{"message": {"content": "**Task ID:** T1\nWrote tests"}}
+{"message": {"content": [{"type": "tool_use", "name": "Write", "input": {"file_path": "src/test/FooTest.java", "content": "..."}}]}}
+{"message": {"content": [{"type": "tool_use", "id": "tool_mvn", "name": "Bash", "input": {"command": "mvn test"}}]}}
+{"message": {"content": [{"type": "tool_result", "tool_use_id": "tool_mvn", "content": "BUILD SUCCESS\nTests run: 2, Failures: 0, Errors: 0"}]}}
+EOF
+
+(cd "$AD_GIT_DIR" && echo "{\"session_id\": \"assert-test\", \"agent_type\": \"code-implementer-agent\", \"agent_transcript_path\": \"$AD_GIT_DIR/assert-transcript.jsonl\"}" | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/update-task-status.sh" 2>&1 >/dev/null)
+
+EMPTY_STUB_WRITTEN=$(jq -r '.tasks[] | select(.id=="T1") | .new_tests_written' "$AD_GIT_DIR/.claude/state/active_task_graph.json")
+EMPTY_STUB_EVIDENCE=$(jq -r '.tasks[] | select(.id=="T1") | .new_test_evidence' "$AD_GIT_DIR/.claude/state/active_task_graph.json")
+[[ "$EMPTY_STUB_WRITTEN" == "false" ]] && pass "Assertion density: empty stubs → new_tests_written=false" || fail "Assertion density: empty stubs" "false" "$EMPTY_STUB_WRITTEN"
+[[ "$EMPTY_STUB_EVIDENCE" == *"0 assertions"* ]] && pass "Assertion density: reports 0 assertions" || fail "Assertion density: 0 assertions" "contains '0 assertions'" "$EMPTY_STUB_EVIDENCE"
+
+# Test: real tests with assertions → new_tests_written=true
+chmod 644 "$AD_GIT_DIR/.claude/state/active_task_graph.json" 2>/dev/null || true
+rm -rf "$AD_GIT_DIR/.claude/state/.task_graph.lock"* 2>/dev/null || true
+cat > "$AD_GIT_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [{"id": "T1", "wave": 1, "status": "pending", "agent": "code-implementer-agent"}],
+  "executing_tasks": [],
+  "wave_gates": {"1": {"impl_complete": false}}
+}
+EOF
+echo "$AD_GIT_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/assert-test2.task_graph
+
+# Overwrite test file with real assertions
+cat > "$AD_GIT_DIR/src/test/FooTest.java" << 'JAVA'
+import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+public class FooTest {
+    @Test
+    void testSomething() {
+        assertThat(1 + 1).isEqualTo(2);
+    }
+    @Test
+    void testAnother() {
+        assertThat("hello").isNotEmpty();
+    }
+}
+JAVA
+
+(cd "$AD_GIT_DIR" && echo "{\"session_id\": \"assert-test2\", \"agent_type\": \"code-implementer-agent\", \"agent_transcript_path\": \"$AD_GIT_DIR/assert-transcript.jsonl\"}" | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/update-task-status.sh" 2>&1 >/dev/null)
+
+REAL_WRITTEN=$(jq -r '.tasks[] | select(.id=="T1") | .new_tests_written' "$AD_GIT_DIR/.claude/state/active_task_graph.json")
+REAL_EVIDENCE=$(jq -r '.tasks[] | select(.id=="T1") | .new_test_evidence' "$AD_GIT_DIR/.claude/state/active_task_graph.json")
+[[ "$REAL_WRITTEN" == "true" ]] && pass "Assertion density: real assertions → new_tests_written=true" || fail "Assertion density: real assertions" "true" "$REAL_WRITTEN"
+[[ "$REAL_EVIDENCE" == *"assertions"* ]] && pass "Assertion density: reports assertion count" || fail "Assertion density: assertion count" "contains 'assertions'" "$REAL_EVIDENCE"
+
+rm -rf "$AD_GIT_DIR" /tmp/claude-subagents
+
+# ============================================
+# Test 28: validate-task-graph.sh new_tests_required keyword validation
+# ============================================
+echo ""
+echo "--- Test: validate-task-graph.sh new_tests_required keywords ---"
+
+# Task with new_tests_required=false + config description → no warning
+VALID_JSON='{
+  "plan_title": "Test",
+  "plan_file": "plan.md",
+  "spec_file": "spec.md",
+  "tasks": [{"id": "T1", "description": "Update config for new env", "wave": 1, "agent": "code-implementer-agent", "depends_on": [], "new_tests_required": false}]
+}'
+
+VALID_OUTPUT=$(echo "$VALID_JSON" | bash "$REPO_ROOT/.claude/hooks/helpers/validate-task-graph.sh" - 2>&1)
+! echo "$VALID_OUTPUT" | grep -q "WARNING" && pass "validate-task-graph: no warning for config task + tests=false" || fail "validate-task-graph: config no warning" "no WARNING" "$VALID_OUTPUT"
+
+# Task with new_tests_required=false + implementation description → WARNING
+SUSPICIOUS_JSON='{
+  "plan_title": "Test",
+  "plan_file": "plan.md",
+  "spec_file": "spec.md",
+  "tasks": [{"id": "T1", "description": "Implement user authentication with JWT", "wave": 1, "agent": "code-implementer-agent", "depends_on": [], "new_tests_required": false}]
+}'
+
+SUSPICIOUS_OUTPUT=$(echo "$SUSPICIOUS_JSON" | bash "$REPO_ROOT/.claude/hooks/helpers/validate-task-graph.sh" - 2>&1)
+echo "$SUSPICIOUS_OUTPUT" | grep -q "WARNING" && pass "validate-task-graph: warns for impl task + tests=false" || fail "validate-task-graph: impl warning" "contains WARNING" "$SUSPICIOUS_OUTPUT"
+
+# Still valid (warning ≠ error) — exit code should be 0
+echo "$SUSPICIOUS_JSON" | bash "$REPO_ROOT/.claude/hooks/helpers/validate-task-graph.sh" - >/dev/null 2>&1
+[[ $? -eq 0 ]] && pass "validate-task-graph: warning doesn't fail validation" || fail "validate-task-graph: warning not error" "exit 0" "exit $?"
+
+# Task with new_tests_required=false + migration description → no warning
+MIGRATION_JSON='{
+  "plan_title": "Test",
+  "plan_file": "plan.md",
+  "spec_file": "spec.md",
+  "tasks": [{"id": "T1", "description": "Run database migration for user table", "wave": 1, "agent": "code-implementer-agent", "depends_on": [], "new_tests_required": false}]
+}'
+
+MIGRATION_OUTPUT=$(echo "$MIGRATION_JSON" | bash "$REPO_ROOT/.claude/hooks/helpers/validate-task-graph.sh" - 2>&1)
+! echo "$MIGRATION_OUTPUT" | grep -q "WARNING" && pass "validate-task-graph: no warning for migration + tests=false" || fail "validate-task-graph: migration no warning" "no WARNING" "$MIGRATION_OUTPUT"
+
+# ============================================
+# Test 29: guard-state-file.sh blocks chmod
+# ============================================
+echo ""
+echo "--- Test: guard-state-file.sh blocks chmod ---"
+
+cd "$TEST_DIR"
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{"current_wave": 1, "tasks": [], "wave_gates": {}}
+EOF
+
+# Test: chmod on state file should be blocked
+if echo '{"tool_name": "Bash", "tool_input": {"command": "chmod 644 .claude/state/active_task_graph.json"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/guard-state-file.sh" 2>/dev/null; then
+  fail "guard-state-file: blocks chmod on state file" "exit 2" "exit 0"
+else
+  pass "guard-state-file: blocks chmod on state file"
+fi
+
+# Test: state-file-write.sh is whitelisted
+if echo '{"tool_name": "Bash", "tool_input": {"command": "bash ~/.claude/hooks/helpers/state-file-write.sh .x = 1"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/guard-state-file.sh" 2>/dev/null; then
+  pass "guard-state-file: whitelists state-file-write.sh"
+else
+  fail "guard-state-file: whitelists state-file-write.sh" "exit 0" "exit 2"
+fi
+
+# Test: populate-task-graph.sh is whitelisted
+if echo '{"tool_name": "Bash", "tool_input": {"command": "echo x | bash ~/.claude/hooks/helpers/populate-task-graph.sh --issue 42"}}' | bash "$REPO_ROOT/.claude/hooks/PreToolUse/guard-state-file.sh" 2>/dev/null; then
+  pass "guard-state-file: whitelists populate-task-graph.sh"
+else
+  fail "guard-state-file: whitelists populate-task-graph.sh" "exit 0" "exit 2"
+fi
+
+# ============================================
+# Test 30: store-reviewer-findings.sh parses Machine Summary
+# ============================================
+echo ""
+echo "--- Test: store-reviewer-findings.sh Machine Summary parsing ---"
+
+cd "$TEST_DIR"
+mkdir -p /tmp/claude-subagents
+
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [
+    {"id": "T1", "wave": 1, "status": "implemented", "review_status": "pending", "critical_findings": [], "advisory_findings": []}
+  ],
+  "wave_gates": {"1": {"impl_complete": true, "tests_passed": true, "reviews_complete": false, "blocked": false}}
+}
+EOF
+
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/review-summary-test.task_graph
+
+# Create transcript with Machine Summary block
+cat > "$TEST_DIR/review-summary-transcript.jsonl" << 'EOF'
+{"message": {"content": "--task T1\n# PR Review Summary\n## Critical Issues\n- SQL injection in query builder\n## Suggestions\n- Consider logging\n\n### Machine Summary\nCRITICAL_COUNT: 1\nADVISORY_COUNT: 1\nCRITICAL: SQL injection in query builder\nADVISORY: Consider logging"}}
+EOF
+
+echo '{"session_id": "review-summary-test", "agent_type": "review-invoker", "agent_transcript_path": "'"$TEST_DIR"'/review-summary-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/store-reviewer-findings.sh" 2>&1 >/dev/null
+
+MS_CRITICAL=$(jq '[.tasks[] | select(.id=="T1") | .critical_findings | length] | add' "$TEST_DIR/.claude/state/active_task_graph.json")
+MS_ADVISORY=$(jq '[.tasks[] | select(.id=="T1") | .advisory_findings | length] | add' "$TEST_DIR/.claude/state/active_task_graph.json")
+MS_STATUS=$(jq -r '.tasks[] | select(.id=="T1") | .review_status' "$TEST_DIR/.claude/state/active_task_graph.json")
+
+[[ "$MS_CRITICAL" == "1" ]] && pass "Machine Summary: 1 critical finding parsed" || fail "Machine Summary: critical count" "1" "$MS_CRITICAL"
+[[ "$MS_ADVISORY" == "1" ]] && pass "Machine Summary: 1 advisory finding parsed" || fail "Machine Summary: advisory count" "1" "$MS_ADVISORY"
+[[ "$MS_STATUS" == "blocked" ]] && pass "Machine Summary: review_status=blocked" || fail "Machine Summary: status" "blocked" "$MS_STATUS"
+
+# Test: CRITICAL_COUNT: 0 with Machine Summary → passed
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_wave": 1,
+  "tasks": [
+    {"id": "T1", "wave": 1, "status": "implemented", "review_status": "pending", "critical_findings": [], "advisory_findings": []}
+  ],
+  "wave_gates": {"1": {"impl_complete": true, "tests_passed": true, "reviews_complete": false, "blocked": false}}
+}
+EOF
+
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/review-pass-test.task_graph
+
+cat > "$TEST_DIR/review-pass-transcript.jsonl" << 'EOF'
+{"message": {"content": "--task T1\n# PR Review Summary\nNo issues found.\n\n### Machine Summary\nCRITICAL_COUNT: 0\nADVISORY_COUNT: 0"}}
+EOF
+
+echo '{"session_id": "review-pass-test", "agent_type": "review-invoker", "agent_transcript_path": "'"$TEST_DIR"'/review-pass-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/store-reviewer-findings.sh" 2>&1 >/dev/null
+
+PASS_STATUS=$(jq -r '.tasks[] | select(.id=="T1") | .review_status' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$PASS_STATUS" == "passed" ]] && pass "Machine Summary: CRITICAL_COUNT:0 → review_status=passed" || fail "Machine Summary: pass status" "passed" "$PASS_STATUS"
+
+rm -rf /tmp/claude-subagents
+
+# ============================================
+# Test 31: dispatch.sh routes to correct hooks
+# ============================================
+echo ""
+echo "--- Test: dispatch.sh routing ---"
+
+cd "$TEST_DIR"
+mkdir -p /tmp/claude-subagents
+
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "init",
+  "phase_artifacts": {},
+  "skipped_phases": [],
+  "current_wave": null,
+  "tasks": []
+}
+EOF
+
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/dispatch-test.task_graph
+echo "brainstorm-agent" > /tmp/claude-subagents/agent-dispatch-1.type
+
+# Test: dispatcher routes brainstorm-agent → advance-phase (should advance init → specify)
+echo '{"session_id": "dispatch-test", "agent_id": "agent-dispatch-1", "agent_type": "brainstorm-agent", "agent_transcript_path": "/tmp/fake.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/dispatch.sh" 2>&1 >/dev/null
+
+DISPATCH_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$DISPATCH_PHASE" == "specify" ]] && pass "dispatch: routes brainstorm-agent → advance-phase" || fail "dispatch: brainstorm routing" "specify" "$DISPATCH_PHASE"
+
+# Test: dispatcher routes impl agent → update-task-status (not advance-phase)
+reset_state
+cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
+{
+  "current_phase": "execute",
+  "phase_artifacts": {},
+  "skipped_phases": [],
+  "current_wave": 1,
+  "tasks": [{"id": "T1", "wave": 1, "status": "pending", "agent": "code-implementer-agent"}],
+  "executing_tasks": [],
+  "wave_gates": {"1": {"impl_complete": false}}
+}
+EOF
+
+echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/dispatch-impl-test.task_graph
+
+cat > "$TEST_DIR/dispatch-impl-transcript.jsonl" << 'EOF'
+{"message": {"content": "**Task ID:** T1\nDone"}}
+EOF
+
+echo '{"session_id": "dispatch-impl-test", "agent_type": "code-implementer-agent", "agent_transcript_path": "'"$TEST_DIR"'/dispatch-impl-transcript.jsonl"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/dispatch.sh" 2>&1 >/dev/null
+
+DISPATCH_STATUS=$(jq -r '.tasks[] | select(.id=="T1") | .status' "$TEST_DIR/.claude/state/active_task_graph.json")
+DISPATCH_PHASE2=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+[[ "$DISPATCH_STATUS" == "implemented" ]] && pass "dispatch: routes impl agent → update-task-status" || fail "dispatch: impl routing" "implemented" "$DISPATCH_STATUS"
+[[ "$DISPATCH_PHASE2" == "execute" ]] && pass "dispatch: impl agent doesn't trigger advance-phase" || fail "dispatch: no advance" "execute" "$DISPATCH_PHASE2"
+
+# Test: dispatcher handles unknown agent type gracefully (cleanup only)
+echo '{"session_id": "dispatch-test", "agent_id": "agent-unknown", "agent_type": "general-purpose"}' | \
+  bash "$REPO_ROOT/.claude/hooks/SubagentStop/dispatch.sh" 2>&1 >/dev/null
+pass "dispatch: handles unknown agent type gracefully"
+
+rm -rf /tmp/claude-subagents
 
 # ============================================
 # Summary

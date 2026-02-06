@@ -37,7 +37,7 @@ This prints per-task evidence status. Exit 0 = all tasks have evidence, exit 1 =
 
 **If evidence missing** → re-spawn the implementation agent for that task. The agent MUST run tests and the SubagentStop hook must see pass markers in the transcript.
 
-**New test verification:** The `verify-new-tests.sh` SubagentStop hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass.
+**New test verification:** The `update-task-status.sh` SubagentStop hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass.
 
 **Do NOT manually run tests or set test flags.** The guard hook blocks direct state file writes. Evidence can only come from agent execution → SubagentStop hook extraction.
 
@@ -144,7 +144,7 @@ bash ~/.claude/hooks/helpers/complete-wave-gate.sh
 
 The helper performs **five checks** before advancing:
 1. **Per-task test evidence** — all wave tasks must have `tests_passed == true`
-2. **New tests written** — all wave tasks must have `new_tests_written == true`
+2. **New tests written** — all wave tasks must have `new_tests_written == true` OR `new_tests_required == false`
 3. **Spec alignment** — `spec_check.critical_count == 0`
 4. **Per-task review status** — all wave tasks must have `review_status != "pending"`
 5. **No critical findings** — code review `critical_findings` count must be 0

@@ -21,7 +21,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 [[ -z "$COMMAND" ]] && exit 0
 
 # Allow whitelisted helper scripts (they do their own validation)
-if echo "$COMMAND" | grep -qE '(complete-wave-gate|mark-tests-passed|store-review-findings)\.sh'; then
+if echo "$COMMAND" | grep -qE '(complete-wave-gate|mark-tests-passed|store-review-findings|state-file-write|populate-task-graph)\.sh'; then
   exit 0
 fi
 
@@ -30,7 +30,7 @@ STATE_FILES="active_task_graph|review-invocations"
 # Only inspect commands that reference state files
 if echo "$COMMAND" | grep -qE "$STATE_FILES"; then
   # Block write patterns targeting state files
-  if echo "$COMMAND" | grep -qE '(>>?|mv |cp |tee |sed -i|perl -i|dd |sponge |python3? .*(open|write)|node .*(writeFile|fs\.))'; then
+  if echo "$COMMAND" | grep -qE '(>>?|mv |cp |tee |sed -i|perl -i|dd |sponge |chmod |python3? .*(open|write)|node .*(writeFile|fs\.))'; then
     echo "BLOCKED: Write to state file not allowed during task-planner workflow." >&2
     echo "State is managed by SubagentStop hooks and helper scripts only." >&2
     echo "Read access (jq, cat) is allowed." >&2

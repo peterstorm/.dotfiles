@@ -7,7 +7,7 @@
 # Usage: bash ~/.claude/hooks/helpers/mark-tests-passed.sh [--wave N]
 # Exit 0 = all tasks have evidence, Exit 1 = missing evidence
 
-TASK_GRAPH=".claude/state/active_task_graph.json"
+TASK_GRAPH="${TASK_GRAPH:-.claude/state/active_task_graph.json}"
 
 [[ ! -f "$TASK_GRAPH" ]] && { echo "ERROR: No active task graph"; exit 1; }
 

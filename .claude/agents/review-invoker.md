@@ -32,21 +32,27 @@ You receive:
 Skill(skill: "review-pr", args: "--files {files} --task {task}")
 ```
 
-Then return the skill output verbatim.
+Then return the skill output **verbatim** — do NOT reformat, summarize, or translate findings.
 
-## Output Format
+## Output Requirements
 
-After /review-pr completes, format output as:
+The /review-pr skill outputs a `### Machine Summary` block at the end. This block is **critical** for automated hook parsing.
+
+**Your job:**
+1. Invoke /review-pr
+2. Return the FULL output including the `### Machine Summary` block
+3. If the skill output is missing `### Machine Summary`, append one yourself:
 
 ```
-CRITICAL: {finding from skill output}
-ADVISORY: {finding from skill output}
-...
-
-CRITICAL_COUNT: N, ADVISORY_COUNT: M
+### Machine Summary
+CRITICAL_COUNT: {count critical issues from output}
+ADVISORY_COUNT: {count non-critical issues from output}
+CRITICAL: {each critical finding, one per line}
+ADVISORY: {each advisory finding, one per line}
 ```
 
 ## Constraints
 
 - FIRST action: Skill tool call
-- Return skill output formatted as above
+- Return skill output VERBATIM — preserve the `### Machine Summary` block exactly
+- Do NOT drop, reformat, or summarize findings

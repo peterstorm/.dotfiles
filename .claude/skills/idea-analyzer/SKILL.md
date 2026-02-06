@@ -21,11 +21,26 @@ Detect input type from `$ARGUMENTS`:
 
 ### YouTube Extraction
 
-YouTube transcripts require a fallback chain:
+Extract the video ID from the URL (`v=` param, or path segment for `youtu.be` links).
 
-1. **Try WebFetch first** — some YouTube URLs return usable content
-2. **If WebFetch returns minimal content**, try: `yt-dlp --write-auto-sub --skip-download --sub-lang en -o "/tmp/%(id)s" <URL>` then read the generated .vtt file
-3. **If yt-dlp is not installed or fails**, ask the user: "I couldn't extract the transcript automatically. Please paste the transcript text directly, or provide a transcript file."
+Use `nix-shell` for ephemeral transcript fetching — no permanent installation:
+
+```bash
+nix-shell -p python3Packages.youtube-transcript-api --run "python3 -c \"
+from youtube_transcript_api import YouTubeTranscriptApi
+ytt = YouTubeTranscriptApi()
+transcript = ytt.fetch('<VIDEO_ID>')
+for entry in transcript:
+    print(entry.text)
+\""
+```
+
+Filter out nix store download noise (lines starting with `these`, `copying`, `  /nix`) from stdout before processing.
+
+**Fallback chain:**
+1. **nix-shell + youtube-transcript-api** (primary — works for any public video, no API key needed)
+2. **If nix is unavailable**, try: `yt-dlp --write-auto-sub --skip-download --sub-lang en -o "/tmp/%(id)s" <URL>` then read the generated .vtt file
+3. **If both fail**, ask the user to paste the transcript text directly
 
 Never attempt to analyze placeholder/error text. If extraction fails, stop and ask for content.
 

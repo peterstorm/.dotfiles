@@ -64,19 +64,15 @@ if [[ -z "$CRITICAL_COUNT" ]]; then
   echo "WARNING: No SPEC_CHECK_CRITICAL_COUNT found in spec-check output"
   echo "Marking as evidence_capture_failed so /wave-gate can surface the issue."
 
-  # Acquire lock and write explicit failure state
-  LOCK_FILE="$(dirname "$TASK_GRAPH")/.task_graph.lock"
-  source ~/.claude/hooks/helpers/lock.sh
-  acquire_lock "$LOCK_FILE" auto
-
-  jq --arg wave "$WAVE" '
+  # Write explicit failure state
+  bash ~/.claude/hooks/helpers/state-file-write.sh --arg wave "$WAVE" '
     .spec_check = {
       wave: ($wave | tonumber),
       run_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
       verdict: "EVIDENCE_CAPTURE_FAILED",
       error: "SPEC_CHECK_CRITICAL_COUNT marker not found in agent output - re-run /wave-gate"
     }
-  ' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+  '
 
   echo "Spec-check verdict set to EVIDENCE_CAPTURE_FAILED"
   exit 0
@@ -87,19 +83,15 @@ CRITICAL_JSON=$(printf '%s\n' "${CRITICAL_FINDINGS[@]}" | jq -R . | jq -s .)
 HIGH_JSON=$(printf '%s\n' "${HIGH_FINDINGS[@]}" | jq -R . | jq -s .)
 MEDIUM_JSON=$(printf '%s\n' "${MEDIUM_FINDINGS[@]}" | jq -R . | jq -s .)
 
-# Acquire lock for state file update
-LOCK_FILE="$(dirname "$TASK_GRAPH")/.task_graph.lock"
-source ~/.claude/hooks/helpers/lock.sh
-acquire_lock "$LOCK_FILE" auto
-
 # Update task graph with spec_check results
-jq --argjson critical "$CRITICAL_JSON" \
-   --argjson high "$HIGH_JSON" \
-   --argjson medium "$MEDIUM_JSON" \
-   --argjson critical_count "${CRITICAL_COUNT:-0}" \
-   --argjson high_count "${HIGH_COUNT:-0}" \
-   --arg verdict "${VERDICT:-UNKNOWN}" \
-   --arg wave "$WAVE" '
+bash ~/.claude/hooks/helpers/state-file-write.sh \
+  --argjson critical "$CRITICAL_JSON" \
+  --argjson high "$HIGH_JSON" \
+  --argjson medium "$MEDIUM_JSON" \
+  --argjson critical_count "${CRITICAL_COUNT:-0}" \
+  --argjson high_count "${HIGH_COUNT:-0}" \
+  --arg verdict "${VERDICT:-UNKNOWN}" \
+  --arg wave "$WAVE" '
   .spec_check = {
     wave: ($wave | tonumber),
     run_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
@@ -113,7 +105,7 @@ jq --argjson critical "$CRITICAL_JSON" \
   if $critical_count > 0 then
     .wave_gates[$wave].blocked = true
   else . end
-' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+'
 
 echo "Stored spec-check findings: ${CRITICAL_COUNT:-0} critical, ${HIGH_COUNT:-0} high"
 if [[ "${CRITICAL_COUNT:-0}" -gt 0 ]]; then

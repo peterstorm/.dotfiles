@@ -1,18 +1,11 @@
 #!/bin/bash
 # Mark subagent as active so PreToolUse can allow Edit/Write from subagents
-# Also stores agent_type for SubagentStop hooks to read
 # Also stores task_graph absolute path for cross-repo access
 INPUT=$(cat)
-
-# DEBUG: Log raw input
-echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart INPUT: $INPUT" >> /tmp/claude-hooks-debug.log
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
-
-# DEBUG: Log parsed values
-echo "$(date '+%Y-%m-%d %H:%M:%S') SubagentStart PARSED: session=$SESSION_ID agent=$AGENT_ID type=$AGENT_TYPE" >> /tmp/claude-hooks-debug.log
 
 # Create session tracking directory (restrictive permissions)
 umask 077

@@ -9,11 +9,6 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.agent_transcript_path // empty')
 
-# Get agent type directly from SubagentStop input if not already set
-if [[ -z "$AGENT_TYPE" ]]; then
-  AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
-fi
-
 # Map agent type to phase
 detect_completed_phase() {
   local agent="$1"
@@ -33,10 +28,8 @@ COMPLETED_PHASE=$(detect_completed_phase "$AGENT_TYPE")
 # Resolve task graph
 source ~/.claude/hooks/helpers/resolve-task-graph.sh
 TASK_GRAPH=$(resolve_task_graph "$SESSION_ID") || exit 0
-LOCK_FILE=$(task_graph_lock_file "$TASK_GRAPH")
-
-source ~/.claude/hooks/helpers/lock.sh
-acquire_lock "$LOCK_FILE" auto
+export TASK_GRAPH
+export SESSION_ID
 
 CURRENT_PHASE=$(jq -r '.current_phase // "init"' "$TASK_GRAPH")
 
@@ -59,7 +52,7 @@ case "$COMPLETED_PHASE" in
       else
         NEXT_PHASE="architecture"
         # Auto-skip clarify if markers ≤ 3
-        jq '.skipped_phases = ((.skipped_phases // []) + ["clarify"] | unique)' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+        bash ~/.claude/hooks/helpers/state-file-write.sh '.skipped_phases = ((.skipped_phases // []) + ["clarify"] | unique)'
       fi
       ARTIFACT="$SPEC_FILE"
     else
@@ -105,11 +98,11 @@ case "$COMPLETED_PHASE" in
 esac
 
 # Update state
-jq --arg phase "$NEXT_PHASE" --arg completed "$COMPLETED_PHASE" --arg artifact "$ARTIFACT" '
-  .current_phase = $phase |
-  .phase_artifacts[$completed] = $artifact |
-  .updated_at = (now | todate)
-' "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+bash ~/.claude/hooks/helpers/state-file-write.sh \
+  --arg phase "$NEXT_PHASE" \
+  --arg completed "$COMPLETED_PHASE" \
+  --arg artifact "$ARTIFACT" \
+  '.current_phase = $phase | .phase_artifacts[$completed] = $artifact | .updated_at = (now | todate)'
 
 echo "Phase advanced: $COMPLETED_PHASE → $NEXT_PHASE"
 if [[ "$COMPLETED_PHASE" == "specify" && "$NEXT_PHASE" == "architecture" ]]; then

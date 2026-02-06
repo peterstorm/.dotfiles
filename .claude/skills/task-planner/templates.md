@@ -133,8 +133,8 @@ These fields are set **automatically** by SubagentStop hooks. They cannot be set
 | `tests_passed` | `update-task-status.sh` | Extracted from agent transcript (Maven/Node/Vitest/pytest markers) |
 | `test_evidence` | `update-task-status.sh` | Description of which markers were found |
 | `files_modified` | `update-task-status.sh` | Files touched by agent (from Write/Edit tool calls in transcript) |
-| `new_tests_written` | `verify-new-tests.sh` | Git diff scanned for new test method patterns (scoped to files_modified) |
-| `new_test_evidence` | `verify-new-tests.sh` | Count and details of new test methods found |
+| `new_tests_written` | `update-task-status.sh` | Git diff scanned for new test method patterns (scoped to files_modified) |
+| `new_test_evidence` | `update-task-status.sh` | Count and details of new test methods found |
 | `review_status` | `store-review-findings.sh` helper (called by SubagentStop hook) | Review agent completes |
 | `critical_findings` | `store-review-findings.sh` helper | Parsed from reviewer output |
 | `advisory_findings` | `store-review-findings.sh` helper | Parsed from reviewer output |

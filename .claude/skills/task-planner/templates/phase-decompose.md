@@ -18,7 +18,6 @@ Read the spec and plan, then decompose into parallel task graph.
 | Agent (subagent_type) | Use When |
 |---|---|
 | code-implementer-agent | implement, create, build, add, write code, model — **writes tests too** |
-| architecture-agent | design, architecture, pattern, refactor |
 | java-test-agent | add missing tests to EXISTING Java code only |
 | ts-test-agent | add missing tests to EXISTING TypeScript code only |
 | security-agent | security, auth, jwt, oauth, vulnerability |

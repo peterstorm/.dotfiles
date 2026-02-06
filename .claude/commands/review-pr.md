@@ -120,7 +120,15 @@ After agents complete, summarize:
 3. Consider suggestions
 4. Run delegated reviews if recommended
 5. Run code-simplifier after fixes
+
+### Machine Summary
+CRITICAL_COUNT: {number of critical issues}
+ADVISORY_COUNT: {number of important + suggestion issues}
+CRITICAL: {each critical finding on its own line}
+ADVISORY: {each non-critical finding on its own line}
 ```
+
+**IMPORTANT:** The `### Machine Summary` block is MANDATORY. It MUST appear at the end of every review output, even if counts are zero. This block is parsed by automated hooks — do NOT omit it.
 
 ## Usage Examples
 

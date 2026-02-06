@@ -18,9 +18,9 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 - `/task-planner --skip-brainstorm` - Skip brainstorm phase (scope already clear)
 - `/task-planner --skip-clarify` - Skip clarify phase (accept markers as-is)
 - `/task-planner --skip-specify` - Skip brainstorm/specify/clarify (use existing spec)
-- `/task-planner --status` - Show current task graph status
-- `/task-planner --complete` - Finalize, clean up state
-- `/task-planner --abort` - Cancel mid-execution, clean state
+- `/task-planner --status` - Show current task graph status *(planned — use jq commands in Observability section)*
+- `/task-planner --complete` - Finalize, clean up state *(planned — manually remove state file for now)*
+- `/task-planner --abort` - Cancel mid-execution, clean state *(planned — manually remove state file for now)*
 
 **Note:** All phases are MANDATORY by default. Skip flags allow explicit bypass with user acknowledgment.
 
@@ -212,14 +212,24 @@ gh issue create --title "Plan: {title}" --body "$(cat .claude/plans/{slug}.md)"
 
 **B. State File:** Populate `.claude/state/active_task_graph.json` with tasks.
 
-Since `guard-state-file.sh` blocks direct Bash writes, use a **general-purpose subagent** to merge decompose output into the existing state file. Subagents bypass PreToolUse hooks.
+Use the `populate-task-graph.sh` helper (whitelisted in guard-state-file.sh):
 
-The subagent should:
-- Read existing state (phase tracking fields)
-- Merge with validated decompose output (tasks, waves)
-- Add `github_issue`, `spec_file`, `plan_file`, `current_wave: 1`
-- Initialize `wave_gates`, `executing_tasks`
-- Write complete state file
+```bash
+echo "$DECOMPOSE_OUTPUT" | bash ~/.claude/hooks/helpers/populate-task-graph.sh --issue ISSUE_NUMBER --repo OWNER/REPO
+```
+
+This helper:
+- Reads existing state (phase tracking fields)
+- Merges with validated decompose output (tasks, waves)
+- Adds `github_issue`, `spec_file`, `plan_file`, `current_wave: 1`
+- Initializes `wave_gates`, `executing_tasks`
+- Writes via `state-file-write.sh` (chmod 444 protection)
+
+**C. Set state file read-only:**
+```bash
+chmod 444 .claude/state/active_task_graph.json
+```
+State file stays chmod 444 at rest. Only hooks can write via `state-file-write.sh` (temporarily toggles to 644).
 
 ---
 
@@ -283,6 +293,8 @@ The state file `.claude/state/active_task_graph.json` is created **before Phase 
 
 ```bash
 # Initial state (created before Phase 0 via Bash — guard inactive since file doesn't exist yet)
+mkdir -p .claude/state
+cat > .claude/state/active_task_graph.json << 'EOF'
 {
   "current_phase": "init",
   "phase_artifacts": {},
@@ -290,7 +302,11 @@ The state file `.claude/state/active_task_graph.json` is created **before Phase 
   "spec_file": null,
   "plan_file": null
 }
+EOF
+chmod 444 .claude/state/active_task_graph.json
 ```
+
+**IMPORTANT:** Set `chmod 444` immediately after creation. This activates OS-level write protection — subagent Write tool calls will get EACCES. Only hooks writing via `state-file-write.sh` can modify the file.
 
 After Phase 4 (Decompose), the task graph is populated with tasks, waves, and GitHub issue info. This is done by passing decompose output through `validate-task-graph.sh` and writing the full state.
 
@@ -337,15 +353,18 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `block-direct-edits.sh` | PreToolUse: Edit/Write/MultiEdit | Forces Task tool |
-| `guard-state-file.sh` | PreToolUse: Bash | Blocks state writes (exception: `start_sha`) |
+| `guard-state-file.sh` | PreToolUse: Bash | Blocks state writes (whitelisted helpers only) |
 | `validate-task-execution.sh` | PreToolUse: Task | Validates wave order |
 | `validate-phase-order.sh` | PreToolUse: Task | Enforces phase sequencing |
-| `advance-phase.sh` | SubagentStop | Advances phase + verifies artifacts on disk |
-| `update-task-status.sh` | SubagentStop | Marks "implemented" or "failed" (crash detection) |
-| `store-reviewer-findings.sh` | SubagentStop | Parses review findings |
-| `store-spec-check-findings.sh` | SubagentStop | Parses spec-check findings |
+| `dispatch.sh` | SubagentStop | Routes to hooks below by agent type |
+| ↳ `advance-phase.sh` | via dispatch | Advances phase + verifies artifacts on disk |
+| ↳ `update-task-status.sh` | via dispatch | Marks "implemented" or "failed" + test evidence + new-test verification |
+| ↳ `store-reviewer-findings.sh` | via dispatch | Parses review findings |
+| ↳ `store-spec-check-findings.sh` | via dispatch | Parses spec-check findings |
+| ↳ `validate-review-invoker.sh` | via dispatch | Validates /review-pr skill was invoked |
+| ↳ `cleanup-subagent-flag.sh` | via dispatch | Cleans up subagent tracking (always runs) |
 
-**NEVER call helpers yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `verify-new-tests.sh`, etc.) run automatically via hooks or `/wave-gate`. Only exception: `detect-test-requirement.sh` during planning.
+**NEVER call helpers yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `state-file-write.sh`, `populate-task-graph.sh`, etc.) run automatically via hooks or `/wave-gate`. Only exception: `populate-task-graph.sh` during Phase 4d.
 
 ---
 

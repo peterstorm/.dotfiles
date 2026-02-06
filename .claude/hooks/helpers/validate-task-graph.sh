@@ -21,7 +21,8 @@ if ! echo "$JSON" | jq empty 2>/dev/null; then
 fi
 
 # Known agent types
-KNOWN_AGENTS='["code-implementer-agent","architecture-agent","java-test-agent","ts-test-agent","security-agent","dotfiles-agent","k8s-agent","keycloak-agent","frontend-agent","general-purpose","brainstorm-agent","specify-agent","clarify-agent","decompose-agent"]'
+# Impl agents only — phase agents (brainstorm/specify/clarify/architecture/decompose) should not appear in task graph
+KNOWN_AGENTS='["code-implementer-agent","java-test-agent","ts-test-agent","security-agent","dotfiles-agent","k8s-agent","keycloak-agent","frontend-agent","general-purpose"]'
 
 # Required top-level fields
 for field in plan_title plan_file spec_file tasks; do
@@ -124,6 +125,20 @@ for i in $(seq 0 $(( TASK_COUNT - 1 ))); do
   NTR=$(echo "$TASK" | jq -r '.new_tests_required // empty')
   if [[ -n "$NTR" && "$NTR" != "true" && "$NTR" != "false" ]]; then
     ERRORS+=("Task $TID: 'new_tests_required' must be boolean if present")
+  fi
+
+  # Validate new_tests_required=false against description keywords
+  # Flags suspicious test-skip: if description doesn't match known no-test patterns, warn
+  # Note: NTR from jq `// empty` is "" for false, so check raw value
+  NTR_RAW=$(echo "$TASK" | jq -r '.new_tests_required | tostring')
+  if [[ "$NTR_RAW" == "false" && -n "$DESC" ]]; then
+    DESC_LOWER=$(echo "$DESC" | tr '[:upper:]' '[:lower:]')
+    NO_TEST_KEYWORDS="migration|config|schema|rename|bump|version|refactor|cleanup|typo|docs|interface|documentation|changelog|readme|ci|cd|pipeline|deploy|→|->|styling|css|formatting"
+    if ! echo "$DESC_LOWER" | grep -qE "$NO_TEST_KEYWORDS"; then
+      echo "WARNING: Task $TID has new_tests_required=false but description doesn't match no-test patterns" >&2
+      echo "  Description: $DESC" >&2
+      echo "  Expected keywords: migration, config, schema, rename, refactor, docs, etc." >&2
+    fi
   fi
 done
 

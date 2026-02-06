@@ -4,18 +4,18 @@
 # Called by wave-gate skill after confirming no critical findings
 #
 # Enforcement chain:
-#   tests_passed      → set by SubagentStop hook (update-task-status.sh)
-#   new_tests_written → set by SubagentStop hook (verify-new-tests.sh)
+#   tests_passed      → set by SubagentStop hook (update-task-status.sh) from Bash tool output
+#   new_tests_written → set by SubagentStop hook (update-task-status.sh) via git diff + assertion density
 #   review_status     → set by SubagentStop hook (store-reviewer-findings.sh)
-#   All unfakeable    → guard-state-file.sh blocks direct state writes
+#   All unfakeable    → state-file-write.sh (chmod 444 protection) + guard-state-file.sh
 #
 # Usage: bash ~/.claude/hooks/helpers/complete-wave-gate.sh [--wave N]
 # If --wave not specified, uses current_wave from state
 
 set -e
 
-TASK_GRAPH=".claude/state/active_task_graph.json"
-LOCK_FILE=".claude/state/.task_graph.lock"
+TASK_GRAPH="${TASK_GRAPH:-.claude/state/active_task_graph.json}"
+export TASK_GRAPH
 
 if [[ ! -f "$TASK_GRAPH" ]]; then
   echo "ERROR: No active task graph at $TASK_GRAPH"
@@ -30,10 +30,6 @@ while [[ $# -gt 0 ]]; do
     *) shift ;;
   esac
 done
-
-# Acquire cross-platform lock
-source ~/.claude/hooks/helpers/lock.sh
-acquire_lock "$LOCK_FILE" auto
 
 # Default to current wave
 if [[ -z "$WAVE" ]]; then
@@ -61,7 +57,7 @@ fi
 echo "1. Test evidence verified ($TASKS_WITH_TESTS/$WAVE_TASKS tasks):"
 jq -r ".tasks[] | select(.wave == $WAVE) | \"     \\(.id): \\(.test_evidence // \"evidence present\")\"" "$TASK_GRAPH"
 
-# --- 1b. Verify NEW tests were written OR not required (set by SubagentStop verify-new-tests.sh) ---
+# --- 1b. Verify NEW tests were written OR not required (set by SubagentStop update-task-status.sh) ---
 # Logic: task passes if new_tests_required == false OR new_tests_written == true
 TASKS_NEW_TEST_OK=$(jq -r "[.tasks[] | select(.wave == $WAVE and ((.new_tests_required == false) or (.new_tests_written == true)))] | length" "$TASK_GRAPH")
 
@@ -81,7 +77,7 @@ echo "   New tests verified ($TASKS_NEW_TEST_OK/$WAVE_TASKS tasks):"
 jq -r ".tasks[] | select(.wave == $WAVE) | \"     \\(.id): \\(.new_test_evidence // (if .new_tests_required == false then \"not required\" else \"new tests present\" end))\"" "$TASK_GRAPH"
 
 # Mark wave tests_passed (derived from per-task evidence)
-jq ".wave_gates[\"$WAVE\"].tests_passed = true" "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+bash ~/.claude/hooks/helpers/state-file-write.sh --arg wave "$WAVE" '.wave_gates[$wave].tests_passed = true'
 
 # --- 2. Verify reviews were conducted (set by SubagentStop hook) ---
 TASKS_REVIEWED=$(jq -r "[.tasks[] | select(.wave == $WAVE and (.review_status == \"passed\" or .review_status == \"blocked\"))] | length" "$TASK_GRAPH")
@@ -154,15 +150,15 @@ echo "All checks passed. Advancing..."
 TASK_IDS=$(jq -r ".tasks[] | select(.wave == $WAVE) | .id" "$TASK_GRAPH")
 
 # Mark all wave tasks as "completed" and review_status = "passed"
-jq "
+bash ~/.claude/hooks/helpers/state-file-write.sh --argjson wave "$WAVE" '
   .tasks |= map(
-    if .wave == $WAVE then
-      .status = \"completed\" | .review_status = \"passed\"
+    if .wave == $wave then
+      .status = "completed" | .review_status = "passed"
     else . end
   ) |
-  .wave_gates[\"$WAVE\"].reviews_complete = true |
-  .wave_gates[\"$WAVE\"].blocked = false
-" "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+  .wave_gates[($wave | tostring)].reviews_complete = true |
+  .wave_gates[($wave | tostring)].blocked = false
+'
 
 echo "Marked wave $WAVE tasks completed."
 
@@ -189,15 +185,15 @@ NEXT_WAVE=$((WAVE + 1))
 
 if [[ "$NEXT_WAVE" -le "$MAX_WAVE" ]]; then
   # Initialize next wave gate
-  jq "
-    .current_wave = $NEXT_WAVE |
-    .wave_gates[\"$NEXT_WAVE\"] = {
-      \"impl_complete\": false,
-      \"tests_passed\": null,
-      \"reviews_complete\": false,
-      \"blocked\": false
+  bash ~/.claude/hooks/helpers/state-file-write.sh --argjson next "$NEXT_WAVE" '
+    .current_wave = $next |
+    .wave_gates[($next | tostring)] = {
+      "impl_complete": false,
+      "tests_passed": null,
+      "reviews_complete": false,
+      "blocked": false
     }
-  " "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+  '
 
   echo "Advanced to wave $NEXT_WAVE."
   echo ""

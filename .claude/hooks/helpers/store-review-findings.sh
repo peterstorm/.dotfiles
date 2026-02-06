@@ -15,7 +15,7 @@ set -e
 
 # Use exported TASK_GRAPH if available (cross-repo), fallback to local
 TASK_GRAPH="${TASK_GRAPH:-.claude/state/active_task_graph.json}"
-LOCK_FILE="$(dirname "$TASK_GRAPH")/.task_graph.lock"
+export TASK_GRAPH
 
 [[ ! -f "$TASK_GRAPH" ]] && { echo "ERROR: No active task graph at $TASK_GRAPH"; exit 1; }
 
@@ -47,10 +47,6 @@ if [[ ! -t 0 ]]; then
   done
 fi
 
-# Acquire cross-platform lock
-source ~/.claude/hooks/helpers/lock.sh
-acquire_lock "$LOCK_FILE" auto
-
 # Build JSON arrays using jq for proper escaping
 CRITICAL_JSON="[]"
 ADVISORY_JSON="[]"
@@ -63,23 +59,27 @@ if [[ ${#ADVISORY[@]} -gt 0 ]]; then
   ADVISORY_JSON=$(printf '%s\n' "${ADVISORY[@]}" | jq -R . | jq -s .)
 fi
 
-# Update task with findings
-jq --argjson critical "$CRITICAL_JSON" --argjson advisory "$ADVISORY_JSON" "
+# Update task with findings via state-file-write
+export TASK_GRAPH
+bash ~/.claude/hooks/helpers/state-file-write.sh \
+  --argjson critical "$CRITICAL_JSON" \
+  --argjson advisory "$ADVISORY_JSON" \
+  --arg task_id "$TASK_ID" '
   .tasks |= map(
-    if .id == \"$TASK_ID\" then
-      .critical_findings = \$critical |
-      .advisory_findings = \$advisory |
-      .review_status = (if (\$critical | length) > 0 then \"blocked\" else \"passed\" end)
+    if .id == $task_id then
+      .critical_findings = $critical |
+      .advisory_findings = $advisory |
+      .review_status = (if ($critical | length) > 0 then "blocked" else "passed" end)
     else . end
   )
-" "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+'
 
 echo "Stored findings for $TASK_ID: ${#CRITICAL[@]} critical, ${#ADVISORY[@]} advisory"
 
 # Update wave blocked status if critical findings
 if [[ ${#CRITICAL[@]} -gt 0 ]]; then
   WAVE=$(jq -r ".tasks[] | select(.id==\"$TASK_ID\") | .wave" "$TASK_GRAPH")
-  jq ".wave_gates[\"$WAVE\"].blocked = true" "$TASK_GRAPH" > "${TASK_GRAPH}.tmp" && mv "${TASK_GRAPH}.tmp" "$TASK_GRAPH"
+  bash ~/.claude/hooks/helpers/state-file-write.sh --arg wave "$WAVE" '.wave_gates[$wave].blocked = true'
   echo "Wave $WAVE BLOCKED due to critical findings."
 fi
 

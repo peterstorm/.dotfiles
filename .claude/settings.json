@@ -45,6 +45,15 @@
         ]
       },
       {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/PreToolUse/block-direct-edits.sh"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -59,31 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/advance-phase.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/update-task-status.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/verify-new-tests.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/store-reviewer-findings.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/store-spec-check-findings.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/validate-review-invoker.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/SubagentStop/cleanup-subagent-flag.sh"
+            "command": "bash ~/.claude/hooks/SubagentStop/dispatch.sh"
           }
         ]
       }
