@@ -1,0 +1,6 @@
+{"message":{"content":"Hello world"}}
+{"message":{"content":[{"type":"text","text":"This is a test message"}]}}
+{"message":{"content":[{"type":"tool_use","name":"Bash","id":"tool1","input":{"command":"npm test"}},{"type":"text","text":"Running tests"}]}}
+{"message":{"content":[{"type":"tool_result","tool_use_id":"tool1","content":"All tests passed!"}]}}
+{"message":{"content":[{"type":"tool_use","name":"Write","id":"tool2","input":{"file_path":"/tmp/test.ts","content":"export const x = 1;"}}]}}
+{"message":{"content":[{"type":"tool_use","name":"Edit","id":"tool3","input":{"file_path":"/tmp/other.ts","old_string":"a","new_string":"b"}}]}}

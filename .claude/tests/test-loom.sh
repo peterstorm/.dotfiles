@@ -1401,7 +1401,12 @@ WRITTEN_STATUS=$(jq -r '.tasks[0].status' "$TEST_DIR/.claude/state/active_task_g
 [[ "$WRITTEN_STATUS" == "implemented" ]] && pass "state-file-write: jq transform succeeds through chmod" || fail "state-file-write: jq transform" "implemented" "$WRITTEN_STATUS"
 
 # Verify file is back to 444 after write
-PERMS=$(stat -f '%Lp' "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || stat -c '%a' "$TEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null)
+# GNU stat uses -c, BSD/macOS stat uses -f. Detect by checking --version
+if stat --version 2>/dev/null | grep -q 'GNU'; then
+  PERMS=$(stat -c '%a' "$TEST_DIR/.claude/state/active_task_graph.json")
+else
+  PERMS=$(stat -f '%Lp' "$TEST_DIR/.claude/state/active_task_graph.json")
+fi
 [[ "$PERMS" == "444" ]] && pass "state-file-write: restores chmod 444 after write" || fail "state-file-write: restores 444" "444" "$PERMS"
 
 # Test --arg passing

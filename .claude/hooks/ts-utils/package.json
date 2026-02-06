@@ -1,0 +1,17 @@
+{
+  "name": "loom-ts-utils",
+  "version": "1.0.0",
+  "description": "TypeScript utilities for loom transcript parsing",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/*.ts --bundle --platform=node --format=esm --outdir=dist --packages=external",
+    "build:watch": "esbuild src/*.ts --bundle --platform=node --format=esm --outdir=dist --packages=external --watch",
+    "test": "node --test dist/tests.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0"
+  }
+}

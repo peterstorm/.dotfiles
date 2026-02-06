@@ -9,33 +9,19 @@
 # Or standalone:
 #   bash ~/.claude/hooks/helpers/parse-files-modified.sh "/path/to/transcript.jsonl"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TS_UTILS_DIR="$SCRIPT_DIR/../ts-utils/dist"
+
 parse_files_modified() {
   local transcript_path="$1"
   [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && return 0
 
-  TRANSCRIPT_PATH="$transcript_path" python3 -c "
-import os, json
-files = set()
-with open(os.environ['TRANSCRIPT_PATH']) as f:
-    for line in f:
-        try:
-            d = json.loads(line)
-            msg = d.get('message', {})
-            content = msg.get('content', [])
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get('type') == 'tool_use':
-                        name = block.get('name', '')
-                        inp = block.get('input', {})
-                        if name in ('Write', 'Edit') and 'file_path' in inp:
-                            files.add(inp['file_path'])
-                        elif name == 'MultiEdit' and 'file_path' in inp:
-                            files.add(inp['file_path'])
-        except:
-            pass
-for f in sorted(files):
-    print(f)
-" 2>/dev/null
+  if ! command -v node &>/dev/null; then
+    echo "ERROR: node not found - required for parse-files-modified" >&2
+    return 1
+  fi
+
+  node "$TS_UTILS_DIR/parse-files-modified.js" "$transcript_path" 2>/dev/null
 }
 
 # Allow standalone usage

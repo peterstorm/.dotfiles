@@ -5,6 +5,9 @@ result
 # Claude state files (runtime, not persisted)
 .claude/state/*
 !.claude/state/.gitkeep
+
+# TypeScript utilities dependencies
+.claude/hooks/ts-utils/node_modules/
 # Local .terraform directories
 **/.terraform/*
 
