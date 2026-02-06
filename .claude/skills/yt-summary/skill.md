@@ -127,6 +127,26 @@ Replace all prose with bullet points:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+## Save as Note
+
+After displaying the summary, ask the user if they want to save it as a note.
+
+If yes:
+1. Resolve the notes directory: `~/.dotfiles/.claude/notes/` (use `$HOME` to expand `~` at runtime)
+2. Create the directory if it doesn't exist: `mkdir -p "$HOME/.dotfiles/.claude/notes/"`
+3. Filename: `YYYY-MM-DD-[slugified-video-title].md`
+4. Format the note as markdown with frontmatter:
+   ```yaml
+   ---
+   source: [YouTube URL]
+   date: YYYY-MM-DD
+   speaker: [Speaker name if identified]
+   type: yt-summary
+   ---
+   ```
+5. Write the full summary (matching whichever format was used — default, detailed, bullets) as the note body
+6. Confirm save path to user
+
 ## Summary Principles
 
 - **Be concise** — the point is to save the viewer time
