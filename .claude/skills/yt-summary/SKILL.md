@@ -18,7 +18,7 @@ Detect input from `$ARGUMENTS`:
 
 ## Flags
 
-- `--detailed` — longer summary with section-by-section breakdown
+- `--brief` — short summary with key takeaways only (no section breakdown)
 - `--timestamps` — include approximate timestamps for key sections
 - `--bullets` — output as bullet points only, no prose
 
@@ -31,16 +31,16 @@ Extract the video ID from the URL (`v=` param, or path segment for `youtu.be` li
 Use `nix-shell` for ephemeral transcript fetching — no permanent installation:
 
 ```bash
-nix-shell -p python3Packages.youtube-transcript-api --run "python3 -c \"
+nix-shell -p python3Packages.youtube-transcript-api --run 'python3 -c "
 from youtube_transcript_api import YouTubeTranscriptApi
 ytt = YouTubeTranscriptApi()
-transcript = ytt.fetch('<VIDEO_ID>')
+transcript = ytt.fetch(\"<VIDEO_ID>\")
 for entry in transcript:
     print(entry.text)
-\""
+"' 2>&1 | grep -v '^these ' | grep -v '^copying ' | grep -v '^  /nix'
 ```
 
-Filter out nix store download noise (lines starting with `these`, `copying`, `  /nix`) from stdout before processing.
+Redirect stderr to stdout (`2>&1`) so nix download noise is captured, then filter it out.
 
 **Fallback chain:**
 1. **nix-shell + youtube-transcript-api** (primary — works for any public video, no API key needed)
@@ -54,20 +54,61 @@ Never attempt to summarize placeholder/error text. If extraction fails, stop and
 Use this variant to capture start times:
 
 ```bash
-nix-shell -p python3Packages.youtube-transcript-api --run "python3 -c \"
+nix-shell -p python3Packages.youtube-transcript-api --run 'python3 -c "
 from youtube_transcript_api import YouTubeTranscriptApi
 ytt = YouTubeTranscriptApi()
-transcript = ytt.fetch('<VIDEO_ID>')
+transcript = ytt.fetch(\"<VIDEO_ID>\")
 for entry in transcript:
     minutes = int(entry.start // 60)
     seconds = int(entry.start % 60)
-    print(f'[{minutes:02d}:{seconds:02d}] {entry.text}')
-\""
+    print(f\"[{minutes:02d}:{seconds:02d}] {entry.text}\")
+"' 2>&1 | grep -v '^these ' | grep -v '^copying ' | grep -v '^  /nix'
 ```
 
 ## Output Format
 
-### Default Summary
+### Default Summary (Detailed)
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎬 [Video Title — inferred from content]
+🔗 [YouTube URL]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**TL;DR:** [2-3 sentence summary of the entire video]
+
+**Key Takeaways:**
+1. [Most important point]
+2. [Second most important point]
+3. [Third most important point]
+(up to 5-7 takeaways depending on video length)
+
+**Who's talking:** [Speaker/channel context if identifiable]
+**Who it's for:** [Target audience]
+
+**Section Breakdown:**
+
+### [Section 1 Title] [timestamp if available]
+[2-3 sentence summary]
+
+### [Section 2 Title] [timestamp if available]
+[2-3 sentence summary]
+
+...
+
+**Notable Quotes:**
+- "[Exact or near-exact quote]"
+- "[Another quote]"
+
+**Links/Resources Mentioned:**
+- [Any tools, books, websites referenced in the video]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### With `--brief`
+
+Shorter output — key takeaways only, no section breakdown:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -87,29 +128,6 @@ for entry in transcript:
 **Who it's for:** [Target audience]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### With `--detailed`
-
-Add after the default output:
-
-```
-**Section Breakdown:**
-
-### [Section 1 Title] [timestamp if available]
-[2-3 sentence summary]
-
-### [Section 2 Title] [timestamp if available]
-[2-3 sentence summary]
-
-...
-
-**Notable Quotes:**
-- "[Exact or near-exact quote]"
-- "[Another quote]"
-
-**Links/Resources Mentioned:**
-- [Any tools, books, websites referenced in the video]
 ```
 
 ### With `--bullets`
