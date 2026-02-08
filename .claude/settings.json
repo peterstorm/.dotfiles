@@ -23,6 +23,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/PreToolUse/validate-task-execution.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/PreToolUse/validate-template-substitution.sh"
           }
         ]
       },

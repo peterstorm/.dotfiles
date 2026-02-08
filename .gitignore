@@ -8,6 +8,7 @@ result
 
 # TypeScript utilities dependencies
 .claude/hooks/ts-utils/node_modules/
+.claude/hooks/loom/node_modules/
 # Local .terraform directories
 **/.terraform/*
 

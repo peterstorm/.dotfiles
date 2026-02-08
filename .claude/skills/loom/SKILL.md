@@ -32,7 +32,7 @@ If `bun` is missing, **STOP and tell the user**. Loom hooks require bun for Type
 
 **Note:** All phases are MANDATORY by default. Skip flags allow explicit bypass with user acknowledgment.
 
-**Clarify threshold:** Markers > 3 triggers mandatory clarify phase. Source of truth: `hooks/helpers/loom-config.sh`
+**Clarify threshold:** Markers > 3 triggers mandatory clarify phase. Source of truth: `hooks/loom/src/config.ts`
 
 ---
 
@@ -182,7 +182,7 @@ Substitute variables:
 Run schema validator on agent output:
 
 ```bash
-echo "$DECOMPOSE_OUTPUT" | bash ~/.claude/hooks/helpers/validate-task-graph.sh -
+echo "$DECOMPOSE_OUTPUT" | bun ~/.claude/hooks/loom/src/cli.ts helper validate-task-graph -
 ```
 
 If validation fails → re-spawn decompose-agent with error details.
@@ -192,7 +192,7 @@ If validation fails → re-spawn decompose-agent with error details.
 If decompose-agent didn't set anchors, use helper:
 
 ```bash
-~/.claude/hooks/helpers/suggest-spec-anchors.sh "task description" .claude/specs/*/spec.md
+bun ~/.claude/hooks/loom/src/cli.ts helper suggest-spec-anchors "task description" .claude/specs/*/spec.md
 ```
 
 Returns JSON with suggested anchors and confidence scores:
@@ -227,7 +227,7 @@ gh issue create --title "Plan: {title}" --body "$(cat .claude/plans/{slug}.md)"
 Use the `populate-task-graph.sh` helper (whitelisted in guard-state-file.sh):
 
 ```bash
-echo "$DECOMPOSE_OUTPUT" | bash ~/.claude/hooks/helpers/populate-task-graph.sh --issue ISSUE_NUMBER --repo OWNER/REPO
+echo "$DECOMPOSE_OUTPUT" | bun ~/.claude/hooks/loom/src/cli.ts helper populate-task-graph --issue ISSUE_NUMBER --repo OWNER/REPO
 ```
 
 This helper:
@@ -235,13 +235,13 @@ This helper:
 - Merges with validated decompose output (tasks, waves)
 - Adds `github_issue`, `spec_file`, `plan_file`, `current_wave: 1`
 - Initializes `wave_gates`, `executing_tasks`
-- Writes via `state-file-write.sh` (chmod 444 protection)
+- Writes via `StateManager` (chmod 444 protection)
 
 **C. Set state file read-only:**
 ```bash
 chmod 444 .claude/state/active_task_graph.json
 ```
-State file stays chmod 444 at rest. Only hooks can write via `state-file-write.sh` (temporarily toggles to 644).
+State file stays chmod 444 at rest. Only hooks can write via `StateManager` (temporarily toggles to 644).
 
 ---
 
@@ -318,7 +318,7 @@ EOF
 chmod 444 .claude/state/active_task_graph.json
 ```
 
-**IMPORTANT:** Set `chmod 444` immediately after creation. This activates OS-level write protection — subagent Write tool calls will get EACCES. Only hooks writing via `state-file-write.sh` can modify the file.
+**IMPORTANT:** Set `chmod 444` immediately after creation. This activates OS-level write protection — subagent Write tool calls will get EACCES. Only hooks writing via `StateManager` can modify the file.
 
 After Phase 4 (Decompose), the task graph is populated with tasks, waves, and GitHub issue info. This is done by passing decompose output through `validate-task-graph.sh` and writing the full state.
 
@@ -377,7 +377,7 @@ Hooks auto-activate when `active_task_graph.json` exists:
 | ↳ `validate-review-invoker.sh` | via dispatch | Validates /review-pr skill was invoked |
 | ↳ `cleanup-subagent-flag.sh` | via dispatch | Cleans up subagent tracking (always runs) |
 
-**NEVER call helpers yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `state-file-write.sh`, `populate-task-graph.sh`, etc.) run automatically via hooks or `/wave-gate`. Only exception: `populate-task-graph.sh` during Phase 4d.
+**NEVER call helpers yourself.** All helpers (`mark-tests-passed.sh`, `complete-wave-gate.sh`, `StateManager`, `populate-task-graph.sh`, etc.) run automatically via hooks or `/wave-gate`. Only exception: `populate-task-graph.sh` during Phase 4d.
 
 ---
 

@@ -48,6 +48,7 @@
       gemini-cli
       inputs.llm-agents.packages.${pkgs.system}.copilot-cli
       jq
+      bun
       inputs.llm-agents.packages.${pkgs.system}.opencode
     ];
 
