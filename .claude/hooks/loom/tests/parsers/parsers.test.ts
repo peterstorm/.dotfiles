@@ -180,4 +180,110 @@ describe("parsePhaseArtifacts", () => {
     const result = parsePhaseArtifacts(content);
     expect(result).toEqual({});
   });
+
+  it("deeply nested spec path → longest path wins", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/spec.md"}}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/foo/bar/baz/spec.md"}}]}}',
+    ].join("\n");
+    const result = parsePhaseArtifacts(content);
+    expect(result.spec_file).toBe("/p/.claude/specs/foo/bar/baz/spec.md");
+  });
+
+  it("Edit tool (not Write) → not counted as artifact", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/p/.claude/specs/2025/spec.md"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    expect(result.spec_file).toBeUndefined();
+  });
+
+  it(".md.bak extension → ignored", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/spec.md.bak"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    expect(result.spec_file).toBeUndefined();
+  });
+});
+
+describe("parseBashTestOutput — malformed inputs", () => {
+  it("malformed JSONL (missing closing brace) → graceful skip", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"npm test"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"OK"',  // truncated
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Real result"}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).toContain("Real result");
+  });
+
+  it("JSONL with no tool_use blocks → empty", () => {
+    const content = '{"message":{"content":"just plain text"}}';
+    const result = parseBashTestOutput(content);
+    expect(result).toBe("");
+  });
+
+  it("tool_use with empty command → skip", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":""}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"output"}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).toBe("");
+  });
+
+  it("empty string → empty", () => {
+    expect(parseBashTestOutput("")).toBe("");
+  });
+
+  it("Unicode in test output → parsed correctly", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"bun test"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"✓ test passed — 日本語 output"}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).toContain("✓ test passed");
+    expect(result).toContain("日本語");
+  });
+
+  it("markdown-bold wrapped BUILD SUCCESS → still in output", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"mvn test"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"**BUILD SUCCESS**\\n**Tests run: 5, Failures: 0, Errors: 0**"}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).toContain("BUILD SUCCESS");
+  });
+
+  it("tool_result with nested content blocks → extracts text", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"pytest"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"3 passed in 0.2s"}]}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).toContain("3 passed");
+  });
+
+  it("multiple test commands → all results collected", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"npm test"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"5 passing"}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t2","input":{"command":"pytest"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"3 passed"}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).toContain("5 passing");
+    expect(result).toContain("3 passed");
+  });
+
+  it("non-test command interleaved → only test results captured", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"ls -la"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"file.txt"}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Bash","id":"t2","input":{"command":"mvn test"}}]}}',
+      '{"message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"BUILD SUCCESS"}]}}',
+    ].join("\n");
+    const result = parseBashTestOutput(content);
+    expect(result).not.toContain("file.txt");
+    expect(result).toContain("BUILD SUCCESS");
+  });
 });

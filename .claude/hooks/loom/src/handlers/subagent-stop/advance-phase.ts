@@ -14,7 +14,7 @@ import { StateManager } from "../../state-manager";
 import { parsePhaseArtifacts } from "../../parsers/parse-phase-artifacts";
 
 /** Recursively search for a file by name under a directory */
-function findFile(dir: string, filename: string): string | null {
+export function findFile(dir: string, filename: string): string | null {
   if (!existsSync(dir)) return null;
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -29,7 +29,7 @@ function findFile(dir: string, filename: string): string | null {
 }
 
 /** Count NEEDS CLARIFICATION markers in a file */
-function countMarkers(filePath: string): number {
+export function countMarkers(filePath: string): number {
   try {
     return (readFileSync(filePath, "utf-8").match(/NEEDS CLARIFICATION/g) ?? []).length;
   } catch {
@@ -38,7 +38,7 @@ function countMarkers(filePath: string): number {
 }
 
 /** Determine next phase + artifact after a phase completes */
-function resolveTransition(
+export function resolveTransition(
   completedPhase: Phase,
   state: TaskGraph,
 ): { nextPhase: Phase; artifact: string; skipClarify?: boolean } | null {
