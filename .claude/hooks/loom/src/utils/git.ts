@@ -1,6 +1,6 @@
 /**
  * Git utilities — pure functions for test counting, thin wrappers for I/O
- * Uses execSync/execFileSync for vitest compatibility (no bun shell dependency)
+ * Uses node:child_process (bun-compatible) — execFileSync for user input, execSync for fixed commands
  */
 
 import { execSync, execFileSync } from "node:child_process";
