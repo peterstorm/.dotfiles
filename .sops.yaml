@@ -1,6 +1,7 @@
 keys:
   - &peterstorm age1a6sl06c8qhe39d6ss2fvvh37uq74vdakur3dx2f7708u9tlkxf8q4zjk9l
   - &hansen142 age15szuax689kt40ftylqynggcn7fgxp6y8x7lrmk44htcjcu6yjqzs2p0l8e
+  - &homelab age1p6c59j97s0nf6enr4fmwnhwn508s92eyvwtc2wmd24wkpecr3drshgt0n2
 creation_rules:
   # Common secrets - accessible to all hosts/users
   - path_regex: secrets/common/.*\.(yaml|json|env|ini)$
@@ -8,7 +9,14 @@ creation_rules:
     - age:
       - *peterstorm
       - *hansen142
-  # Host-specific secrets  
+  # Homelab host secrets - include homelab age key for decryption
+  - path_regex: secrets/hosts/homelab/.*\.(yaml|json|env|ini)$
+    key_groups:
+    - age:
+      - *peterstorm
+      - *hansen142
+      - *homelab
+  # Host-specific secrets
   - path_regex: secrets/hosts/.*/.*\.(yaml|json|env|ini)$
     key_groups:
     - age:
