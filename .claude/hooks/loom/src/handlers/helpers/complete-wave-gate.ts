@@ -142,6 +142,18 @@ const handler: HookHandler = async (_stdin, args) => {
     }
   }
 
+  // Mark test evidence verified on wave gate
+  await mgr.update((s) => ({
+    ...s,
+    wave_gates: {
+      ...s.wave_gates,
+      [String(wave)]: {
+        ...(s.wave_gates[String(wave)] ?? { impl_complete: false, tests_passed: null, reviews_complete: false, blocked: false }),
+        tests_passed: true,
+      },
+    },
+  }));
+
   // All passed — advance
   process.stderr.write("\nAll checks passed. Advancing...\n");
 

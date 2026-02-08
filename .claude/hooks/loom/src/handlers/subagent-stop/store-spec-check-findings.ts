@@ -4,6 +4,7 @@
  * Blocks wave if CRITICAL_COUNT > 0.
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import type { HookHandler, SubagentStopInput, SpecCheck } from "../../types";
 import { StateManager } from "../../state-manager";
 import { parseTranscript } from "../../parsers/parse-transcript";
@@ -57,9 +58,10 @@ const handler: HookHandler = async (stdin) => {
   const mgr = StateManager.fromSession(input.session_id);
   if (!mgr) return { kind: "passthrough" };
 
-  const transcript = input.agent_transcript_path
-    ? parseTranscript(input.agent_transcript_path)
+  const transcriptContent = input.agent_transcript_path && existsSync(input.agent_transcript_path)
+    ? readFileSync(input.agent_transcript_path, "utf-8")
     : "";
+  const transcript = parseTranscript(transcriptContent);
   if (!transcript) return { kind: "passthrough" };
 
   const findings = parseSpecCheckOutput(transcript);

@@ -62,7 +62,7 @@ export class StateManager {
 
   /** lock → chmod 644 → produce → write tmp → rename → chmod 444 → unlock */
   private async atomicWrite(produce: () => TaskGraph): Promise<void> {
-    const lockFile = `${dirname(this.path)}/.task_graph.lock`;
+    const lockFile = `${dirname(this.path)}/.task_graph`;
     await withLock(lockFile, () => {
       chmodSync(this.path, 0o644);
       try {

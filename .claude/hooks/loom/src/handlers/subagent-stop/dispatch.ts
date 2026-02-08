@@ -3,7 +3,6 @@
  * Replaces dispatch.sh: reads stdin once, calls only relevant handlers.
  */
 
-import { existsSync } from "node:fs";
 import { match, P } from "ts-pattern";
 import type { HookHandler, SubagentStopInput } from "../../types";
 import { PHASE_AGENT_MAP, IMPL_AGENTS } from "../../config";

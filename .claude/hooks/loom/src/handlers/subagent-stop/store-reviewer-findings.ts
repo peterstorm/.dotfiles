@@ -95,11 +95,17 @@ const handler: HookHandler = async (stdin) => {
       ...s,
       tasks: s.tasks.map((t) =>
         t.id === taskId
-          ? { ...t, review_status: "evidence_capture_failed" as ReviewStatus }
+          ? { ...t, review_status: "evidence_capture_failed" as ReviewStatus,
+              review_error: "CRITICAL_COUNT marker not found in agent output" }
           : t
       ),
     }));
     return { kind: "passthrough" };
+  }
+
+  // Safety: criticalCount > 0 but no findings parsed → synthesize error
+  if (findings.criticalCount > 0 && findings.critical.length === 0) {
+    findings.critical.push(`Review output parsing failed - ${findings.criticalCount} findings not captured`);
   }
 
   // Determine review_status

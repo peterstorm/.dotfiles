@@ -4,7 +4,7 @@
  */
 
 import { existsSync, appendFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { resolve, dirname, basename } from "node:path";
+import { resolve } from "node:path";
 import type { HookHandler, SubagentStartInput } from "../../types";
 import { TASK_GRAPH_PATH, SUBAGENT_DIR } from "../../config";
 
@@ -24,7 +24,6 @@ const handler: HookHandler = async (stdin) => {
   // SubagentStop may run in different repo, needs this path
   const taskGraphFile = `${SUBAGENT_DIR}/${session_id}.task_graph`;
   if (existsSync(TASK_GRAPH_PATH) && !existsSync(taskGraphFile)) {
-    const absPath = resolve(dirname(TASK_GRAPH_PATH), basename(TASK_GRAPH_PATH));
     writeFileSync(taskGraphFile, resolve(TASK_GRAPH_PATH));
   }
 

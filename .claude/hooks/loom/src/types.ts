@@ -58,6 +58,7 @@ export interface Task {
   new_test_evidence?: string;
   files_modified?: string[];
   review_status?: ReviewStatus;
+  review_error?: string;
   critical_findings?: string[];
   advisory_findings?: string[];
   start_sha?: string;

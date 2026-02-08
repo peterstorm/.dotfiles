@@ -5,11 +5,12 @@
 
 import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import type { HookHandler } from "../../types";
 import { SUBAGENT_DIR } from "../../config";
 
 const STALE_MINUTES = 60;
 
-const handler = async (_stdin: string): Promise<{ kind: "passthrough" }> => {
+const handler: HookHandler = async (_stdin, _args) => {
   if (!existsSync(SUBAGENT_DIR)) return { kind: "passthrough" };
 
   const cutoff = Date.now() - STALE_MINUTES * 60_000;

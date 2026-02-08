@@ -4,104 +4,104 @@
     "frontend-design@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/frontend-design/f1be96f0fb58",
         "version": "f1be96f0fb58",
         "installedAt": "2026-01-09T10:47:46.249Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "code-review@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/code-review/unknown",
         "version": "unknown",
         "installedAt": "2026-01-09T10:48:41.024Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "typescript-lsp@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-09T10:48:41.046Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "security-guidance@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/security-guidance/unknown",
         "version": "unknown",
         "installedAt": "2026-01-09T10:48:41.066Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "pr-review-toolkit@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/pr-review-toolkit/unknown",
         "version": "unknown",
         "installedAt": "2026-01-09T10:48:41.085Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "agent-sdk-dev@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/unknown",
         "version": "unknown",
         "installedAt": "2026-01-09T10:48:41.104Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "jdtls-lsp@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/jdtls-lsp/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-09T10:48:41.120Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z"
       }
     ],
     "plugin-dev@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/plugin-dev/f1be96f0fb58",
         "version": "f1be96f0fb58",
         "installedAt": "2026-01-21T20:29:02.313Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "gitCommitSha": "f1be96f0fb58d5aaf2840ca7d7036d5c0923742c",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z",
+        "gitCommitSha": "f1be96f0fb58d5aaf2840ca7d7036d5c0923742c"
       }
     ],
     "marketing-skills@marketingskills": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/marketingskills/marketing-skills/a04cb61a577a",
         "version": "a04cb61a577a",
         "installedAt": "2026-02-03T08:34:26.079Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "gitCommitSha": "a04cb61a577a20d9ab0f3da2a2d99c17a0476ded",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z",
+        "gitCommitSha": "a04cb61a577a20d9ab0f3da2a2d99c17a0476ded"
       }
     ],
     "atlassian@claude-plugins-official": [
       {
         "scope": "project",
+        "projectPath": "/Users/hansen142/.dotfiles",
         "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/atlassian/7caef65e1070",
         "version": "7caef65e1070",
         "installedAt": "2026-02-04T11:27:37.778Z",
-        "lastUpdated": "2026-02-07T20:37:39.926Z",
-        "gitCommitSha": "7caef65e1070f5219efa018fa0b1023738dbd56b",
-        "projectPath": "/home/peterstorm/.dotfiles"
+        "lastUpdated": "2026-02-08T13:18:00.766Z",
+        "gitCommitSha": "7caef65e1070f5219efa018fa0b1023738dbd56b"
       }
     ]
   }

@@ -55,7 +55,6 @@ export const WHITELISTED_HELPERS = [
   "complete-wave-gate",
   "mark-tests-passed",
   "store-review-findings",
-  "state-file-write",
   "populate-task-graph",
 ];
 

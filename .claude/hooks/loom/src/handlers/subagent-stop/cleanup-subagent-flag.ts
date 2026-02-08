@@ -15,7 +15,7 @@ const handler: HookHandler = async (stdin) => {
   if (!agent_id) return { kind: "passthrough" };
 
   const activeFile = `${SUBAGENT_DIR}/${session_id}.active`;
-  const lockFile = `${SUBAGENT_DIR}/${session_id}.cleanup.lock`;
+  const lockFile = `${SUBAGENT_DIR}/${session_id}.cleanup`;
 
   if (!existsSync(activeFile)) return { kind: "passthrough" };
 

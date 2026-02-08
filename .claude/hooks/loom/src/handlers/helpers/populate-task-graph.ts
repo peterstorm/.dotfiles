@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import type { HookHandler, TaskGraph, Task, WaveGate } from "../../types";
 import { TASK_GRAPH_PATH } from "../../config";
 import { StateManager } from "../../state-manager";
+import { validateFull, fixFull } from "./validate-task-graph";
 
 interface DecomposeInput {
   plan_title: string;
@@ -58,6 +59,17 @@ const handler: HookHandler = async (stdin, args) => {
 
   if (!Array.isArray(decompose.tasks) || decompose.tasks.length === 0) {
     return { kind: "error", message: "No tasks in decompose JSON" };
+  }
+
+  // Validate decompose output before merging
+  const validation = validateFull(decompose as unknown as Record<string, unknown>);
+  if (!validation.valid) {
+    if (fix) {
+      decompose = JSON.parse(fixFull(decompose as unknown as Record<string, unknown>)) as DecomposeInput;
+      process.stderr.write(`Auto-fixed ${validation.errors.length} issues\n`);
+    } else {
+      return { kind: "error", message: `Decompose validation failed:\n${validation.errors.map(e => `  - ${e}`).join("\n")}` };
+    }
   }
 
   const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
