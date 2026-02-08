@@ -9,6 +9,16 @@
 import { match } from "ts-pattern";
 import type { HookResult, HookHandler } from "./types";
 
+// Eagerly buffer stdin before any async work (bun drains piped data during dynamic imports)
+const stdinPromise: Promise<string> = process.stdin.isTTY
+  ? Promise.resolve("")
+  : new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      process.stdin.on("data", (chunk) => chunks.push(chunk));
+      process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+      process.stdin.on("error", reject);
+    });
+
 /** Known handler routes — validated before dynamic import */
 const KNOWN_HANDLERS: Record<string, Set<string>> = {
   "pre-tool-use": new Set([
@@ -24,19 +34,10 @@ const KNOWN_HANDLERS: Record<string, Set<string>> = {
   "session-start": new Set(["cleanup-stale-subagents"]),
   "helper": new Set([
     "complete-wave-gate", "populate-task-graph", "validate-task-graph",
-    "store-review-findings", "mark-tests-passed", "suggest-spec-anchors",
-    "extract-task-id",
+    "store-review-findings", "store-spec-check", "mark-tests-passed",
+    "suggest-spec-anchors", "extract-task-id",
   ]),
 };
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (chunk) => chunks.push(chunk));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
-    process.stdin.on("error", reject);
-  });
-}
 
 function resultToExit(result: HookResult): never {
   match(result)
@@ -80,7 +81,7 @@ async function main() {
   const modulePath = `./handlers/${dirName}/${handlerName}.ts`;
   const module = await import(modulePath) as { default: HookHandler };
 
-  const stdin = await readStdin();
+  const stdin = await stdinPromise;
   const result = await module.default(stdin, extraArgs);
   resultToExit(result);
 }

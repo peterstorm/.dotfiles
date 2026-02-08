@@ -47,7 +47,7 @@
         legacyPackages.homeManagerConfigurations = {
 
           peterstorm = user.mkHMUser {
-            roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" "sops-template-example" ];
+            roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" "sops-template-example" "obsidian-git-sync" ];
             username = "peterstorm";
           };
 

@@ -55,14 +55,16 @@ export const WHITELISTED_HELPERS = [
   "complete-wave-gate",
   "mark-tests-passed",
   "store-review-findings",
+  "store-spec-check",
   "populate-task-graph",
 ];
 
 /** State file patterns to guard */
 export const STATE_FILE_PATTERNS = /active_task_graph|review-invocations/;
 
-/** Write patterns to block on state files */
-export const WRITE_PATTERNS = />>?|mv |cp |tee |sed -i|perl -i|dd |sponge |chmod |python3? .*(open|write)|node .*(writeFile|fs\.)/;
+/** Write patterns to block on state files.
+ * Note: `(?:^|\s)>>?(?!&)` avoids matching `2>&1` redirects in read-only commands */
+export const WRITE_PATTERNS = /(?:^|\s)>>?(?!&)|mv |cp |tee |sed -i|perl -i|(?:^|\s)dd |sponge |chmod |python3? .*(open|write)|node .*(writeFile|fs\.)/;
 
 /** Test command patterns (for bash test output parsing) */
 export const TEST_COMMAND_PATTERNS = [

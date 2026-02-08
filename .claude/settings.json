@@ -3,6 +3,11 @@
   "permissions": {
     "allow": [
       "Skill",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Bash(bun:*)",
+      "Bash(cd:*)",
       "Bash(gh:*)",
       "Bash(gh issue:*)",
       "Bash(gh pr:*)",

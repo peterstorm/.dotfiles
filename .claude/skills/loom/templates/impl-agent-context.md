@@ -4,6 +4,26 @@ Template for spawning implementation agents during Execute phase. Variables in `
 
 ---
 
+## !! MANDATORY FINAL STEP — READ THIS FIRST !!
+
+**Your LAST action before finishing MUST be running tests via the Bash tool.**
+
+```
+bun test          # TypeScript/Bun projects
+npm test          # Node projects
+npx vitest run    # Vitest projects
+mvn test          # Java/Maven projects
+pytest            # Python projects
+```
+
+A hook reads your transcript and extracts test evidence ONLY from Bash tool_result blocks.
+If you do not run tests via Bash, `tests_passed = false` and the wave gate FAILS.
+Writing tests without executing them counts as failure.
+
+**Do NOT finish without Bash test output showing pass markers (e.g., "X passing", "0 fail", "BUILD SUCCESS").**
+
+---
+
 ## Task Assignment
 
 **Task ID:** {task_id}
@@ -34,7 +54,7 @@ Spec-check at wave gate will verify alignment.
 
 Available at: {plan_file_path}
 
-## CRITICAL: You CAN Write Files
+## You CAN Write Files
 
 **You are a subagent. The block-direct-edits hook detects subagents and allows Edit/Write.**
 - You MUST use Write/Edit tools to create/modify files — this WILL work
@@ -47,22 +67,10 @@ Available at: {plan_file_path}
 - Do not modify scope beyond this task
 - MUST satisfy spec anchors listed above
 
-## CRITICAL: Test Execution Required
+## Required Workflow
 
-**You MUST run the project's test suite before completing this task.**
-
-1. Run the appropriate test command for this project (e.g., `mvn test`, `npm test`, `pytest`, etc.)
-2. Include the FULL test output in your response
-3. Tests MUST pass - if they fail, fix the issues and re-run
-4. Your task is NOT complete until tests pass and output is shown
-
-The SubagentStop hook extracts test evidence from your output to update the task graph.
-Without visible test output showing pass markers (e.g., "BUILD SUCCESS", "X passing", "OK"),
-the task will NOT be marked as having tests passed.
-
-## New Tests Required
-
-- You MUST write NEW tests for your implementation
-- Rerunning existing tests alone is NOT sufficient
-- A hook will git-diff for new test patterns (@Test, it(, test(, describe()
-- If no new test patterns found, wave advancement is BLOCKED
+1. Read the plan file and understand scope
+2. Implement code following the plan's patterns
+3. Write NEW tests (hook git-diffs for @Test, it(, test(, describe( patterns — no new tests = wave blocked)
+4. **Run tests via Bash tool** — fix failures, re-run until 0 failures
+5. Only then are you done
