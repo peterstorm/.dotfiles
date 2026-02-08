@@ -10,7 +10,7 @@ Executes the gate sequence after all wave tasks reach "implemented". Verifies te
 
 **Run this after SubagentStop hook outputs "Wave N implementation complete".**
 
-**Important:** State file writes via Bash are blocked by `guard-state-file.sh`. All state mutations happen through SubagentStop hooks and whitelisted helper scripts. Read access (jq, cat) is allowed.
+**Important:** State file writes via Bash are blocked by `guard-state-file`. All state mutations happen through SubagentStop hooks and whitelisted helper scripts. Read access (jq, cat) is allowed.
 
 ---
 
@@ -26,18 +26,18 @@ Abort if `impl_complete != true`.
 
 ### Step 2: Verify Test Evidence
 
-Test evidence is set **automatically** by the `update-task-status.sh` SubagentStop hook when implementation agents complete. It extracts pass markers (Maven, Node, Vitest, pytest) from agent transcripts and stores per-task `tests_passed` + `test_evidence`.
+Test evidence is set **automatically** by the `update-task-status` SubagentStop hook when implementation agents complete. It extracts pass markers (Maven, Node, Vitest, pytest) from agent transcripts and stores per-task `tests_passed` + `test_evidence`.
 
 **Check evidence status (read-only):**
 ```bash
-bash ~/.claude/hooks/helpers/mark-tests-passed.sh
+bun ~/.claude/hooks/loom/src/cli.ts helper mark-tests-passed
 ```
 
 This prints per-task evidence status. Exit 0 = all tasks have evidence, exit 1 = missing.
 
 **If evidence missing** → re-spawn the implementation agent for that task. The agent MUST run tests and the SubagentStop hook must see pass markers in the transcript.
 
-**New test verification:** The `update-task-status.sh` SubagentStop hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass.
+**New test verification:** The `update-task-status` SubagentStop hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass.
 
 **Do NOT manually run tests or set test flags.** The guard hook blocks direct state file writes. Evidence can only come from agent execution → SubagentStop hook extraction.
 
@@ -93,11 +93,11 @@ Call: Skill(skill: "review-pr", args: "--files {files} --task {task_id}")
 
 | Agent | SubagentStop Hook | Effect |
 |-------|-------------------|--------|
-| spec-check-invoker | `store-spec-check-findings.sh` | Sets `spec_check.critical_count`, `spec_check.verdict` |
-| review-invoker | `store-reviewer-findings.sh` | Sets `review_status` per task |
+| spec-check-invoker | `store-spec-check-findings` | Sets `spec_check.critical_count`, `spec_check.verdict` |
+| review-invoker | `store-reviewer-findings` | Sets `review_status` per task |
 
 **File-to-task mapping algorithm (for reviewers):**
-1. Read `task.files_modified` from state (set by `update-task-status.sh` hook via transcript parsing)
+1. Read `task.files_modified` from state (set by `update-task-status` hook via transcript parsing)
 2. If `files_modified` is non-empty: use those files directly
 3. Fallback (empty `files_modified`): use all wave changes from `git diff`
 4. Pass to review-invoker: `--files {files_modified}`
@@ -136,10 +136,10 @@ EOF
 
 ### Step 5: Advance
 
-Call `complete-wave-gate.sh` — it handles ALL verification and advancement:
+Call `complete-wave-gate` — it handles ALL verification and advancement:
 
 ```bash
-bash ~/.claude/hooks/helpers/complete-wave-gate.sh
+bun ~/.claude/hooks/loom/src/cli.ts helper complete-wave-gate
 ```
 
 The helper performs **five checks** before advancing:
@@ -211,4 +211,4 @@ jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.
 - NEVER advance if code review has critical findings
 - NEVER manually write to state file (guard hook blocks it)
 - All status comes from SubagentStop hooks — cannot be set manually
-- `complete-wave-gate.sh` is the ONLY path to advance waves
+- `complete-wave-gate` is the ONLY path to advance waves

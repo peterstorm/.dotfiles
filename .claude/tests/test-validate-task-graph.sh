@@ -1,11 +1,11 @@
 #!/bin/bash
-# Tests for validate-task-graph.sh — minimal mode, full mode, and --fix
+# Tests for validate-task-graph + populate-task-graph (TS CLI)
 # Run: bash .claude/tests/test-validate-task-graph.sh
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VALIDATOR="$SCRIPT_DIR/../hooks/helpers/validate-task-graph.sh"
+CLI="$SCRIPT_DIR/../hooks/loom/src/cli.ts"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -19,7 +19,7 @@ fail() { TESTS_RUN=$((TESTS_RUN + 1)); echo -e "${RED}✗${NC} $1 (expected '$2'
 
 # ===== MINIMAL MODE =====
 
-echo "Testing validate-task-graph.sh"
+echo "Testing validate-task-graph (TS CLI)"
 echo "========================================="
 echo ""
 echo "--- Minimal mode ---"
@@ -33,7 +33,7 @@ VALID_MINIMAL='{
   "plan_file": null
 }'
 
-if echo "$VALID_MINIMAL" | bash "$VALIDATOR" --minimal - >/dev/null 2>&1; then
+if echo "$VALID_MINIMAL" | bun "$CLI" helper validate-task-graph --minimal >/dev/null 2>&1; then
   pass "valid minimal graph passes"
 else
   fail "valid minimal graph passes" "exit 0" "exit 1"
@@ -46,7 +46,7 @@ BAD_NO_PHASE='{
   "spec_file": null,
   "plan_file": null
 }'
-if echo "$BAD_NO_PHASE" | bash "$VALIDATOR" --minimal - >/dev/null 2>&1; then
+if echo "$BAD_NO_PHASE" | bun "$CLI" helper validate-task-graph --minimal >/dev/null 2>&1; then
   fail "rejects missing current_phase" "exit 1" "exit 0"
 else
   pass "rejects missing current_phase"
@@ -60,7 +60,7 @@ BAD_PHASE='{
   "spec_file": null,
   "plan_file": null
 }'
-if echo "$BAD_PHASE" | bash "$VALIDATOR" --minimal - >/dev/null 2>&1; then
+if echo "$BAD_PHASE" | bun "$CLI" helper validate-task-graph --minimal >/dev/null 2>&1; then
   fail "rejects invalid phase name" "exit 1" "exit 0"
 else
   pass "rejects invalid phase name"
@@ -72,7 +72,7 @@ BAD_NO_SPEC='{
   "phase_artifacts": {},
   "skipped_phases": []
 }'
-if echo "$BAD_NO_SPEC" | bash "$VALIDATOR" --minimal - >/dev/null 2>&1; then
+if echo "$BAD_NO_SPEC" | bun "$CLI" helper validate-task-graph --minimal >/dev/null 2>&1; then
   fail "rejects missing spec_file key" "exit 1" "exit 0"
 else
   pass "rejects missing spec_file key"
@@ -86,7 +86,7 @@ BAD_PA='{
   "spec_file": null,
   "plan_file": null
 }'
-if echo "$BAD_PA" | bash "$VALIDATOR" --minimal - >/dev/null 2>&1; then
+if echo "$BAD_PA" | bun "$CLI" helper validate-task-graph --minimal >/dev/null 2>&1; then
   fail "rejects non-object phase_artifacts" "exit 1" "exit 0"
 else
   pass "rejects non-object phase_artifacts"
@@ -95,7 +95,7 @@ fi
 # All valid phase names accepted
 for phase in init brainstorm specify clarify architecture decompose execute; do
   JSON=$(echo "$VALID_MINIMAL" | jq --arg p "$phase" '.current_phase = $p')
-  if echo "$JSON" | bash "$VALIDATOR" --minimal - >/dev/null 2>&1; then
+  if echo "$JSON" | bun "$CLI" helper validate-task-graph --minimal >/dev/null 2>&1; then
     pass "accepts phase: $phase"
   else
     fail "accepts phase: $phase" "exit 0" "exit 1"
@@ -109,7 +109,7 @@ echo "--- Minimal --fix mode ---"
 
 # Fix missing fields
 PARTIAL='{"current_phase": "specify"}'
-FIXED=$(echo "$PARTIAL" | bash "$VALIDATOR" --minimal --fix - 2>/dev/null)
+FIXED=$(echo "$PARTIAL" | bun "$CLI" helper validate-task-graph --minimal --fix 2>/dev/null)
 if echo "$FIXED" | jq -e '.phase_artifacts == {} and .skipped_phases == [] and .spec_file == null and .plan_file == null' >/dev/null 2>&1; then
   pass "fix adds missing minimal fields"
 else
@@ -118,13 +118,13 @@ fi
 
 # Fix resets invalid current_phase to "init"
 BOGUS_PHASE='{"current_phase": "bogus", "phase_artifacts": {}, "skipped_phases": [], "spec_file": null, "plan_file": null}'
-FIXED_BOGUS=$(echo "$BOGUS_PHASE" | bash "$VALIDATOR" --minimal --fix - 2>/dev/null)
+FIXED_BOGUS=$(echo "$BOGUS_PHASE" | bun "$CLI" helper validate-task-graph --minimal --fix 2>/dev/null)
 FIXED_CP=$(echo "$FIXED_BOGUS" | jq -r '.current_phase')
 [[ "$FIXED_CP" == "init" ]] && pass "fix resets invalid current_phase to init" || fail "fix resets invalid phase" "init" "$FIXED_CP"
 
 # Fix preserves valid fields
 PARTIAL_WITH_DATA='{"current_phase": "architecture", "phase_artifacts": {"brainstorm": "/path"}, "skipped_phases": ["clarify"]}'
-FIXED2=$(echo "$PARTIAL_WITH_DATA" | bash "$VALIDATOR" --minimal --fix - 2>/dev/null)
+FIXED2=$(echo "$PARTIAL_WITH_DATA" | bun "$CLI" helper validate-task-graph --minimal --fix 2>/dev/null)
 CP=$(echo "$FIXED2" | jq -r '.current_phase')
 PA=$(echo "$FIXED2" | jq -r '.phase_artifacts.brainstorm')
 SP=$(echo "$FIXED2" | jq -r '.skipped_phases[0]')
@@ -135,7 +135,7 @@ else
 fi
 
 # Fix from garbage JSON
-FIXED3=$(echo "not json at all" | bash "$VALIDATOR" --minimal --fix - 2>/dev/null)
+FIXED3=$(echo "not json at all" | bun "$CLI" helper validate-task-graph --minimal --fix 2>/dev/null)
 if echo "$FIXED3" | jq -e '.current_phase == "init"' >/dev/null 2>&1; then
   pass "fix recovers from invalid JSON with canonical template"
 else
@@ -155,7 +155,7 @@ FIXABLE='{
     {"id": "T1", "description": "Do thing", "agent": "code-implementer-agent", "wave": 1}
   ]
 }'
-FIXED4=$(echo "$FIXABLE" | bash "$VALIDATOR" --fix - 2>/dev/null)
+FIXED4=$(echo "$FIXABLE" | bun "$CLI" helper validate-task-graph --fix 2>/dev/null)
 HAS_DEFAULTS=$(echo "$FIXED4" | jq '.tasks[0] | has("depends_on") and has("status") and has("review_status") and has("critical_findings") and has("advisory_findings")')
 if [[ "$HAS_DEFAULTS" == "true" ]]; then
   pass "fix adds per-task defaults (status, review_status, depends_on, findings)"
@@ -169,10 +169,11 @@ STATUS=$(echo "$FIXED4" | jq -r '.tasks[0].status')
 # ===== POPULATE VALIDATION =====
 
 echo ""
-echo "--- populate-task-graph.sh validates decompose input ---"
+echo "--- populate-task-graph validates decompose input ---"
 
-POPULATE="$SCRIPT_DIR/../hooks/helpers/populate-task-graph.sh"
 PTEST_DIR=$(mktemp -d)
+CLEANUP_DIRS="$PTEST_DIR"
+trap "rm -rf $CLEANUP_DIRS" EXIT
 
 # Setup minimal state
 mkdir -p "$PTEST_DIR/.claude/state"
@@ -189,8 +190,7 @@ chmod 644 "$PTEST_DIR/.claude/state/active_task_graph.json"
 
 # Bad decompose JSON (missing required fields)
 BAD_DECOMPOSE='{"tasks": []}'
-cd "$PTEST_DIR"
-if echo "$BAD_DECOMPOSE" | TASK_GRAPH="$PTEST_DIR/.claude/state/active_task_graph.json" bash "$POPULATE" 2>/dev/null; then
+if (cd "$PTEST_DIR" && echo "$BAD_DECOMPOSE" | bun "$CLI" helper populate-task-graph 2>/dev/null); then
   fail "populate rejects invalid decompose JSON" "exit 1" "exit 0"
 else
   pass "populate rejects invalid decompose JSON"
@@ -205,7 +205,9 @@ GOOD_DECOMPOSE='{
     {"id": "T1", "description": "Impl", "agent": "code-implementer-agent", "wave": 1, "depends_on": []}
   ]
 }'
-# Reset state
+# Reset state (may be chmod 444 after previous write)
+chmod 644 "$PTEST_DIR/.claude/state/active_task_graph.json" 2>/dev/null || true
+rm -rf "$PTEST_DIR/.claude/state/.task_graph.lock" 2>/dev/null || true
 cat > "$PTEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "decompose",
@@ -216,13 +218,11 @@ cat > "$PTEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 }
 EOF
 
-if echo "$GOOD_DECOMPOSE" | TASK_GRAPH="$PTEST_DIR/.claude/state/active_task_graph.json" bash "$POPULATE" >/dev/null 2>&1; then
+if (cd "$PTEST_DIR" && echo "$GOOD_DECOMPOSE" | bun "$CLI" helper populate-task-graph >/dev/null 2>&1); then
   pass "populate accepts valid decompose JSON"
 else
   fail "populate accepts valid decompose JSON" "exit 0" "exit 1"
 fi
-
-rm -rf "$PTEST_DIR"
 
 # ===== RESULTS =====
 

@@ -1,0 +1,17 @@
+{
+  "name": "loom-hooks",
+  "version": "1.0.0",
+  "description": "Loom orchestration hooks for Claude Code",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0",
+    "ts-pattern": "^5.0.0"
+  }
+}

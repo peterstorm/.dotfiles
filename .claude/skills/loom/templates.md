@@ -16,10 +16,10 @@ Phase and agent context templates are in `templates/` directory:
 
 ## Spec Anchor Helper
 
-Use `~/.claude/hooks/helpers/suggest-spec-anchors.sh` to auto-suggest anchors:
+Use `bun ~/.claude/hooks/loom/src/cli.ts helper suggest-spec-anchors` to auto-suggest anchors:
 
 ```bash
-suggest-spec-anchors.sh "Implement email validation" .claude/specs/*/spec.md
+bun ~/.claude/hooks/loom/src/cli.ts helper suggest-spec-anchors "Implement email validation" .claude/specs/*/spec.md
 # Returns: [{"anchor":"FR-003","score":0.85,"text":"..."},...]
 ```
 

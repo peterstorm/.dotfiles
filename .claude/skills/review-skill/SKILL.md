@@ -37,7 +37,7 @@ Search these locations for files belonging to the skill:
 ~/.claude/hooks/SubagentStart/               → SubagentStart hooks
 ~/.claude/hooks/SubagentStop/                → SubagentStop hooks
 ~/.claude/hooks/Stop/                        → Stop hooks
-~/.claude/hooks/helpers/                     → helper scripts
+~/.claude/hooks/loom/                        → TS hook handlers
 ~/.claude/tests/                             → test files
 ~/.claude/settings.json                      → hook registrations
 ```
