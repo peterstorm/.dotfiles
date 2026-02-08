@@ -148,7 +148,7 @@ Cortex automatically captures knowledge from Claude Code sessions and surfaces r
 - FR-001: System MUST extract memories automatically at session end without user action
 - FR-002: System MUST parse conversation transcripts to identify decisions, patterns, gotchas, code descriptions, and progress updates
 - FR-003: System MUST extract session context including branch name, recent commits, and changed files
-- FR-004: System MUST track cursor position in transcript to resume extraction if interrupted via extractions table (session_id, cursor_position, extracted_at)
+- FR-004: System MUST track cursor position in transcript via extractions table (session_id, cursor_position, extracted_at) to resume extraction if interrupted. Cursor persists in SQLite extractions table between sessions.
 - FR-005: System MUST classify extracted memories into types: architecture, decision, pattern, gotcha, context, progress, code_description, code
 - FR-006: System MUST classify memories as project-scoped or global-scoped based on content analysis
 - FR-007: System MUST assign confidence score (0-1) to each extracted memory based on clarity and relevance
@@ -156,7 +156,7 @@ Cortex automatically captures knowledge from Claude Code sessions and surfaces r
 - FR-009: System MUST complete extraction within 30 seconds (p95) to avoid session end delays
 - FR-010: System MUST handle extraction errors without blocking session closure
 - FR-011: System MUST log extraction errors to inspect later without surfacing to user
-- FR-012: System MUST support resumable extraction if session transcript exceeds 100KB by checkpointing cursor position
+- FR-012: System MUST support resumable extraction if session transcript exceeds 100KB threshold by checkpointing cursor position to extractions table
 
 ### Push Surface Requirements
 
@@ -190,7 +190,7 @@ Cortex automatically captures knowledge from Claude Code sessions and surfaces r
 - FR-037: System MUST update access count and last accessed timestamp when memories are retrieved
 - FR-038: System MUST complete semantic search within 2 seconds (p95)
 - FR-039: System MUST prefix query embeddings with metadata `[memory_type] [project:name]` for aligned search
-- FR-040: System MUST support graph traversal from a memory by ID to discover connected memories with depth limit of 2
+- FR-040: System MUST support graph traversal from a memory by ID to discover connected memories with depth limit of 2 (maximum 2 hops from source node)
 
 ### Memory Creation Requirements
 
