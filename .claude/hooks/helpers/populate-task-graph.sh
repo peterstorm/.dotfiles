@@ -9,20 +9,23 @@
 # adds github_issue, current_wave:1, initializes wave_gates and executing_tasks.
 #
 # Expects decompose JSON on stdin with: plan_title, plan_file, spec_file, tasks[]
-# Assumes validate-task-graph.sh already passed.
+# Validates schema before merging. Use --fix to auto-correct fixable issues.
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_GRAPH="${TASK_GRAPH:-.claude/state/active_task_graph.json}"
 [[ ! -f "$TASK_GRAPH" ]] && { echo "ERROR: No task graph at $TASK_GRAPH" >&2; exit 1; }
 
 # Parse args
 ISSUE=""
 REPO=""
+AUTO_FIX=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --issue) ISSUE="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
+    --fix) AUTO_FIX=true; shift ;;
     *) shift ;;
   esac
 done
@@ -36,8 +39,30 @@ if ! echo "$DECOMPOSE_JSON" | jq empty 2>/dev/null; then
   exit 1
 fi
 
-# Read existing state (preserves phase tracking fields)
-EXISTING=$(cat "$TASK_GRAPH")
+# Validate decompose schema (defense-in-depth)
+if ! echo "$DECOMPOSE_JSON" | bash "$SCRIPT_DIR/validate-task-graph.sh" -; then
+  if $AUTO_FIX; then
+    echo "Attempting auto-fix..." >&2
+    if FIXED=$(echo "$DECOMPOSE_JSON" | bash "$SCRIPT_DIR/validate-task-graph.sh" --fix -); then
+      DECOMPOSE_JSON="$FIXED"
+      echo "Auto-fix applied" >&2
+    else
+      echo "ERROR: Auto-fix could not resolve all issues" >&2
+      exit 1
+    fi
+  else
+    echo "Hint: re-run with --fix to auto-correct fixable issues" >&2
+    exit 1
+  fi
+fi
+
+# Validate existing state has correct minimal schema
+if ! bash "$SCRIPT_DIR/validate-task-graph.sh" --minimal "$TASK_GRAPH" >/dev/null 2>&1; then
+  echo "WARNING: Existing state file has invalid minimal schema — fixing" >&2
+  EXISTING=$(bash "$SCRIPT_DIR/validate-task-graph.sh" --minimal --fix "$TASK_GRAPH")
+else
+  EXISTING=$(cat "$TASK_GRAPH")
+fi
 
 # Merge: existing phase fields + decompose tasks + new execution fields
 MERGED=$(echo "$EXISTING" | jq \

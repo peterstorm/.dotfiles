@@ -1072,6 +1072,10 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 }
 EOF
 
+# Create brainstorm.md so advance-phase can find it
+mkdir -p "$TEST_DIR/.claude/specs/test-feature"
+echo "# Brainstorm" > "$TEST_DIR/.claude/specs/test-feature/brainstorm.md"
+
 # Create transcript with brainstorm agent type indicator
 mkdir -p /tmp/claude-subagents
 echo "brainstorm-agent" > /tmp/claude-subagents/agent-brainstorm-123.type
@@ -1083,7 +1087,7 @@ NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.js
 BRAINSTORM_ARTIFACT=$(jq -r '.phase_artifacts.brainstorm // "missing"' "$TEST_DIR/.claude/state/active_task_graph.json")
 
 [[ "$NEW_PHASE" == "specify" ]] && pass "advance-phase: brainstorm → specify" || fail "advance-phase: brainstorm → specify" "specify" "$NEW_PHASE"
-[[ "$BRAINSTORM_ARTIFACT" == "completed" ]] && pass "advance-phase: sets brainstorm artifact" || fail "advance-phase: sets brainstorm artifact" "completed" "$BRAINSTORM_ARTIFACT"
+[[ "$BRAINSTORM_ARTIFACT" == *"brainstorm.md" ]] && pass "advance-phase: sets brainstorm artifact to file path" || fail "advance-phase: sets brainstorm artifact" "*brainstorm.md" "$BRAINSTORM_ARTIFACT"
 
 # Test: specify complete with few markers → architecture (skip clarify)
 cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
@@ -1143,11 +1147,17 @@ NEW_PHASE=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.js
 [[ "$NEW_PHASE" == "clarify" ]] && pass "advance-phase: specify → clarify (markers > 3)" || fail "advance-phase: specify → clarify" "clarify" "$NEW_PHASE"
 
 # Test: clarify complete → architecture
+# Simulate clarify agent having resolved markers (≤ threshold)
+cat > "$TEST_DIR/.claude/specs/test-feature/spec.md" << 'EOF'
+# Spec
+[NEEDS CLARIFICATION]: One remaining
+EOF
+
 reset_state
 cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
 {
   "current_phase": "clarify",
-  "phase_artifacts": {"brainstorm": "completed", "specify": ".claude/specs/test-feature/spec.md"},
+  "phase_artifacts": {"brainstorm": ".claude/specs/test-feature/brainstorm.md", "specify": ".claude/specs/test-feature/spec.md"},
   "skipped_phases": [],
   "spec_file": ".claude/specs/test-feature/spec.md",
   "current_wave": null,
@@ -1729,6 +1739,10 @@ cat > "$TEST_DIR/.claude/state/active_task_graph.json" << 'EOF'
   "tasks": []
 }
 EOF
+
+# Create brainstorm.md so advance-phase can find it
+mkdir -p "$TEST_DIR/.claude/specs/test-feature"
+echo "# Brainstorm" > "$TEST_DIR/.claude/specs/test-feature/brainstorm.md"
 
 echo "$TEST_DIR/.claude/state/active_task_graph.json" > /tmp/claude-subagents/dispatch-test.task_graph
 echo "brainstorm-agent" > /tmp/claude-subagents/agent-dispatch-1.type

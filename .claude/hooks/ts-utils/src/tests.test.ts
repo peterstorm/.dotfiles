@@ -1,36 +1,29 @@
-import { describe, it } from "node:test";
-import assert from "node:assert";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { describe, it, expect } from "bun:test";
 
 import { parseTranscript } from "./parse-transcript.js";
 import { parseFilesModified } from "./parse-files-modified.js";
 import { parseBashTestOutput } from "./parse-bash-test-output.js";
 import { parsePhaseArtifacts } from "./parse-phase-artifacts.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixturesDir = join(__dirname, "..", "src", "fixtures");
-
 describe("parseTranscript", () => {
   it("extracts text from string content", () => {
     const content = '{"message":{"content":"Hello world"}}';
     const result = parseTranscript(content);
-    assert.ok(result.includes("Hello world"));
+    expect(result).toContain("Hello world");
   });
 
   it("extracts text from content blocks", () => {
     const content =
       '{"message":{"content":[{"type":"text","text":"Block text"}]}}';
     const result = parseTranscript(content);
-    assert.ok(result.includes("Block text"));
+    expect(result).toContain("Block text");
   });
 
   it("extracts tool_result content", () => {
     const content =
       '{"message":{"content":[{"type":"tool_result","content":"Result text"}]}}';
     const result = parseTranscript(content);
-    assert.ok(result.includes("Result text"));
+    expect(result).toContain("Result text");
   });
 });
 
@@ -39,21 +32,21 @@ describe("parseFilesModified", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/test.ts"}}]}}';
     const result = parseFilesModified(content);
-    assert.deepStrictEqual(result, ["/tmp/test.ts"]);
+    expect(result).toEqual(["/tmp/test.ts"]);
   });
 
   it("extracts Edit file paths", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/tmp/other.ts"}}]}}';
     const result = parseFilesModified(content);
-    assert.deepStrictEqual(result, ["/tmp/other.ts"]);
+    expect(result).toEqual(["/tmp/other.ts"]);
   });
 
   it("ignores non-file-modifying tools", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}';
     const result = parseFilesModified(content);
-    assert.deepStrictEqual(result, []);
+    expect(result).toEqual([]);
   });
 
   it("deduplicates files", () => {
@@ -62,7 +55,7 @@ describe("parseFilesModified", () => {
       '{"message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/tmp/test.ts"}}]}}',
     ].join("\n");
     const result = parseFilesModified(content);
-    assert.deepStrictEqual(result, ["/tmp/test.ts"]);
+    expect(result).toEqual(["/tmp/test.ts"]);
   });
 });
 
@@ -73,7 +66,7 @@ describe("parseBashTestOutput", () => {
       '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Tests passed"}]}}',
     ].join("\n");
     const result = parseBashTestOutput(content);
-    assert.ok(result.includes("Tests passed"));
+    expect(result).toContain("Tests passed");
   });
 
   it("ignores non-test Bash commands", () => {
@@ -82,7 +75,7 @@ describe("parseBashTestOutput", () => {
       '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"file.txt"}]}}',
     ].join("\n");
     const result = parseBashTestOutput(content);
-    assert.strictEqual(result, "");
+    expect(result).toBe("");
   });
 
   it("matches various test runners", () => {
@@ -101,7 +94,7 @@ describe("parseBashTestOutput", () => {
         '{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"OK"}]}}',
       ].join("\n");
       const result = parseBashTestOutput(content);
-      assert.ok(result.includes("OK"), `Failed for: ${cmd}`);
+      expect(result).toContain("OK");
     }
   });
 });
@@ -111,22 +104,20 @@ describe("parsePhaseArtifacts", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}';
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(
-      result.spec_file,
+    expect(result.spec_file).toBe(
       "/project/.claude/specs/2025-01-15-auth/spec.md"
     );
-    assert.strictEqual(result.plan_file, undefined);
+    expect(result.plan_file).toBeUndefined();
   });
 
   it("extracts plan_file from Write to .claude/plans/", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/plans/2025-01-15-auth.md"}}]}}';
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(
-      result.plan_file,
+    expect(result.plan_file).toBe(
       "/project/.claude/plans/2025-01-15-auth.md"
     );
-    assert.strictEqual(result.spec_file, undefined);
+    expect(result.spec_file).toBeUndefined();
   });
 
   it("extracts both spec_file and plan_file from multi-phase transcript", () => {
@@ -135,12 +126,10 @@ describe("parsePhaseArtifacts", () => {
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/plans/2025-01-15-auth.md"}}]}}',
     ].join("\n");
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(
-      result.spec_file,
+    expect(result.spec_file).toBe(
       "/project/.claude/specs/2025-01-15-auth/spec.md"
     );
-    assert.strictEqual(
-      result.plan_file,
+    expect(result.plan_file).toBe(
       "/project/.claude/plans/2025-01-15-auth.md"
     );
   });
@@ -149,15 +138,15 @@ describe("parsePhaseArtifacts", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/src/auth.ts"}}]}}';
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(result.spec_file, undefined);
-    assert.strictEqual(result.plan_file, undefined);
+    expect(result.spec_file).toBeUndefined();
+    expect(result.plan_file).toBeUndefined();
   });
 
   it("ignores non-.md files in .claude/specs/", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/data.json"}}]}}';
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(result.spec_file, undefined);
+    expect(result.spec_file).toBeUndefined();
   });
 
   it("prefers deeper spec path (more specific)", () => {
@@ -166,8 +155,7 @@ describe("parsePhaseArtifacts", () => {
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}',
     ].join("\n");
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(
-      result.spec_file,
+    expect(result.spec_file).toBe(
       "/project/.claude/specs/2025-01-15-auth/spec.md"
     );
   });
@@ -176,22 +164,21 @@ describe("parsePhaseArtifacts", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"filePath":"/project/.claude/specs/2025-01-15-auth/spec.md"}}]}}';
     const result = parsePhaseArtifacts(content);
-    assert.strictEqual(
-      result.spec_file,
+    expect(result.spec_file).toBe(
       "/project/.claude/specs/2025-01-15-auth/spec.md"
     );
   });
 
   it("returns empty object for empty transcript", () => {
     const result = parsePhaseArtifacts("");
-    assert.deepStrictEqual(result, {});
+    expect(result).toEqual({});
   });
 
   it("returns empty object for transcript with no Write calls", () => {
     const content =
       '{"message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}';
     const result = parsePhaseArtifacts(content);
-    assert.deepStrictEqual(result, {});
+    expect(result).toEqual({});
   });
 });
 

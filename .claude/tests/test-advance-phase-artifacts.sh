@@ -208,17 +208,169 @@ EOF
   teardown
 }
 
+# ===== NEGATIVE: artifact refusal tests =====
+
+assert_phase_unchanged() {
+  local expected_phase=$1
+  local name=$2
+  local actual
+  actual=$(jq -r '.current_phase' "$TEST_DIR/.claude/state/active_task_graph.json")
+  TESTS_RUN=$((TESTS_RUN + 1))
+  if [[ "$expected_phase" == "$actual" ]]; then
+    echo -e "${GREEN}✓${NC} $name"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}✗${NC} $name (expected phase '$expected_phase', got '$actual')"
+  fi
+}
+
+assert_no_completed_sentinel() {
+  local phase=$1
+  local name=$2
+  local artifact
+  artifact=$(jq -r ".phase_artifacts.\"$phase\" // empty" "$TEST_DIR/.claude/state/active_task_graph.json")
+  TESTS_RUN=$((TESTS_RUN + 1))
+  if [[ "$artifact" != "completed" ]]; then
+    echo -e "${GREEN}✓${NC} $name"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}✗${NC} $name (found 'completed' sentinel in phase_artifacts.$phase)"
+  fi
+}
+
+test_brainstorm_refuses_without_file() {
+  setup
+  # Set phase to brainstorm, no brainstorm.md created
+  jq '.current_phase = "brainstorm"' "$TEST_DIR/.claude/state/active_task_graph.json" > "$TEST_DIR/tmp.json"
+  mv "$TEST_DIR/tmp.json" "$TEST_DIR/.claude/state/active_task_graph.json"
+  rm -f "$TEST_DIR/.claude/specs/"*/brainstorm.md
+
+  local input
+  input=$(jq -n \
+    --arg session "test-neg-1" \
+    --arg agent "brainstorm-agent" \
+    '{session_id: $session, agent_type: $agent}')
+
+  echo "$input" | bash "$HOOK" 2>/dev/null || true
+
+  assert_phase_unchanged "brainstorm" "brainstorm refuses without brainstorm.md"
+  assert_no_completed_sentinel "brainstorm" "no 'completed' sentinel for brainstorm"
+  teardown
+}
+
+test_architecture_refuses_without_plan_file() {
+  setup
+  # Set phase to architecture, plan_file = null
+  jq '.current_phase = "architecture" | .plan_file = null' \
+    "$TEST_DIR/.claude/state/active_task_graph.json" > "$TEST_DIR/tmp.json"
+  mv "$TEST_DIR/tmp.json" "$TEST_DIR/.claude/state/active_task_graph.json"
+
+  local input
+  input=$(jq -n \
+    --arg session "test-neg-2" \
+    --arg agent "architecture-agent" \
+    '{session_id: $session, agent_type: $agent}')
+
+  echo "$input" | bash "$HOOK" 2>/dev/null || true
+
+  assert_phase_unchanged "architecture" "architecture refuses without plan_file"
+  assert_no_completed_sentinel "architecture" "no 'completed' sentinel for architecture"
+  teardown
+}
+
+test_clarify_refuses_without_spec_file() {
+  setup
+  # Set phase to clarify, spec_file = null
+  jq '.current_phase = "clarify" | .spec_file = null' \
+    "$TEST_DIR/.claude/state/active_task_graph.json" > "$TEST_DIR/tmp.json"
+  mv "$TEST_DIR/tmp.json" "$TEST_DIR/.claude/state/active_task_graph.json"
+
+  local input
+  input=$(jq -n \
+    --arg session "test-neg-3" \
+    --arg agent "clarify-agent" \
+    '{session_id: $session, agent_type: $agent}')
+
+  echo "$input" | bash "$HOOK" 2>/dev/null || true
+
+  assert_phase_unchanged "clarify" "clarify refuses without spec_file"
+  assert_no_completed_sentinel "clarify" "no 'completed' sentinel for clarify"
+  teardown
+}
+
+test_specify_refuses_without_spec_in_specs_dir() {
+  setup
+  # Set spec_file to path outside .claude/specs/
+  local bad_spec="$TEST_DIR/src/wrong/spec.md"
+  mkdir -p "$(dirname "$bad_spec")"
+  echo "# Wrong" > "$bad_spec"
+  jq --arg spec "$bad_spec" '.spec_file = $spec' \
+    "$TEST_DIR/.claude/state/active_task_graph.json" > "$TEST_DIR/tmp.json"
+  mv "$TEST_DIR/tmp.json" "$TEST_DIR/.claude/state/active_task_graph.json"
+
+  local input
+  input=$(jq -n \
+    --arg session "test-neg-4" \
+    --arg agent "specify-agent" \
+    '{session_id: $session, agent_type: $agent}')
+
+  echo "$input" | bash "$HOOK" 2>/dev/null || true
+
+  assert_phase_unchanged "specify" "specify refuses spec outside .claude/specs/"
+  assert_no_completed_sentinel "specify" "no 'completed' sentinel for specify"
+  teardown
+}
+
+test_artifact_is_file_path_not_sentinel() {
+  setup
+
+  local transcript="$TEST_DIR/transcript.jsonl"
+  local spec_path="$TEST_DIR/.claude/specs/2025-01-15-auth/spec.md"
+  create_transcript "$transcript" "$spec_path" ""
+
+  local input
+  input=$(jq -n \
+    --arg session "test-neg-5" \
+    --arg agent "specify-agent" \
+    --arg transcript "$transcript" \
+    '{session_id: $session, agent_type: $agent, agent_transcript_path: $transcript}')
+
+  echo "$input" | bash "$HOOK" 2>/dev/null
+
+  # After successful specify, artifact should be actual file path
+  local artifact
+  artifact=$(jq -r '.phase_artifacts.specify // empty' "$TEST_DIR/.claude/state/active_task_graph.json")
+  TESTS_RUN=$((TESTS_RUN + 1))
+  if [[ -n "$artifact" && "$artifact" != "completed" && -f "$artifact" ]]; then
+    echo -e "${GREEN}✓${NC} specify artifact is file path, not sentinel"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}✗${NC} specify artifact is file path, not sentinel (got '$artifact')"
+  fi
+
+  teardown
+}
+
 # ===== RUN TESTS =====
 
 echo "Testing advance-phase.sh artifact capture"
 echo "========================================="
 echo ""
 
+echo "--- Positive tests ---"
 test_captures_spec_file_from_transcript
 test_captures_plan_file_from_transcript
 test_does_not_overwrite_existing_spec_file
 test_ignores_non_spec_paths
 test_ignores_non_existent_files
+
+echo ""
+echo "--- Negative: artifact refusal tests ---"
+test_brainstorm_refuses_without_file
+test_architecture_refuses_without_plan_file
+test_clarify_refuses_without_spec_file
+test_specify_refuses_without_spec_in_specs_dir
+test_artifact_is_file_path_not_sentinel
 
 echo ""
 echo "========================================="

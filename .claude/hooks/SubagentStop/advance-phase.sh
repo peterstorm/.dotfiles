@@ -86,44 +86,54 @@ case "$COMPLETED_PHASE" in
   brainstorm)
     NEXT_PHASE="specify"
     BRAINSTORM_FILE=$(find .claude/specs -name "brainstorm.md" -type f 2>/dev/null | head -1)
-    ARTIFACT="${BRAINSTORM_FILE:-completed}"
+    if [[ -z "$BRAINSTORM_FILE" || ! -f "$BRAINSTORM_FILE" ]]; then
+      echo "ERROR: brainstorm phase requires brainstorm.md in .claude/specs/ — not advancing" >&2
+      exit 0
+    fi
+    ARTIFACT="$BRAINSTORM_FILE"
     ;;
   specify)
-    # Check if clarify needed (markers > CLARIFY_THRESHOLD)
     # spec_file must be in .claude/specs/ — reject pre-populated non-spec paths
     SPEC_FILE=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
-    if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" && "$SPEC_FILE" == *".claude/specs/"* ]]; then
-      MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || true)
-      if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
-        NEXT_PHASE="clarify"
-      else
-        NEXT_PHASE="architecture"
-        # Auto-skip clarify if markers ≤ CLARIFY_THRESHOLD
-        bash ~/.claude/hooks/helpers/state-file-write.sh '.skipped_phases = ((.skipped_phases // []) + ["clarify"] | unique)'
-      fi
-      ARTIFACT="$SPEC_FILE"
-    else
-      NEXT_PHASE="clarify"
-      ARTIFACT="completed"
+    if [[ -z "$SPEC_FILE" || ! -f "$SPEC_FILE" || "$SPEC_FILE" != *".claude/specs/"* ]]; then
+      echo "ERROR: specify phase requires spec_file in .claude/specs/ — not advancing" >&2
+      exit 0
     fi
+    # Check if clarify needed (markers > CLARIFY_THRESHOLD)
+    MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || true)
+    if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
+      NEXT_PHASE="clarify"
+    else
+      NEXT_PHASE="architecture"
+      # Auto-skip clarify if markers ≤ CLARIFY_THRESHOLD
+      bash ~/.claude/hooks/helpers/state-file-write.sh '.skipped_phases = ((.skipped_phases // []) + ["clarify"] | unique)'
+    fi
+    ARTIFACT="$SPEC_FILE"
     ;;
   clarify)
-    # Only advance if markers actually resolved (≤ threshold) in spec.md
     SPEC_FILE=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
-    if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" ]]; then
-      MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || echo 0)
-      if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
-        echo "Clarify agent returned but $MARKERS markers remain (> $CLARIFY_THRESHOLD) — not advancing"
-        exit 0
-      fi
+    if [[ -z "$SPEC_FILE" || ! -f "$SPEC_FILE" ]]; then
+      echo "ERROR: clarify phase requires spec_file on disk — not advancing" >&2
+      exit 0
+    fi
+    # Only advance if markers actually resolved (≤ threshold)
+    MARKERS=$(grep -c "NEEDS CLARIFICATION" "$SPEC_FILE" 2>/dev/null || true)
+    MARKERS=${MARKERS:-0}
+    if [[ "$MARKERS" -gt "$CLARIFY_THRESHOLD" ]]; then
+      echo "Clarify agent returned but $MARKERS markers remain (> $CLARIFY_THRESHOLD) — not advancing"
+      exit 0
     fi
     NEXT_PHASE="architecture"
-    ARTIFACT="${SPEC_FILE:-completed}"
+    ARTIFACT="$SPEC_FILE"
     ;;
   architecture)
     NEXT_PHASE="decompose"
     PLAN_FILE=$(jq -r '.plan_file // empty' "$TASK_GRAPH")
-    ARTIFACT="${PLAN_FILE:-completed}"
+    if [[ -z "$PLAN_FILE" || "$PLAN_FILE" == "null" || ! -f "$PLAN_FILE" ]]; then
+      echo "ERROR: architecture phase requires plan_file on disk — not advancing" >&2
+      exit 0
+    fi
+    ARTIFACT="$PLAN_FILE"
     ;;
   decompose)
     NEXT_PHASE="execute"
@@ -133,31 +143,18 @@ esac
 
 [[ -z "$NEXT_PHASE" ]] && exit 0
 
-# Verify expected artifact exists on disk before advancing
+# Defense-in-depth: validate artifact matches phase contract
 case "$COMPLETED_PHASE" in
-  brainstorm)
-    if [[ -z "$BRAINSTORM_FILE" || ! -f "$BRAINSTORM_FILE" ]]; then
-      echo "ERROR: brainstorm.md not found in .claude/specs/. Phase not advanced." >&2
-      exit 0
-    fi
+  brainstorm|specify)
+    [[ ! -f "$ARTIFACT" ]] && { echo "BUG: $COMPLETED_PHASE artifact not a file" >&2; exit 0; }
+    [[ "$ARTIFACT" != *".claude/specs/"* ]] && { echo "BUG: $COMPLETED_PHASE artifact not in .claude/specs/" >&2; exit 0; }
     ;;
-  specify)
-    SPEC_CHECK=$(jq -r '.spec_file // empty' "$TASK_GRAPH")
-    if [[ -z "$SPEC_CHECK" || ! -f "$SPEC_CHECK" ]]; then
-      echo "ERROR: spec_file '${SPEC_CHECK:-null}' not found on disk. Phase not advanced." >&2
-      exit 0
-    fi
-    if [[ "$SPEC_CHECK" != *".claude/specs/"* ]]; then
-      echo "ERROR: spec_file '$SPEC_CHECK' not in .claude/specs/. Phase not advanced." >&2
-      exit 0
-    fi
+  clarify)
+    [[ ! -f "$ARTIFACT" ]] && { echo "BUG: clarify artifact not a file" >&2; exit 0; }
     ;;
   architecture)
-    PLAN_CHECK=$(jq -r '.plan_file // empty' "$TASK_GRAPH")
-    if [[ -n "$PLAN_CHECK" && ! -f "$PLAN_CHECK" ]]; then
-      echo "ERROR: plan_file '$PLAN_CHECK' not found on disk. Phase not advanced." >&2
-      exit 0
-    fi
+    [[ ! -f "$ARTIFACT" ]] && { echo "BUG: architecture artifact not a file" >&2; exit 0; }
+    [[ "$ARTIFACT" != *".claude/plans/"* ]] && { echo "BUG: architecture artifact not in .claude/plans/" >&2; exit 0; }
     ;;
 esac
 
