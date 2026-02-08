@@ -24,7 +24,10 @@ function validateExecution(
   // Check 2: Dependencies complete
   for (const dep of task.depends_on) {
     const depTask = state.tasks.find((t) => t.id === dep);
-    if (depTask && depTask.status !== "completed") {
+    if (!depTask) {
+      return { kind: "block", reason: `dep ${dep} not found in task graph` };
+    }
+    if (depTask.status !== "completed") {
       return { kind: "block", reason: `dep ${dep} not complete (${depTask.status})` };
     }
   }
@@ -152,15 +155,16 @@ describe("validate-task-execution — dependency gates", () => {
     expect(validateExecution("T1", state).kind).toBe("allow");
   });
 
-  it("allows when dependency references non-existent task (graceful)", () => {
-    // If dep task doesn't exist in graph, the find returns undefined
-    // The code checks: if (depTask && depTask.status !== "completed")
-    // undefined → skips the check → allow
+  it("blocks when dependency references non-existent task", () => {
     const state = mkState([
       mkTask({ id: "T1", wave: 1, depends_on: ["T99"] }),
     ], { current_wave: 1 });
 
-    expect(validateExecution("T1", state).kind).toBe("allow");
+    const result = validateExecution("T1", state);
+    expect(result.kind).toBe("block");
+    if (result.kind === "block") {
+      expect(result.reason).toContain("not found");
+    }
   });
 });
 

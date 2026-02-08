@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { acquireLock, releaseLock } from "../../src/utils/lock";
+import { acquireLock, releaseLock, isStaleLock } from "../../src/utils/lock";
 
 function makeTmpDir(): string {
   const dir = join(tmpdir(), `lock-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -56,5 +56,16 @@ describe("lock", () => {
     expect(existsSync(lockDir)).toBe(true);
 
     releaseLock(lockFile);
+  });
+
+  it("does not consider lock stale when EPERM (process exists, no permission)", () => {
+    tmpDir = makeTmpDir();
+    const lockDir = join(tmpDir, "eperm.lock");
+    mkdirSync(lockDir);
+    // PID 1 (init/launchd) always exists but kill(1,0) throws EPERM for non-root
+    writeFileSync(`${lockDir}/pid`, "1");
+
+    // Should NOT be stale — process exists, we just can't signal it
+    expect(isStaleLock(lockDir)).toBe(false);
   });
 });

@@ -117,6 +117,16 @@ export function validateFull(json: Record<string, unknown>): ValidationResult {
     }
   }
 
+  // Check wave contiguity — waves must be consecutive (1,2,3 not 1,3,5)
+  const waves = [...new Set(tasks.map((t: Record<string, unknown>) => t.wave as number))]
+    .filter((w): w is number => typeof w === "number" && Number.isInteger(w))
+    .sort((a, b) => a - b);
+  for (let i = 1; i < waves.length; i++) {
+    if (waves[i] !== waves[i - 1] + 1) {
+      errors.push(`Wave gap: ${waves[i - 1]} → ${waves[i]} (waves must be contiguous)`);
+    }
+  }
+
   return { valid: errors.length === 0, errors };
 }
 

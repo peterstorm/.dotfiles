@@ -9,7 +9,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { match } from "ts-pattern";
 import type { HookHandler, SubagentStopInput, Phase, TaskGraph } from "../../types";
-import { PHASE_AGENT_MAP, CLARIFY_THRESHOLD } from "../../config";
+import { PHASE_AGENT_MAP, PHASE_ORDER, CLARIFY_THRESHOLD } from "../../config";
 import { StateManager } from "../../state-manager";
 import { parsePhaseArtifacts } from "../../parsers/parse-phase-artifacts";
 
@@ -32,8 +32,9 @@ export function findFile(dir: string, filename: string): string | null {
 export function countMarkers(filePath: string): number {
   try {
     return (readFileSync(filePath, "utf-8").match(/NEEDS CLARIFICATION/g) ?? []).length;
-  } catch {
-    return 0;
+  } catch (e) {
+    process.stderr.write(`WARNING: countMarkers failed for ${filePath}: ${(e as Error).message}\n`);
+    return CLARIFY_THRESHOLD + 1; // force clarify on read failure
   }
 }
 
@@ -83,6 +84,15 @@ const handler: HookHandler = async (stdin) => {
   const mgr = StateManager.fromSession(input.session_id);
   if (!mgr) return { kind: "passthrough" };
 
+  // Guard: skip if phase already advanced past this one
+  const currentState = mgr.load();
+  const currentIdx = PHASE_ORDER.indexOf(currentState.current_phase);
+  const completedIdx = PHASE_ORDER.indexOf(completedPhase);
+  if (completedIdx >= 0 && currentIdx > completedIdx) {
+    process.stderr.write(`Phase ${completedPhase} already past (current: ${currentState.current_phase}), skipping.\n`);
+    return { kind: "passthrough" };
+  }
+
   // Extract artifacts from transcript before checking transition
   if (input.agent_transcript_path && existsSync(input.agent_transcript_path)) {
     const transcriptContent = readFileSync(input.agent_transcript_path, "utf-8");
@@ -92,11 +102,11 @@ const handler: HookHandler = async (stdin) => {
       const updates: Partial<TaskGraph> = {};
 
       if (artifacts.spec_file && existsSync(artifacts.spec_file)
-          && artifacts.spec_file.includes(".claude/specs/") && !s.spec_file) {
+          && artifacts.spec_file.includes(".claude/specs/")) {
         updates.spec_file = artifacts.spec_file;
       }
       if (artifacts.plan_file && existsSync(artifacts.plan_file)
-          && artifacts.plan_file.includes(".claude/plans/") && !s.plan_file) {
+          && artifacts.plan_file.includes(".claude/plans/")) {
         updates.plan_file = artifacts.plan_file;
       }
 

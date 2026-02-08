@@ -120,4 +120,36 @@ describe("StateManager", () => {
     const final = mgr.load();
     expect(final.current_wave).toBe(5);
   });
+
+  it("throws on empty file", () => {
+    chmodSync(statePath, 0o644);
+    writeFileSync(statePath, "");
+    chmodSync(statePath, 0o444);
+    const mgr = new StateManager(statePath);
+    expect(() => mgr.load()).toThrow("Corrupt state file");
+  });
+
+  it("throws on truncated JSON", () => {
+    chmodSync(statePath, 0o644);
+    writeFileSync(statePath, '{"current_phase":');
+    chmodSync(statePath, 0o444);
+    const mgr = new StateManager(statePath);
+    expect(() => mgr.load()).toThrow("invalid JSON");
+  });
+
+  it("throws on missing required fields", () => {
+    chmodSync(statePath, 0o644);
+    writeFileSync(statePath, '{"foo": "bar"}');
+    chmodSync(statePath, 0o444);
+    const mgr = new StateManager(statePath);
+    expect(() => mgr.load()).toThrow("missing current_phase");
+  });
+
+  it("throws on non-object JSON (array)", () => {
+    chmodSync(statePath, 0o644);
+    writeFileSync(statePath, '[1, 2, 3]');
+    chmodSync(statePath, 0o444);
+    const mgr = new StateManager(statePath);
+    expect(() => mgr.load()).toThrow("not an object");
+  });
 });

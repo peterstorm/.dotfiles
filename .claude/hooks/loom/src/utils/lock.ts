@@ -13,7 +13,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Check if a lock dir is stale (owning process is dead) */
-function isStaleLock(lockDir: string): boolean {
+export function isStaleLock(lockDir: string): boolean {
   try {
     const pidFile = `${lockDir}/pid`;
     if (!existsSync(pidFile)) return true;
@@ -21,8 +21,13 @@ function isStaleLock(lockDir: string): boolean {
     if (isNaN(pid)) return true;
     process.kill(pid, 0); // throws if process doesn't exist
     return false;
-  } catch {
-    return true;
+  } catch (err: unknown) {
+    // ESRCH = no such process → stale lock
+    if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "ESRCH") {
+      return true;
+    }
+    // EPERM or other → process exists but we can't signal it → not stale
+    return false;
   }
 }
 

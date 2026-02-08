@@ -196,14 +196,15 @@ describe("validateFull — edge cases", () => {
     expect(result).toBeDefined();
   });
 
-  it("accepts wave gaps (wave 1, wave 3, no wave 2)", () => {
+  it("rejects wave gaps (wave 1, wave 3, no wave 2)", () => {
     const result = validateFull(
       wrapTasks([
         { id: "T1", description: "a", agent: "frontend-agent", wave: 1, depends_on: [] },
         { id: "T2", description: "b", agent: "ts-test-agent", wave: 3, depends_on: ["T1"] },
       ]),
     );
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes("Wave gap"))).toBe(true);
   });
 
   it("accepts very large wave numbers", () => {

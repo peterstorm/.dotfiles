@@ -1,13 +1,25 @@
 /**
  * Git utilities — pure functions for test counting, thin wrappers for I/O
- * Uses execSync for vitest compatibility (no bun shell dependency)
+ * Uses execSync/execFileSync for vitest compatibility (no bun shell dependency)
  */
 
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 
+/** Run a fixed git command (no user input in args) */
 function exec(cmd: string): string {
   try {
     return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+  } catch (e: unknown) {
+    const stderr = e && typeof e === "object" && "stderr" in e ? String((e as { stderr: unknown }).stderr) : "";
+    if (stderr) process.stderr.write(`git warning: ${stderr.trim()}\n`);
+    return "";
+  }
+}
+
+/** Run git with array args (safe against shell injection) */
+function execArgs(args: string[]): string {
+  try {
+    return execFileSync("git", args, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
   } catch {
     return "";
   }
@@ -37,14 +49,14 @@ export function defaultBranch(): string {
 
 /** Get merge base between HEAD and default branch */
 export function mergeBase(branch: string): string | null {
-  const result = exec(`git merge-base HEAD "origin/${branch}"`).trim();
+  const result = execArgs(["merge-base", "HEAD", `origin/${branch}`]).trim();
   return result || null;
 }
 
 /** Get git diff between two refs */
 export function diff(from?: string, to?: string): string {
-  if (from && to) return exec(`git diff ${from} ${to}`);
-  if (from) return exec(`git diff ${from}`);
+  if (from && to) return execArgs(["diff", from, to]);
+  if (from) return execArgs(["diff", from]);
   return exec("git diff");
 }
 
@@ -56,21 +68,19 @@ export function diffStaged(): string {
 /** Diff specific files (unstaged) */
 export function diffFiles(files: string[]): string {
   if (files.length === 0) return "";
-  const quoted = files.map(f => `"${f}"`).join(" ");
-  return exec(`git diff -- ${quoted}`);
+  return execArgs(["diff", "--", ...files]);
 }
 
 /** Diff specific files (staged) */
 export function diffFilesStaged(files: string[]): string {
   if (files.length === 0) return "";
-  const quoted = files.map(f => `"${f}"`).join(" ");
-  return exec(`git diff --cached -- ${quoted}`);
+  return execArgs(["diff", "--cached", "--", ...files]);
 }
 
 /** Check if file is tracked by git */
 export function isTracked(file: string): boolean {
   try {
-    execSync(`git ls-files --error-unmatch "${file}"`, { stdio: "ignore" });
+    execFileSync("git", ["ls-files", "--error-unmatch", file], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -80,7 +90,7 @@ export function isTracked(file: string): boolean {
 /** Diff untracked file against /dev/null */
 export function diffUntracked(file: string): string {
   try {
-    return execSync(`git diff --no-index /dev/null "${file}"`, {
+    return execFileSync("git", ["diff", "--no-index", "/dev/null", file], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });

@@ -11,6 +11,7 @@ import {
   TASK_GRAPH_PATH, PHASE_AGENT_MAP, IMPL_AGENTS, REVIEW_AGENTS,
   UTILITY_AGENTS, VALID_TRANSITIONS, CLARIFY_THRESHOLD,
 } from "../../config";
+import { StateManager } from "../../state-manager";
 
 export function detectPhase(agent: string, prompt: string): Phase | "unknown" {
   if (PHASE_AGENT_MAP[agent]) return PHASE_AGENT_MAP[agent];
@@ -114,7 +115,9 @@ const handler: HookHandler = async (stdin) => {
     };
   }
 
-  const state = JSON.parse(readFileSync(TASK_GRAPH_PATH, "utf-8"));
+  const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
+  if (!mgr) return { kind: "allow" };
+  const state = mgr.load();
   const currentPhase: Phase = state.current_phase ?? "init";
 
   // Validate transition

@@ -14,5 +14,13 @@
     },
     "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/marketingskills",
     "lastUpdated": "2026-02-07T09:50:00.447Z"
+  },
+  "local": {
+    "source": {
+      "source": "directory",
+      "path": "/Users/hansen142/.dotfiles/.claude/local-marketplace"
+    },
+    "installLocation": "/Users/hansen142/.dotfiles/.claude/local-marketplace",
+    "lastUpdated": "2026-02-08T14:30:50.907Z"
   }
 }

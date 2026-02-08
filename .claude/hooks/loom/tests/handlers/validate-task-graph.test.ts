@@ -141,4 +141,42 @@ describe("validateFull (pure)", () => {
     });
     expect(result.valid).toBe(true);
   });
+
+  it("rejects wave gaps (1 → 3)", () => {
+    const result = validateFull({
+      plan_title: "x", plan_file: "x", spec_file: "x",
+      tasks: [
+        { ...validTask, id: "T1", wave: 1, depends_on: [] },
+        { ...validTask, id: "T2", wave: 3, depends_on: [] },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain("Wave gap");
+  });
+
+  it("detects multiple wave gaps (1 → 3 → 7)", () => {
+    const result = validateFull({
+      plan_title: "x", plan_file: "x", spec_file: "x",
+      tasks: [
+        { ...validTask, id: "T1", wave: 1, depends_on: [] },
+        { ...validTask, id: "T2", wave: 3, depends_on: [] },
+        { ...validTask, id: "T3", wave: 7, depends_on: [] },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    const gapErrors = result.errors.filter(e => e.includes("Wave gap"));
+    expect(gapErrors).toHaveLength(2);
+  });
+
+  it("accepts contiguous waves (1, 2, 3)", () => {
+    const result = validateFull({
+      plan_title: "x", plan_file: "x", spec_file: "x",
+      tasks: [
+        { ...validTask, id: "T1", wave: 1, depends_on: [] },
+        { ...validTask, id: "T2", wave: 2, depends_on: [] },
+        { ...validTask, id: "T3", wave: 3, depends_on: [] },
+      ],
+    });
+    expect(result.valid).toBe(true);
+  });
 });

@@ -5,7 +5,7 @@
  * Replaces: state-file-write.sh, resolve-task-graph.sh, loom-config.sh
  */
 
-import { readFileSync, writeFileSync, chmodSync, existsSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, chmodSync, existsSync, renameSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { withLock } from "./utils/lock";
 import { TASK_GRAPH_PATH, SUBAGENT_DIR } from "./config";
@@ -43,7 +43,21 @@ export class StateManager {
   }
 
   load(): TaskGraph {
-    return JSON.parse(readFileSync(this.path, "utf-8")) as TaskGraph;
+    const raw = readFileSync(this.path, "utf-8");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      throw new Error(`Corrupt state file (invalid JSON): ${this.path} — ${(e as Error).message}`);
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`Corrupt state file (not an object): ${this.path}`);
+    }
+    const obj = parsed as Record<string, unknown>;
+    if (!("current_phase" in obj)) throw new Error(`Corrupt state file (missing current_phase): ${this.path}`);
+    if (!("phase_artifacts" in obj)) throw new Error(`Corrupt state file (missing phase_artifacts): ${this.path}`);
+    if (!("tasks" in obj)) throw new Error(`Corrupt state file (missing tasks): ${this.path}`);
+    return parsed as TaskGraph;
   }
 
   getPath(): string {
@@ -63,12 +77,16 @@ export class StateManager {
   /** lock → chmod 644 → produce → write tmp → rename → chmod 444 → unlock */
   private async atomicWrite(produce: () => TaskGraph): Promise<void> {
     const lockFile = `${dirname(this.path)}/.task_graph`;
+    const tmp = `${this.path}.tmp`;
     await withLock(lockFile, () => {
       chmodSync(this.path, 0o644);
       try {
-        const tmp = `${this.path}.tmp`;
         writeFileSync(tmp, JSON.stringify(produce(), null, 2));
         renameSync(tmp, this.path);
+      } catch (e) {
+        // Clean up orphaned .tmp file
+        try { unlinkSync(tmp); } catch {}
+        throw e;
       } finally {
         chmodSync(this.path, 0o444);
       }

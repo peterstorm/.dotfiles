@@ -19,18 +19,20 @@ interface DecomposeInput {
   tasks: Task[];
 }
 
-function parseArgs(args: string[]): { issue?: number; repo?: string; fix: boolean } {
+function parseArgs(args: string[]): { issue?: number; repo?: string; fix: boolean; force: boolean } {
   let issue: number | undefined;
   let repo: string | undefined;
   let fix = false;
+  let force = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--issue" && args[i + 1]) { issue = Number(args[++i]); continue; }
     if (args[i] === "--repo" && args[i + 1]) { repo = args[++i]; continue; }
     if (args[i] === "--fix") { fix = true; continue; }
+    if (args[i] === "--force") { force = true; continue; }
   }
 
-  return { issue, repo, fix };
+  return { issue, repo, fix, force };
 }
 
 /** Build wave gates for all waves */
@@ -48,7 +50,7 @@ const handler: HookHandler = async (stdin, args) => {
     return { kind: "error", message: `No task graph at ${TASK_GRAPH_PATH}` };
   }
 
-  const { issue, repo, fix } = parseArgs(args);
+  const { issue, repo, fix, force } = parseArgs(args);
 
   let decompose: DecomposeInput;
   try {
@@ -74,6 +76,17 @@ const handler: HookHandler = async (stdin, args) => {
 
   const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
   if (!mgr) return { kind: "error", message: "Cannot open task graph" };
+
+  // Guard against overwriting non-pending tasks
+  if (!force) {
+    const existing = mgr.load();
+    if (existing.tasks.some((t) => t.status !== "pending")) {
+      return {
+        kind: "error",
+        message: "Cannot overwrite task graph with non-pending tasks. Use --force to override.",
+      };
+    }
+  }
 
   await mgr.update((existing) => {
     const merged: TaskGraph = {

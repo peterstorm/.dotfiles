@@ -37,19 +37,27 @@ const handler: HookHandler = async (stdin, args) => {
 
   const category = categorize(input.agent_type ?? "");
 
+  const safeRun = async (name: string, fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (e) {
+      process.stderr.write(`ERROR in ${name}: ${(e as Error).message}\n`);
+    }
+  };
+
   await match(category)
     .with("phase", async () => {
-      await advancePhase(stdin, args);
+      await safeRun("advancePhase", () => advancePhase(stdin, args));
     })
     .with("impl", async () => {
-      await updateTaskStatus(stdin, args);
+      await safeRun("updateTaskStatus", () => updateTaskStatus(stdin, args));
     })
     .with("review", async () => {
-      await storeReviewerFindings(stdin, args);
-      await validateReviewInvoker(stdin, args);
+      await safeRun("storeReviewerFindings", () => storeReviewerFindings(stdin, args));
+      await safeRun("validateReviewInvoker", () => validateReviewInvoker(stdin, args));
     })
     .with("spec-check", async () => {
-      await storeSpecCheckFindings(stdin, args);
+      await safeRun("storeSpecCheckFindings", () => storeSpecCheckFindings(stdin, args));
     })
     .with("unknown", async () => {
       // No orchestration hooks for unknown agents

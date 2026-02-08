@@ -40,8 +40,8 @@ describe("countMarkers", () => {
     expect(countMarkers(f)).toBe(0);
   });
 
-  it("returns 0 for missing file", () => {
-    expect(countMarkers(join(tmpDir, "nope.md"))).toBe(0);
+  it("returns CLARIFY_THRESHOLD + 1 for missing file (force clarify)", () => {
+    expect(countMarkers(join(tmpDir, "nope.md"))).toBe(CLARIFY_THRESHOLD + 1);
   });
 
   it("returns 0 for empty file", () => {

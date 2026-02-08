@@ -67,12 +67,12 @@ export function checkReviews(tasks: Task[]): GateCheck {
 }
 
 /** Check 3: Spec alignment */
-function checkSpecAlignment(state: TaskGraph, wave: number): GateCheck {
+export function checkSpecAlignment(state: TaskGraph, wave: number): GateCheck {
   if (!state.spec_check) {
     return { passed: true, message: "3. Spec alignment: skipped (no spec-check data)." };
   }
   if (state.spec_check.wave !== wave) {
-    return { passed: true, message: `3. Spec alignment: WARNING — was run for wave ${state.spec_check.wave}, not ${wave}.` };
+    return { passed: false, message: `FAILED: Spec alignment was run for wave ${state.spec_check.wave}, not ${wave}. Re-run /spec-check for wave ${wave}.` };
   }
   if ((state.spec_check.critical_count ?? 0) > 0) {
     const findings = (state.spec_check.critical_findings ?? []).map((f) => `  - ${f}`).join("\n");
@@ -116,83 +116,95 @@ function updateGitHubIssue(state: TaskGraph, taskIds: string[]): void {
   } catch {}
 }
 
+/** Compute next wave from actual wave numbers (handles non-contiguous waves) */
+export function computeNextWave(tasks: Task[], currentWave: number): number | null {
+  const allWaves = [...new Set(tasks.map((t) => t.wave))].sort((a, b) => a - b);
+  return allWaves.find((w) => w > currentWave) ?? null;
+}
+
 const handler: HookHandler = async (_stdin, args) => {
   const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
   if (!mgr) return { kind: "error", message: `No task graph at ${TASK_GRAPH_PATH}` };
 
-  const state = mgr.load();
-  const wave = parseWaveArg(args) ?? state.current_wave ?? 1;
-  const waveTasks = state.tasks.filter((t) => t.wave === wave);
+  const waveArg = parseWaveArg(args);
 
-  process.stderr.write(`Completing wave ${wave} gate...\n\n`);
+  // Single locked update: run all checks on locked state, then mutate atomically
+  let errorMessage: string | null = null;
+  let taskIds: string[] = [];
+  let nextWave: number | null = null;
+  let githubState: { issue?: number; repo?: string } = {};
 
-  // Run all checks
-  const checks = [
-    checkTestEvidence(waveTasks),
-    checkNewTests(waveTasks),
-    checkReviews(waveTasks),
-    checkSpecAlignment(state, wave),
-    checkCriticalFindings(waveTasks),
-  ];
+  await mgr.update((s) => {
+    const wave = waveArg ?? s.current_wave ?? 1;
+    const waveTasks = s.tasks.filter((t) => t.wave === wave);
 
-  for (const check of checks) {
-    process.stderr.write(check.message + "\n");
-    if (!check.passed) {
-      return { kind: "error", message: check.message };
+    process.stderr.write(`Completing wave ${wave} gate...\n\n`);
+
+    // Run all checks on locked state
+    const checks = [
+      checkTestEvidence(waveTasks),
+      checkNewTests(waveTasks),
+      checkReviews(waveTasks),
+      checkSpecAlignment(s, wave),
+      checkCriticalFindings(waveTasks),
+    ];
+
+    for (const check of checks) {
+      process.stderr.write(check.message + "\n");
+      if (!check.passed) {
+        errorMessage = check.message;
+        return s; // Return state unchanged
+      }
     }
-  }
 
-  // Mark test evidence verified on wave gate
-  await mgr.update((s) => ({
-    ...s,
-    wave_gates: {
-      ...s.wave_gates,
-      [String(wave)]: {
-        ...(s.wave_gates[String(wave)] ?? { impl_complete: false, tests_passed: null, reviews_complete: false, blocked: false }),
-        tests_passed: true,
-      },
-    },
-  }));
+    process.stderr.write("\nAll checks passed. Advancing...\n");
 
-  // All passed — advance
-  process.stderr.write("\nAll checks passed. Advancing...\n");
+    taskIds = waveTasks.map((t) => t.id);
+    githubState = { issue: s.github_issue, repo: s.github_repo };
 
-  const taskIds = waveTasks.map((t) => t.id);
+    // Compute next wave from actual wave numbers
+    nextWave = computeNextWave(s.tasks, wave);
 
-  // Mark tasks completed + gate passed
-  await mgr.update((s) => ({
-    ...s,
-    tasks: s.tasks.map((t) =>
-      t.wave === wave
-        ? { ...t, status: "completed" as const, review_status: "passed" as const }
-        : t
-    ),
-    wave_gates: {
-      ...s.wave_gates,
-      [String(wave)]: {
-        ...(s.wave_gates[String(wave)] ?? { impl_complete: false, tests_passed: null, reviews_complete: false, blocked: false }),
-        reviews_complete: true,
-        blocked: false,
-      },
-    },
-  }));
+    const defaultGate: WaveGate = { impl_complete: false, tests_passed: null, reviews_complete: false, blocked: false };
 
-  // Update GitHub issue
-  updateGitHubIssue(state, taskIds);
-
-  // Advance wave
-  const maxWave = Math.max(...state.tasks.map((t) => t.wave));
-  const nextWave = wave + 1;
-
-  if (nextWave <= maxWave) {
-    await mgr.update((s) => ({
+    // Build updated state atomically
+    const updated: TaskGraph = {
       ...s,
-      current_wave: nextWave,
+      tasks: s.tasks.map((t) =>
+        t.wave === wave
+          ? { ...t, status: "completed" as const, review_status: "passed" as const }
+          : t
+      ),
       wave_gates: {
         ...s.wave_gates,
-        [String(nextWave)]: { impl_complete: false, tests_passed: null, reviews_complete: false, blocked: false },
+        [String(wave)]: {
+          ...(s.wave_gates[String(wave)] ?? defaultGate),
+          tests_passed: true,
+          reviews_complete: true,
+          blocked: false,
+        },
+        ...(nextWave != null ? {
+          [String(nextWave)]: {
+            ...(s.wave_gates[String(nextWave)] ?? defaultGate),
+          },
+        } : {}),
       },
-    }));
+      ...(nextWave != null ? { current_wave: nextWave } : {}),
+    };
+
+    return updated;
+  });
+
+  if (errorMessage) {
+    return { kind: "error", message: errorMessage };
+  }
+
+  // I/O at edge: update GitHub issue outside lock
+  if (githubState.issue) {
+    updateGitHubIssue({ github_issue: githubState.issue, github_repo: githubState.repo } as TaskGraph, taskIds);
+  }
+
+  if (nextWave != null) {
     process.stderr.write(`Advanced to wave ${nextWave}.\n`);
   } else {
     process.stderr.write("\n=== All waves complete! ===\nRun /loom --complete to finalize.\n");

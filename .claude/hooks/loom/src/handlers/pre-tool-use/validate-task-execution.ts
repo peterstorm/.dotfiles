@@ -3,8 +3,8 @@
  * Also stores baseline SHA for per-task new-test detection.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import type { HookHandler, PreToolUseInput, TaskGraph } from "../../types";
+import { existsSync } from "node:fs";
+import type { HookHandler, PreToolUseInput } from "../../types";
 import { TASK_GRAPH_PATH } from "../../config";
 import { extractTaskId } from "../../utils/extract-task-id";
 import { StateManager } from "../../state-manager";
@@ -23,7 +23,10 @@ const handler: HookHandler = async (stdin) => {
   const taskId = extractTaskId(prompt) ?? extractTaskId(description);
   if (!taskId) return { kind: "allow" }; // Not a planned task
 
-  const state: TaskGraph = JSON.parse(readFileSync(TASK_GRAPH_PATH, "utf-8"));
+  const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
+  if (!mgr) return { kind: "allow" };
+
+  const state = mgr.load();
   const task = state.tasks.find((t) => t.id === taskId);
   if (!task) return { kind: "allow" }; // Task not in graph
 
@@ -40,7 +43,13 @@ const handler: HookHandler = async (stdin) => {
   // Check 2: Dependencies complete
   for (const dep of task.depends_on) {
     const depTask = state.tasks.find((t) => t.id === dep);
-    if (depTask && depTask.status !== "completed") {
+    if (!depTask) {
+      return {
+        kind: "block",
+        message: `BLOCKED: Cannot execute ${taskId} - dependency ${dep} not found in task graph`,
+      };
+    }
+    if (depTask.status !== "completed") {
       return {
         kind: "block",
         message: `BLOCKED: Cannot execute ${taskId} - dependency ${dep} not complete (status: ${depTask.status})`,
@@ -71,19 +80,17 @@ const handler: HookHandler = async (stdin) => {
     }
   }
 
-  // Store baseline SHA for per-task new-test detection
+  // Store baseline SHA + add to executing_tasks atomically
   if (taskId && git.isGitRepo()) {
     const sha = git.headSha();
     if (sha) {
-      const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
-      if (mgr) {
-        await mgr.update((s) => ({
-          ...s,
-          tasks: s.tasks.map((t) =>
-            t.id === taskId ? { ...t, start_sha: sha } : t
-          ),
-        }));
-      }
+      await mgr.update((s) => ({
+        ...s,
+        executing_tasks: [...new Set([...(s.executing_tasks ?? []), taskId])],
+        tasks: s.tasks.map((t) =>
+          t.id === taskId ? { ...t, start_sha: sha } : t
+        ),
+      }));
     }
   }
 
