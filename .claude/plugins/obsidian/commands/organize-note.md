@@ -18,4 +18,5 @@ Load the `obsidian-vault` skill for conventions.
    - Set `up` to the folder's MOC
 3. **Scan for linkable terms**: Grep vault for notes whose titles/aliases appear in this note's content → suggest wikilinks
 4. **Check MOC**: ensure the note is listed in its parent `MOC.md`. If not, add it.
-5. **Report**: what was changed, links suggested
+5. **Log**: append changelog entry: `- **organized** [[note-name]] — <summary of changes>`
+6. **Report**: what was changed, links suggested

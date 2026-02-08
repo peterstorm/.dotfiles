@@ -5,7 +5,7 @@
       "repo": "anthropics/claude-plugins-official"
     },
     "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/claude-plugins-official",
-    "lastUpdated": "2026-02-08T19:53:19.142Z"
+    "lastUpdated": "2026-02-08T20:05:03.021Z"
   },
   "marketingskills": {
     "source": {
@@ -13,7 +13,7 @@
       "repo": "coreyhaines31/marketingskills"
     },
     "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/marketingskills",
-    "lastUpdated": "2026-02-08T19:53:22.822Z"
+    "lastUpdated": "2026-02-08T20:05:06.287Z"
   },
   "local": {
     "source": {

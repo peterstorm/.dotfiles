@@ -101,11 +101,11 @@ const handler: HookHandler = async (stdin) => {
     await mgr.update((s) => {
       const updates: Partial<TaskGraph> = {};
 
-      if (artifacts.spec_file && existsSync(artifacts.spec_file)
+      if (!s.spec_file && artifacts.spec_file && existsSync(artifacts.spec_file)
           && artifacts.spec_file.includes(".claude/specs/")) {
         updates.spec_file = artifacts.spec_file;
       }
-      if (artifacts.plan_file && existsSync(artifacts.plan_file)
+      if (!s.plan_file && artifacts.plan_file && existsSync(artifacts.plan_file)
           && artifacts.plan_file.includes(".claude/plans/")) {
         updates.plan_file = artifacts.plan_file;
       }

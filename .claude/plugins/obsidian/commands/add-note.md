@@ -40,3 +40,4 @@ Then proceed with direct mode steps.
 - Search vault before creating to avoid duplicates
 - Propose links with reasoning, never add silently
 - Update the parent MOC after creating
+- Append changelog entry: `- **added** [[note-name]] to \`folder/\``

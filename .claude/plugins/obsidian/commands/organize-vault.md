@@ -43,5 +43,8 @@ For each orphan note:
 - Suggest 1-2 wikilink candidates
 - Ask user to confirm before adding links
 
-### 6. Report
+### 6. Log
+Append changelog entry: `- **vault audit** — <summary: N frontmatter fixed, N MOCs created, N orphans resolved, N folders reorganized>`
+
+### 7. Report
 Summary: notes processed, frontmatter fixed, MOCs created, orphans resolved, folders reorganized.

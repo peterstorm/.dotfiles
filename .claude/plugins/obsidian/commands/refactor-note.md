@@ -38,3 +38,9 @@ If user asks to merge notes:
 6. Update MOCs to reference merged note
 
 Always confirm destructive actions (delete, overwrite) with user before executing.
+
+## Always
+
+- Append changelog entry after refactoring:
+  - Split: `- **refactored** [[original]] → split into [[part-a]], [[part-b]]`
+  - Merge: `- **merged** [[note-a]], [[note-b]] → [[merged-note]]`

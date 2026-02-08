@@ -28,13 +28,48 @@ Manage an Obsidian vault at `/home/peterstorm/dev/notes/remotevault/` using file
 2. **Format**: add frontmatter, apply naming conventions
 3. **Link**: connect to existing notes via wikilinks
 4. **Place**: file in correct folder, update parent MOC
-5. **Review**: periodically find orphans and missing links
+5. **Log**: append entry to changelog
+6. **Review**: periodically find orphans and missing links
+
+## Changelog
+
+The vault maintains a changelog at `changelog.md` in the vault root. Every command that modifies the vault appends an entry.
+
+### Changelog Format
+```markdown
+---
+title: Changelog
+date: 2026-02-04
+tags: [moc, reference]
+aliases: []
+up: "[[_index]]"
+---
+# Changelog
+
+## 2026-02-08
+
+- **added** [[new-note-name]] to `concepts/`
+- **organized** [[messy-note]] — fixed frontmatter, added 3 wikilinks
+- **refactored** [[big-note]] → split into [[part-a]], [[part-b]], [[part-c]]
+- **vault audit** — fixed 12 frontmatter, created 3 MOCs, resolved 5 orphans
+```
+
+### Entry Rules
+- Group entries under `## YYYY-MM-DD` date headings
+- If today's date heading exists, append under it; otherwise create it at the top (below frontmatter)
+- Use bold action verb: **added**, **organized**, **refactored**, **merged**, **moved**, **vault audit**
+- Wikilink all note names
+- Keep entries single-line
+
+### When to Log
+All commands that modify notes: `add-note`, `organize-note`, `organize-vault`, `refactor-note`. Read-only commands (`find-orphans`, `find-links`) do not log.
 
 ## Vault Conventions
 
 ### Folder Structure
 ```
 remotevault/
+├── changelog.md           # Vault changelog
 ├── _index.md              # Vault entry point MOC
 ├── archive/               # Legacy projects, read-only
 │   └── MOC.md

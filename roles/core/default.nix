@@ -28,6 +28,8 @@
 
   documentation.info.enable = false;
 
+  users.mutableUsers = false;
+
   virtualisation.docker.enable = true;
 
 
