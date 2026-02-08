@@ -37,9 +37,9 @@ run_test() {
   echo ""
 }
 
-# TypeScript tests (parse-phase-artifacts, etc.)
+# TypeScript tests (parse-phase-artifacts, etc.) — bun runs TS directly
 run_test "TypeScript Parser Tests" \
-  "nix-shell -p nodejs --run \"cd $HOOKS_DIR/ts-utils && npx esbuild src/*.ts --bundle --platform=node --format=esm --outdir=dist --packages=external 2>/dev/null && node --test dist/tests.js\""
+  "cd $HOOKS_DIR/ts-utils && bun test src/tests.test.ts"
 
 # Template validation tests
 run_test "Template Validation Hook Tests" \
@@ -48,6 +48,10 @@ run_test "Template Validation Hook Tests" \
 # Advance-phase artifact capture tests
 run_test "Advance-Phase Artifact Capture Tests" \
   "nix-shell -p nodejs jq --run \"bash $SCRIPT_DIR/test-advance-phase-artifacts.sh\""
+
+# Task graph validation tests (minimal, full, --fix)
+run_test "Task Graph Validation Tests" \
+  "nix-shell -p jq --run \"bash $SCRIPT_DIR/test-validate-task-graph.sh\""
 
 # Core loom tests
 if [[ -f "$SCRIPT_DIR/test-loom.sh" ]]; then
