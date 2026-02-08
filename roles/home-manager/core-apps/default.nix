@@ -58,6 +58,7 @@
     obsidian
     docker-compose
     light
+    bun
     inputs.llm-agents.packages.${pkgs.system}.claude-code
     inputs.llm-agents.packages.${pkgs.system}.opencode
   ];

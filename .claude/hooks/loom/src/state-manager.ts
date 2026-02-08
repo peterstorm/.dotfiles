@@ -56,8 +56,10 @@ export class StateManager {
     const obj = parsed as Record<string, unknown>;
     if (!("current_phase" in obj)) throw new Error(`Corrupt state file (missing current_phase): ${this.path}`);
     if (!("phase_artifacts" in obj)) throw new Error(`Corrupt state file (missing phase_artifacts): ${this.path}`);
-    if (!("tasks" in obj)) throw new Error(`Corrupt state file (missing tasks): ${this.path}`);
-    return parsed as TaskGraph;
+    // Default tasks and wave_gates for early phases (populated in Phase 4)
+    if (!("tasks" in obj)) (obj as Record<string, unknown>).tasks = [];
+    if (!("wave_gates" in obj)) (obj as Record<string, unknown>).wave_gates = {};
+    return obj as TaskGraph;
   }
 
   getPath(): string {

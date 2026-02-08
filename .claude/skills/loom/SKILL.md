@@ -312,7 +312,8 @@ cat > .claude/state/active_task_graph.json << 'EOF'
   "phase_artifacts": {},
   "skipped_phases": [],
   "spec_file": null,
-  "plan_file": null
+  "plan_file": null,
+  "tasks": []
 }
 EOF
 chmod 444 .claude/state/active_task_graph.json
