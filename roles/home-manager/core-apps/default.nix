@@ -59,6 +59,7 @@
     docker-compose
     light
     inputs.llm-agents.packages.${pkgs.system}.claude-code
+    inputs.llm-agents.packages.${pkgs.system}.copilot-cli
     inputs.llm-agents.packages.${pkgs.system}.opencode
   ];
 
