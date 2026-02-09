@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/time"
       version = ">= 0.9"
     }
+    sops = {
+      source  = "carlpett/sops"
+      version = ">= 1.0"
+    }
   }
 }
 
@@ -31,8 +35,14 @@ provider "kubectl" {
   config_path = "~/.kube/config"
 }
 
+provider "sops" {}
+
+data "sops_file" "cloudflare" {
+  source_file = "../../secrets/hosts/homelab/cloudflare.yaml"
+}
+
 provider "cloudflare" {
-  # uses CLOUDFLARE_API_TOKEN env var
+  api_token = data.sops_file.cloudflare.data["api_token"]
 }
 
 module "cilium" {
@@ -54,7 +64,7 @@ module "argocd" {
 module "cloudflare" {
   source = "./cloudflare"
 
-  cloudflare_zone_id   = var.cloudflare_zone_id
+  cloudflare_zone_id   = data.sops_file.cloudflare.data["zone_id"]
   cloudflare_tunnel_id = var.cloudflare_tunnel_id
 }
 
