@@ -621,7 +621,8 @@ export function saveExtractionCheckpoint(
   db: Database,
   checkpoint: Omit<ExtractionCheckpoint, 'id'>
 ): void {
-  const extracted_at = new Date().toISOString();
+  // Respect caller's extracted_at if provided, otherwise use current timestamp
+  const extracted_at = checkpoint.extracted_at ?? new Date().toISOString();
 
   // Check if checkpoint exists for this session
   const existing = getExtractionCheckpoint(db, checkpoint.session_id);
@@ -664,6 +665,16 @@ export function saveExtractionCheckpoint(
 // ============================================================================
 
 /**
+ * Validate path to prevent SQL injection via single quote
+ * @throws if path contains single quote
+ */
+function validatePath(path: string): void {
+  if (path.includes("'")) {
+    throw new Error('Path contains invalid character: single quote');
+  }
+}
+
+/**
  * Create database checkpoint (backup)
  * I/O: Creates backup file using VACUUM INTO
  *
@@ -674,10 +685,28 @@ export function createCheckpoint(db: Database): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const checkpointPath = `${db.filename}.checkpoint-${timestamp}`;
 
+  // Validate path to prevent SQL injection
+  validatePath(checkpointPath);
+
   // Use VACUUM INTO to create a backup
   db.run(`VACUUM INTO '${checkpointPath}'`);
 
   return checkpointPath;
+}
+
+/**
+ * Allowlist of known table names to prevent SQL injection
+ */
+const ALLOWED_TABLES = new Set(['memories', 'edges', 'extraction_checkpoints']);
+
+/**
+ * Validate table name against allowlist
+ * @throws if table name not in allowlist
+ */
+function validateTableName(name: string): void {
+  if (!ALLOWED_TABLES.has(name)) {
+    throw new Error(`Table name not in allowlist: ${name}`);
+  }
 }
 
 /**
@@ -691,6 +720,9 @@ export function createCheckpoint(db: Database): string {
  * @param checkpointPath - Path to checkpoint file
  */
 export function restoreCheckpoint(db: Database, checkpointPath: string): void {
+  // Validate path to prevent SQL injection
+  validatePath(checkpointPath);
+
   // Attach the checkpoint database and copy all data
   db.run(`ATTACH DATABASE '${checkpointPath}' AS checkpoint`);
 
@@ -704,8 +736,12 @@ export function restoreCheckpoint(db: Database, checkpointPath: string): void {
 
   // Clear current tables and copy from checkpoint
   for (const { name } of tables) {
-    db.run(`DELETE FROM main.${name}`);
-    db.run(`INSERT INTO main.${name} SELECT * FROM checkpoint.${name}`);
+    // Validate table name against allowlist
+    validateTableName(name);
+
+    // Use double quotes for table identifiers (SQL standard)
+    db.run(`DELETE FROM main."${name}"`);
+    db.run(`INSERT INTO main."${name}" SELECT * FROM checkpoint."${name}"`);
   }
 
   db.run('DETACH DATABASE checkpoint');
@@ -717,18 +753,17 @@ export function restoreCheckpoint(db: Database, checkpointPath: string): void {
 
 /**
  * Route to appropriate database based on memory scope
- * I/O: Opens database if not already open
+ * Pure function - accepts pre-opened databases
  *
  * @param scope - Memory scope (project or global)
- * @param projectDbPath - Path to project database
- * @param globalDbPath - Path to global database
+ * @param projectDb - Pre-opened project database
+ * @param globalDb - Pre-opened global database
  * @returns Database instance for the scope
  */
 export function routeToDatabase(
   scope: MemoryScope,
-  projectDbPath: string,
-  globalDbPath: string
+  projectDb: Database,
+  globalDb: Database
 ): Database {
-  const path = scope === 'project' ? projectDbPath : globalDbPath;
-  return openDatabase(path);
+  return scope === 'project' ? projectDb : globalDb;
 }

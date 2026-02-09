@@ -36,6 +36,43 @@ describe("parseMachineSummary (pure)", () => {
     expect(result!.criticalCount).toBe(0);
     expect(result!.critical).toEqual([]);
   });
+
+  it("finds last Machine Summary, not skill template", () => {
+    const output = [
+      "### Machine Summary",
+      "CRITICAL_COUNT: {number of critical issues}",
+      "ADVISORY_COUNT: {number of important + suggestion issues}",
+      "CRITICAL: {each critical finding on its own line}",
+      "ADVISORY: {each non-critical finding on its own line}",
+      "",
+      "Some other review text...",
+      "",
+      "### Machine Summary",
+      "CRITICAL_COUNT: 3",
+      "ADVISORY_COUNT: 5",
+      "CRITICAL: SQL injection in db.ts",
+      "CRITICAL: Connection leak",
+      "CRITICAL: Type mismatch",
+      "ADVISORY: Missing test coverage",
+      "ADVISORY: Consider extracting validation",
+      "ADVISORY: Code duplication in service layer",
+      "ADVISORY: Incomplete error handling",
+      "ADVISORY: Performance concern in loop",
+    ].join("\n");
+
+    const result = parseMachineSummary(output);
+    expect(result).not.toBeNull();
+    expect(result!.criticalCount).toBe(3);
+    expect(result!.critical).toHaveLength(3);
+    expect(result!.critical).toEqual([
+      "SQL injection in db.ts",
+      "Connection leak",
+      "Type mismatch",
+    ]);
+    expect(result!.advisory).toHaveLength(5);
+    expect(result!.advisory).toContain("Missing test coverage");
+    expect(result!.advisory).toContain("Performance concern in loop");
+  });
 });
 
 describe("parseLegacyFindings (pure)", () => {

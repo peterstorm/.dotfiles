@@ -7,7 +7,18 @@
 
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings';
 const VOYAGE_MODEL = 'voyage-3.5-lite';
-const EMBEDDING_DIMENSIONS = 1024;
+
+/**
+ * Embedding vector dimensions for voyage-3.5-lite model.
+ * Exported for downstream consumers that need to know vector size.
+ */
+export const EMBEDDING_DIMENSIONS = 1024;
+
+/**
+ * Maximum number of texts per API request.
+ * Voyage AI API limit: 128 texts per batch.
+ */
+export const MAX_BATCH_SIZE = 128;
 
 /**
  * Response structure from Voyage API
@@ -23,15 +34,6 @@ type VoyageResponse = {
   };
 };
 
-/**
- * Error types for Voyage API failures
- */
-export type VoyageError =
-  | { type: 'network'; message: string }
-  | { type: 'auth'; message: string; status: number }
-  | { type: 'rate_limit'; message: string; status: number }
-  | { type: 'api_error'; message: string; status: number }
-  | { type: 'invalid_response'; message: string };
 
 /**
  * Check if Voyage API is available (API key present and non-empty).
@@ -59,6 +61,10 @@ export async function embedTexts(
 ): Promise<Float64Array[]> {
   if (texts.length === 0) {
     return [];
+  }
+
+  if (texts.length > MAX_BATCH_SIZE) {
+    throw new Error(`Voyage API batch limit exceeded: ${texts.length} texts (max ${MAX_BATCH_SIZE})`);
   }
 
   if (!isVoyageAvailable(apiKey)) {

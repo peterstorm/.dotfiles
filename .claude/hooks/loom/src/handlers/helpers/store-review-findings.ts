@@ -4,9 +4,44 @@
  * Reads CRITICAL:/ADVISORY: lines from stdin.
  */
 
-import type { HookHandler, ReviewStatus } from "../../types";
+import type { HookHandler, ReviewStatus, Task } from "../../types";
 import { TASK_GRAPH_PATH } from "../../config";
 import { StateManager } from "../../state-manager";
+
+/** Pure: Parse CRITICAL/ADVISORY lines from stdin */
+export function parseFindings(stdin: string): { critical: string[]; advisory: string[] } {
+  const critical: string[] = [];
+  const advisory: string[] = [];
+
+  for (const line of stdin.split("\n")) {
+    const critMatch = line.match(/^CRITICAL:\s*(.*)/);
+    if (critMatch) {
+      critical.push(critMatch[1]);
+      continue;
+    }
+    const advMatch = line.match(/^ADVISORY:\s*(.*)/);
+    if (advMatch) advisory.push(advMatch[1]);
+  }
+
+  return { critical, advisory };
+}
+
+/** Pure: Update task with findings, preserving existing advisories when none provided */
+export function updateTaskFindings(
+  task: Task,
+  critical: string[],
+  advisory: string[]
+): Task {
+  const reviewStatus: ReviewStatus = critical.length > 0 ? "blocked" : "passed";
+
+  return {
+    ...task,
+    critical_findings: critical,
+    review_status: reviewStatus,
+    // Preserve existing advisories when none provided in stdin
+    ...(advisory.length > 0 ? { advisory_findings: advisory } : {}),
+  };
+}
 
 const handler: HookHandler = async (stdin, args) => {
   const taskIdx = args.indexOf("--task");
@@ -16,25 +51,11 @@ const handler: HookHandler = async (stdin, args) => {
   const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
   if (!mgr) return { kind: "error", message: `No task graph at ${TASK_GRAPH_PATH}` };
 
-  const critical: string[] = [];
-  const advisory: string[] = [];
-
-  for (const line of stdin.split("\n")) {
-    const critMatch = line.match(/^CRITICAL:\s*(.*)/);
-    if (critMatch) { critical.push(critMatch[1]); continue; }
-    const advMatch = line.match(/^ADVISORY:\s*(.*)/);
-    if (advMatch) advisory.push(advMatch[1]);
-  }
-
-  const reviewStatus: ReviewStatus = critical.length > 0 ? "blocked" : "passed";
+  const { critical, advisory } = parseFindings(stdin);
 
   await mgr.update((s) => ({
     ...s,
-    tasks: s.tasks.map((t) =>
-      t.id === taskId
-        ? { ...t, critical_findings: critical, advisory_findings: advisory, review_status: reviewStatus }
-        : t
-    ),
+    tasks: s.tasks.map((t) => (t.id === taskId ? updateTaskFindings(t, critical, advisory) : t)),
   }));
 
   process.stderr.write(`Stored findings for ${taskId}: ${critical.length} critical, ${advisory.length} advisory\n`);

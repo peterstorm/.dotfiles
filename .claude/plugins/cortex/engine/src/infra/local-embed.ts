@@ -10,10 +10,6 @@
  */
 
 // Functional Core: Pure types
-type LocalEmbedResult =
-  | { ok: true; embedding: Float32Array }
-  | { ok: false; error: string };
-
 type ModelAvailabilityResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -43,7 +39,7 @@ let modelAvailabilityCache: ModelAvailabilityResult | null = null;
  * Load the local embedding model (lazy initialization).
  * Caches the pipeline for reuse.
  */
-async function loadModel(): Promise<LocalEmbedResult | ModelAvailabilityResult> {
+async function loadModel(): Promise<ModelAvailabilityResult> {
   if (cachedPipeline) {
     return { ok: true };
   }
@@ -91,10 +87,20 @@ function meanPooling(embeddings: number[][][]): Float32Array {
 }
 
 /**
- * Check if local embedding model is available.
- * Caches result after first successful/failed attempt.
+ * Check if local embedding model is available (synchronous).
+ * Returns true only if model has been successfully loaded and cached.
+ * Use ensureModelLoaded() to trigger async loading if needed.
  */
-export async function isLocalModelAvailable(): Promise<boolean> {
+export function isLocalModelAvailable(): boolean {
+  return modelAvailabilityCache?.ok === true;
+}
+
+/**
+ * Ensure the local embedding model is loaded.
+ * Attempts to load the model if not already cached.
+ * Returns true if model is available, false otherwise.
+ */
+export async function ensureModelLoaded(): Promise<boolean> {
   if (modelAvailabilityCache !== null) {
     return modelAvailabilityCache.ok;
   }
@@ -154,8 +160,11 @@ export async function embedLocal(text: string): Promise<Float32Array> {
 
 /**
  * Reset cached state (for testing).
+ * Clears all module-level state including import errors.
  */
 export function resetLocalEmbedCache(): void {
   cachedPipeline = null;
   modelAvailabilityCache = null;
+  transformersModule = null;
+  importError = null;
 }

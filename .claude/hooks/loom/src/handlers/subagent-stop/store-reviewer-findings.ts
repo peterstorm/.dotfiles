@@ -19,7 +19,7 @@ interface ParsedFindings {
 
 /** Parse Machine Summary block for structured findings */
 export function parseMachineSummary(output: string): ParsedFindings | null {
-  const idx = output.indexOf("### Machine Summary");
+  const idx = output.lastIndexOf("### Machine Summary");
   if (idx === -1) return null;
 
   let block = output.slice(idx);
@@ -76,8 +76,9 @@ const handler: HookHandler = async (stdin) => {
   const mgr = StateManager.fromSession(input.session_id);
   if (!mgr) return { kind: "passthrough" };
 
-  const transcriptContent = input.agent_transcript_path && existsSync(input.agent_transcript_path)
-    ? readFileSync(input.agent_transcript_path, "utf-8")
+  const rawPath = input.agent_transcript_path?.replace(/^~/, process.env.HOME ?? "~") ?? "";
+  const transcriptContent = rawPath && existsSync(rawPath)
+    ? readFileSync(rawPath, "utf-8")
     : "";
   const transcript = parseTranscript(transcriptContent);
   if (!transcript) return { kind: "passthrough" };

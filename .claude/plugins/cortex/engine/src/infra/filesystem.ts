@@ -55,24 +55,34 @@ export function isStalePidLock(lockPath: string): boolean {
  * Acquire PID lock by writing current process PID to lock file.
  * Throws if lock exists and process is still running.
  * Overrides if lock is stale.
+ *
+ * Uses atomic file creation (wx flag) to prevent TOCTOU race conditions.
  */
 function acquirePidLock(lockPath: string): void {
-  // Check for existing lock
-  if (fs.existsSync(lockPath)) {
-    const existingPid = readPidFromLock(lockPath);
-    if (existingPid !== null && isProcessRunning(existingPid)) {
-      throw new Error(
-        `Lock file already held by running process ${existingPid}: ${lockPath}`
-      );
-    }
-    // Lock is stale, override it
-  }
-
   // Create parent directory if needed
   const lockDir = path.dirname(lockPath);
   fs.mkdirSync(lockDir, { recursive: true });
 
-  // Write current PID
+  // Attempt atomic lock creation (fails if file exists)
+  try {
+    fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
+    return; // Lock acquired successfully
+  } catch (e: any) {
+    // If error is not EEXIST, propagate it
+    if (e.code !== 'EEXIST') {
+      throw e;
+    }
+  }
+
+  // Lock file exists - check if stale
+  const existingPid = readPidFromLock(lockPath);
+  if (existingPid !== null && isProcessRunning(existingPid)) {
+    throw new Error(
+      `Lock file already held by running process ${existingPid}: ${lockPath}`
+    );
+  }
+
+  // Stale lock - override it
   fs.writeFileSync(lockPath, String(process.pid), 'utf8');
 }
 

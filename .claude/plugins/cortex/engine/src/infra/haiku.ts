@@ -9,6 +9,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { EdgeRelation } from '../core/types.js';
+import { EDGE_RELATIONS, isEdgeRelation } from '../core/types.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 4096;
@@ -233,11 +234,11 @@ function parseEdgeClassificationResponse(
       .map((c) => ({
         source_id: String(c.source_id),
         target_id: String(c.target_id),
-        relation_type: c.relation_type as EdgeRelation,
+        relation_type: c.relation_type,
         strength: Number(c.strength),
       }));
-  } catch {
-    // Parse failure - return empty array
+  } catch (e) {
+    process.stderr.write(`WARNING: Failed to parse edge classification response: ${(e as Error).message}\n`);
     return [];
   }
 }
@@ -263,18 +264,8 @@ function isValidEdgeClassification(
     return false;
   }
 
-  // Validate relation_type
-  const validRelations: readonly EdgeRelation[] = [
-    'relates_to',
-    'derived_from',
-    'contradicts',
-    'exemplifies',
-    'refines',
-    'supersedes',
-    'source_of',
-  ];
-
-  if (!validRelations.includes(classification.relation_type as EdgeRelation)) {
+  // Validate relation_type using type guard
+  if (!isEdgeRelation(classification.relation_type)) {
     return false;
   }
 

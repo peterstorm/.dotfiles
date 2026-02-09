@@ -122,6 +122,73 @@ export function computeNextWave(tasks: Task[], currentWave: number): number | nu
   return allWaves.find((w) => w > currentWave) ?? null;
 }
 
+/** Pure: Generate wave gate summary markdown */
+export function generateWaveGateSummary(
+  wave: number,
+  tasks: Task[],
+  specCheck?: TaskGraph["spec_check"]
+): string {
+  const lines: string[] = [`## Wave ${wave} — Gate Passed\n`];
+
+  // Spec check
+  if (specCheck) {
+    lines.push(`### Spec Alignment: ${specCheck.verdict} (${specCheck.critical_count ?? 0} critical)`);
+    if (specCheck.medium_findings?.length) {
+      specCheck.medium_findings.forEach((f) => lines.push(`- MEDIUM: ${f}`));
+    }
+    lines.push('');
+  }
+
+  // Per-task review summary
+  lines.push('### Code Review\n');
+  for (const task of tasks) {
+    const critCount = task.critical_findings?.length ?? 0;
+    const advCount = task.advisory_findings?.length ?? 0;
+    lines.push(`#### ${task.id}: ${task.description?.slice(0, 60) ?? ''}`);
+    lines.push(`**Status:** ${task.review_status} — ${critCount} critical, ${advCount} advisory`);
+
+    if (task.advisory_findings?.length) {
+      lines.push('<details>');
+      lines.push(`<summary>${advCount} advisories</summary>\n`);
+      task.advisory_findings.forEach((a) => lines.push(`- ${a}`));
+      lines.push('</details>');
+    }
+    lines.push('');
+  }
+
+  // Test summary
+  lines.push('### Tests');
+  for (const task of tasks) {
+    lines.push(`- ${task.id}: ${task.test_evidence ?? 'no evidence'}`);
+  }
+
+  return lines.join('\n');
+}
+
+/** Post GitHub comment summarizing wave gate results */
+async function postWaveGateSummary(mgr: StateManager, waveArg: number | null): Promise<void> {
+  const state = mgr.load();
+  const currentWave = waveArg ?? state.current_wave ?? 1;
+  const githubIssue = state.github_issue;
+
+  if (!githubIssue) return;
+
+  try {
+    const waveTasks = state.tasks.filter((t) => t.wave === currentWave);
+    const body = generateWaveGateSummary(currentWave, waveTasks, state.spec_check);
+
+    const repoFlag = state.github_repo ? `--repo ${state.github_repo}` : "";
+    execSync(`gh issue comment ${githubIssue} ${repoFlag} --body ${JSON.stringify(body)}`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 15000,
+    });
+    process.stderr.write(`Posted wave ${currentWave} summary to issue #${githubIssue}\n`);
+  } catch (e) {
+    // Non-blocking — don't fail the gate on comment failure
+    process.stderr.write(`WARNING: Failed to post GH comment: ${(e as Error).message}\n`);
+  }
+}
+
 const handler: HookHandler = async (_stdin, args) => {
   const mgr = StateManager.fromPath(TASK_GRAPH_PATH);
   if (!mgr) return { kind: "error", message: `No task graph at ${TASK_GRAPH_PATH}` };
@@ -209,6 +276,9 @@ const handler: HookHandler = async (_stdin, args) => {
   } else {
     process.stderr.write("\n=== All waves complete! ===\nRun /loom --complete to finalize.\n");
   }
+
+  // Post GitHub comment with wave summary
+  await postWaveGateSummary(mgr, waveArg);
 
   return { kind: "passthrough" };
 };

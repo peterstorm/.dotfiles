@@ -21,11 +21,27 @@ interface SpecCheckFindings {
 
 /** Parse spec-check output for findings */
 export function parseSpecCheckOutput(output: string): SpecCheckFindings {
+  // Find the actual output block (last occurrence of CRITICAL_COUNT, not template)
+  // Template has "SPEC_CHECK_CRITICAL_COUNT: N" where N is not a digit
+  // Real output has "SPEC_CHECK_CRITICAL_COUNT: 0" (or other digit)
+  const lastCritCountIdx = output.lastIndexOf("SPEC_CHECK_CRITICAL_COUNT:");
+
+  // Search backwards from lastCritCountIdx to find the start of this output block
+  // Look for previous SPEC_CHECK_WAVE or start of string
+  let blockStart = 0;
+  if (lastCritCountIdx >= 0) {
+    const beforeCount = output.slice(0, lastCritCountIdx);
+    const lastWaveIdx = beforeCount.lastIndexOf("SPEC_CHECK_WAVE:");
+    blockStart = lastWaveIdx >= 0 ? lastWaveIdx : 0;
+  }
+
+  const searchBlock = lastCritCountIdx >= 0 ? output.slice(blockStart) : output;
+
   const critical: string[] = [];
   const high: string[] = [];
   const medium: string[] = [];
 
-  for (const line of output.split("\n")) {
+  for (const line of searchBlock.split("\n")) {
     const critMatch = line.match(/^CRITICAL:\s*(.*)/);
     if (critMatch) { critical.push(critMatch[1]); continue; }
     const highMatch = line.match(/^HIGH:\s*(.*)/);
@@ -34,10 +50,10 @@ export function parseSpecCheckOutput(output: string): SpecCheckFindings {
     if (medMatch) medium.push(medMatch[1]);
   }
 
-  const critCount = output.match(/SPEC_CHECK_CRITICAL_COUNT:\s*(\d+)/);
-  const highCount = output.match(/SPEC_CHECK_HIGH_COUNT:\s*(\d+)/);
-  const verdict = output.match(/SPEC_CHECK_VERDICT:\s*(PASSED|BLOCKED)/);
-  const wave = output.match(/SPEC_CHECK_WAVE:\s*(\d+)/);
+  const critCount = searchBlock.match(/SPEC_CHECK_CRITICAL_COUNT:\s*(\d+)/);
+  const highCount = searchBlock.match(/SPEC_CHECK_HIGH_COUNT:\s*(\d+)/);
+  const verdict = searchBlock.match(/SPEC_CHECK_VERDICT:\s*(PASSED|BLOCKED)/);
+  const wave = searchBlock.match(/SPEC_CHECK_WAVE:\s*(\d+)/);
 
   return {
     critical,
@@ -58,8 +74,9 @@ const handler: HookHandler = async (stdin) => {
   const mgr = StateManager.fromSession(input.session_id);
   if (!mgr) return { kind: "passthrough" };
 
-  const transcriptContent = input.agent_transcript_path && existsSync(input.agent_transcript_path)
-    ? readFileSync(input.agent_transcript_path, "utf-8")
+  const rawPath = input.agent_transcript_path?.replace(/^~/, process.env.HOME ?? "~") ?? "";
+  const transcriptContent = rawPath && existsSync(rawPath)
+    ? readFileSync(rawPath, "utf-8")
     : "";
   const transcript = parseTranscript(transcriptContent);
   if (!transcript) return { kind: "passthrough" };

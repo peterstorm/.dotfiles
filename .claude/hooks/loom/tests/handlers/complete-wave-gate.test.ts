@@ -6,6 +6,7 @@ import {
   checkSpecAlignment,
   checkCriticalFindings,
   computeNextWave,
+  generateWaveGateSummary,
 } from "../../src/handlers/helpers/complete-wave-gate";
 import type { Task, TaskGraph } from "../../src/types";
 
@@ -172,5 +173,104 @@ describe("computeNextWave (pure)", () => {
 
   it("returns null for empty tasks", () => {
     expect(computeNextWave([], 1)).toBeNull();
+  });
+});
+
+describe("generateWaveGateSummary (pure)", () => {
+  const mkTask = (id: string, overrides: Partial<Task> = {}): Task => ({
+    ...baseTask,
+    id,
+    description: `Task ${id}`,
+    test_evidence: "5 tests passed",
+    ...overrides,
+  });
+
+  it("generates summary with spec check and tasks", () => {
+    const tasks = [
+      mkTask("T1", { critical_findings: [], advisory_findings: ["Refactor suggestion"] }),
+      mkTask("T2", { critical_findings: [], advisory_findings: [] }),
+    ];
+
+    const specCheck = {
+      wave: 1,
+      run_at: "2024-01-01",
+      verdict: "aligned",
+      critical_count: 0,
+      medium_findings: ["Minor drift in validation"],
+    };
+
+    const summary = generateWaveGateSummary(1, tasks, specCheck);
+
+    expect(summary).toContain("## Wave 1 — Gate Passed");
+    expect(summary).toContain("### Spec Alignment: aligned (0 critical)");
+    expect(summary).toContain("- MEDIUM: Minor drift in validation");
+    expect(summary).toContain("### Code Review");
+    expect(summary).toContain("#### T1: Task T1");
+    expect(summary).toContain("**Status:** passed — 0 critical, 1 advisory");
+    expect(summary).toContain("<details>");
+    expect(summary).toContain("<summary>1 advisories</summary>");
+    expect(summary).toContain("- Refactor suggestion");
+    expect(summary).toContain("### Tests");
+    expect(summary).toContain("- T1: 5 tests passed");
+  });
+
+  it("generates summary without spec check", () => {
+    const tasks = [mkTask("T1")];
+    const summary = generateWaveGateSummary(1, tasks);
+
+    expect(summary).toContain("## Wave 1 — Gate Passed");
+    expect(summary).not.toContain("### Spec Alignment");
+    expect(summary).toContain("### Code Review");
+    expect(summary).toContain("### Tests");
+  });
+
+  it("handles tasks with no advisories", () => {
+    const tasks = [mkTask("T1", { advisory_findings: [] })];
+    const summary = generateWaveGateSummary(1, tasks);
+
+    expect(summary).not.toContain("<details>");
+    expect(summary).toContain("**Status:** passed — 0 critical, 0 advisory");
+  });
+
+  it("handles tasks with no test evidence", () => {
+    const tasks = [mkTask("T1", { test_evidence: undefined })];
+    const summary = generateWaveGateSummary(1, tasks);
+
+    expect(summary).toContain("- T1: no evidence");
+  });
+
+  it("truncates long task descriptions", () => {
+    const longDesc = "A".repeat(100);
+    const tasks = [mkTask("T1", { description: longDesc })];
+    const summary = generateWaveGateSummary(1, tasks);
+
+    expect(summary).toContain("#### T1: " + "A".repeat(60));
+    expect(summary).not.toContain("A".repeat(61));
+  });
+
+  it("includes multiple advisories in details", () => {
+    const tasks = [
+      mkTask("T1", {
+        advisory_findings: ["Advisory 1", "Advisory 2", "Advisory 3"],
+      }),
+    ];
+    const summary = generateWaveGateSummary(1, tasks);
+
+    expect(summary).toContain("<summary>3 advisories</summary>");
+    expect(summary).toContain("- Advisory 1");
+    expect(summary).toContain("- Advisory 2");
+    expect(summary).toContain("- Advisory 3");
+  });
+
+  it("preserves advisory findings in summary even when empty criticals", () => {
+    const tasks = [
+      mkTask("T1", {
+        critical_findings: [],
+        advisory_findings: ["Keep this advisory"],
+      }),
+    ];
+    const summary = generateWaveGateSummary(1, tasks);
+
+    expect(summary).toContain("Keep this advisory");
   });
 });

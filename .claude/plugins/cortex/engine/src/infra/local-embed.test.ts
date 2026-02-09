@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   embedLocal,
   isLocalModelAvailable,
+  ensureModelLoaded,
   resetLocalEmbedCache,
 } from './local-embed';
 
@@ -18,15 +19,40 @@ describe('local-embed', () => {
   });
 
   describe('isLocalModelAvailable', () => {
+    it('returns false before model is loaded', () => {
+      const available = isLocalModelAvailable();
+      expect(available).toBe(false);
+    });
+
+    it('returns true after successful model load', async () => {
+      await ensureModelLoaded();
+      const available = isLocalModelAvailable();
+      expect(typeof available).toBe('boolean');
+    });
+
+    it('is synchronous', () => {
+      const result = isLocalModelAvailable();
+      expect(typeof result).toBe('boolean');
+    });
+  });
+
+  describe('ensureModelLoaded', () => {
     it('returns boolean result', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       expect(typeof available).toBe('boolean');
     });
 
     it('caches result on subsequent calls', async () => {
-      const first = await isLocalModelAvailable();
-      const second = await isLocalModelAvailable();
+      const first = await ensureModelLoaded();
+      const second = await ensureModelLoaded();
       expect(second).toBe(first);
+    });
+
+    it('updates isLocalModelAvailable after loading', async () => {
+      expect(isLocalModelAvailable()).toBe(false);
+      await ensureModelLoaded();
+      const available = isLocalModelAvailable();
+      expect(typeof available).toBe('boolean');
     });
   });
 
@@ -42,7 +68,7 @@ describe('local-embed', () => {
 
   describe('embedLocal - when model available', () => {
     it('returns Float32Array of length 384', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         await expect(embedLocal('test text')).rejects.toThrow(/Failed to load local embedding model/);
         return;
@@ -54,7 +80,7 @@ describe('local-embed', () => {
     });
 
     it('returns deterministic embeddings for same text', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         return;
       }
@@ -72,7 +98,7 @@ describe('local-embed', () => {
     });
 
     it('produces different embeddings for different texts', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         return;
       }
@@ -98,7 +124,7 @@ describe('local-embed', () => {
     });
 
     it('produces non-zero embeddings', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         return;
       }
@@ -111,7 +137,7 @@ describe('local-embed', () => {
     });
 
     it('handles longer text', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         return;
       }
@@ -124,7 +150,7 @@ describe('local-embed', () => {
     });
 
     it('embeddings have reasonable magnitude', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         return;
       }
@@ -146,7 +172,7 @@ describe('local-embed', () => {
 
   describe('caching behavior', () => {
     it('reuses loaded model for multiple embeddings', async () => {
-      const available = await isLocalModelAvailable();
+      const available = await ensureModelLoaded();
       if (!available) {
         return;
       }

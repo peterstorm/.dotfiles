@@ -618,6 +618,41 @@ describe('Database Layer', () => {
 
       db.close();
     });
+
+    it('respects caller-provided extracted_at timestamp', () => {
+      const customTimestamp = '2024-01-15T10:30:00.000Z';
+
+      saveExtractionCheckpoint(db, {
+        session_id: 'session-ckpt-3',
+        cursor_position: 500,
+        extracted_at: customTimestamp,
+      });
+
+      const checkpoint = getExtractionCheckpoint(db, 'session-ckpt-3');
+      expect(checkpoint?.extracted_at).toBe(customTimestamp);
+
+      db.close();
+    });
+
+    it('generates extracted_at when not provided', () => {
+      const beforeSave = new Date();
+
+      saveExtractionCheckpoint(db, {
+        session_id: 'session-ckpt-4',
+        cursor_position: 600,
+      });
+
+      const checkpoint = getExtractionCheckpoint(db, 'session-ckpt-4');
+      expect(checkpoint).toBeDefined();
+
+      const afterSave = new Date();
+      const extractedAt = new Date(checkpoint!.extracted_at);
+
+      expect(extractedAt.getTime()).toBeGreaterThanOrEqual(beforeSave.getTime());
+      expect(extractedAt.getTime()).toBeLessThanOrEqual(afterSave.getTime());
+
+      db.close();
+    });
   });
 
   describe('Checkpoint/Restore', () => {
@@ -658,18 +693,45 @@ describe('Database Layer', () => {
 
       db.close();
     });
+
+    it('rejects checkpoint path with single quote (SQL injection prevention)', () => {
+      const db = openDatabase(':memory:');
+
+      // Attempt to create checkpoint - should pass validation
+      const validPath = createCheckpoint(db);
+      expect(validPath).toBeDefined();
+
+      // Attempt to restore with malicious path containing single quote
+      const maliciousPath = "'; DROP TABLE memories; --";
+
+      expect(() => restoreCheckpoint(db, maliciousPath)).toThrow(
+        'Path contains invalid character: single quote'
+      );
+
+      db.close();
+    });
   });
 
   describe('routeToDatabase', () => {
     it('routes to project database for project scope', () => {
-      const projectDb = routeToDatabase('project', ':memory:', ':memory:');
-      expect(projectDb).toBeDefined();
+      const projectDb = openDatabase(':memory:');
+      const globalDb = openDatabase(':memory:');
+
+      const routed = routeToDatabase('project', projectDb, globalDb);
+      expect(routed).toBe(projectDb);
+
       projectDb.close();
+      globalDb.close();
     });
 
     it('routes to global database for global scope', () => {
-      const globalDb = routeToDatabase('global', ':memory:', ':memory:');
-      expect(globalDb).toBeDefined();
+      const projectDb = openDatabase(':memory:');
+      const globalDb = openDatabase(':memory:');
+
+      const routed = routeToDatabase('global', projectDb, globalDb);
+      expect(routed).toBe(globalDb);
+
+      projectDb.close();
       globalDb.close();
     });
   });

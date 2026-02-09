@@ -147,6 +147,12 @@ describe('embedTexts', () => {
   });
 
   describe('error handling', () => {
+    it('throws when batch size exceeds limit', async () => {
+      const oversized = Array.from({ length: 129 }, (_, i) => `text ${i}`);
+      await expect(embedTexts(oversized, 'test-key')).rejects.toThrow(/batch limit/i);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it('throws on missing API key', async () => {
       await expect(embedTexts(['test'], '')).rejects.toThrow(
         'Voyage API key is required and must be non-empty'

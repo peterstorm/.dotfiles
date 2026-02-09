@@ -55,6 +55,40 @@ describe("parseSpecCheckOutput (pure)", () => {
     expect(result.critical).toHaveLength(2);
     expect(result.high).toHaveLength(3);
   });
+
+  it("finds last spec-check block, not skill template", () => {
+    const output = [
+      "SPEC_CHECK_WAVE: {wave_number}",
+      "SPEC_CHECK_CRITICAL_COUNT: N",
+      "SPEC_CHECK_HIGH_COUNT: N",
+      "SPEC_CHECK_VERDICT: {PASSED|BLOCKED}",
+      "CRITICAL: {each critical finding}",
+      "HIGH: {each high-severity finding}",
+      "",
+      "Agent processing text...",
+      "",
+      "SPEC_CHECK_WAVE: 2",
+      "SPEC_CHECK_CRITICAL_COUNT: 2",
+      "SPEC_CHECK_HIGH_COUNT: 1",
+      "SPEC_CHECK_VERDICT: BLOCKED",
+      "CRITICAL: Missing authentication on /api/admin",
+      "CRITICAL: SQL injection vulnerability",
+      "HIGH: No rate limiting on public endpoints",
+    ].join("\n");
+
+    const result = parseSpecCheckOutput(output);
+    expect(result.wave).toBe(2);
+    expect(result.criticalCount).toBe(2);
+    expect(result.highCount).toBe(1);
+    expect(result.verdict).toBe("BLOCKED");
+    expect(result.critical).toHaveLength(2);
+    expect(result.critical).toEqual([
+      "Missing authentication on /api/admin",
+      "SQL injection vulnerability",
+    ]);
+    expect(result.high).toEqual(["No rate limiting on public endpoints"]);
+    expect(result.medium).toEqual([]);
+  });
 });
 
 describe("handler reads file content (not path)", () => {
