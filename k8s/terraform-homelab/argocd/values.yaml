@@ -2,7 +2,13 @@ server:
   extraArgs:
     - --insecure
 
+configs:
+  cm:
+    kustomize.buildOptions: "--enable-alpha-plugins --enable-exec"
+
 repoServer:
+  extraArgs:
+    - --allow-oob-symlinks
   volumes:
     - name: custom-tools
       emptyDir: {}
