@@ -9,7 +9,10 @@
     Service = {
       Type = "oneshot";
       WorkingDirectory = "${config.home.homeDirectory}/dev/notes";
-      Environment = "SSH_AUTH_SOCK=%t/ssh-agent";
+      Environment = [
+        "SSH_AUTH_SOCK=%t/ssh-agent"
+        "GIT_SSH_COMMAND=${pkgs.openssh}/bin/ssh"
+      ];
 
       ExecStart = pkgs.writeShellScript "obsidian-git-sync" ''
         set -e
