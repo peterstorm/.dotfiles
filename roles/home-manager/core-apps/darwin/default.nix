@@ -50,6 +50,7 @@
       jq
       bun
       inputs.llm-agents.packages.${pkgs.system}.opencode
+      inputs.llm-agents.packages.${pkgs.system}.codex
     ];
 
     programs.zsh = {
