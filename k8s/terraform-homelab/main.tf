@@ -26,13 +26,13 @@ terraform {
 }
 
 provider "helm" {
-  kubernetes {
-    config_path = "~/.kube/config"
+  kubernetes = {
+    config_path = "/etc/rancher/k3s/k3s.yaml"
   }
 }
 
 provider "kubectl" {
-  config_path = "~/.kube/config"
+  config_path = "/etc/rancher/k3s/k3s.yaml"
 }
 
 provider "sops" {}
@@ -46,11 +46,11 @@ provider "cloudflare" {
 }
 
 module "cilium" {
-  source = "./cilium"
+  source = "./helm-cilium"
 }
 
 module "cilium_l2" {
-  source = "./cilium-l2"
+  source = "./helm-cilium-l2"
 
   depends_on = [module.cilium]
 }

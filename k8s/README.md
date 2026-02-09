@@ -112,6 +112,47 @@ Requires DNS or `/etc/hosts` pointing `*.peterstorm.io` to `192.168.0.240`.
 |---------|-----|
 | Plex | http://192.168.0.241:32400 |
 
+## Post-wipe bootstrap gotchas
+
+When deploying on a node that previously ran flannel/kube-proxy (or any prior CNI):
+
+1. **Delete old flannel VXLAN interface** before cilium can initialize:
+   ```bash
+   sudo ip link delete flannel.1
+   ```
+   Cilium uses VXLAN on port 8472 — if flannel.1 holds it, cilium's datapath fails
+   and all pod creation returns 429 (TooManyRequests).
+
+2. **Flush stale kube-proxy iptables** — k3s with `--disable-kube-proxy` doesn't clean
+   up old rules from previous installs. These intercept service traffic before cilium's
+   BPF can handle it:
+   ```bash
+   sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F
+   sudo iptables -X && sudo iptables -t nat -X && sudo iptables -t mangle -X
+   ```
+
+3. **Restart k3s** after cleaning up to get a fresh state:
+   ```bash
+   sudo systemctl restart k3s
+   ```
+
+4. **Restart all kube-system pods** after cilium is healthy — pods created before
+   cilium's datapath was ready have stale network namespaces:
+   ```bash
+   kubectl rollout restart daemonset cilium cilium-envoy -n kube-system
+   kubectl rollout restart deployment cilium-operator coredns hubble-relay hubble-ui metrics-server -n kube-system
+   ```
+
+5. **ArgoCD CRDs from previous install** — if old CRDs exist without Helm labels,
+   helm install fails. Either delete them first or adopt with:
+   ```bash
+   kubectl label crd applications.argoproj.io app.kubernetes.io/managed-by=Helm --overwrite
+   kubectl annotate crd applications.argoproj.io meta.helm.sh/release-name=argocd meta.helm.sh/release-namespace=argocd --overwrite
+   ```
+
+6. **Kubeconfig** — terraform providers must use `/etc/rancher/k3s/k3s.yaml` directly,
+   not a stale copy at `~/.kube/config`. k3s rotates certs on restart.
+
 ## Troubleshooting
 
 ```bash
@@ -129,12 +170,26 @@ kubectl -n <namespace> describe pod -l app=<app>
 
 # Cilium issues
 kubectl -n kube-system exec ds/cilium -- cilium status
+
+# Cilium service routing broken (pods can't reach ClusterIP services)
+kubectl exec -n kube-system ds/cilium -- cilium service list  # check for (maintenance) backends
+kubectl exec -n kube-system ds/cilium -- cilium-health status  # check endpoint reachability
+sudo iptables -t nat -L KUBE-SERVICES | head  # stale kube-proxy rules?
+
+# Cilium VXLAN conflict
+kubectl logs -n kube-system ds/cilium | grep "address already in use"  # flannel.1 blocking port 8472
+ip link show flannel.1  # if exists, delete it
 ```
 
 ## Architecture
 
 ```
 terraform-homelab/     # Bootstrap: Cilium, ArgoCD, DNS, ApplicationSet
+  helm-cilium/         # Cilium helm release (prefixed to avoid chart name collision)
+  helm-cilium-l2/      # Cilium L2 announcement + IP pool
+  argocd/              # ArgoCD helm release
+  applicationset/      # Root ApplicationSet (git directory generator)
+  cloudflare/          # DNS records via Cloudflare provider
 argocd-homelab/        # App manifests (auto-discovered by ApplicationSet)
   cloudflared/         # Tunnel ingress (ksops secrets)
   echo-server/         # Smoke test
