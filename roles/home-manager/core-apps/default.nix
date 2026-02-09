@@ -15,6 +15,8 @@
     };
   };
 
+  services.ssh-agent.enable = true;
+
   imports = [
     ./git
     ./tmux
@@ -26,12 +28,6 @@
 
   programs.bash = {
     enable = true;
-    initExtra = ''
-      if [ -z "$SSH_AUTH_SOCK" ] ; then
-        eval `ssh-agent -s`
-        ssh-add
-      fi
-    '';
     shellAliases = {
       lock = "i3lock -c 000000";
       sus = "systemctl suspend";

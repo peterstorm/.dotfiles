@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+data:
+  config.yaml: |
+    tunnel: homelab-k8s
+    credentials-file: /etc/cloudflared/credentials.json
+    no-autoupdate: true
+    ingress:
+      - hostname: echo-server.peterstorm.io
+        service: http://echo-server.echo-server:80
+      - hostname: argocd.peterstorm.io
+        service: http://argocd-server.argocd:80
+      - hostname: grafana.peterstorm.io
+        service: http://kube-prometheus-stack-grafana.monitoring:80
+      - hostname: sonarr.peterstorm.io
+        service: http://sonarr.sonarr:8989
+      - hostname: radarr.peterstorm.io
+        service: http://radarr.radarr:7878
+      - hostname: prowlarr.peterstorm.io
+        service: http://prowlarr.prowlarr:9696
+      - hostname: overseerr.peterstorm.io
+        service: http://overseerr.overseerr:5055
+      - hostname: transmission.peterstorm.io
+        service: http://transmission.transmission:80
+      - service: http_status:404

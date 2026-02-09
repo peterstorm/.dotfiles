@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transmission
+  labels:
+    app: transmission
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: transmission
+  template:
+    metadata:
+      labels:
+        app: transmission
+    spec:
+      containers:
+        - name: transmission
+          image: haugene/transmission-openvpn:5.2
+          ports:
+            - containerPort: 9091
+          env:
+            - name: OPENVPN_PROVIDER
+              value: NORDVPN
+            - name: OPENVPN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: openvpn
+                  key: username
+            - name: OPENVPN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openvpn
+                  key: password
+            - name: NORDVPN_PROTOCOL
+              value: TCP
+            - name: NORDVPN_COUNTRY
+              value: SE
+            - name: NORDVPN_CATEGORY
+              value: P2P
+            - name: LOCAL_NETWORK
+              value: "192.168.0.0/24"
+            - name: TRANSMISSION_PEER_PORT
+              value: "47444"
+            - name: TRANSMISSION_DOWNLOAD_DIR
+              value: /torrents/complete
+            - name: TRANSMISSION_INCOMPLETE_DIR
+              value: /torrents/incomplete
+            - name: TRANSMISSION_INCOMPLETE_DIR_ENABLED
+              value: "true"
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: Europe/Copenhagen
+            - name: CREATE_TUN_DEVICE
+              value: "false"
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: config
+              mountPath: /data
+            - name: torrents
+              mountPath: /torrents
+            - name: media
+              mountPath: /media
+            - name: dev-tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: config
+          hostPath:
+            path: /var/data/configs/transmission
+            type: DirectoryOrCreate
+        - name: torrents
+          hostPath:
+            path: /var/data/torrents
+            type: DirectoryOrCreate
+        - name: media
+          hostPath:
+            path: /var/data/media
+            type: DirectoryOrCreate
+        - name: dev-tun
+          hostPath:
+            path: /dev/net/tun
