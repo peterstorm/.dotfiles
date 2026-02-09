@@ -57,6 +57,7 @@ export const WHITELISTED_HELPERS = [
   "store-review-findings",
   "store-spec-check",
   "populate-task-graph",
+  "store-test-evidence",
 ];
 
 /** State file patterns to guard */

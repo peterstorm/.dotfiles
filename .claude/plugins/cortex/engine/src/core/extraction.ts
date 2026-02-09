@@ -3,38 +3,12 @@
  * Implements FR-002, FR-004, FR-005, FR-006, FR-007, FR-008, FR-012, FR-108
  */
 
-// Minimal inline types (no separate types file needed)
-export type MemoryType =
-  | "architecture"
-  | "decision"
-  | "pattern"
-  | "gotcha"
-  | "context"
-  | "progress"
-  | "code_description"
-  | "code";
-
-export type Category = "project" | "global";
-
-export interface MemoryCandidate {
-  readonly content: string;
-  readonly summary: string;
-  readonly memoryType: MemoryType;
-  readonly category: Category;
-  readonly confidence: number; // 0-1
-  readonly priority: number; // 1-10
-}
+import type { MemoryType, MemoryScope, MemoryCandidate, GitContext } from './types.js';
+import { MEMORY_TYPES } from './types.js';
 
 export interface TruncationResult {
   readonly truncated: string;
   readonly newCursor: number;
-}
-
-export interface GitContext {
-  readonly branch: string;
-  readonly projectName: string;
-  readonly recentCommits?: readonly string[];
-  readonly changedFiles?: readonly string[];
 }
 
 /**
@@ -106,22 +80,24 @@ export function truncateTranscript(
  *
  * @param transcript - JSONL transcript content (possibly truncated)
  * @param gitContext - Git repository context
+ * @param projectName - Project name for context
  * @returns Prompt string for LLM
  */
 export function buildExtractionPrompt(
   transcript: string,
-  gitContext: GitContext
+  gitContext: GitContext,
+  projectName: string
 ): string {
-  const { branch, projectName, recentCommits, changedFiles } = gitContext;
+  const { branch, recent_commits, changed_files } = gitContext;
 
   const contextBlock = [
     `Project: ${projectName}`,
     `Branch: ${branch}`,
-    recentCommits && recentCommits.length > 0
-      ? `Recent commits:\n${recentCommits.map((c) => `  - ${c}`).join("\n")}`
+    recent_commits && recent_commits.length > 0
+      ? `Recent commits:\n${recent_commits.map((c) => `  - ${c}`).join("\n")}`
       : null,
-    changedFiles && changedFiles.length > 0
-      ? `Changed files:\n${changedFiles.map((f) => `  - ${f}`).join("\n")}`
+    changed_files && changed_files.length > 0
+      ? `Changed files:\n${changed_files.map((f) => `  - ${f}`).join("\n")}`
       : null,
   ]
     .filter(Boolean)
@@ -162,15 +138,18 @@ Extract memories following these rules:
    - Medium (4-6): Useful context/progress
    - Low (1-3): Minor details
 
+5. Tags: Extract relevant keywords/topics as array of strings
+
 Return JSON array of memories:
 [
   {
     "content": "Full detailed content",
     "summary": "Concise 1-2 sentence summary",
-    "memoryType": "decision",
-    "category": "project",
+    "memory_type": "decision",
+    "scope": "project",
     "confidence": 0.85,
-    "priority": 8
+    "priority": 8,
+    "tags": ["api-design", "performance"]
   }
 ]
 
@@ -210,10 +189,11 @@ export function parseExtractionResponse(
       .map((c) => ({
         content: String(c.content),
         summary: String(c.summary),
-        memoryType: c.memoryType as MemoryType,
-        category: c.category as Category,
+        memory_type: c.memory_type as MemoryType,
+        scope: c.scope as MemoryScope,
         confidence: Number(c.confidence),
         priority: Number(c.priority),
+        tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
       }));
   } catch {
     // Parse failure - return empty array
@@ -233,8 +213,8 @@ function isValidCandidate(obj: unknown): obj is MemoryCandidate {
   if (
     typeof candidate.content !== "string" ||
     typeof candidate.summary !== "string" ||
-    typeof candidate.memoryType !== "string" ||
-    typeof candidate.category !== "string" ||
+    typeof candidate.memory_type !== "string" ||
+    typeof candidate.scope !== "string" ||
     typeof candidate.confidence !== "number" ||
     typeof candidate.priority !== "number"
   ) {
@@ -242,22 +222,12 @@ function isValidCandidate(obj: unknown): obj is MemoryCandidate {
   }
 
   // Validate memory type (FR-005)
-  const validTypes: readonly MemoryType[] = [
-    "architecture",
-    "decision",
-    "pattern",
-    "gotcha",
-    "context",
-    "progress",
-    "code_description",
-    "code",
-  ];
-  if (!validTypes.includes(candidate.memoryType as MemoryType)) {
+  if (!MEMORY_TYPES.includes(candidate.memory_type as MemoryType)) {
     return false;
   }
 
-  // Validate category
-  if (candidate.category !== "project" && candidate.category !== "global") {
+  // Validate scope
+  if (candidate.scope !== "project" && candidate.scope !== "global") {
     return false;
   }
 
@@ -291,5 +261,5 @@ export function buildEmbeddingText(
   memory: MemoryCandidate,
   projectName: string
 ): string {
-  return `[${memory.memoryType}] [project:${projectName}] ${memory.summary}`;
+  return `[${memory.memory_type}] [project:${projectName}] ${memory.summary}`;
 }

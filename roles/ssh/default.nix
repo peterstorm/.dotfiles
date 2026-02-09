@@ -3,9 +3,11 @@
 {
   services.openssh = {
     enable = true;
-    passwordAuthentication = false;
     allowSFTP = false; # Don't set this if you need sftp
-    challengeResponseAuthentication = false;
+    settings = {
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
+    };
     extraConfig = ''
      AllowTcpForwarding yes
      X11Forwarding no

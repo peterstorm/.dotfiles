@@ -7,9 +7,9 @@ import {
   classifySimilarity,
   jaccardPreFilter,
   batchCosineSimilarity,
-  type SimilarityAction,
   type JaccardPreFilter,
 } from './similarity';
+import type { SimilarityAction } from './types';
 
 describe('cosineSimilarity', () => {
   describe('example-based tests', () => {
@@ -41,6 +41,18 @@ describe('cosineSimilarity', () => {
       const zero = new Float64Array([0, 0, 0]);
       const nonzero = new Float64Array([1, 2, 3]);
       expect(cosineSimilarity(zero, nonzero)).toBe(0);
+    });
+
+    it('accepts Float32Array inputs', () => {
+      const a = new Float32Array([1, 0, 0]);
+      const b = new Float32Array([1, 0, 0]);
+      expect(cosineSimilarity(a, b)).toBeCloseTo(1.0, 6);
+    });
+
+    it('accepts mixed Float32Array and Float64Array', () => {
+      const a = new Float32Array([1, 2, 3]);
+      const b = new Float64Array([1, 2, 3]);
+      expect(cosineSimilarity(a, b)).toBeCloseTo(1.0, 6);
     });
 
     it('throws on dimension mismatch', () => {
@@ -236,106 +248,116 @@ describe('jaccardSimilarity', () => {
 describe('classifySimilarity', () => {
   it('classifies score < 0.1 as ignore', () => {
     const result = classifySimilarity(0.05);
-    expect(result.type).toBe('ignore');
-    expect(result.score).toBe(0.05);
+    expect(result.action).toBe('ignore');
+    expect('strength' in result).toBe(false);
   });
 
   it('classifies score 0.1-0.4 as relate', () => {
-    expect(classifySimilarity(0.1).type).toBe('relate');
-    expect(classifySimilarity(0.25).type).toBe('relate');
-    expect(classifySimilarity(0.39).type).toBe('relate');
+    const r1 = classifySimilarity(0.1);
+    expect(r1.action).toBe('relate');
+    if (r1.action === 'relate') expect(r1.strength).toBe(0.1);
+
+    const r2 = classifySimilarity(0.25);
+    expect(r2.action).toBe('relate');
+    if (r2.action === 'relate') expect(r2.strength).toBe(0.25);
+
+    const r3 = classifySimilarity(0.39);
+    expect(r3.action).toBe('relate');
+    if (r3.action === 'relate') expect(r3.strength).toBe(0.39);
   });
 
   it('classifies score 0.4-0.5 as suggest', () => {
-    expect(classifySimilarity(0.4).type).toBe('suggest');
-    expect(classifySimilarity(0.45).type).toBe('suggest');
-    expect(classifySimilarity(0.5).type).toBe('suggest');
+    const r1 = classifySimilarity(0.4);
+    expect(r1.action).toBe('suggest');
+    if (r1.action === 'suggest') expect(r1.strength).toBe(0.4);
+
+    const r2 = classifySimilarity(0.45);
+    expect(r2.action).toBe('suggest');
+    if (r2.action === 'suggest') expect(r2.strength).toBe(0.45);
+
+    const r3 = classifySimilarity(0.5);
+    expect(r3.action).toBe('suggest');
+    if (r3.action === 'suggest') expect(r3.strength).toBe(0.5);
   });
 
   it('classifies score > 0.5 as consolidate', () => {
-    expect(classifySimilarity(0.51).type).toBe('consolidate');
-    expect(classifySimilarity(0.75).type).toBe('consolidate');
-    expect(classifySimilarity(1.0).type).toBe('consolidate');
+    expect(classifySimilarity(0.51).action).toBe('consolidate');
+    expect(classifySimilarity(0.75).action).toBe('consolidate');
+    expect(classifySimilarity(1.0).action).toBe('consolidate');
   });
 
-  it('preserves original score in result', () => {
-    const score = 0.42;
-    const result = classifySimilarity(score);
-    expect(result.score).toBe(score);
+  it('preserves strength in relate and suggest actions', () => {
+    const r1 = classifySimilarity(0.25);
+    if (r1.action === 'relate') expect(r1.strength).toBe(0.25);
+
+    const r2 = classifySimilarity(0.42);
+    if (r2.action === 'suggest') expect(r2.strength).toBe(0.42);
+  });
+
+  it('omits strength for ignore and consolidate actions', () => {
+    const r1 = classifySimilarity(0.05);
+    expect('strength' in r1).toBe(false);
+
+    const r2 = classifySimilarity(0.75);
+    expect('strength' in r2).toBe(false);
   });
 
   describe('boundary tests', () => {
     it('handles boundary 0.1', () => {
-      expect(classifySimilarity(0.1).type).toBe('relate');
-      expect(classifySimilarity(0.09999).type).toBe('ignore');
+      expect(classifySimilarity(0.1).action).toBe('relate');
+      expect(classifySimilarity(0.09999).action).toBe('ignore');
     });
 
     it('handles boundary 0.4', () => {
-      expect(classifySimilarity(0.4).type).toBe('suggest');
-      expect(classifySimilarity(0.39999).type).toBe('relate');
+      expect(classifySimilarity(0.4).action).toBe('suggest');
+      expect(classifySimilarity(0.39999).action).toBe('relate');
     });
 
     it('handles boundary 0.5', () => {
-      expect(classifySimilarity(0.5).type).toBe('suggest');
-      expect(classifySimilarity(0.50001).type).toBe('consolidate');
+      expect(classifySimilarity(0.5).action).toBe('suggest');
+      expect(classifySimilarity(0.50001).action).toBe('consolidate');
     });
   });
 });
 
 describe('jaccardPreFilter', () => {
   it('returns definitely_similar for score > 0.6', () => {
-    const a = new Set(['a', 'b', 'c']);
-    const b = new Set(['a', 'b', 'c', 'd']); // J = 3/4 = 0.75
-    const result = jaccardPreFilter(a, b);
+    const result = jaccardPreFilter(0.75);
     expect(result.result).toBe('definitely_similar');
     expect(result.score).toBe(0.75);
   });
 
   it('returns definitely_different for score < 0.1', () => {
-    const a = new Set(['a']);
-    const b = new Set(['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k']); // J = 0/11 = 0
-    const result = jaccardPreFilter(a, b);
+    const result = jaccardPreFilter(0.05);
     expect(result.result).toBe('definitely_different');
-    expect(result.score).toBe(0.0);
+    expect(result.score).toBe(0.05);
   });
 
   it('returns maybe for score 0.1-0.6', () => {
-    const a = new Set(['a', 'b']);
-    const b = new Set(['b', 'c', 'd']); // J = 1/4 = 0.25
-    const result = jaccardPreFilter(a, b);
+    const result = jaccardPreFilter(0.25);
     expect(result.result).toBe('maybe');
     expect(result.score).toBe(0.25);
   });
 
   describe('boundary tests', () => {
     it('handles boundary 0.6', () => {
-      // Create sets with J = exactly 0.6
-      const a = new Set(['a', 'b', 'c']);
-      const b = new Set(['a', 'b', 'd', 'e']); // J = 2/5 = 0.4
-      const result = jaccardPreFilter(a, b);
-      expect(result.result).toBe('maybe');
-      expect(result.score).toBe(0.4);
+      const result1 = jaccardPreFilter(0.6);
+      expect(result1.result).toBe('maybe');
+      expect(result1.score).toBe(0.6);
 
-      // Create sets with J > 0.6
-      const c = new Set(['a', 'b', 'c']);
-      const d = new Set(['a', 'b', 'c', 'd']); // J = 3/4 = 0.75
-      const result2 = jaccardPreFilter(c, d);
+      const result2 = jaccardPreFilter(0.60001);
       expect(result2.result).toBe('definitely_similar');
+      expect(result2.score).toBe(0.60001);
     });
 
     it('handles boundary 0.1', () => {
-      // Create sets with J = exactly 0.1
-      const a = new Set(['a']);
-      const b = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']); // J = 1/10 = 0.1
-      const result = jaccardPreFilter(a, b);
-      expect(result.result).toBe('maybe');
-      expect(result.score).toBe(0.1);
+      const result1 = jaccardPreFilter(0.1);
+      expect(result1.result).toBe('maybe');
+      expect(result1.score).toBe(0.1);
 
-      // Create sets with J < 0.1
-      const c = new Set(['a']);
-      const d = new Set(['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k']); // J = 0
-      const result2 = jaccardPreFilter(c, d);
+      const result2 = jaccardPreFilter(0.09999);
       expect(result2.result).toBe('definitely_different');
+      expect(result2.score).toBe(0.09999);
     });
   });
 });
@@ -389,11 +411,11 @@ describe('batchCosineSimilarity', () => {
 
     const results = batchCosineSimilarity(query, targets);
 
-    expect(results[0].action.type).toBe('consolidate');
-    expect(results[1].action.type).toBe('consolidate');
-    expect(results[2].action.type).toBe('suggest');
-    expect(results[3].action.type).toBe('relate');
-    expect(results[4].action.type).toBe('ignore');
+    expect(results[0].action.action).toBe('consolidate');
+    expect(results[1].action.action).toBe('consolidate');
+    expect(results[2].action.action).toBe('suggest');
+    expect(results[3].action.action).toBe('relate');
+    expect(results[4].action.action).toBe('ignore');
   });
 
   it('handles empty targets array', () => {

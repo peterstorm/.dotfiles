@@ -62,6 +62,26 @@ describe("extractTestEvidence (pure)", () => {
     expect(result.passed).toBe(false);
   });
 
+  it("detects bun test passing", () => {
+    const output = " 409 pass\n 0 fail\n 16856 expect() calls\nRan 409 tests across 13 files. [2.28s]";
+    const result = extractTestEvidence(output);
+    expect(result.passed).toBe(true);
+    expect(result.evidence).toContain("bun");
+  });
+
+  it("rejects bun test with failures", () => {
+    const output = " 408 pass\n 1 fail\n 16856 expect() calls";
+    const result = extractTestEvidence(output);
+    expect(result.passed).toBe(false);
+  });
+
+  it("detects bun test pass-only (no fail line)", () => {
+    const output = " 26 pass\n 63 expect() calls";
+    const result = extractTestEvidence(output);
+    expect(result.passed).toBe(true);
+    expect(result.evidence).toContain("bun");
+  });
+
   it("returns false for no test output", () => {
     const result = extractTestEvidence("just some code output");
     expect(result.passed).toBe(false);

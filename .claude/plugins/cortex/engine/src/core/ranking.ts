@@ -1,33 +1,7 @@
-// Minimal inline types for ranking engine
-// These align with types.ts from T1 (running in parallel)
+import type { Memory, MemoryType, SearchResult } from './types.js';
 
-type MemoryType =
-  | 'architecture'
-  | 'decision'
-  | 'pattern'
-  | 'gotcha'
-  | 'context'
-  | 'progress'
-  | 'code_description'
-  | 'code';
-
-interface Memory {
-  readonly id: string;
-  readonly content: string;
-  readonly summary: string;
-  readonly memory_type: MemoryType;
-  readonly confidence: number;      // 0-1
-  readonly priority: number;        // 1-10
-  readonly source_context: string;  // JSON: { branch, commits, files }
-  readonly access_count: number;
-  readonly centrality?: number;     // In-degree count, added by caller if available
-}
-
-interface SearchResult {
-  readonly memory: Memory;
-  readonly score: number;
-  readonly source: 'project' | 'global';
-}
+// Memory with optional centrality (computed at runtime by caller)
+type MemoryWithCentrality = Memory & { readonly centrality?: number };
 
 // Per-category line budgets (FR-016)
 const CATEGORY_BUDGETS: Record<MemoryType, number> = {
@@ -44,7 +18,7 @@ const CATEGORY_BUDGETS: Record<MemoryType, number> = {
 // FR-015: Composite ranking formula
 // rank = (confidence * 0.5) + (priority/10 * 0.2) + (centrality * 0.15) + (log(access+1)/maxLog * 0.15)
 export function computeRank(
-  memory: Memory,
+  memory: MemoryWithCentrality,
   options: {
     readonly maxAccessLog: number;
     readonly currentBranch?: string;
@@ -72,7 +46,8 @@ export function computeRank(
       if (context.branch === currentBranch) {
         rank += branchBoost;
       }
-    } catch {
+    } catch (e) {
+      if (!(e instanceof SyntaxError)) throw e;
       // Invalid JSON in source_context, no boost
     }
   }
@@ -83,7 +58,7 @@ export function computeRank(
 
 // FR-016, FR-017, FR-018: Select memories for push surface with category budgets
 export function selectForSurface(
-  memories: readonly Memory[],
+  memories: readonly MemoryWithCentrality[],
   options: {
     readonly currentBranch: string;
     readonly targetTokens?: number;
@@ -121,11 +96,12 @@ export function selectForSurface(
     code: 0
   };
 
-  const selected: Memory[] = [];
+  const selected: Array<{ memory: Memory; rank: number }> = [];
   let totalTokens = 0;
 
   // First pass: select within soft budgets
-  for (const { memory } of ranked) {
+  for (const item of ranked) {
+    const { memory, rank } = item;
     const type = memory.memory_type;
     const budget = CATEGORY_BUDGETS[type];
     const lines = estimateLines(memory.summary);
@@ -141,7 +117,7 @@ export function selectForSurface(
       break;
     }
 
-    selected.push(memory);
+    selected.push({ memory, rank });
     categoryUsed[type] += lines;
     totalTokens += tokens;
 
@@ -153,15 +129,16 @@ export function selectForSurface(
 
   // FR-017: Allow overflow for high-value memories if under target
   if (totalTokens < targetTokens) {
-    for (const { memory } of ranked) {
-      if (selected.includes(memory)) continue;
+    for (const item of ranked) {
+      const { memory, rank } = item;
+      if (selected.some(s => s.memory.id === memory.id)) continue;
 
       const tokens = estimateTokens(memory.summary);
       if (totalTokens + tokens > maxTokens) {
         break;
       }
 
-      selected.push(memory);
+      selected.push({ memory, rank });
       totalTokens += tokens;
 
       if (totalTokens >= targetTokens) {
@@ -170,7 +147,10 @@ export function selectForSurface(
     }
   }
 
-  return selected;
+  // Re-sort final selection by rank (fix for overflow pass ordering)
+  selected.sort((a, b) => b.rank - a.rank);
+
+  return selected.map(s => s.memory);
 }
 
 // FR-015: Merge project and global search results, deduplicate, re-rank

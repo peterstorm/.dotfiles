@@ -8,7 +8,6 @@ import {
   getHalfLife,
   decayConfidence,
   determineLifecycleAction,
-  computeDecayedConfidence,
   type LifecycleAction,
 } from './decay.js';
 import type { Memory, MemoryType, MemoryStatus } from './types.js';
@@ -160,98 +159,7 @@ describe('decay engine', () => {
     });
   });
 
-  describe('decayConfidence', () => {
-    it('returns original confidence when half-life is null', () => {
-      expect(decayConfidence(0.8, 100, null)).toBe(0.8);
-      expect(decayConfidence(1.0, 365, null)).toBe(1.0);
-    });
-
-    it('returns original confidence when age is 0', () => {
-      expect(decayConfidence(0.8, 0, 60)).toBe(0.8);
-      expect(decayConfidence(1.0, 0, 7)).toBe(1.0);
-    });
-
-    it('halves confidence after exactly one half-life period', () => {
-      expect(decayConfidence(0.8, 60, 60)).toBeCloseTo(0.4);
-      expect(decayConfidence(1.0, 7, 7)).toBeCloseTo(0.5);
-    });
-
-    it('quarters confidence after two half-life periods', () => {
-      expect(decayConfidence(0.8, 120, 60)).toBeCloseTo(0.2);
-      expect(decayConfidence(1.0, 14, 7)).toBeCloseTo(0.25);
-    });
-
-    it('decays progress memory significantly after 30 days', () => {
-      // After 30 days with 7-day half-life: 0.5^(30/7) ≈ 0.051
-      const decayed = decayConfidence(1.0, 30, 7);
-      expect(decayed).toBeCloseTo(0.051, 2);
-    });
-
-    // Property test: monotonic decay (more time = lower confidence)
-    it('property: confidence decays monotonically over time', () => {
-      fc.assert(
-        fc.property(
-          confidenceArb,
-          fc.nat({ max: 200 }),
-          fc.nat({ max: 200 }),
-          fc.nat({ min: 1, max: 100 }),
-          (confidence, age1, age2, halfLife) => {
-            const older = Math.max(age1, age2);
-            const younger = Math.min(age1, age2);
-
-            const decayed1 = decayConfidence(confidence, younger, halfLife);
-            const decayed2 = decayConfidence(confidence, older, halfLife);
-
-            return decayed2 <= decayed1;
-          }
-        )
-      );
-    });
-
-    // Property test: decayed confidence never exceeds original
-    it('property: decayed confidence <= original', () => {
-      fc.assert(
-        fc.property(
-          confidenceArb,
-          ageDaysArb,
-          fc.nat({ min: 1, max: 100 }),
-          (confidence, age, halfLife) => {
-            const decayed = decayConfidence(confidence, age, halfLife);
-            return decayed <= confidence + 0.000001; // float tolerance
-          }
-        )
-      );
-    });
-
-    // Property test: half-life actually halves confidence
-    it('property: exactly one half-life halves confidence', () => {
-      fc.assert(
-        fc.property(
-          fc.double({ min: 0.01, max: 1, noNaN: true }), // Practical confidence range
-          fc.integer({ min: 1, max: 100 }), // halfLife must be >= 1
-          (confidence, halfLife) => {
-            const decayed = decayConfidence(confidence, halfLife, halfLife);
-            const expected = confidence * 0.5;
-            // Relative tolerance: 0.1% of expected value
-            const relTolerance = Math.max(0.000001, expected * 0.001);
-            return Math.abs(decayed - expected) < relTolerance;
-          }
-        )
-      );
-    });
-
-    // Property test: zero half-life or null means no decay
-    it('property: null half-life means no decay', () => {
-      fc.assert(
-        fc.property(confidenceArb, ageDaysArb, (confidence, age) => {
-          const decayed = decayConfidence(confidence, age, null);
-          return Math.abs(decayed - confidence) < 0.000001;
-        })
-      );
-    });
-  });
-
-  describe('computeDecayedConfidence', () => {
+  describe('decayConfidence (canonical export)', () => {
     it('returns original confidence for pinned memories', () => {
       const memory = createMemory({
         pinned: true,
@@ -260,7 +168,7 @@ describe('decay engine', () => {
         created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
       });
       const now = new Date('2026-02-08T00:00:00Z'); // 38 days later
-      const decayed = computeDecayedConfidence(memory, 0.2, now);
+      const decayed = decayConfidence(memory, 0.2, now);
       expect(decayed).toBe(0.8);
     });
 
@@ -271,7 +179,7 @@ describe('decay engine', () => {
         created_at: new Date('2025-01-01T00:00:00Z').toISOString(),
       });
       const now = new Date('2026-02-08T00:00:00Z'); // 404 days later
-      const decayed = computeDecayedConfidence(memory, 0.1, now);
+      const decayed = decayConfidence(memory, 0.1, now);
       expect(decayed).toBe(0.9);
     });
 
@@ -283,7 +191,7 @@ describe('decay engine', () => {
         created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
       });
       const now = new Date('2026-02-08T00:00:00Z'); // 7 days later
-      const decayed = computeDecayedConfidence(memory, 0.2, now);
+      const decayed = decayConfidence(memory, 0.2, now);
       expect(decayed).toBeCloseTo(0.5); // One half-life
     });
 
@@ -295,7 +203,7 @@ describe('decay engine', () => {
         created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
       });
       const now = new Date('2026-02-08T00:00:00Z'); // 7 days = 0.5 half-lives
-      const decayed = computeDecayedConfidence(memory, 0.2, now);
+      const decayed = decayConfidence(memory, 0.2, now);
       expect(decayed).toBeCloseTo(0.707, 2); // 0.5^0.5 ≈ 0.707
     });
 
@@ -307,7 +215,7 @@ describe('decay engine', () => {
         created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
       });
       const now = new Date('2026-02-08T00:00:00Z'); // 7 days
-      const decayed = computeDecayedConfidence(memory, 0.8, now); // > 0.5
+      const decayed = decayConfidence(memory, 0.8, now); // > 0.5
       expect(decayed).toBeCloseTo(0.707, 2); // Half-life doubled to 14
     });
 
@@ -330,7 +238,94 @@ describe('decay engine', () => {
               created_at: createdAt.toISOString(),
             });
 
-            const decayed = computeDecayedConfidence(memory, cent, new Date());
+            const decayed = decayConfidence(memory, cent, new Date());
+            return Math.abs(decayed - conf) < 0.000001;
+          }
+        )
+      );
+    });
+  });
+
+  describe('decayConfidence', () => {
+    it('returns original confidence for pinned memories', () => {
+      const memory = createMemory({
+        pinned: true,
+        memory_type: 'progress',
+        confidence: 0.8,
+        created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+      });
+      const now = new Date('2026-02-08T00:00:00Z'); // 38 days later
+      const decayed = decayConfidence(memory, 0.2, now);
+      expect(decayed).toBe(0.8);
+    });
+
+    it('returns original confidence for stable types', () => {
+      const memory = createMemory({
+        memory_type: 'architecture',
+        confidence: 0.9,
+        created_at: new Date('2025-01-01T00:00:00Z').toISOString(),
+      });
+      const now = new Date('2026-02-08T00:00:00Z'); // 404 days later
+      const decayed = decayConfidence(memory, 0.1, now);
+      expect(decayed).toBe(0.9);
+    });
+
+    it('decays progress memory with base half-life', () => {
+      const memory = createMemory({
+        memory_type: 'progress',
+        confidence: 1.0,
+        access_count: 5,
+        created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
+      });
+      const now = new Date('2026-02-08T00:00:00Z'); // 7 days later
+      const decayed = decayConfidence(memory, 0.2, now);
+      expect(decayed).toBeCloseTo(0.5); // One half-life
+    });
+
+    it('decays slower with high access count', () => {
+      const memory = createMemory({
+        memory_type: 'progress',
+        confidence: 1.0,
+        access_count: 15, // > 10, doubles half-life to 14 days
+        created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
+      });
+      const now = new Date('2026-02-08T00:00:00Z'); // 7 days = 0.5 half-lives
+      const decayed = decayConfidence(memory, 0.2, now);
+      expect(decayed).toBeCloseTo(0.707, 2); // 0.5^0.5 ≈ 0.707
+    });
+
+    it('decays slower with high centrality', () => {
+      const memory = createMemory({
+        memory_type: 'progress',
+        confidence: 1.0,
+        access_count: 5,
+        created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
+      });
+      const now = new Date('2026-02-08T00:00:00Z'); // 7 days
+      const decayed = decayConfidence(memory, 0.8, now); // > 0.5
+      expect(decayed).toBeCloseTo(0.707, 2); // Half-life doubled to 14
+    });
+
+    // Property test: pinned memories never decay
+    it('property: pinned memories have stable confidence', () => {
+      fc.assert(
+        fc.property(
+          memoryTypeArb,
+          confidenceArb,
+          ageDaysArb,
+          centralityArb,
+          (type, conf, age, cent) => {
+            const createdAt = new Date();
+            createdAt.setDate(createdAt.getDate() - age);
+
+            const memory = createMemory({
+              memory_type: type,
+              confidence: conf,
+              pinned: true,
+              created_at: createdAt.toISOString(),
+            });
+
+            const decayed = decayConfidence(memory, cent, new Date());
             return Math.abs(decayed - conf) < 0.000001;
           }
         )
@@ -344,13 +339,13 @@ describe('decay engine', () => {
     it('keeps active memories with good confidence', () => {
       const memory = createMemory({ status: 'active', confidence: 0.8 });
       const action = determineLifecycleAction(memory, 0.8, 0, 0.2, now);
-      expect(action).toEqual({ action: 'keep' });
+      expect(action).toEqual({ action: 'none' });
     });
 
     it('keeps memories with low confidence if not below threshold long enough', () => {
       const memory = createMemory({ status: 'active' });
       const action = determineLifecycleAction(memory, 0.2, 10, 0.2, now);
-      expect(action).toEqual({ action: 'keep' });
+      expect(action).toEqual({ action: 'none' });
     });
 
     it('archives memories with confidence < 0.3 for 14+ days', () => {
@@ -383,7 +378,7 @@ describe('decay engine', () => {
         last_accessed_at: recentAccess.toISOString(),
       });
       const action = determineLifecycleAction(memory, 0.1, 30, 0.2, now);
-      expect(action).toEqual({ action: 'keep' });
+      expect(action).toEqual({ action: 'none' });
     });
 
     it('prunes archived memories untouched for 30+ days', () => {
@@ -401,13 +396,13 @@ describe('decay engine', () => {
     it('keeps pruned memories (terminal state)', () => {
       const memory = createMemory({ status: 'pruned' });
       const action = determineLifecycleAction(memory, 0.1, 30, 0.2, now);
-      expect(action).toEqual({ action: 'keep' });
+      expect(action).toEqual({ action: 'none' });
     });
 
     it('keeps superseded memories (terminal state)', () => {
       const memory = createMemory({ status: 'superseded' });
       const action = determineLifecycleAction(memory, 0.1, 30, 0.2, now);
-      expect(action).toEqual({ action: 'keep' });
+      expect(action).toEqual({ action: 'none' });
     });
 
     // Property test: pinned memories always exempt or keep
@@ -426,7 +421,7 @@ describe('decay engine', () => {
               cent,
               now
             );
-            return action.action === 'exempt' || action.action === 'keep';
+            return action.action === 'exempt' || action.action === 'none';
           }
         )
       );
@@ -477,7 +472,7 @@ describe('decay engine', () => {
               cent,
               now
             );
-            return action.action === 'keep' || action.action === 'prune';
+            return action.action === 'none' || action.action === 'prune';
           }
         )
       );
@@ -501,7 +496,7 @@ describe('decay engine', () => {
       });
 
       // After 30 days with 7-day half-life: 0.8 * 0.5^(30/7) ≈ 0.052
-      const decayed = computeDecayedConfidence(memory, 0.1, now);
+      const decayed = decayConfidence(memory, 0.1, now);
       expect(decayed).toBeLessThan(0.3);
 
       // Should be archived if below threshold for 14 days
@@ -523,12 +518,12 @@ describe('decay engine', () => {
       });
 
       // 60 days = 0.5 effective half-lives
-      const decayed = computeDecayedConfidence(memory, 0.2, now);
+      const decayed = decayConfidence(memory, 0.2, now);
       expect(decayed).toBeGreaterThan(0.7); // ~0.707
       expect(decayed).toBeCloseTo(0.707, 1);
 
       const action = determineLifecycleAction(memory, decayed, 0, 0.2, now);
-      expect(action).toEqual({ action: 'keep' });
+      expect(action).toEqual({ action: 'none' });
     });
 
     it('hub memory (high centrality) protected from archival', () => {
@@ -546,7 +541,7 @@ describe('decay engine', () => {
 
       // High centrality (0.7 > 0.5) doubles half-life from 30 to 60 days
       // 60 days = 1 effective half-life, so: 0.8 * 0.5 = 0.4
-      const decayed = computeDecayedConfidence(memory, 0.7, now);
+      const decayed = decayConfidence(memory, 0.7, now);
       expect(decayed).toBeCloseTo(0.4, 2);
 
       // Protected from archival by centrality

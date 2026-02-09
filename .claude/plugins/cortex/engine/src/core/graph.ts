@@ -1,23 +1,6 @@
 // Pure graph engine functions for memory relationships
 
-// Edge relation types (FR-056)
-export type EdgeRelation =
-  | 'relates_to'
-  | 'derived_from'
-  | 'contradicts'
-  | 'exemplifies'
-  | 'refines'
-  | 'supersedes'
-  | 'source_of';
-
-// Edge type for graph operations
-export type Edge = {
-  readonly source_id: string;
-  readonly target_id: string;
-  readonly relation_type: EdgeRelation;
-  readonly strength: number; // 0-1
-  readonly bidirectional: boolean;
-};
+import type { Edge, EdgeRelation } from './types.js';
 
 // Traversal direction filter
 export type TraversalDirection = 'outgoing' | 'incoming' | 'both';
@@ -64,7 +47,7 @@ export function sanitizeEdgeType(raw: string): EdgeRelation | null {
     'source': 'source_of',
   };
 
-  return typeMap[normalized] ?? null;
+  return Object.hasOwn(typeMap, normalized) ? typeMap[normalized] : null;
 }
 
 /**
@@ -81,12 +64,23 @@ export function isDuplicateEdge(existing: Edge, candidate: Edge): boolean {
 }
 
 /**
- * Compute in-degree centrality for each memory (FR-062, FR-066)
+ * Compute in-degree centrality for a single memory (FR-062, FR-066)
+ *
+ * Centrality is the count of incoming edges, normalized to [0, 1].
+ * Returns 0 if memory has no incoming edges.
+ */
+export function computeCentrality(memoryId: string, edges: ReadonlyArray<Edge>): number {
+  const all = computeAllCentrality(edges);
+  return all.get(memoryId) ?? 0;
+}
+
+/**
+ * Compute in-degree centrality for all memories (FR-062, FR-066)
  *
  * Centrality is the count of incoming edges, normalized to [0, 1].
  * Returns a map of memory ID to centrality score.
  */
-export function computeCentrality(edges: ReadonlyArray<Edge>): Map<string, number> {
+export function computeAllCentrality(edges: ReadonlyArray<Edge>): Map<string, number> {
   const inDegree = new Map<string, number>();
 
   // Count incoming edges for each node
@@ -95,8 +89,11 @@ export function computeCentrality(edges: ReadonlyArray<Edge>): Map<string, numbe
     inDegree.set(edge.target_id, current + 1);
   }
 
-  // Normalize to [0, 1]
-  const maxDegree = Math.max(...Array.from(inDegree.values()), 0);
+  // Normalize to [0, 1] - safe for large graphs
+  let maxDegree = 0;
+  for (const degree of inDegree.values()) {
+    if (degree > maxDegree) maxDegree = degree;
+  }
 
   if (maxDegree === 0) {
     return new Map(); // No edges = all centrality is 0

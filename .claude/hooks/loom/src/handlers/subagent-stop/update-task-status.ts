@@ -58,6 +58,15 @@ export function extractTestEvidence(bashOutput: string): TestEvidence {
     }
   }
 
+  // Bun: "N pass" without "N fail" (or "0 fail")
+  const bunPass = bashOutput.match(/(\d+) pass\b/);
+  if (bunPass) {
+    const bunFail = bashOutput.match(/(\d+) fail\b/);
+    if (!bunFail || bunFail[1] === "0") {
+      return { passed: true, evidence: `bun: ${bunPass[0]}` };
+    }
+  }
+
   return { passed: false, evidence: "" };
 }
 
@@ -137,44 +146,51 @@ const handler: HookHandler = async (stdin) => {
   if (!mgr) return { kind: "passthrough" };
 
   // Parse transcript (read file content, then parse)
-  const transcriptContent = input.agent_transcript_path && existsSync(input.agent_transcript_path)
-    ? readFileSync(input.agent_transcript_path, "utf-8")
+  // Expand ~ in transcript path (Claude Code may send tilde-prefixed paths)
+  const transcriptPath = input.agent_transcript_path?.replace(/^~/, process.env.HOME ?? "~") ?? "";
+  const transcriptContent = transcriptPath && existsSync(transcriptPath)
+    ? readFileSync(transcriptPath, "utf-8")
     : "";
   const transcript = parseTranscript(transcriptContent);
   const filesModified = parseFilesModified(transcriptContent);
   const bashTestOutput = parseBashTestOutput(transcriptContent);
 
   // Extract task ID
-  const taskId = extractTaskId(transcript);
+  let taskId = extractTaskId(transcript);
 
-  // Crash detection: impl agent completed without parseable task ID
+  // When transcript parse fails, try to infer task ID from executing_tasks.
+  // If exactly one task is executing, it's unambiguous.
   if (!taskId) {
     const state = mgr.load();
     const executing = state.executing_tasks ?? [];
-    if (executing.length > 0) {
-      process.stderr.write(`CRASH DETECTED: ${agentType} completed without task ID\n`);
+    if (executing.length === 1) {
+      process.stderr.write(`WARNING: ${agentType} transcript parse failed, inferred task ${executing[0]} from executing_tasks\n`);
+      taskId = executing[0];
+      // Fall through with inferred taskId
+    } else {
+      // Ambiguous or empty — just clear executing_tasks, don't mark tasks as failed.
+      // Marking all executing tasks as "failed" causes a cascade where subsequent hooks
+      // bypass the guard and overwrite valid test evidence.
+      if (executing.length > 0) {
+        process.stderr.write(`WARNING: ${agentType} completed without task ID, ${executing.length} tasks executing (ambiguous)\n`);
+      }
       await mgr.update((s) => ({
         ...s,
-        tasks: s.tasks.map((t) =>
-          executing.includes(t.id)
-            ? { ...t, status: "failed" as const, failure_reason: "agent_crash: no task ID in output", retry_count: (t.retry_count ?? 0) + 1 }
-            : t
-        ),
         executing_tasks: [],
       }));
+      return { kind: "passthrough" };
     }
-    return { kind: "passthrough" };
   }
 
   const state = mgr.load();
   const task = state.tasks.find((t) => t.id === taskId);
   if (!task) return { kind: "passthrough" };
 
-  // Skip if already completed, or implemented with evidence
+  // Skip if already completed or has valid test evidence (regardless of status).
+  // Guards against crash-detection cascade: if another agent's hook set status="failed"
+  // via crash detection, we still preserve previously-set test evidence.
   if (task.status === "completed") return { kind: "passthrough" };
-  if (task.status === "implemented" && task.tests_passed !== undefined) {
-    return { kind: "passthrough" };
-  }
+  if (task.tests_passed === true) return { kind: "passthrough" };
 
   // Section 1: Test evidence from bash output
   const testEvidence = extractTestEvidence(bashTestOutput);

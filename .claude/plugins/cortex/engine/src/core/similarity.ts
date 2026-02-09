@@ -3,14 +3,7 @@
  * Pure functional implementations with no I/O
  */
 
-/**
- * Discriminated union for similarity action classification
- */
-export type SimilarityAction =
-  | { type: 'ignore'; score: number }
-  | { type: 'relate'; score: number }
-  | { type: 'suggest'; score: number }
-  | { type: 'consolidate'; score: number };
+import type { SimilarityAction } from './types.js';
 
 /**
  * Discriminated union for Jaccard pre-filter results
@@ -28,7 +21,7 @@ export type JaccardPreFilter =
  * @param b - Second embedding vector
  * @returns Cosine similarity score
  */
-export function cosineSimilarity(a: Float64Array, b: Float64Array): number {
+export function cosineSimilarity(a: Float64Array | Float32Array, b: Float64Array | Float32Array): number {
   if (a.length !== b.length) {
     throw new Error(`Vector dimension mismatch: ${a.length} vs ${b.length}`);
   }
@@ -63,7 +56,7 @@ export function cosineSimilarity(a: Float64Array, b: Float64Array): number {
  * @param text - Input text to tokenize
  * @returns Set of normalized tokens
  */
-export function tokenize(text: string): Set<string> {
+export function tokenize(text: string): ReadonlySet<string> {
   const normalized = text
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
@@ -85,7 +78,7 @@ export function tokenize(text: string): Set<string> {
  * @param tokensB - Second token set
  * @returns Jaccard similarity score
  */
-export function jaccardSimilarity(tokensA: Set<string>, tokensB: Set<string>): number {
+export function jaccardSimilarity(tokensA: ReadonlySet<string>, tokensB: ReadonlySet<string>): number {
   if (tokensA.size === 0 && tokensB.size === 0) {
     return 1.0; // Both empty = identical
   }
@@ -108,19 +101,19 @@ export function jaccardSimilarity(tokensA: Set<string>, tokensB: Set<string>): n
  * - > 0.5: consolidate (flag for merge)
  *
  * @param score - Similarity score in range [0, 1]
- * @returns Similarity action with type and original score
+ * @returns Similarity action with action type and strength (where applicable)
  */
 export function classifySimilarity(score: number): SimilarityAction {
   if (score < 0.1) {
-    return { type: 'ignore', score };
+    return { action: 'ignore' };
   }
   if (score < 0.4) {
-    return { type: 'relate', score };
+    return { action: 'relate', strength: score };
   }
   if (score <= 0.5) {
-    return { type: 'suggest', score };
+    return { action: 'suggest', strength: score };
   }
-  return { type: 'consolidate', score };
+  return { action: 'consolidate' };
 }
 
 /**
@@ -130,16 +123,10 @@ export function classifySimilarity(score: number): SimilarityAction {
  * - < 0.1: definitely_different (skip embedding check)
  * - 0.1-0.6: maybe (proceed with embedding similarity)
  *
- * @param tokensNew - Tokens from new memory
- * @param tokensExisting - Tokens from existing memory
+ * @param score - Pre-computed Jaccard similarity score
  * @returns Pre-filter result with classification and score
  */
-export function jaccardPreFilter(
-  tokensNew: Set<string>,
-  tokensExisting: Set<string>
-): JaccardPreFilter {
-  const score = jaccardSimilarity(tokensNew, tokensExisting);
-
+export function jaccardPreFilter(score: number): JaccardPreFilter {
   if (score > 0.6) {
     return { result: 'definitely_similar', score };
   }
@@ -167,8 +154,8 @@ export type SimilarityResult = {
  * @returns Array of similarity results sorted by score (highest first)
  */
 export function batchCosineSimilarity(
-  query: Float64Array,
-  targets: Float64Array[]
+  query: Float64Array | Float32Array,
+  targets: (Float64Array | Float32Array)[]
 ): SimilarityResult[] {
   return targets
     .map((target, index) => {

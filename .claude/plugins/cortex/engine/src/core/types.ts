@@ -178,13 +178,34 @@ export function createMemory(input: {
   updated_at?: string;
   status?: MemoryStatus;
 }): Memory {
+  // Validate non-empty strings
+  const trimmedId = input.id.trim();
+  if (trimmedId === '') {
+    throw new Error('id must not be empty');
+  }
+
+  const trimmedContent = input.content.trim();
+  if (trimmedContent === '') {
+    throw new Error('content must not be empty');
+  }
+
+  const trimmedSummary = input.summary.trim();
+  if (trimmedSummary === '') {
+    throw new Error('summary must not be empty');
+  }
+
+  const trimmedSourceSession = input.source_session.trim();
+  if (trimmedSourceSession === '') {
+    throw new Error('source_session must not be empty');
+  }
+
   // Validate confidence [0, 1]
-  if (input.confidence < 0 || input.confidence > 1) {
+  if (Number.isNaN(input.confidence) || input.confidence < 0 || input.confidence > 1) {
     throw new Error(`confidence must be in [0, 1], got ${input.confidence}`);
   }
 
   // Validate priority [1, 10]
-  if (input.priority < 1 || input.priority > 10) {
+  if (Number.isNaN(input.priority) || input.priority < 1 || input.priority > 10) {
     throw new Error(`priority must be in [1, 10], got ${input.priority}`);
   }
 
@@ -202,9 +223,9 @@ export function createMemory(input: {
   const now = new Date().toISOString();
 
   return {
-    id: input.id,
-    content: input.content,
-    summary: input.summary,
+    id: trimmedId,
+    content: trimmedContent,
+    summary: trimmedSummary,
     memory_type: input.memory_type,
     scope: input.scope,
     voyage_embedding: input.voyage_embedding ?? null,
@@ -213,7 +234,7 @@ export function createMemory(input: {
     priority: input.priority,
     pinned: input.pinned ?? false,
     source_type: input.source_type,
-    source_session: input.source_session,
+    source_session: trimmedSourceSession,
     source_context: input.source_context,
     tags: input.tags ?? [],
     access_count: input.access_count ?? 0,
@@ -237,8 +258,13 @@ export function createEdge(input: {
   status?: EdgeStatus;
   created_at?: string;
 }): Edge {
+  // Validate no self-referencing edges
+  if (input.source_id === input.target_id) {
+    throw new Error('source_id and target_id must not be equal (no self-referencing edges)');
+  }
+
   // Validate strength [0, 1]
-  if (input.strength < 0 || input.strength > 1) {
+  if (Number.isNaN(input.strength) || input.strength < 0 || input.strength > 1) {
     throw new Error(`strength must be in [0, 1], got ${input.strength}`);
   }
 
@@ -271,7 +297,7 @@ export function createExtractionCheckpoint(input: {
   extracted_at?: string;
 }): ExtractionCheckpoint {
   // Validate cursor_position >= 0
-  if (input.cursor_position < 0) {
+  if (Number.isNaN(input.cursor_position) || input.cursor_position < 0) {
     throw new Error(
       `cursor_position must be >= 0, got ${input.cursor_position}`
     );
@@ -298,12 +324,12 @@ export function createMemoryCandidate(input: {
   tags?: readonly string[];
 }): MemoryCandidate {
   // Validate confidence [0, 1]
-  if (input.confidence < 0 || input.confidence > 1) {
+  if (Number.isNaN(input.confidence) || input.confidence < 0 || input.confidence > 1) {
     throw new Error(`confidence must be in [0, 1], got ${input.confidence}`);
   }
 
   // Validate priority [1, 10]
-  if (input.priority < 1 || input.priority > 10) {
+  if (Number.isNaN(input.priority) || input.priority < 1 || input.priority > 10) {
     throw new Error(`priority must be in [1, 10], got ${input.priority}`);
   }
 

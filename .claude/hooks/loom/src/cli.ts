@@ -35,7 +35,7 @@ const KNOWN_HANDLERS: Record<string, Set<string>> = {
   "helper": new Set([
     "complete-wave-gate", "populate-task-graph", "validate-task-graph",
     "store-review-findings", "store-spec-check", "mark-tests-passed",
-    "suggest-spec-anchors", "extract-task-id",
+    "suggest-spec-anchors", "extract-task-id", "store-test-evidence",
   ]),
 };
 

@@ -10,11 +10,12 @@ import {
   CATEGORY_BUDGETS,
   type SurfaceOptions,
   type StalenessInfo,
+  type RankedMemory,
 } from './surface.js';
 import type { Memory, MemoryType } from './types.js';
 
 // Test fixtures
-const createMemory = (overrides: Partial<Memory> = {}): Memory => ({
+const createMemory = (overrides: Partial<RankedMemory> = {}): RankedMemory => ({
   id: overrides.id ?? 'mem-1',
   content: overrides.content ?? 'Test content',
   summary: overrides.summary ?? 'Test summary',
@@ -34,7 +35,7 @@ const createMemory = (overrides: Partial<Memory> = {}): Memory => ({
   created_at: overrides.created_at ?? '2024-01-01T00:00:00Z',
   updated_at: overrides.updated_at ?? '2024-01-01T00:00:00Z',
   status: overrides.status ?? 'active',
-  rank: overrides.rank,
+  rank: overrides.rank ?? 0.5,
 });
 
 describe('estimateTokens', () => {
@@ -91,16 +92,16 @@ describe('wrapInMarkers', () => {
 });
 
 describe('allocateBudget', () => {
-  it('allocates memories within category budgets', () => {
+  it('allocates memories within category LINE budgets', () => {
     const memories = [
-      createMemory({ id: '1', memory_type: 'architecture', rank: 0.9 }),
-      createMemory({ id: '2', memory_type: 'architecture', rank: 0.8 }),
-      createMemory({ id: '3', memory_type: 'decision', rank: 0.7 }),
+      createMemory({ id: '1', memory_type: 'architecture', summary: 'Single line', rank: 0.9 }),
+      createMemory({ id: '2', memory_type: 'architecture', summary: 'Another line', rank: 0.8 }),
+      createMemory({ id: '3', memory_type: 'decision', summary: 'Decision line', rank: 0.7 }),
     ];
 
     const budgets: Record<MemoryType, number> = {
-      architecture: 1,
-      decision: 1,
+      architecture: 1, // 1 line budget
+      decision: 1, // 1 line budget
       pattern: 0,
       gotcha: 0,
       context: 0,
@@ -111,7 +112,7 @@ describe('allocateBudget', () => {
 
     const allocated = allocateBudget(memories, budgets, false);
 
-    // Should take top 1 architecture and top 1 decision
+    // Should take top 1 architecture (1 line) and top 1 decision (1 line)
     expect(allocated).toHaveLength(2);
     expect(allocated.find(m => m.id === '1')).toBeDefined(); // top architecture
     expect(allocated.find(m => m.id === '3')).toBeDefined(); // top decision
@@ -119,14 +120,14 @@ describe('allocateBudget', () => {
 
   it('allows overflow when enabled', () => {
     const memories = [
-      createMemory({ id: '1', memory_type: 'architecture', rank: 0.9 }),
-      createMemory({ id: '2', memory_type: 'architecture', rank: 0.8 }),
-      createMemory({ id: '3', memory_type: 'architecture', rank: 0.7 }),
+      createMemory({ id: '1', memory_type: 'architecture', summary: 'Line 1', rank: 0.9 }),
+      createMemory({ id: '2', memory_type: 'architecture', summary: 'Line 2', rank: 0.8 }),
+      createMemory({ id: '3', memory_type: 'architecture', summary: 'Line 3', rank: 0.7 }),
     ];
 
     const budgets: Record<MemoryType, number> = {
-      architecture: 1,
-      decision: 5, // unused budget
+      architecture: 1, // 1 line budget
+      decision: 5, // 5 line unused budget
       pattern: 0,
       gotcha: 0,
       context: 0,
@@ -137,22 +138,22 @@ describe('allocateBudget', () => {
 
     const allocated = allocateBudget(memories, budgets, true);
 
-    // Should take 1 within budget + up to 5 from unused decision budget
+    // Should take 1 within budget + up to 2 more from unused decision budget (each is 1 line)
     expect(allocated.length).toBeGreaterThan(1);
-    expect(allocated.length).toBeLessThanOrEqual(6); // 1 + 5 unused
+    expect(allocated.length).toBeLessThanOrEqual(3); // all 3 can fit in 1 + 5 unused lines
   });
 
-  it('redistributes unused budget to high-value overflow', () => {
+  it('redistributes unused LINE budget to high-value overflow', () => {
     const memories = [
-      createMemory({ id: '1', memory_type: 'architecture', rank: 0.9 }),
-      createMemory({ id: '2', memory_type: 'architecture', rank: 0.8 }),
-      createMemory({ id: '3', memory_type: 'architecture', rank: 0.7 }),
-      createMemory({ id: '4', memory_type: 'decision', rank: 0.6 }),
+      createMemory({ id: '1', memory_type: 'architecture', summary: 'Arch 1', rank: 0.9 }),
+      createMemory({ id: '2', memory_type: 'architecture', summary: 'Arch 2', rank: 0.8 }),
+      createMemory({ id: '3', memory_type: 'architecture', summary: 'Arch 3', rank: 0.7 }),
+      createMemory({ id: '4', memory_type: 'decision', summary: 'Dec 1', rank: 0.6 }),
     ];
 
     const budgets: Record<MemoryType, number> = {
-      architecture: 2,
-      decision: 5, // unused (only 1 decision memory)
+      architecture: 2, // 2 line budget
+      decision: 5, // 5 line budget, but only 1 decision (4 unused lines)
       pattern: 0,
       gotcha: 0,
       context: 0,
@@ -163,15 +164,15 @@ describe('allocateBudget', () => {
 
     const allocated = allocateBudget(memories, budgets, true);
 
-    // Should take 2 architecture, 1 decision, + 1 overflow (id=3, rank 0.7)
+    // Should take 2 architecture (2 lines), 1 decision (1 line), + 1 overflow (id=3, 1 line from 4 unused)
     expect(allocated).toHaveLength(4);
     expect(allocated.find(m => m.id === '3')).toBeDefined(); // overflow redistributed
   });
 
   it('skips categories with zero budget', () => {
     const memories = [
-      createMemory({ id: '1', memory_type: 'code', rank: 0.9 }),
-      createMemory({ id: '2', memory_type: 'decision', rank: 0.8 }),
+      createMemory({ id: '1', memory_type: 'code', summary: 'Code mem', rank: 0.9 }),
+      createMemory({ id: '2', memory_type: 'decision', summary: 'Decision mem', rank: 0.8 }),
     ];
 
     const allocated = allocateBudget(memories, CATEGORY_BUDGETS, false);
@@ -179,6 +180,93 @@ describe('allocateBudget', () => {
     // Code has budget 0, should be excluded
     expect(allocated.find(m => m.id === '1')).toBeUndefined();
     expect(allocated.find(m => m.id === '2')).toBeDefined();
+  });
+
+  it('respects LINE budgets for multi-line summaries', () => {
+    const memories = [
+      createMemory({
+        id: '1',
+        memory_type: 'architecture',
+        summary: 'Line 1\nLine 2\nLine 3', // 3 lines
+        rank: 0.9
+      }),
+      createMemory({
+        id: '2',
+        memory_type: 'architecture',
+        summary: 'Single line', // 1 line
+        rank: 0.8
+      }),
+      createMemory({
+        id: '3',
+        memory_type: 'architecture',
+        summary: 'Another\nTwo lines', // 2 lines
+        rank: 0.7
+      }),
+    ];
+
+    const budgets: Record<MemoryType, number> = {
+      architecture: 4, // 4 line budget
+      decision: 0,
+      pattern: 0,
+      gotcha: 0,
+      context: 0,
+      progress: 0,
+      code_description: 0,
+      code: 0,
+    };
+
+    const allocated = allocateBudget(memories, budgets, false);
+
+    // Should take id=1 (3 lines) + id=2 (1 line) = 4 lines total
+    // id=3 would exceed budget (4 + 2 = 6 > 4)
+    expect(allocated).toHaveLength(2);
+    expect(allocated.find(m => m.id === '1')).toBeDefined();
+    expect(allocated.find(m => m.id === '2')).toBeDefined();
+    expect(allocated.find(m => m.id === '3')).toBeUndefined();
+  });
+
+  it('redistributes unused LINE budget with multi-line summaries', () => {
+    const memories = [
+      createMemory({
+        id: '1',
+        memory_type: 'architecture',
+        summary: 'Line 1\nLine 2', // 2 lines
+        rank: 0.9
+      }),
+      createMemory({
+        id: '2',
+        memory_type: 'architecture',
+        summary: 'Line 3\nLine 4\nLine 5', // 3 lines (overflow)
+        rank: 0.85
+      }),
+      createMemory({
+        id: '3',
+        memory_type: 'architecture',
+        summary: 'Line 6', // 1 line (overflow)
+        rank: 0.8
+      }),
+    ];
+
+    const budgets: Record<MemoryType, number> = {
+      architecture: 2, // 2 line budget - only id=1 fits
+      decision: 5, // 5 unused lines
+      pattern: 0,
+      gotcha: 0,
+      context: 0,
+      progress: 0,
+      code_description: 0,
+      code: 0,
+    };
+
+    const allocated = allocateBudget(memories, budgets, true);
+
+    // Should allocate id=1 (2 lines within budget)
+    // Overflow: id=2 (3 lines, rank 0.85) and id=3 (1 line, rank 0.8)
+    // Redistribute from 5 unused lines: id=2 (3 lines) + id=3 (1 line) = 4 lines used
+    expect(allocated).toHaveLength(3);
+    expect(allocated.find(m => m.id === '1')).toBeDefined();
+    expect(allocated.find(m => m.id === '2')).toBeDefined(); // higher rank overflow
+    expect(allocated.find(m => m.id === '3')).toBeDefined(); // lower rank overflow (still fits)
   });
 
   // Property test: allocated count never exceeds total budget
@@ -211,14 +299,14 @@ describe('allocateBudget', () => {
   // Property test: with overflow, high-rank memories are prioritized
   it('property: overflow prioritizes high-rank memories', () => {
     const memories = [
-      createMemory({ id: '1', memory_type: 'architecture', rank: 0.9 }),
-      createMemory({ id: '2', memory_type: 'architecture', rank: 0.5 }),
-      createMemory({ id: '3', memory_type: 'architecture', rank: 0.8 }),
+      createMemory({ id: '1', memory_type: 'architecture', summary: 'High', rank: 0.9 }),
+      createMemory({ id: '2', memory_type: 'architecture', summary: 'Low', rank: 0.5 }),
+      createMemory({ id: '3', memory_type: 'architecture', summary: 'Med', rank: 0.8 }),
     ];
 
     const budgets: Record<MemoryType, number> = {
-      architecture: 1,
-      decision: 2, // unused
+      architecture: 1, // 1 line budget
+      decision: 2, // 2 lines unused
       pattern: 0,
       gotcha: 0,
       context: 0,
@@ -236,7 +324,7 @@ describe('allocateBudget', () => {
     if (allocated.length > 1) {
       const overflowMem = allocated.find(m => m.id === '3' || m.id === '2');
       if (allocated.length === 3) {
-        // Both taken
+        // Both taken (2 unused lines available)
         expect(allocated.find(m => m.id === '3')).toBeDefined();
       } else if (overflowMem) {
         // Only one overflow, should be higher rank
@@ -357,6 +445,7 @@ describe('generateSurface', () => {
               'pattern',
               'gotcha'
             ),
+            rank: fc.double({ min: 0, max: 1 }),
           }),
           { minLength: 1, maxLength: 20 }
         ),
@@ -390,6 +479,7 @@ describe('generateSurface', () => {
               'gotcha',
               'progress'
             ),
+            rank: fc.double({ min: 0, max: 1 }),
           }),
           { minLength: 5, maxLength: 30 }
         ),

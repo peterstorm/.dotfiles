@@ -1,34 +1,33 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { computeRank, selectForSurface, mergeResults } from './ranking.js';
+import type { Memory, MemoryType, SearchResult } from './types.js';
 
-// Minimal types for testing
-type MemoryType =
-  | 'architecture'
-  | 'decision'
-  | 'pattern'
-  | 'gotcha'
-  | 'context'
-  | 'progress'
-  | 'code_description'
-  | 'code';
-
-interface Memory {
-  readonly id: string;
-  readonly content: string;
-  readonly summary: string;
-  readonly memory_type: MemoryType;
-  readonly confidence: number;
-  readonly priority: number;
-  readonly source_context: string;
-  readonly access_count: number;
-  readonly centrality?: number;
-}
-
-interface SearchResult {
-  readonly memory: Memory;
-  readonly score: number;
-  readonly source: 'project' | 'global';
+// Helper: create complete Memory with all required fields
+function createTestMemory(overrides: Partial<Memory> = {}): Memory {
+  const now = new Date().toISOString();
+  return {
+    id: 'test-id',
+    content: 'test content',
+    summary: 'test summary',
+    memory_type: 'decision',
+    scope: 'project',
+    voyage_embedding: null,
+    local_embedding: null,
+    confidence: 0.8,
+    priority: 5,
+    pinned: false,
+    source_type: 'extraction',
+    source_session: 'session-1',
+    source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
+    tags: [],
+    access_count: 0,
+    last_accessed_at: now,
+    created_at: now,
+    updated_at: now,
+    status: 'active',
+    ...overrides,
+  };
 }
 
 // Arbitraries for property tests
@@ -52,8 +51,7 @@ const memoryArb = fc.record({
   priority: fc.integer({ min: 1, max: 10 }),
   source_context: fc.string().map(s => JSON.stringify({ branch: s, commits: [], files: [] })),
   access_count: fc.nat({ max: 1000 }),
-  centrality: fc.option(fc.double({ min: 0, max: 1, noNaN: true }), { nil: undefined })
-});
+}).map(partial => createTestMemory(partial));
 
 const searchResultArb = (sourceType: 'project' | 'global') =>
   fc.record({
@@ -65,19 +63,17 @@ const searchResultArb = (sourceType: 'project' | 'global') =>
 // Example-based tests
 describe('computeRank', () => {
   it('computes rank for basic memory', () => {
-    const memory: Memory = {
+    const memory = createTestMemory({
       id: '1',
-      content: 'test',
-      summary: 'test summary',
-      memory_type: 'decision',
       confidence: 0.8,
       priority: 5,
-      source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
       access_count: 10,
-      centrality: 0.5
-    };
+    });
 
-    const rank = computeRank(memory, { maxAccessLog: Math.log(11) });
+    // Add centrality property (not part of Memory type, computed at runtime)
+    const memoryWithCentrality = { ...memory, centrality: 0.5 };
+
+    const rank = computeRank(memoryWithCentrality, { maxAccessLog: Math.log(11) });
 
     // Expected: (0.8 * 0.5) + (0.5 * 0.2) + (0.5 * 0.15) + (log(11)/log(11) * 0.15)
     // = 0.4 + 0.1 + 0.075 + 0.15 = 0.725
@@ -85,17 +81,13 @@ describe('computeRank', () => {
   });
 
   it('applies branch boost when branch matches', () => {
-    const memory: Memory = {
+    const memory = createTestMemory({
       id: '1',
-      content: 'test',
-      summary: 'test summary',
-      memory_type: 'decision',
       confidence: 0.8,
       priority: 5,
       source_context: JSON.stringify({ branch: 'feature/x', commits: [], files: [] }),
       access_count: 0,
-      centrality: 0
-    };
+    });
 
     const withoutBoost = computeRank(memory, {
       maxAccessLog: 1,
@@ -112,17 +104,13 @@ describe('computeRank', () => {
   });
 
   it('handles invalid source_context gracefully', () => {
-    const memory: Memory = {
+    const memory = createTestMemory({
       id: '1',
-      content: 'test',
-      summary: 'test summary',
-      memory_type: 'decision',
       confidence: 0.5,
       priority: 5,
       source_context: 'invalid json',
       access_count: 0,
-      centrality: 0
-    };
+    });
 
     expect(() =>
       computeRank(memory, { maxAccessLog: 1, currentBranch: 'main' })
@@ -130,17 +118,13 @@ describe('computeRank', () => {
   });
 
   it('handles zero maxAccessLog', () => {
-    const memory: Memory = {
+    const memory = createTestMemory({
       id: '1',
-      content: 'test',
-      summary: 'test summary',
-      memory_type: 'decision',
       confidence: 0.5,
       priority: 5,
       source_context: '{}',
       access_count: 100,
-      centrality: 0
-    };
+    });
 
     const rank = computeRank(memory, { maxAccessLog: 0 });
     expect(rank).toBeGreaterThanOrEqual(0);
@@ -177,8 +161,8 @@ describe('computeRank properties', () => {
         (baseMemory, priority1, priority2) => {
           fc.pre(priority1 !== priority2);
 
-          const mem1 = { ...baseMemory, priority: priority1 };
-          const mem2 = { ...baseMemory, priority: priority2 };
+          const mem1 = createTestMemory({ ...baseMemory, priority: priority1 });
+          const mem2 = createTestMemory({ ...baseMemory, priority: priority2 });
 
           const rank1 = computeRank(mem1, { maxAccessLog: 1 });
           const rank2 = computeRank(mem2, { maxAccessLog: 1 });
@@ -196,10 +180,10 @@ describe('computeRank properties', () => {
   it('branch boost increases rank', () => {
     fc.assert(
       fc.property(memoryArb, fc.string(), (baseMemory, branch) => {
-        const memory = {
+        const memory = createTestMemory({
           ...baseMemory,
           source_context: JSON.stringify({ branch, commits: [], files: [] })
-        };
+        });
 
         const withoutBoost = computeRank(memory, { maxAccessLog: 1 });
         const withBoost = computeRank(memory, { maxAccessLog: 1, currentBranch: branch });
@@ -218,8 +202,8 @@ describe('computeRank properties', () => {
         (baseMemory, conf1, conf2) => {
           fc.pre(Math.abs(conf1 - conf2) > 0.1);
 
-          const mem1 = { ...baseMemory, confidence: conf1 };
-          const mem2 = { ...baseMemory, confidence: conf2 };
+          const mem1 = createTestMemory({ ...baseMemory, confidence: conf1 });
+          const mem2 = createTestMemory({ ...baseMemory, confidence: conf2 });
 
           const rank1 = computeRank(mem1, { maxAccessLog: 1 });
           const rank2 = computeRank(mem2, { maxAccessLog: 1 });
@@ -240,28 +224,20 @@ describe('computeRank properties', () => {
 describe('selectForSurface', () => {
   it('excludes code type memories', () => {
     const memories: Memory[] = [
-      {
+      createTestMemory({
         id: '1',
-        content: 'code content',
-        summary: 'code summary',
         memory_type: 'code',
         confidence: 1.0,
         priority: 10,
-        source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
         access_count: 100,
-        centrality: 1.0
-      },
-      {
+      }),
+      createTestMemory({
         id: '2',
-        content: 'decision content',
-        summary: 'decision summary',
         memory_type: 'decision',
         confidence: 0.8,
         priority: 5,
-        source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
         access_count: 10,
-        centrality: 0.5
-      }
+      }),
     ];
 
     const selected = selectForSurface(memories, { currentBranch: 'main' });
@@ -273,17 +249,16 @@ describe('selectForSurface', () => {
   it('respects category budgets (soft limit)', () => {
     // Create enough memories that we would exceed maxTokens before selecting all
     const longSummary = 'word '.repeat(100); // ~75 tokens per memory
-    const memories: Memory[] = Array.from({ length: 50 }, (_, i) => ({
-      id: `${i}`,
-      content: `content ${i}`,
-      summary: longSummary,
-      memory_type: 'decision' as MemoryType,
-      confidence: 0.8,
-      priority: 8,
-      source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
-      access_count: i,
-      centrality: 0.5
-    }));
+    const memories: Memory[] = Array.from({ length: 50 }, (_, i) =>
+      createTestMemory({
+        id: `${i}`,
+        summary: longSummary,
+        memory_type: 'decision',
+        confidence: 0.8,
+        priority: 8,
+        access_count: i,
+      })
+    );
 
     const selected = selectForSurface(memories, { currentBranch: 'main', maxTokens: 500 });
 
@@ -294,28 +269,20 @@ describe('selectForSurface', () => {
 
   it('selects highest ranked memories first', () => {
     const memories: Memory[] = [
-      {
+      createTestMemory({
         id: '1',
-        content: 'low',
         summary: 'low priority',
-        memory_type: 'decision',
         confidence: 0.3,
         priority: 1,
-        source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
         access_count: 0,
-        centrality: 0
-      },
-      {
+      }),
+      createTestMemory({
         id: '2',
-        content: 'high',
         summary: 'high priority',
-        memory_type: 'decision',
         confidence: 0.9,
         priority: 10,
-        source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
         access_count: 100,
-        centrality: 0.8
-      }
+      }),
     ];
 
     const selected = selectForSurface(memories, { currentBranch: 'main' });
@@ -324,17 +291,16 @@ describe('selectForSurface', () => {
   });
 
   it('stops at max tokens', () => {
-    const memories: Memory[] = Array.from({ length: 100 }, (_, i) => ({
-      id: `${i}`,
-      content: `content ${i}`,
-      summary: 'a '.repeat(100),  // ~75 tokens each
-      memory_type: 'decision' as MemoryType,
-      confidence: 0.8,
-      priority: 8,
-      source_context: JSON.stringify({ branch: 'main', commits: [], files: [] }),
-      access_count: i,
-      centrality: 0.5
-    }));
+    const memories: Memory[] = Array.from({ length: 100 }, (_, i) =>
+      createTestMemory({
+        id: `${i}`,
+        summary: 'a '.repeat(100),  // ~75 tokens each
+        memory_type: 'decision',
+        confidence: 0.8,
+        priority: 8,
+        access_count: i,
+      })
+    );
 
     const selected = selectForSurface(memories, {
       currentBranch: 'main',
@@ -367,8 +333,10 @@ describe('selectForSurface properties', () => {
 
         if (selected.length < 2) return;
 
+        // Match selectForSurface: compute maxAccessLog from non-code candidates only
+        const candidates = memories.filter(m => m.memory_type !== 'code');
         const maxAccessLog = Math.max(
-          ...memories.map(m => Math.log(m.access_count + 1)),
+          ...candidates.map(m => Math.log(m.access_count + 1)),
           1
         );
 
@@ -386,24 +354,14 @@ describe('selectForSurface properties', () => {
 
 describe('mergeResults', () => {
   it('deduplicates by memory ID', () => {
-    const sharedMemory: Memory = {
-      id: 'shared',
-      content: 'shared content',
-      summary: 'shared summary',
-      memory_type: 'decision',
-      confidence: 0.8,
-      priority: 5,
-      source_context: '{}',
-      access_count: 10,
-      centrality: 0.5
-    };
+    const sharedMemory = createTestMemory({ id: 'shared' });
 
     const projectResults: SearchResult[] = [
-      { memory: sharedMemory, score: 0.9, source: 'project' }
+      { memory: sharedMemory, score: 0.9, source: 'project', related: [] }
     ];
 
     const globalResults: SearchResult[] = [
-      { memory: sharedMemory, score: 0.7, source: 'global' }
+      { memory: sharedMemory, score: 0.7, source: 'global', related: [] }
     ];
 
     const merged = mergeResults(projectResults, globalResults, 10);
@@ -413,24 +371,14 @@ describe('mergeResults', () => {
   });
 
   it('prefers project results over global when duplicate', () => {
-    const memory: Memory = {
-      id: 'dup',
-      content: 'dup content',
-      summary: 'dup summary',
-      memory_type: 'decision',
-      confidence: 0.8,
-      priority: 5,
-      source_context: '{}',
-      access_count: 10,
-      centrality: 0.5
-    };
+    const memory = createTestMemory({ id: 'dup' });
 
     const projectResults: SearchResult[] = [
-      { memory, score: 0.5, source: 'project' }
+      { memory, score: 0.5, source: 'project', related: [] }
     ];
 
     const globalResults: SearchResult[] = [
-      { memory, score: 0.9, source: 'global' }
+      { memory, score: 0.9, source: 'global', related: [] }
     ];
 
     const merged = mergeResults(projectResults, globalResults, 10);
@@ -440,36 +388,15 @@ describe('mergeResults', () => {
   });
 
   it('sorts by score descending', () => {
-    const mem1: Memory = {
-      id: '1',
-      content: 'c1',
-      summary: 's1',
-      memory_type: 'decision',
-      confidence: 0.8,
-      priority: 5,
-      source_context: '{}',
-      access_count: 10,
-      centrality: 0.5
-    };
-
-    const mem2: Memory = {
-      id: '2',
-      content: 'c2',
-      summary: 's2',
-      memory_type: 'decision',
-      confidence: 0.8,
-      priority: 5,
-      source_context: '{}',
-      access_count: 10,
-      centrality: 0.5
-    };
+    const mem1 = createTestMemory({ id: '1' });
+    const mem2 = createTestMemory({ id: '2' });
 
     const projectResults: SearchResult[] = [
-      { memory: mem1, score: 0.5, source: 'project' }
+      { memory: mem1, score: 0.5, source: 'project', related: [] }
     ];
 
     const globalResults: SearchResult[] = [
-      { memory: mem2, score: 0.9, source: 'global' }
+      { memory: mem2, score: 0.9, source: 'global', related: [] }
     ];
 
     const merged = mergeResults(projectResults, globalResults, 10);
@@ -480,19 +407,10 @@ describe('mergeResults', () => {
 
   it('respects limit', () => {
     const projectResults: SearchResult[] = Array.from({ length: 10 }, (_, i) => ({
-      memory: {
-        id: `p${i}`,
-        content: 'c',
-        summary: 's',
-        memory_type: 'decision' as MemoryType,
-        confidence: 0.8,
-        priority: 5,
-        source_context: '{}',
-        access_count: 10,
-        centrality: 0.5
-      },
+      memory: createTestMemory({ id: `p${i}` }),
       score: 0.5 + i * 0.01,
-      source: 'project' as const
+      source: 'project' as const,
+      related: [],
     }));
 
     const globalResults: SearchResult[] = [];

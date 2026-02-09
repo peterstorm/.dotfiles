@@ -238,6 +238,196 @@ describe('createMemory', () => {
     expect(memory.updated_at).toBe(memory.created_at);
     expect(memory.last_accessed_at).toBe(memory.created_at);
   });
+
+  it('throws on empty id', () => {
+    expect(() =>
+      createMemory({
+        id: '',
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('id must not be empty');
+  });
+
+  it('throws on whitespace-only id', () => {
+    expect(() =>
+      createMemory({
+        id: '   ',
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('id must not be empty');
+  });
+
+  it('throws on empty content', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: '',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('content must not be empty');
+  });
+
+  it('throws on whitespace-only content', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: '   ',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('content must not be empty');
+  });
+
+  it('throws on empty summary', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: 'Content',
+        summary: '',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('summary must not be empty');
+  });
+
+  it('throws on whitespace-only summary', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: 'Content',
+        summary: '   ',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('summary must not be empty');
+  });
+
+  it('throws on empty source_session', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: '',
+        source_context: '{}',
+      })
+    ).toThrow('source_session must not be empty');
+  });
+
+  it('throws on whitespace-only source_session', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: 5,
+        source_type: 'manual',
+        source_session: '   ',
+        source_context: '{}',
+      })
+    ).toThrow('source_session must not be empty');
+  });
+
+  it('throws on NaN confidence', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: NaN,
+        priority: 5,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('confidence must be in [0, 1]');
+  });
+
+  it('throws on NaN priority', () => {
+    expect(() =>
+      createMemory({
+        id: 'mem-1',
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: NaN,
+        source_type: 'manual',
+        source_session: 'session',
+        source_context: '{}',
+      })
+    ).toThrow('priority must be in [1, 10]');
+  });
+
+  it('trims whitespace from id, content, summary, and source_session', () => {
+    const memory = createMemory({
+      id: '  mem-1  ',
+      content: '  Content  ',
+      summary: '  Summary  ',
+      memory_type: 'architecture',
+      scope: 'project',
+      confidence: 0.5,
+      priority: 5,
+      source_type: 'manual',
+      source_session: '  session  ',
+      source_context: '{}',
+    });
+
+    expect(memory.id).toBe('mem-1');
+    expect(memory.content).toBe('Content');
+    expect(memory.summary).toBe('Summary');
+    expect(memory.source_session).toBe('session');
+  });
 });
 
 describe('createEdge', () => {
@@ -340,6 +530,30 @@ describe('createEdge', () => {
     expect(edge.created_at >= before).toBe(true);
     expect(edge.created_at <= after).toBe(true);
   });
+
+  it('throws on self-referencing edge', () => {
+    expect(() =>
+      createEdge({
+        id: 'edge-7',
+        source_id: 'mem-1',
+        target_id: 'mem-1',
+        relation_type: 'relates_to',
+        strength: 0.5,
+      })
+    ).toThrow('source_id and target_id must not be equal');
+  });
+
+  it('throws on NaN strength', () => {
+    expect(() =>
+      createEdge({
+        id: 'edge-8',
+        source_id: 'mem-1',
+        target_id: 'mem-2',
+        relation_type: 'relates_to',
+        strength: NaN,
+      })
+    ).toThrow('strength must be in [0, 1]');
+  });
 });
 
 describe('createExtractionCheckpoint', () => {
@@ -398,6 +612,16 @@ describe('createExtractionCheckpoint', () => {
 
     expect(checkpoint.extracted_at >= before).toBe(true);
     expect(checkpoint.extracted_at <= after).toBe(true);
+  });
+
+  it('throws on NaN cursor_position', () => {
+    expect(() =>
+      createExtractionCheckpoint({
+        id: 'ckpt-6',
+        session_id: 'session-6',
+        cursor_position: NaN,
+      })
+    ).toThrow('cursor_position must be >= 0');
   });
 });
 
@@ -498,6 +722,32 @@ describe('createMemoryCandidate', () => {
         priority: 5,
       })
     ).toThrow('invalid memory_type');
+  });
+
+  it('throws on NaN confidence', () => {
+    expect(() =>
+      createMemoryCandidate({
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: NaN,
+        priority: 5,
+      })
+    ).toThrow('confidence must be in [0, 1]');
+  });
+
+  it('throws on NaN priority', () => {
+    expect(() =>
+      createMemoryCandidate({
+        content: 'Content',
+        summary: 'Summary',
+        memory_type: 'architecture',
+        scope: 'project',
+        confidence: 0.5,
+        priority: NaN,
+      })
+    ).toThrow('priority must be in [1, 10]');
   });
 });
 

@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import {
-  type Edge,
-  type EdgeRelation,
   sanitizeEdgeType,
   isDuplicateEdge,
   computeCentrality,
+  computeAllCentrality,
   traverseGraph,
 } from './graph.js';
+import type { Edge, EdgeRelation } from './types.js';
 
 // Arbitraries for property-based testing
 const edgeRelationArb = fc.constantFrom<EdgeRelation>(
@@ -23,14 +23,17 @@ const edgeRelationArb = fc.constantFrom<EdgeRelation>(
 const memoryIdArb = fc.stringMatching(/^mem-[0-9]+$/);
 
 const edgeArb: fc.Arbitrary<Edge> = fc.record({
+  id: fc.string(),
   source_id: memoryIdArb,
   target_id: memoryIdArb,
   relation_type: edgeRelationArb,
   strength: fc.double({ min: 0, max: 1 }),
   bidirectional: fc.boolean(),
+  status: fc.constantFrom('active', 'suggested') as fc.Arbitrary<'active' | 'suggested'>,
+  created_at: fc.constant(new Date().toISOString()),
 });
 
-// Helper to create edges
+// Helper to create edges with all canonical Edge fields
 function edge(
   source: string,
   target: string,
@@ -38,11 +41,14 @@ function edge(
   strength: number = 1.0
 ): Edge {
   return {
+    id: `edge-${source}-${target}`,
     source_id: source,
     target_id: target,
     relation_type: type,
     strength,
     bidirectional: false,
+    status: 'active',
+    created_at: new Date().toISOString(),
   };
 }
 
@@ -168,8 +174,45 @@ describe('isDuplicateEdge', () => {
 });
 
 describe('computeCentrality', () => {
+  it('returns 0 for memory with no incoming edges', () => {
+    const edges = [
+      edge('a', 'b'),
+      edge('c', 'b'),
+    ];
+    expect(computeCentrality('a', edges)).toBe(0);
+    expect(computeCentrality('z', edges)).toBe(0);
+  });
+
+  it('computes normalized centrality for single memory', () => {
+    const edges = [
+      edge('a', 'b'),
+      edge('c', 'b'),
+      edge('d', 'e'),
+    ];
+
+    // b has 2 incoming edges (max), normalized to 1.0
+    expect(computeCentrality('b', edges)).toBe(1.0);
+    // e has 1 incoming edge, normalized to 0.5
+    expect(computeCentrality('e', edges)).toBe(0.5);
+    // a has no incoming edges
+    expect(computeCentrality('a', edges)).toBe(0);
+  });
+
+  it('property: per-memory matches batch version', () => {
+    fc.assert(
+      fc.property(fc.array(edgeArb), memoryIdArb, (edges, memoryId) => {
+        const single = computeCentrality(memoryId, edges);
+        const all = computeAllCentrality(edges);
+        const fromBatch = all.get(memoryId) ?? 0;
+        expect(single).toBe(fromBatch);
+      })
+    );
+  });
+});
+
+describe('computeAllCentrality', () => {
   it('returns empty map for empty edge list', () => {
-    const centrality = computeCentrality([]);
+    const centrality = computeAllCentrality([]);
     expect(centrality.size).toBe(0);
   });
 
@@ -179,7 +222,7 @@ describe('computeCentrality', () => {
       edge('c', 'b'),
       edge('d', 'b'),
     ];
-    const centrality = computeCentrality(edges);
+    const centrality = computeAllCentrality(edges);
 
     // b has 3 incoming edges (max), normalized to 1.0
     expect(centrality.get('b')).toBe(1.0);
@@ -194,7 +237,7 @@ describe('computeCentrality', () => {
       edge('c', 'b'),
       edge('d', 'e'),
     ];
-    const centrality = computeCentrality(edges);
+    const centrality = computeAllCentrality(edges);
 
     // b has 2 incoming edges (max)
     // e has 1 incoming edge
@@ -207,7 +250,7 @@ describe('computeCentrality', () => {
       edge('a', 'b'),
       edge('c', 'd'),
     ];
-    const centrality = computeCentrality(edges);
+    const centrality = computeAllCentrality(edges);
 
     // Both b and d have 1 incoming edge (max)
     expect(centrality.get('b')).toBe(1.0);
@@ -217,7 +260,7 @@ describe('computeCentrality', () => {
   it('property: centrality is always >= 0', () => {
     fc.assert(
       fc.property(fc.array(edgeArb), (edges) => {
-        const centrality = computeCentrality(edges);
+        const centrality = computeAllCentrality(edges);
         for (const score of centrality.values()) {
           expect(score).toBeGreaterThanOrEqual(0);
         }
@@ -228,7 +271,7 @@ describe('computeCentrality', () => {
   it('property: centrality is always <= 1', () => {
     fc.assert(
       fc.property(fc.array(edgeArb), (edges) => {
-        const centrality = computeCentrality(edges);
+        const centrality = computeAllCentrality(edges);
         for (const score of centrality.values()) {
           expect(score).toBeLessThanOrEqual(1);
         }
@@ -239,7 +282,7 @@ describe('computeCentrality', () => {
   it('property: max centrality is 1.0 if any edges exist', () => {
     fc.assert(
       fc.property(fc.array(edgeArb, { minLength: 1 }), (edges) => {
-        const centrality = computeCentrality(edges);
+        const centrality = computeAllCentrality(edges);
         const maxScore = Math.max(...Array.from(centrality.values()));
         expect(maxScore).toBe(1.0);
       })
@@ -249,7 +292,7 @@ describe('computeCentrality', () => {
   it('property: nodes not in target_id have centrality 0 (undefined)', () => {
     fc.assert(
       fc.property(fc.array(edgeArb), (edges) => {
-        const centrality = computeCentrality(edges);
+        const centrality = computeAllCentrality(edges);
         const sources = new Set(edges.map(e => e.source_id));
         const targets = new Set(edges.map(e => e.target_id));
 

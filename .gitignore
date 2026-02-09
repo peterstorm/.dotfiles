@@ -6,9 +6,9 @@ result
 .claude/state/*
 !.claude/state/.gitkeep
 
-# TypeScript utilities dependencies
-.claude/hooks/ts-utils/node_modules/
-.claude/hooks/loom/node_modules/
+# Node modules (all subdirectories)
+**/node_modules/
+.claude/plugins/cortex/engine/:memory:*
 # Local .terraform directories
 **/.terraform/*
 

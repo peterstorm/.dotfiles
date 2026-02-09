@@ -51,7 +51,8 @@ export function getHalfLife(
 
 // FR-087: Apply exponential decay formula
 // confidence * (0.5 ^ (age_days / half_life))
-export function decayConfidence(
+// Internal helper function
+function applyDecay(
   originalConfidence: number,
   ageDays: number,
   halfLife: number | null
@@ -67,98 +68,15 @@ export function decayConfidence(
 
 // Lifecycle action discriminated union
 export type LifecycleAction =
-  | { action: 'keep' }
+  | { action: 'none' }
   | { action: 'archive'; reason: string }
   | { action: 'prune'; reason: string }
-  | { action: 'restore' }
   | { action: 'exempt'; reason: string };
 
 // FR-088, FR-089, FR-090, FR-091: Determine lifecycle transition
 // Archive if confidence < 0.3 for 14 consecutive days
 // Exempt if centrality > 0.5 (hub protection)
-// Restore if accessed while archived
 // Prune if archived and untouched for 30 days
-export function determineLifecycle(
-  memory: Memory,
-  now: Date
-): LifecycleAction {
-  const ageDays = computeAgeDays(memory.created_at, now);
-  const daysSinceAccess = computeAgeDays(memory.last_accessed_at, now);
-
-  // FR-090: Restore archived memories when accessed
-  // Note: This check assumes that access would have updated last_accessed_at
-  // In practice, the system would call this BEFORE updating access time
-  // So we rely on status checks only
-  if (memory.status === 'archived') {
-    // FR-091: Prune if archived and untouched for 30 days
-    if (daysSinceAccess >= 30) {
-      return { action: 'prune', reason: 'archived_30d_no_access' };
-    }
-    // Stay archived (restore happens on explicit access, not here)
-    return { action: 'keep' };
-  }
-
-  // Already pruned or superseded - keep state
-  if (memory.status === 'pruned' || memory.status === 'superseded') {
-    return { action: 'keep' };
-  }
-
-  // FR-084: Pinned memories never decay
-  if (memory.pinned) {
-    return { action: 'exempt', reason: 'pinned' };
-  }
-
-  // Compute effective half-life (will be null for stable types)
-  // We don't have centrality here directly, so we need to accept it as param
-  // Actually, looking at the plan, determineLifecycle should receive centrality
-  // Let me adjust the signature
-
-  return { action: 'keep' };
-}
-
-// Updated signature to include required data for lifecycle decisions
-export function determineLifecycleWithContext(
-  memory: Memory,
-  decayedConfidence: number,
-  centrality: number,
-  now: Date
-): LifecycleAction {
-  const daysSinceAccess = computeAgeDays(memory.last_accessed_at, now);
-
-  // FR-090: Handle archived memories
-  if (memory.status === 'archived') {
-    // FR-091: Prune if archived and untouched for 30 days
-    if (daysSinceAccess >= 30) {
-      return { action: 'prune', reason: 'archived_30d_no_access' };
-    }
-    return { action: 'keep' };
-  }
-
-  // Already pruned or superseded - keep state
-  if (memory.status === 'pruned' || memory.status === 'superseded') {
-    return { action: 'keep' };
-  }
-
-  // FR-084: Pinned memories never decay
-  if (memory.pinned) {
-    return { action: 'exempt', reason: 'pinned' };
-  }
-
-  // FR-089: Hub protection - exempt if centrality > 0.5
-  if (centrality > 0.5) {
-    return { action: 'exempt', reason: 'high_centrality' };
-  }
-
-  // FR-088: Archive if confidence < 0.3 for 14 consecutive days
-  // Note: "14 consecutive days" means we need to track how long it's been below threshold
-  // This requires state we don't have in this pure function
-  // Per the plan signature, we receive daysBelowThreshold as input
-  // Let me adjust signature again
-
-  return { action: 'keep' };
-}
-
-// Final signature matching the plan
 export function determineLifecycleAction(
   memory: Memory,
   decayedConfidence: number,
@@ -174,12 +92,12 @@ export function determineLifecycleAction(
     if (daysSinceAccess >= 30) {
       return { action: 'prune', reason: 'archived_30d_no_access' };
     }
-    return { action: 'keep' };
+    return { action: 'none' };
   }
 
   // Already pruned or superseded - keep state
   if (memory.status === 'pruned' || memory.status === 'superseded') {
-    return { action: 'keep' };
+    return { action: 'none' };
   }
 
   // FR-084: Pinned memories never decay
@@ -203,12 +121,12 @@ export function determineLifecycleAction(
     return { action: 'archive', reason: 'low_confidence_14d' };
   }
 
-  return { action: 'keep' };
+  return { action: 'none' };
 }
 
-// Convenience function that computes everything in one pass
-// Useful for tests and simple scenarios
-export function computeDecayedConfidence(
+// Canonical export matching plan signature
+// Computes decayed confidence for a memory
+export function decayConfidence(
   memory: Memory,
   centrality: number,
   now: Date
@@ -224,5 +142,5 @@ export function computeDecayedConfidence(
     centrality,
   });
 
-  return decayConfidence(memory.confidence, ageDays, halfLife);
+  return applyDecay(memory.confidence, ageDays, halfLife);
 }

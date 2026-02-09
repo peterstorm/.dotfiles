@@ -3,6 +3,9 @@
 
 import type { Memory, MemoryType } from './types.js';
 
+// Ranked memory - memory with rank attached by ranking module
+export type RankedMemory = Memory & { readonly rank: number };
+
 // Per-category line budgets (FR-016)
 export const CATEGORY_BUDGETS: Record<MemoryType, number> = {
   architecture: 25,
@@ -31,7 +34,7 @@ export interface StalenessInfo {
  * Target 300-500 tokens (FR-025).
  */
 export function generateSurface(
-  memories: readonly Memory[],
+  memories: readonly RankedMemory[],
   branch: string,
   staleness: StalenessInfo | null,
   options: SurfaceOptions = {}
@@ -97,33 +100,43 @@ export function generateSurface(
  * Under-budget categories redistribute (FR-018).
  */
 export function allocateBudget(
-  memories: readonly Memory[],
+  memories: readonly RankedMemory[],
   budgets: Record<MemoryType, number>,
   allowOverflow: boolean
-): readonly Memory[] {
+): readonly RankedMemory[] {
   // Group by category
   const byCategory = groupByCategory(memories);
 
-  const allocated: Memory[] = [];
+  const allocated: RankedMemory[] = [];
 
-  // First pass: allocate within budgets
+  // First pass: allocate within LINE budgets
   for (const [category, mems] of Object.entries(byCategory)) {
     const budget = budgets[category as MemoryType] ?? 0;
     if (budget === 0) continue; // skip code blocks
 
-    const taken = mems.slice(0, budget);
-    allocated.push(...taken);
+    let linesUsed = 0;
+    for (const mem of mems) {
+      const memLines = estimateLines(mem.summary);
+      if (linesUsed + memLines > budget) break;
+      allocated.push(mem);
+      linesUsed += memLines;
+    }
   }
 
   if (!allowOverflow) {
     return allocated;
   }
 
-  // Second pass: calculate unused budget (across ALL categories, not just those with memories)
+  // Second pass: calculate unused LINE budget (across ALL categories, not just those with memories)
   const unusedBudget = Object.entries(budgets).reduce((acc, [category, budget]) => {
     const mems = byCategory[category] ?? [];
-    const used = Math.min(mems.length, budget);
-    return acc + (budget - used);
+    let linesUsed = 0;
+    for (const mem of mems) {
+      const memLines = estimateLines(mem.summary);
+      if (linesUsed + memLines > budget) break;
+      linesUsed += memLines;
+    }
+    return acc + (budget - linesUsed);
   }, 0);
 
   if (unusedBudget === 0) {
@@ -131,20 +144,47 @@ export function allocateBudget(
   }
 
   // Third pass: redistribute unused budget to high-value overflow memories
-  const overflow: Memory[] = [];
+  const overflow: RankedMemory[] = [];
   for (const [category, mems] of Object.entries(byCategory)) {
     const budget = budgets[category as MemoryType] ?? 0;
-    if (mems.length > budget) {
-      const extra = mems.slice(budget);
-      overflow.push(...extra);
+
+    let linesUsed = 0;
+    let overflowStart = 0;
+    for (let i = 0; i < mems.length; i++) {
+      const memLines = estimateLines(mems[i].summary);
+      if (linesUsed + memLines > budget) {
+        overflowStart = i;
+        break;
+      }
+      linesUsed += memLines;
+    }
+
+    if (overflowStart > 0 || (overflowStart === 0 && linesUsed === 0 && mems.length > 0)) {
+      overflow.push(...mems.slice(overflowStart));
     }
   }
 
-  // Sort overflow by rank (highest first) and take up to unused budget
-  const sortedOverflow = [...overflow].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0));
-  const redistributed = sortedOverflow.slice(0, unusedBudget);
+  // Sort overflow by rank (highest first) and take up to unused LINE budget
+  const sortedOverflow = [...overflow].sort((a, b) => b.rank - a.rank);
+  const redistributed: RankedMemory[] = [];
+  let remainingBudget = unusedBudget;
+
+  for (const mem of sortedOverflow) {
+    const memLines = estimateLines(mem.summary);
+    if (memLines <= remainingBudget) {
+      redistributed.push(mem);
+      remainingBudget -= memLines;
+    }
+  }
 
   return [...allocated, ...redistributed];
+}
+
+/**
+ * Estimate line count for a text string.
+ */
+function estimateLines(text: string): number {
+  return text.split('\n').length;
 }
 
 /**
@@ -169,8 +209,8 @@ export function estimateTokens(text: string): number {
 }
 
 // Helper: group memories by category
-function groupByCategory(memories: readonly Memory[]): Record<string, Memory[]> {
-  const groups: Record<string, Memory[]> = {};
+function groupByCategory(memories: readonly RankedMemory[]): Record<string, RankedMemory[]> {
+  const groups: Record<string, RankedMemory[]> = {};
 
   for (const mem of memories) {
     if (!groups[mem.memory_type]) {

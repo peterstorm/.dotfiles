@@ -10,10 +10,8 @@ import {
   buildExtractionPrompt,
   parseExtractionResponse,
   buildEmbeddingText,
-  type MemoryCandidate,
-  type GitContext,
-  type MemoryType,
 } from "./extraction";
+import type { MemoryCandidate, GitContext, MemoryType } from "./types";
 
 describe("truncateTranscript", () => {
   it("returns full content when under maxBytes", () => {
@@ -171,11 +169,12 @@ describe("buildExtractionPrompt", () => {
   it("includes project name and branch", () => {
     const gitContext: GitContext = {
       branch: "main",
-      projectName: "test-project",
+      recent_commits: [],
+      changed_files: [],
     };
     const transcript = '{"role":"user","content":"test"}\n';
 
-    const prompt = buildExtractionPrompt(transcript, gitContext);
+    const prompt = buildExtractionPrompt(transcript, gitContext, "test-project");
 
     expect(prompt).toContain("Project: test-project");
     expect(prompt).toContain("Branch: main");
@@ -185,12 +184,12 @@ describe("buildExtractionPrompt", () => {
   it("includes recent commits when provided", () => {
     const gitContext: GitContext = {
       branch: "feature/test",
-      projectName: "test-project",
-      recentCommits: ["abc123 Initial commit", "def456 Add feature"],
+      recent_commits: ["abc123 Initial commit", "def456 Add feature"],
+      changed_files: [],
     };
     const transcript = '{"role":"user","content":"test"}\n';
 
-    const prompt = buildExtractionPrompt(transcript, gitContext);
+    const prompt = buildExtractionPrompt(transcript, gitContext, "test-project");
 
     expect(prompt).toContain("Recent commits:");
     expect(prompt).toContain("abc123 Initial commit");
@@ -200,26 +199,27 @@ describe("buildExtractionPrompt", () => {
   it("includes changed files when provided", () => {
     const gitContext: GitContext = {
       branch: "main",
-      projectName: "test-project",
-      changedFiles: ["src/index.ts", "README.md"],
+      recent_commits: [],
+      changed_files: ["src/index.ts", "README.md"],
     };
     const transcript = '{"role":"user","content":"test"}\n';
 
-    const prompt = buildExtractionPrompt(transcript, gitContext);
+    const prompt = buildExtractionPrompt(transcript, gitContext, "test-project");
 
     expect(prompt).toContain("Changed files:");
     expect(prompt).toContain("src/index.ts");
     expect(prompt).toContain("README.md");
   });
 
-  it("omits optional fields when not provided", () => {
+  it("omits optional fields when empty arrays", () => {
     const gitContext: GitContext = {
       branch: "main",
-      projectName: "test-project",
+      recent_commits: [],
+      changed_files: [],
     };
     const transcript = '{"role":"user","content":"test"}\n';
 
-    const prompt = buildExtractionPrompt(transcript, gitContext);
+    const prompt = buildExtractionPrompt(transcript, gitContext, "test-project");
 
     expect(prompt).not.toContain("Recent commits:");
     expect(prompt).not.toContain("Changed files:");
@@ -228,11 +228,12 @@ describe("buildExtractionPrompt", () => {
   it("includes FR requirements in prompt", () => {
     const gitContext: GitContext = {
       branch: "main",
-      projectName: "test-project",
+      recent_commits: [],
+      changed_files: [],
     };
     const transcript = "";
 
-    const prompt = buildExtractionPrompt(transcript, gitContext);
+    const prompt = buildExtractionPrompt(transcript, gitContext, "test-project");
 
     // Check for memory types (FR-005)
     expect(prompt).toContain("architecture");
@@ -260,10 +261,11 @@ describe("parseExtractionResponse", () => {
       {
         content: "Test content",
         summary: "Test summary",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.85,
         priority: 7,
+        tags: ["api", "design"],
       },
     ]);
 
@@ -273,10 +275,11 @@ describe("parseExtractionResponse", () => {
     expect(result[0]).toEqual({
       content: "Test content",
       summary: "Test summary",
-      memoryType: "decision",
-      category: "project",
+      memory_type: "decision",
+      scope: "project",
       confidence: 0.85,
       priority: 7,
+      tags: ["api", "design"],
     });
   });
 
@@ -286,10 +289,11 @@ describe("parseExtractionResponse", () => {
   {
     "content": "Test",
     "summary": "Summary",
-    "memoryType": "pattern",
-    "category": "global",
+    "memory_type": "pattern",
+    "scope": "global",
     "confidence": 0.9,
-    "priority": 8
+    "priority": 8,
+    "tags": []
   }
 ]
 \`\`\``;
@@ -297,7 +301,7 @@ describe("parseExtractionResponse", () => {
     const result = parseExtractionResponse(response);
 
     expect(result).toHaveLength(1);
-    expect(result[0].memoryType).toBe("pattern");
+    expect(result[0].memory_type).toBe("pattern");
   });
 
   it("returns empty array for invalid JSON", () => {
@@ -319,25 +323,27 @@ describe("parseExtractionResponse", () => {
       {
         content: "Valid",
         summary: "Valid",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.8,
         priority: 5,
+        tags: [],
       },
       {
         content: "Invalid",
         summary: "Invalid",
-        memoryType: "invalid_type",
-        category: "project",
+        memory_type: "invalid_type",
+        scope: "project",
         confidence: 0.8,
         priority: 5,
+        tags: [],
       },
     ]);
 
     const result = parseExtractionResponse(response);
 
     expect(result).toHaveLength(1);
-    expect(result[0].memoryType).toBe("decision");
+    expect(result[0].memory_type).toBe("decision");
   });
 
   it("filters out invalid confidence values (FR-006)", () => {
@@ -345,26 +351,29 @@ describe("parseExtractionResponse", () => {
       {
         content: "Valid",
         summary: "Valid",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.5,
         priority: 5,
+        tags: [],
       },
       {
         content: "Too low",
         summary: "Too low",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: -0.1,
         priority: 5,
+        tags: [],
       },
       {
         content: "Too high",
         summary: "Too high",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 1.5,
         priority: 5,
+        tags: [],
       },
     ]);
 
@@ -379,34 +388,38 @@ describe("parseExtractionResponse", () => {
       {
         content: "Valid",
         summary: "Valid",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.8,
         priority: 5,
+        tags: [],
       },
       {
         content: "Too low",
         summary: "Too low",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.8,
         priority: 0,
+        tags: [],
       },
       {
         content: "Too high",
         summary: "Too high",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.8,
         priority: 11,
+        tags: [],
       },
       {
         content: "Not integer",
         summary: "Not integer",
-        memoryType: "decision",
-        category: "project",
+        memory_type: "decision",
+        scope: "project",
         confidence: 0.8,
         priority: 5.5,
+        tags: [],
       },
     ]);
 
@@ -433,30 +446,66 @@ describe("parseExtractionResponse", () => {
         {
           content: `Test ${type}`,
           summary: `Summary ${type}`,
-          memoryType: type,
-          category: "project",
+          memory_type: type,
+          scope: "project",
           confidence: 0.8,
           priority: 5,
+          tags: [],
         },
       ]);
 
       const result = parseExtractionResponse(response);
       expect(result).toHaveLength(1);
-      expect(result[0].memoryType).toBe(type);
+      expect(result[0].memory_type).toBe(type);
     });
+  });
+
+  it("preserves tags from LLM response", () => {
+    const response = JSON.stringify([
+      {
+        content: "Test content",
+        summary: "Test summary",
+        memory_type: "decision",
+        scope: "project",
+        confidence: 0.8,
+        priority: 5,
+        tags: ["api", "performance", "security"],
+      },
+    ]);
+
+    const result = parseExtractionResponse(response);
+    expect(result).toHaveLength(1);
+    expect(result[0].tags).toEqual(["api", "performance", "security"]);
+  });
+
+  it("handles missing tags field", () => {
+    const response = JSON.stringify([
+      {
+        content: "Test content",
+        summary: "Test summary",
+        memory_type: "decision",
+        scope: "project",
+        confidence: 0.8,
+        priority: 5,
+      },
+    ]);
+
+    const result = parseExtractionResponse(response);
+    expect(result).toHaveLength(1);
+    expect(result[0].tags).toEqual([]);
   });
 
   it("returns empty array when all candidates are invalid", () => {
     const response = JSON.stringify([
       {
         content: "Missing fields",
-        memoryType: "decision",
+        memory_type: "decision",
       },
       {
         content: "Invalid type",
         summary: "Summary",
-        memoryType: "not_valid",
-        category: "project",
+        memory_type: "not_valid",
+        scope: "project",
         confidence: 0.8,
         priority: 5,
       },
@@ -479,7 +528,7 @@ describe("parseExtractionResponse", () => {
       "code"
     );
 
-    const categoryArb = fc.constantFrom<"project" | "global">(
+    const scopeArb = fc.constantFrom<"project" | "global">(
       "project",
       "global"
     );
@@ -487,10 +536,11 @@ describe("parseExtractionResponse", () => {
     const validMemoryArb = fc.record({
       content: fc.string({ minLength: 1 }),
       summary: fc.string({ minLength: 1 }),
-      memoryType: memoryTypeArb,
-      category: categoryArb,
+      memory_type: memoryTypeArb,
+      scope: scopeArb,
       confidence: fc.double({ min: 0, max: 1, noNaN: true }),
       priority: fc.integer({ min: 1, max: 10 }),
+      tags: fc.array(fc.string()),
     });
 
     it("always returns array", () => {
@@ -510,7 +560,7 @@ describe("parseExtractionResponse", () => {
           const result = parseExtractionResponse(response);
 
           result.forEach((memory) => {
-            expect(memory.memoryType).toMatch(
+            expect(memory.memory_type).toMatch(
               /^(architecture|decision|pattern|gotcha|context|progress|code_description|code)$/
             );
           });
@@ -546,6 +596,19 @@ describe("parseExtractionResponse", () => {
         })
       );
     });
+
+    it("all parsed memories preserve tags", () => {
+      fc.assert(
+        fc.property(fc.array(validMemoryArb), (memories) => {
+          const response = JSON.stringify(memories);
+          const result = parseExtractionResponse(response);
+
+          result.forEach((memory) => {
+            expect(Array.isArray(memory.tags)).toBe(true);
+          });
+        })
+      );
+    });
   });
 });
 
@@ -554,10 +617,11 @@ describe("buildEmbeddingText", () => {
     const memory: MemoryCandidate = {
       content: "Full content",
       summary: "Test summary",
-      memoryType: "decision",
-      category: "project",
+      memory_type: "decision",
+      scope: "project",
       confidence: 0.8,
       priority: 5,
+      tags: [],
     };
 
     const result = buildEmbeddingText(memory, "test-project");
@@ -569,10 +633,11 @@ describe("buildEmbeddingText", () => {
     const memory: MemoryCandidate = {
       content: "Full content",
       summary: "Test summary",
-      memoryType: "pattern",
-      category: "global",
+      memory_type: "pattern",
+      scope: "global",
       confidence: 0.9,
       priority: 8,
+      tags: [],
     };
 
     const result = buildEmbeddingText(memory, "my-app");
@@ -596,10 +661,11 @@ describe("buildEmbeddingText", () => {
       const memory: MemoryCandidate = {
         content: "Content",
         summary: "Summary",
-        memoryType: type,
-        category: "project",
+        memory_type: type,
+        scope: "project",
         confidence: 0.8,
         priority: 5,
+        tags: [],
       };
 
       const result = buildEmbeddingText(memory, "test");
@@ -622,7 +688,7 @@ describe("buildEmbeddingText", () => {
       "code"
     );
 
-    const categoryArb = fc.constantFrom<"project" | "global">(
+    const scopeArb = fc.constantFrom<"project" | "global">(
       "project",
       "global"
     );
@@ -630,10 +696,11 @@ describe("buildEmbeddingText", () => {
     const memoryArb = fc.record({
       content: fc.string({ minLength: 1 }),
       summary: fc.string({ minLength: 1 }),
-      memoryType: memoryTypeArb,
-      category: categoryArb,
+      memory_type: memoryTypeArb,
+      scope: scopeArb,
       confidence: fc.double({ min: 0, max: 1 }),
       priority: fc.integer({ min: 1, max: 10 }),
+      tags: fc.array(fc.string()),
     });
 
     it("always starts with memory type prefix", () => {
@@ -641,7 +708,7 @@ describe("buildEmbeddingText", () => {
         fc.property(memoryArb, fc.string({ minLength: 1 }), (memory, project) => {
           const result = buildEmbeddingText(memory, project);
           expect(result).toMatch(/^\[.*?\] /);
-          expect(result).toContain(`[${memory.memoryType}]`);
+          expect(result).toContain(`[${memory.memory_type}]`);
         })
       );
     });
@@ -668,7 +735,7 @@ describe("buildEmbeddingText", () => {
       fc.assert(
         fc.property(memoryArb, fc.string({ minLength: 1 }), (memory, project) => {
           const result = buildEmbeddingText(memory, project);
-          const expected = `[${memory.memoryType}] [project:${project}] ${memory.summary}`;
+          const expected = `[${memory.memory_type}] [project:${project}] ${memory.summary}`;
           expect(result).toBe(expected);
         })
       );

@@ -8,7 +8,7 @@
 
     Service = {
       Type = "oneshot";
-      WorkingDirectory = "${config.home.homeDirectory}/dev/notes/remotevault";
+      WorkingDirectory = "${config.home.homeDirectory}/dev/notes";
       Environment = "SSH_AUTH_SOCK=%t/ssh-agent";
 
       ExecStart = pkgs.writeShellScript "obsidian-git-sync" ''
