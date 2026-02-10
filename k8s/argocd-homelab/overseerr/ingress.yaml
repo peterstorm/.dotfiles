@@ -2,8 +2,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: overseerr
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: cilium
+  tls:
+    - hosts:
+        - overseerr.peterstorm.io
+      secretName: overseerr-tls
   rules:
     - host: overseerr.peterstorm.io
       http:

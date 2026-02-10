@@ -97,7 +97,36 @@ data:
 
 ## ArgoCD + Helm
 
-### Helm Chart via ArgoCD
+### Helm via ApplicationSet (Homelab Pattern)
+
+In this repo, Helm charts are deployed via the ApplicationSet git directory generator.
+Place a `Chart.yaml` + `values.yaml` in `k8s/argocd-homelab/<app>/` and the ApplicationSet auto-creates the ArgoCD Application.
+
+```yaml
+# k8s/argocd-homelab/monitoring/Chart.yaml
+apiVersion: v2
+name: monitoring
+version: 0.1.0
+dependencies:
+  - name: kube-prometheus-stack
+    version: "67.9.0"
+    repository: https://prometheus-community.github.io/helm-charts
+```
+
+```yaml
+# k8s/argocd-homelab/monitoring/values.yaml
+kube-prometheus-stack:
+  grafana:
+    ingress:
+      enabled: true
+      ingressClassName: cilium
+      hosts:
+        - grafana.peterstorm.io
+```
+
+### Helm Chart via ArgoCD Application (Manual)
+
+For cases outside ApplicationSet:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
