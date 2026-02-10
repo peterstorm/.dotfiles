@@ -4,8 +4,14 @@ kube-prometheus-stack:
     ingress:
       enabled: true
       ingressClassName: cilium
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
         - grafana.peterstorm.io
+      tls:
+        - hosts:
+            - grafana.peterstorm.io
+          secretName: grafana-tls
   alertmanager:
     enabled: true
   prometheus:

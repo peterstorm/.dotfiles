@@ -2,8 +2,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: echo-server
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: cilium
+  tls:
+    - hosts:
+        - echo-server.peterstorm.io
+      secretName: echo-server-tls
   rules:
     - host: echo-server.peterstorm.io
       http:

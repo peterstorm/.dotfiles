@@ -4,7 +4,7 @@ terraform {
   required_providers {
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.17"
+      version = ">= 2.12"
     }
     kubectl = {
       source  = "alekc/kubectl"
@@ -12,7 +12,7 @@ terraform {
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.48"
+      version = ">= 5.0"
     }
     time = {
       source  = "hashicorp/time"
@@ -59,6 +59,20 @@ module "argocd" {
   source = "./argocd"
 
   depends_on = [module.cilium_l2]
+}
+
+module "cert_manager" {
+  source = "./helm-cert-manager"
+
+  depends_on = [module.cilium_l2]
+}
+
+module "cert_manager_issuer" {
+  source = "./cert-manager-issuer"
+
+  cloudflare_api_token = data.sops_file.cloudflare.data["api_token"]
+
+  depends_on = [module.cert_manager]
 }
 
 module "cloudflare" {

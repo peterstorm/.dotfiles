@@ -2,8 +2,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: transmission
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: cilium
+  tls:
+    - hosts:
+        - transmission.peterstorm.io
+      secretName: transmission-tls
   rules:
     - host: transmission.peterstorm.io
       http:

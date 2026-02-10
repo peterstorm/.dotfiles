@@ -2,7 +2,7 @@ terraform {
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.48"
+      version = ">= 5.0"
     }
   }
 }
@@ -15,10 +15,19 @@ variable "cloudflare_tunnel_id" {
   type = string
 }
 
-# Services via Cloudflare tunnel (proxied)
+# echo-server via Cloudflare tunnel (external access)
+resource "cloudflare_dns_record" "echo_server" {
+  zone_id = var.cloudflare_zone_id
+  name    = "echo-server"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+# Services on Cilium ingress LB IP (LAN only, not proxied)
 locals {
-  tunnel_services = [
-    "echo-server",
+  lan_services = [
     "argocd",
     "grafana",
     "sonarr",
@@ -29,14 +38,14 @@ locals {
   ]
 }
 
-resource "cloudflare_dns_record" "tunnel" {
-  for_each = toset(local.tunnel_services)
+resource "cloudflare_dns_record" "lan" {
+  for_each = toset(local.lan_services)
 
   zone_id = var.cloudflare_zone_id
   name    = each.key
-  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
-  type    = "CNAME"
-  proxied = true
+  content = "192.168.0.242"
+  type    = "A"
+  proxied = false
   ttl     = 1
 }
 
