@@ -2,33 +2,30 @@
  * Tests for backfill command
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { openDatabase, insertMemory } from '../infra/db.ts';
 import { backfill } from './backfill.ts';
 import { createMemory } from '../core/types.ts';
-
-// Create mock functions
-const mockIsGeminiAvailable = vi.fn();
-const mockEmbedTexts = vi.fn();
-const mockEnsureModelLoaded = vi.fn();
-const mockEmbedLocal = vi.fn();
-
-// Mock the embedding modules
-vi.mock('../infra/gemini-embed.ts', () => ({
-  isGeminiAvailable: mockIsGeminiAvailable,
-  embedTexts: mockEmbedTexts,
-  MAX_BATCH_SIZE: 20,
-  EMBEDDING_DIMENSIONS: 768,
-}));
-
-vi.mock('../infra/local-embed.ts', () => ({
-  ensureModelLoaded: mockEnsureModelLoaded,
-  embedLocal: mockEmbedLocal,
-}));
+import * as geminiEmbed from '../infra/gemini-embed.ts';
+import * as localEmbed from '../infra/local-embed.ts';
 
 describe('backfill', () => {
+  let isGeminiAvailableSpy: ReturnType<typeof vi.spyOn>;
+  let embedTextsSpy: ReturnType<typeof vi.spyOn>;
+  let ensureModelLoadedSpy: ReturnType<typeof vi.spyOn>;
+  let embedLocalSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    // Setup spies with default implementations
+    isGeminiAvailableSpy = vi.spyOn(geminiEmbed, 'isGeminiAvailable');
+    embedTextsSpy = vi.spyOn(geminiEmbed, 'embedTexts');
+    ensureModelLoadedSpy = vi.spyOn(localEmbed, 'ensureModelLoaded');
+    embedLocalSpy = vi.spyOn(localEmbed, 'embedLocal');
+  });
+
+  afterEach(() => {
+    // Restore all spies to prevent leakage
+    vi.restoreAllMocks();
   });
 
   describe('when no memories need backfilling', () => {
@@ -83,8 +80,8 @@ describe('backfill', () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks
-      mockIsGeminiAvailable.mockReturnValue(true);
-      mockEmbedTexts.mockResolvedValue([
+isGeminiAvailableSpy.mockReturnValue(true);
+embedTextsSpy.mockResolvedValue([
         new Float64Array(768).fill(0.5),
         new Float64Array(768).fill(0.7),
       ]);
@@ -129,8 +126,8 @@ describe('backfill', () => {
         method: 'gemini',
       });
 
-      expect(mockIsGeminiAvailable).toHaveBeenCalledWith('fake-api-key');
-      expect(mockEmbedTexts).toHaveBeenCalledWith(
+      expect(isGeminiAvailableSpy).toHaveBeenCalledWith('fake-api-key');
+      expect(embedTextsSpy).toHaveBeenCalledWith(
         [
           '[decision] [project:test-project] Chose microservices',
           '[pattern] [project:test-project] Use Either type',
@@ -143,10 +140,10 @@ describe('backfill', () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks
-      mockIsGeminiAvailable.mockReturnValue(true);
+isGeminiAvailableSpy.mockReturnValue(true);
 
-      // Create 25 memories (exceeds batch size of 20)
-      const memories = Array.from({ length: 25 }, (_, i) =>
+      // Create 150 memories (exceeds batch size of 100, will create 2 batches)
+      const memories = Array.from({ length: 150 }, (_, i) =>
         createMemory({
           id: `mem-${i}`,
           content: `Content ${i}`,
@@ -164,34 +161,34 @@ describe('backfill', () => {
       memories.forEach((m) => insertMemory(db, m));
 
       // Mock embedTexts to return appropriate size arrays
-      mockEmbedTexts
+embedTextsSpy
         .mockResolvedValueOnce(
-          Array.from({ length: 20 }, () => new Float64Array(768))
+          Array.from({ length: 100 }, () => new Float64Array(768))
         )
         .mockResolvedValueOnce(
-          Array.from({ length: 5 }, () => new Float64Array(768))
+          Array.from({ length: 50 }, () => new Float64Array(768))
         );
 
       const result = await backfill(db, 'test-project', 'fake-api-key');
 
       expect(result).toEqual({
         ok: true,
-        processed: 25,
+        processed: 150,
         failed: 0,
         errors: [],
         method: 'gemini',
       });
 
       // Should have called embedTexts twice (two batches)
-      expect(mockEmbedTexts).toHaveBeenCalledTimes(2);
+      expect(embedTextsSpy).toHaveBeenCalledTimes(2);
     });
 
     it('handles batch API failures gracefully', async () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks - simulate API failure
-      mockIsGeminiAvailable.mockReturnValue(true);
-      mockEmbedTexts.mockRejectedValueOnce(new Error('API error'));
+isGeminiAvailableSpy.mockReturnValue(true);
+embedTextsSpy.mockRejectedValueOnce(new Error('API error'));
 
       // Insert memory
       const memory = createMemory({
@@ -228,9 +225,9 @@ describe('backfill', () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks
-      mockIsGeminiAvailable.mockReturnValue(false);
-      mockEnsureModelLoaded.mockResolvedValue(true);
-      mockEmbedLocal
+isGeminiAvailableSpy.mockReturnValue(false);
+ensureModelLoadedSpy.mockResolvedValue(true);
+embedLocalSpy
         .mockResolvedValueOnce(new Float32Array(384).fill(0.3))
         .mockResolvedValueOnce(new Float32Array(384).fill(0.4));
 
@@ -274,12 +271,12 @@ describe('backfill', () => {
         method: 'local',
       });
 
-      expect(mockEnsureModelLoaded).toHaveBeenCalled();
-      expect(mockEmbedLocal).toHaveBeenCalledTimes(2);
-      expect(mockEmbedLocal).toHaveBeenCalledWith(
+      expect(ensureModelLoadedSpy).toHaveBeenCalled();
+      expect(embedLocalSpy).toHaveBeenCalledTimes(2);
+      expect(embedLocalSpy).toHaveBeenCalledWith(
         '[decision] [project:test-project] Chose microservices'
       );
-      expect(mockEmbedLocal).toHaveBeenCalledWith(
+      expect(embedLocalSpy).toHaveBeenCalledWith(
         '[pattern] [project:test-project] Use Either type'
       );
     });
@@ -288,8 +285,8 @@ describe('backfill', () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks
-      mockIsGeminiAvailable.mockReturnValue(false);
-      mockEnsureModelLoaded.mockResolvedValue(false);
+isGeminiAvailableSpy.mockReturnValue(false);
+ensureModelLoadedSpy.mockResolvedValue(false);
 
       // Insert memory without embeddings
       const memory = createMemory({
@@ -323,9 +320,9 @@ describe('backfill', () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks
-      mockIsGeminiAvailable.mockReturnValue(false);
-      mockEnsureModelLoaded.mockResolvedValue(true);
-      mockEmbedLocal
+isGeminiAvailableSpy.mockReturnValue(false);
+ensureModelLoadedSpy.mockResolvedValue(true);
+embedLocalSpy
         .mockResolvedValueOnce(new Float32Array(384).fill(0.3))
         .mockRejectedValueOnce(new Error('Model error'));
 
@@ -377,8 +374,8 @@ describe('backfill', () => {
       const db = openDatabase(':memory:');
 
       // Setup mocks
-      mockIsGeminiAvailable.mockReturnValue(true);
-      mockEmbedTexts.mockResolvedValue([
+isGeminiAvailableSpy.mockReturnValue(true);
+embedTextsSpy.mockResolvedValue([
         new Float64Array(768).fill(0.5),
       ]);
 
@@ -439,8 +436,8 @@ describe('backfill', () => {
       });
 
       // Should only process the one without embeddings
-      expect(mockEmbedTexts).toHaveBeenCalledTimes(1);
-      expect(mockEmbedTexts).toHaveBeenCalledWith(
+      expect(embedTextsSpy).toHaveBeenCalledTimes(1);
+      expect(embedTextsSpy).toHaveBeenCalledWith(
         ['[decision] [project:test-project] No embeddings'],
         'fake-api-key'
       );
@@ -465,7 +462,7 @@ describe('backfill', () => {
       insertMemory(db, memory);
 
       // Setup mocks - simulate catastrophic failure
-      mockIsGeminiAvailable.mockImplementation(() => {
+isGeminiAvailableSpy.mockImplementation(() => {
         throw new Error('Unexpected error');
       });
 

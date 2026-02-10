@@ -240,7 +240,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.priority).toBe(8);
@@ -260,7 +262,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.pinned).toBe(true);
@@ -280,7 +284,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.tags.length).toBe(3);
@@ -303,7 +309,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.scope).toBe('global');
@@ -323,7 +331,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.scope).toBe('project');
@@ -353,7 +363,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.embedding).toEqual(geminiEmbedding);
@@ -374,7 +386,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.confidence).toBe(1.0);
@@ -401,7 +415,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     expect(merged.memory_type).toBe('decision');
@@ -421,7 +437,9 @@ describe('buildMergedMemory', () => {
       pair,
       'Merged summary',
       'Merged content',
-      'test-session'
+      'test-session',
+      'test-merged-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     const context = JSON.parse(merged.source_context);
@@ -738,7 +756,7 @@ describe('buildMergedMemory - properties', () => {
       const memoryB = createTestMemory({ priority: priorityB });
 
       const pair: MemoryPair = { memoryA, memoryB, similarity: 0.9 };
-      const merged = buildMergedMemory(pair, 'summary', 'content', 'session');
+      const merged = buildMergedMemory(pair, 'summary', 'content', 'session', 'test-id', '2026-01-01T00:00:00.000Z');
 
       expect(merged.priority).toBe(Math.max(priorityA, priorityB));
     }
@@ -750,7 +768,7 @@ describe('buildMergedMemory - properties', () => {
       const memoryB = createTestMemory({ confidence: Math.random() });
 
       const pair: MemoryPair = { memoryA, memoryB, similarity: 0.9 };
-      const merged = buildMergedMemory(pair, 'summary', 'content', 'session');
+      const merged = buildMergedMemory(pair, 'summary', 'content', 'session', 'test-id', '2026-01-01T00:00:00.000Z');
 
       expect(merged.confidence).toBe(1.0);
     }
@@ -761,8 +779,9 @@ describe('buildMergedMemory - properties', () => {
     const memoryB = createTestMemory({ status: 'active' });
 
     const pair: MemoryPair = { memoryA, memoryB, similarity: 0.9 };
-    const merged = buildMergedMemory(pair, 'summary', 'content', 'session');
+    const merged = buildMergedMemory(pair, 'summary', 'content', 'session', 'test-id', '2026-01-01T00:00:00.000Z');
 
     expect(merged.status).toBe('active');
   });
 });
+

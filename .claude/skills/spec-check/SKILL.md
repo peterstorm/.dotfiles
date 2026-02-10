@@ -1,257 +1,206 @@
 ---
 name: spec-check
-version: "1.0.0"
+version: "2.0.0"
 description: "This skill should be used when the user asks to 'check spec alignment', 'verify requirements coverage', 'detect drift', 'spec audit', or automatically at wave gates. Verifies implementation aligns with specification - different from code review which checks quality."
 ---
 
 # Spec-Check - Drift Detection
 
-Read-only verification that implementation aligns with specification. Detects coverage gaps, scope creep, and requirement drift.
-
-**When to run:**
-- At wave gates (integrated into `/wave-gate` sequence)
-- Before `/finalize`
-- On-demand during long implementations
-- Manual: `/spec-check`
+Read-only verification that implementation aligns with specification. Mechanically extracts requirements, forces per-FR verdicts, detects coverage gaps and scope creep.
 
 **Not what this does:** Check code quality, style, security (that's code-reviewer's job).
 
 ---
 
-## Integration with Wave-Gate
+## Process — FOLLOW EXACTLY
 
-Spec-check runs as part of wave-gate sequence, between test verification and code review:
+Every step below that says "Run:" is a command you MUST execute via Bash/Grep/Read tool. Do NOT skip tool calls. Do NOT assess from memory alone.
 
-```
-Wave N complete
-    → verify test evidence
-    → /spec-check (NEW)
-    → spawn code reviewers
-    → advance wave
-```
+### Step 1: Load artifacts
 
-CRITICAL findings from spec-check block wave advancement.
-
----
-
-## Process
-
-### 1. Load Artifacts
-
+**Run:**
 ```bash
-# Find spec
-SPEC=$(ls -t .claude/specs/*/spec.md | head -1)
+SPEC=$(ls -t .claude/specs/*/spec.md | head -1) && echo "$SPEC"
+```
 
-# Find plan
-PLAN=$(jq -r '.plan_file' .claude/state/active_task_graph.json)
+**Run:**
+```bash
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json) && echo "Wave: $WAVE"
+```
 
-# Get current wave tasks
+**Run:**
+```bash
 WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
-jq -r ".tasks[] | select(.wave == $WAVE)" .claude/state/active_task_graph.json
+jq -r ".tasks[] | select(.wave == $WAVE) | {id, description, spec_anchors}" .claude/state/active_task_graph.json
 ```
 
-### 2. Build Requirement Map
+Save: SPEC path, WAVE number, task list with spec_anchors.
 
-Extract from spec:
-- FR-xxx (Functional Requirements)
-- SC-xxx (Success Criteria)
-- US-x acceptance scenarios
+### Step 2: Extract the FR checklist (deterministic)
 
-Build mapping:
+**Run:** Use Grep to extract all `FR-\d+:` lines from the spec file. This is the master FR list.
+
+Then from step 1 output, collect all `spec_anchors` across wave tasks into a flat list. These are the **in-scope FRs** for this wave.
+
+**Build a checklist** — one row per in-scope FR:
+
 ```
-FR-001 → {description, priority, related_scenarios}
-FR-002 → {description, priority, related_scenarios}
-SC-001 → {metric, threshold}
-...
+FR-XXX | <description from spec> | <assigned task> | PENDING
 ```
 
-### 3. Build Implementation Map
+You MUST have one row for every FR in spec_anchors. Count them. You will emit a verdict for every single row.
 
-From wave tasks and git diff:
+### Step 3: Get changed files (deterministic)
+
+**Run:**
 ```bash
-# Files changed in current wave
-BASE=$(git merge-base HEAD origin/main)
-git diff --name-only $BASE..HEAD
+git diff --name-only origin/main...HEAD
 ```
 
-Extract from code:
-- Functions/classes created
-- Tests written
-- API endpoints added
+Also check per-task files_modified if available:
+```bash
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
+jq -r ".tasks[] | select(.wave == $WAVE) | {id, files_modified}" .claude/state/active_task_graph.json
+```
 
-### 4. Run Detection Passes
+### Step 4: Coverage check — per-FR verdicts
 
-#### Pass 1: Coverage Gaps
+For EACH FR in the checklist from step 2:
 
-Check every FR/SC has corresponding implementation:
+1. **Read the FR description** from spec (you already have it)
+2. **Read the relevant source file(s)** — use the changed files list and task assignment to identify which files implement this FR. Use Read tool.
+3. **Assess**: Does the code satisfy the requirement as written in spec?
+4. **Emit verdict**: `FR-XXX: PASS` or `FR-XXX: FAIL — <specific reason>`
 
-| Finding | Severity |
-|---------|----------|
-| P1 requirement with no code | CRITICAL |
-| P2 requirement with no code | HIGH |
-| P3 requirement with no code | MEDIUM |
-| Success criteria with no test | HIGH |
-| Acceptance scenario with no test | MEDIUM |
+**Rules:**
+- MUST emit exactly one verdict line per in-scope FR. If checklist has 12 FRs, output has 12 verdict lines.
+- "Soft compliance" is not PASS. If spec says "MUST do X" and code doesn't do X, it's FAIL.
+- MUST/SHALL requirements that are unimplemented = CRITICAL
+- SHOULD requirements that are unimplemented = HIGH
+- MAY requirements that are unimplemented = MEDIUM
 
-**Detection method:**
-- Parse task descriptions for requirement references (FR-xxx, SC-xxx)
-- Check `spec_anchors` in task state
-- Search code for requirement IDs in comments
-- Match test names to acceptance scenarios
+**After all verdicts, count:** How many in-scope FRs from the checklist did you emit? Does it match the total from step 2? If not, you skipped one — go back.
 
-#### Pass 2: Scope Creep
+### Step 5: Acceptance scenario coverage
 
-Check for code that maps to no requirement:
+**Run:** Use Grep to extract lines matching `Given .* When .* Then` or `- Given` from the spec file. These are acceptance scenarios.
 
-| Finding | Severity |
-|---------|----------|
-| New feature not in spec | CRITICAL |
-| New endpoint not in spec | HIGH |
-| New entity not in spec | HIGH |
-| Extra configuration | MEDIUM |
+Filter to scenarios belonging to User Stories that map to in-scope tasks (US numbers referenced in spec near the in-scope FRs).
 
-**Detection method:**
-- Compare created functions/endpoints to spec
-- Check Out of Scope section for violations
-- Flag code with no traceability to requirements
+For EACH acceptance scenario:
 
-#### Pass 3: Terminology Drift
+1. Identify which test file should cover it (from changed files, `*.test.ts` or `*.spec.ts`)
+2. **Read the test file** — use Read tool
+3. **Assess**: Is there a test that exercises this scenario (happy path, error path, edge case)?
+4. **Emit verdict**: `US-X scenario N: COVERED` or `US-X scenario N: NOT COVERED — <reason>`
 
-Check naming consistency:
+**Severity for uncovered scenarios:**
+- Happy path not tested = HIGH
+- Error path not tested = MEDIUM
+- Edge case not tested = LOW
 
-| Finding | Severity |
-|---------|----------|
-| Spec says "Order", code says "Purchase" | MEDIUM |
-| Spec says "User", code says "Customer" | MEDIUM |
-| Inconsistent naming across files | LOW |
+### Step 6: Terminology check (deterministic)
 
-**Detection method:**
-- Extract key terms from spec (entities, actions)
-- Search codebase for variants
-- Flag mismatches
+**Run:** Use Grep to find the Glossary/Appendix table in the spec. Extract key terms.
 
-#### Pass 4: Acceptance Criteria Coverage
+**Run:** Also extract from spec Dependencies section — note specific technology names (e.g., "Voyage AI", "Haiku", "FTS5").
 
-For each Given/When/Then in spec:
+For each key term/technology name, grep the changed source files for that term AND common variants. Flag mismatches where spec uses one name but code uses another.
 
-| Finding | Severity |
-|---------|----------|
-| Happy path scenario with no test | HIGH |
-| Error scenario with no test | MEDIUM |
-| Edge case scenario with no test | LOW |
+Severity: MEDIUM for terminology drift.
 
-**Detection method:**
-- Parse acceptance scenarios from spec
-- Match to test descriptions/names
-- Check test assertions align with "Then" clauses
+### Step 7: Scope creep check
 
-#### Pass 5: Success Criteria Verifiability
+**Run:** Use Grep to find the "Out of Scope" section in the spec. Extract the exclusion list.
 
-For each SC-xxx:
-
-| Finding | Severity |
-|---------|----------|
-| Metric claimed but no measurement | HIGH |
-| Threshold exists but not tested | MEDIUM |
-| SC marked complete but no evidence | CRITICAL |
-
-**Detection method:**
-- Check for performance tests
-- Check for metric assertions
-- Validate evidence in task state
+Review the changed files list from step 3. For each new exported function/class/command not traceable to an in-scope FR:
+- If it's in the Out of Scope list = CRITICAL (explicitly excluded)
+- If it's a helper/utility supporting an in-scope FR = OK (not scope creep)
+- If it's a new feature with no FR = HIGH
 
 ---
 
 ## Output Format
 
-### Console Output
+### Per-FR Verdicts (MANDATORY)
 
 ```
-## Spec-Check Report
+## FR Coverage — Wave {N}
 
-**Spec:** .claude/specs/2025-01-29-user-auth/spec.md
-**Wave:** 2
-**Tasks Checked:** T3, T4, T5
+| FR | Description | Task | Verdict |
+|----|-------------|------|---------|
+| FR-001 | System MUST extract memories... | T15 | PASS |
+| FR-004 | System MUST track cursor... | T15 | PASS |
+| FR-039 | System MUST prefix query... | T17 | FAIL — buildQueryEmbeddingText returns raw query |
+...
 
-### CRITICAL (2)
+Total: {X}/{Y} PASS ({Z} FAIL)
+```
 
-1. **Coverage Gap:** FR-003 (email validation) has no implementation
-   - Requirement: "System MUST validate email format"
-   - Expected in: T3 (auth service)
-   - Found: No validation logic in auth service
+### Per-Scenario Verdicts
 
-2. **Scope Creep:** New /api/admin endpoint not in spec
-   - File: src/routes/admin.ts
-   - Not mapped to any FR-xxx
-   - Not in Out of Scope (should be if intentional)
+```
+## Acceptance Scenarios — Wave {N}
 
-### HIGH (1)
+| Scenario | Verdict |
+|----------|---------|
+| US1: Given session with decisions, When ends, Then extracted | COVERED |
+| US3: Given indexed function, When search prose, Then code returned | NOT COVERED |
+...
+```
 
-1. **Acceptance Gap:** US1 error scenario has no test
-   - Scenario: "Given invalid password, When submit, Then error shown"
-   - Expected test: Login failure test
-   - Found: Only happy path tested
+### Findings Summary
 
-### MEDIUM (2)
+```
+## Findings
 
-1. **Terminology Drift:** Spec "User" vs Code "Account"
-2. **Missing Metric:** SC-002 (response time) not measured in tests
+### CRITICAL ({count})
+1. **Coverage Gap:** FR-039 — query embedding metadata prefix not implemented
+   - Spec: "System MUST prefix query embeddings with metadata"
+   - Code: buildQueryEmbeddingText returns raw query
+   - Task: T17
+
+### HIGH ({count})
+...
+
+### MEDIUM ({count})
+...
 
 ### Summary
 
 | Severity | Count |
 |----------|-------|
-| CRITICAL | 2 |
-| HIGH | 1 |
-| MEDIUM | 2 |
-| LOW | 0 |
+| CRITICAL | N |
+| HIGH | N |
+| MEDIUM | N |
+| LOW | N |
 
-**Verdict:** BLOCKED - 2 critical findings must be resolved
+**Verdict:** PASSED | BLOCKED
 ```
 
-### State File Update
+### Machine-Readable Footer (MANDATORY — parsed by hooks)
 
-Write findings to task state for wave-gate:
+The SubagentStop hook parses these exact patterns from the transcript. Emit them **exactly** as shown — no markdown formatting, no indentation, no code fences around them.
 
-```json
-{
-  "spec_check": {
-    "wave": 2,
-    "run_at": "2025-01-29T10:00:00Z",
-    "critical_count": 2,
-    "high_count": 1,
-    "findings": [
-      {
-        "severity": "CRITICAL",
-        "type": "coverage_gap",
-        "requirement": "FR-003",
-        "description": "email validation has no implementation",
-        "task": "T3"
-      }
-    ],
-    "verdict": "BLOCKED"
-  }
-}
+```
+SPEC_CHECK_WAVE: {N}
+
+CRITICAL: {one-line description of critical finding}
+CRITICAL: {another critical finding}
+HIGH: {one-line description of high finding}
+MEDIUM: {one-line description of medium finding}
+
+SPEC_CHECK_CRITICAL_COUNT: {N}
+SPEC_CHECK_HIGH_COUNT: {N}
+SPEC_CHECK_VERDICT: PASSED | BLOCKED
 ```
 
----
-
-## Wave-Gate Integration
-
-### Blocking Logic
-
-Wave advancement blocked if:
-- `spec_check.critical_count > 0`
-
-Wave advancement proceeds if:
-- `spec_check.critical_count == 0` (HIGH/MEDIUM are advisory)
-
-### Re-Check After Fixes
-
-When critical issues fixed:
-1. Re-run `/spec-check`
-2. Updated findings replace previous
-3. If `critical_count == 0`, wave can advance
+**Rules for machine-readable lines:**
+- Each `CRITICAL:` / `HIGH:` / `MEDIUM:` line MUST start at column 0 (no leading spaces)
+- One finding per line, no line breaks within a finding
+- Counts MUST match the number of CRITICAL/HIGH/MEDIUM lines above them
+- Even if counts are zero, emit the SPEC_CHECK_CRITICAL_COUNT and SPEC_CHECK_VERDICT lines
+- These lines appear AFTER the human-readable report, as the very last output
 
 ---
 
@@ -259,46 +208,10 @@ When critical issues fixed:
 
 | Severity | Meaning | Blocks Wave? |
 |----------|---------|--------------|
-| CRITICAL | Spec violation, missing P1 requirement, scope creep | Yes |
-| HIGH | Missing test coverage, P2 gaps | No (advisory) |
-| MEDIUM | Terminology drift, P3 gaps | No (advisory) |
-| LOW | Minor inconsistencies | No (informational) |
-
----
-
-## Manual Invocation
-
-```bash
-/spec-check                    # Check current wave
-/spec-check --full             # Check all waves
-/spec-check --spec path/to/spec.md  # Use specific spec
-```
-
----
-
-## Fixing Critical Findings
-
-### Coverage Gap
-
-```markdown
-**Finding:** FR-003 has no implementation
-
-**Fix options:**
-1. Implement the requirement (spawn impl agent for affected task)
-2. Defer requirement (move to Out of Scope with justification)
-3. Update spec if requirement changed (requires re-approval)
-```
-
-### Scope Creep
-
-```markdown
-**Finding:** New endpoint not in spec
-
-**Fix options:**
-1. Add requirement to spec (FR-xxx) and re-run /specify
-2. Remove code if truly out of scope
-3. Document in Out of Scope as "added during implementation" with rationale
-```
+| CRITICAL | MUST requirement unimplemented, explicit out-of-scope violation | Yes |
+| HIGH | SHOULD requirement gap, happy-path scenario untested | No (advisory) |
+| MEDIUM | Terminology drift, MAY gaps, error-path untested | No (advisory) |
+| LOW | Minor inconsistencies, edge-case untested | No (informational) |
 
 ---
 
@@ -308,4 +221,6 @@ When critical issues fixed:
 - Findings only: Report issues, don't fix them
 - Spec is source of truth: Code must align to spec, not vice versa
 - CRITICAL blocks waves: Non-negotiable
-- Different from code review: Quality vs alignment are separate concerns
+- MUST emit one verdict per in-scope FR — no skipping
+- MUST use tool calls (Grep, Read, Bash) for evidence — no assessing from memory
+- Different from code review: Alignment vs quality are separate concerns

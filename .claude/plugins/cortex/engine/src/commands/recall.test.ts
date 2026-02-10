@@ -99,6 +99,27 @@ describe('recall command', () => {
     expect(geminiEmbed.embedTexts).toHaveBeenCalledTimes(1);
   });
 
+  test('prefixes query with project name for aligned search (FR-039)', async () => {
+    const { projectDb, globalDb } = setupTestDbs();
+
+    const mem = createTestMemory({ summary: 'Test memory' });
+    insertMemory(projectDb, mem);
+
+    const options: RecallOptions = {
+      query: 'test query',
+      geminiApiKey: 'test-key',
+      projectName: 'my-project',
+    };
+
+    await executeRecall(projectDb, globalDb, options);
+
+    // embedTexts should receive prefixed query
+    expect(geminiEmbed.embedTexts).toHaveBeenCalledWith(
+      ['[query] [project:my-project] test query'],
+      'test-key'
+    );
+  });
+
   test('keyword search fallback (no Gemini key)', async () => {
     const { projectDb, globalDb } = setupTestDbs();
 
@@ -143,6 +164,35 @@ describe('recall command', () => {
 
     expect(result.result.method).toBe('keyword');
     expect(geminiEmbed.embedTexts).not.toHaveBeenCalled();
+  });
+
+  test('keyword search finds raw code content via FTS5 (US3-2)', async () => {
+    const { projectDb, globalDb } = setupTestDbs();
+
+    // Insert code memory with JWT content but summary that doesn't mention jwt
+    const codeMem = createTestMemory({
+      memory_type: 'code',
+      content: 'export function verifyAuth(token: string) {\n  return jwt.verify(token, secret);\n}',
+      summary: 'Authentication verification function',
+      embedding: null, // No embedding — forces keyword path
+    });
+    insertMemory(projectDb, codeMem);
+
+    const options: RecallOptions = {
+      query: 'jwt',
+      // No geminiApiKey — forces keyword search
+    };
+
+    const result = await executeRecall(projectDb, globalDb, options);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(result.result.method).toBe('keyword');
+    expect(result.result.results.length).toBeGreaterThan(0);
+
+    const found = result.result.results.find((r) => r.memory.id === codeMem.id);
+    expect(found).toBeDefined();
   });
 
   test('branch filter', async () => {
@@ -391,7 +441,6 @@ describe('recall command', () => {
   test('format recall errors', () => {
     const errors: RecallError[] = [
       { type: 'empty_query' },
-      { type: 'gemini_unavailable' },
       { type: 'embedding_failed', message: 'Network error' },
       { type: 'search_failed', message: 'DB error' },
     ];

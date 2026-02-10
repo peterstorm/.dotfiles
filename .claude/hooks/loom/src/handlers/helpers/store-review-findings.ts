@@ -16,11 +16,15 @@ export function parseFindings(stdin: string): { critical: string[]; advisory: st
   for (const line of stdin.split("\n")) {
     const critMatch = line.match(/^CRITICAL:\s*(.*)/);
     if (critMatch) {
-      critical.push(critMatch[1]);
+      const text = critMatch[1].trim();
+      if (text !== '') critical.push(text);
       continue;
     }
     const advMatch = line.match(/^ADVISORY:\s*(.*)/);
-    if (advMatch) advisory.push(advMatch[1]);
+    if (advMatch) {
+      const text = advMatch[1].trim();
+      if (text !== '') advisory.push(text);
+    }
   }
 
   return { critical, advisory };

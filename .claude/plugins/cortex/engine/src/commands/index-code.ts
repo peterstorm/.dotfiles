@@ -19,9 +19,9 @@
 import { randomUUID } from 'crypto';
 import type { Database } from 'bun:sqlite';
 import type { Memory } from '../core/types.js';
-import { createMemory, createEdge } from '../core/types.js';
+import { createMemory } from '../core/types.js';
 import { buildEmbeddingText } from '../core/extraction.js';
-import { insertMemory, insertEdge, updateMemory, routeToDatabase, getActiveMemories } from '../infra/db.js';
+import { insertMemory, insertEdge, updateMemory, routeToDatabase, getActiveCodeMemoriesByFilePath, getActiveProseMemoriesByFilePath } from '../infra/db.js';
 import { embedTexts, isGeminiAvailable } from '../infra/gemini-embed.ts';
 import { readFileSync } from 'fs';
 
@@ -42,11 +42,9 @@ export interface IndexCodeArgs {
   readonly sessionId: string;
 }
 
-export interface ParseResult {
-  readonly success: boolean;
-  readonly error?: string;
-  readonly args?: IndexCodeArgs;
-}
+export type ParseResult =
+  | { readonly success: true; readonly args: IndexCodeArgs }
+  | { readonly success: false; readonly error: string };
 
 /**
  * Parse args array into IndexCodeArgs
@@ -194,14 +192,14 @@ export function buildCodeSourceContext(
 
 /**
  * Build prose memory (code_description with embedding)
- * Pure function
+ * Pure function — id and timestamp injected from caller
  */
 export function buildProseMemory(
   args: IndexCodeArgs,
-  embedding: Float64Array | null
+  embedding: Float64Array | null,
+  id: string,
+  now: string
 ): Memory {
-  const id = randomUUID();
-  const now = new Date().toISOString();
 
   return createMemory({
     id,
@@ -228,14 +226,14 @@ export function buildProseMemory(
 
 /**
  * Build code memory (raw code, NO embedding per FR-053)
- * Pure function
+ * Pure function — id and timestamp injected from caller
  */
 export function buildCodeMemory(
   args: IndexCodeArgs,
-  codeContent: string
+  codeContent: string,
+  id: string,
+  now: string
 ): Memory {
-  const id = randomUUID();
-  const now = new Date().toISOString();
 
   // Summary is first 200 chars of code
   const codeSummary = codeContent.length <= 200
@@ -350,8 +348,8 @@ export async function executeIndexCode(
   // Parse args (pure)
   const parseResult = parseIndexCodeArgs(argv, sessionId);
 
-  if (!parseResult.success || !parseResult.args) {
-    return formatErrorResult(parseResult.error ?? 'unknown parse error');
+  if (!parseResult.success) {
+    return formatErrorResult(parseResult.error);
   }
 
   const args = parseResult.args;
@@ -401,84 +399,83 @@ export async function executeIndexCode(
     }
   }
 
-  // Build memories (pure)
-  const proseMemory = buildProseMemory(args, proseEmbedding);
-  const codeMemory = buildCodeMemory(args, codeContent);
+  // Build memories (pure — ids and timestamps generated at I/O boundary)
+  const now = new Date().toISOString();
+  const proseMemory = buildProseMemory(args, proseEmbedding, randomUUID(), now);
+  const codeMemory = buildCodeMemory(args, codeContent, randomUUID(), now);
 
   // Route to appropriate database
   const targetDb = routeToDatabase(args.scope, projectDb, globalDb);
 
-  // FR-052: Re-indexing support - find existing code memories for this file
-  let matchingCodeMemories: Memory[] = [];
+  // FR-052: Re-indexing support - find existing code AND prose memories for this file
+  let matchingCodeMemories: readonly Memory[] = [];
+  let matchingProseMemories: readonly Memory[] = [];
   try {
-    // Get all active code memories and filter manually
-    // (Avoid FTS5 search due to special characters in file paths)
-    const allMemories = getActiveMemories(targetDb);
-
-    // Filter for code memories with matching file_path in source_context
-    matchingCodeMemories = allMemories.filter((mem) => {
-      if (mem.memory_type !== 'code') return false;
-      try {
-        const context = JSON.parse(mem.source_context);
-        return context.file_path === args.filePath;
-      } catch {
-        return false;
-      }
-    });
+    matchingCodeMemories = getActiveCodeMemoriesByFilePath(targetDb, args.filePath);
+    matchingProseMemories = getActiveProseMemoriesByFilePath(targetDb, args.filePath);
   } catch (err) {
     // Non-fatal: continue without superseding
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`Warning: failed to find existing code memories: ${message}`);
+    console.error(`Warning: failed to find existing memories: ${message}`);
   }
 
-  // Insert memories first (I/O)
-  try {
-    insertMemory(targetDb, proseMemory);
-    insertMemory(targetDb, codeMemory);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return formatErrorResult(`failed to insert memories: ${message}`);
-  }
-
-  // Now mark old versions as superseded (after new memories exist in DB)
+  // All DB writes in a single transaction for atomicity
   let supersededCount = 0;
   try {
-    for (const oldMemory of matchingCodeMemories) {
-      if (oldMemory.status === 'active') {
-        updateMemory(targetDb, oldMemory.id, { status: 'superseded' });
-        supersededCount++;
+    const tx = targetDb.transaction(() => {
+      // Insert memories
+      insertMemory(targetDb, proseMemory);
+      insertMemory(targetDb, codeMemory);
 
-        // Create supersedes edge: new code -> old code
-        insertEdge(targetDb, {
-          source_id: codeMemory.id,
-          target_id: oldMemory.id,
-          relation_type: 'supersedes',
-          strength: 1.0,
-          bidirectional: false,
-          status: 'active',
-        });
+      // Supersede old code memories
+      for (const oldMemory of matchingCodeMemories) {
+        if (oldMemory.status === 'active') {
+          updateMemory(targetDb, oldMemory.id, { status: 'superseded' });
+          supersededCount++;
+
+          insertEdge(targetDb, {
+            source_id: codeMemory.id,
+            target_id: oldMemory.id,
+            relation_type: 'supersedes',
+            strength: 1.0,
+            bidirectional: false,
+            status: 'active',
+          });
+        }
       }
-    }
-  } catch (err) {
-    // Non-fatal: continue without superseding
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`Warning: failed to supersede old versions: ${message}`);
-  }
 
-  // Link via source_of edge (I/O)
-  // FR-050: prose (code_description) -> code (raw)
-  try {
-    insertEdge(targetDb, {
-      source_id: proseMemory.id,
-      target_id: codeMemory.id,
-      relation_type: 'source_of',
-      strength: 1.0,
-      bidirectional: false,
-      status: 'active',
+      // Supersede old prose (code_description) memories
+      for (const oldProse of matchingProseMemories) {
+        if (oldProse.status === 'active') {
+          updateMemory(targetDb, oldProse.id, { status: 'superseded' });
+          supersededCount++;
+
+          insertEdge(targetDb, {
+            source_id: proseMemory.id,
+            target_id: oldProse.id,
+            relation_type: 'supersedes',
+            strength: 1.0,
+            bidirectional: false,
+            status: 'active',
+          });
+        }
+      }
+
+      // FR-050: Link prose -> code via source_of edge
+      insertEdge(targetDb, {
+        source_id: proseMemory.id,
+        target_id: codeMemory.id,
+        relation_type: 'source_of',
+        strength: 1.0,
+        bidirectional: false,
+        status: 'active',
+      });
     });
+
+    tx();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return formatErrorResult(`failed to create source_of edge: ${message}`);
+    return formatErrorResult(`failed to write memories: ${message}`);
   }
 
   // Format success result (pure)

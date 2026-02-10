@@ -13,9 +13,9 @@ import type { Memory } from '../core/types.js';
 import type { RankedMemory } from '../core/surface.js';
 import { getActiveMemories, getAllEdges } from '../infra/db.js';
 import { computeAllCentrality } from '../core/graph.js';
-import { selectForSurface, computeRank } from '../core/ranking.js';
+import { selectForSurface } from '../core/ranking.js';
 import { generateSurface, wrapInMarkers } from '../core/surface.js';
-import { writeSurface, writeTelemetry, withPidLock } from '../infra/filesystem.js';
+import { writeSurface, writeTelemetry } from '../infra/filesystem.js';
 import { getCurrentBranch } from '../infra/git-context.js';
 
 export interface GenerateOptions {
@@ -43,13 +43,12 @@ export interface GenerateResult {
  * 2. getActiveMemories from both DBs (I/O)
  * 3. getAllEdges for centrality (I/O)
  * 4. computeAllCentrality (pure)
- * 5. selectForSurface (pure)
- * 6. Convert to RankedMemory (pure)
- * 7. generateSurface (pure)
- * 8. wrapInMarkers (pure)
- * 9. writeSurface with PID lock (I/O)
- * 10. write cache file (I/O)
- * 11. writeTelemetry (I/O)
+ * 5. selectForSurface → RankedMemory[] (pure, single ranking pass)
+ * 6. generateSurface (pure)
+ * 7. wrapInMarkers (pure)
+ * 8. writeSurface with PID lock (I/O)
+ * 9. write cache file (I/O)
+ * 10. writeTelemetry (I/O)
  */
 export function runGenerate(options: GenerateOptions): GenerateResult {
   const startTime = Date.now();
@@ -81,27 +80,11 @@ export function runGenerate(options: GenerateOptions): GenerateResult {
     centrality: centralityMap.get(mem.id) ?? 0,
   }));
 
-  // Pure: Select memories for surface with branch boost
-  const selected = selectForSurface(memoriesWithCentrality, {
+  // Pure: Select and rank memories for surface with branch boost
+  const rankedMemories: RankedMemory[] = selectForSurface(memoriesWithCentrality, {
     currentBranch: branch,
     targetTokens: 400,
     maxTokens: 550,
-  });
-
-  // Compute maxAccessLog for ranking
-  const maxAccessLog = Math.max(
-    ...allMemories.map(m => Math.log(m.access_count + 1)),
-    1
-  );
-
-  // Convert to RankedMemory with scores
-  const rankedMemories: RankedMemory[] = selected.map(mem => {
-    const centrality = centralityMap.get(mem.id) ?? 0;
-    const rank = computeRank(
-      { ...mem, centrality },
-      { maxAccessLog, currentBranch: branch }
-    );
-    return { ...mem, rank };
   });
 
   // Pure: Generate surface markdown
@@ -123,15 +106,15 @@ export function runGenerate(options: GenerateOptions): GenerateResult {
     last_generation: new Date().toISOString(),
     branch,
     memory_count: allMemories.length,
-    selected_count: selected.length,
+    selected_count: rankedMemories.length,
     duration_ms: durationMs,
   });
 
   return {
     memoryCount: allMemories.length,
-    selectedCount: selected.length,
+    selectedCount: rankedMemories.length,
     branch,
-    cached: true,
+    cached: false, // Fresh generation, not served from cache
     durationMs,
   };
 }
@@ -210,4 +193,22 @@ function writeCache(cacheDir: string, branch: string, cwd: string, surface: stri
 function computeCacheKey(branch: string, cwd: string): string {
   const input = `${branch}:${cwd}`;
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, 16);
+}
+
+/**
+ * Invalidate all cached surfaces (FR-022).
+ * Called after extraction inserts new memories, since any branch surface may be stale.
+ */
+export function invalidateSurfaceCache(cwd: string, cachePath?: string): void {
+  const cacheDir = cachePath ?? path.join(cwd, '.memory', 'surface-cache');
+  try {
+    const files = fs.readdirSync(cacheDir);
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        fs.unlinkSync(path.join(cacheDir, file));
+      }
+    }
+  } catch {
+    // Cache dir doesn't exist or already empty — no-op
+  }
 }

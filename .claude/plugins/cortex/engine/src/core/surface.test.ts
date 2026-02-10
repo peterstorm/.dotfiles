@@ -395,8 +395,8 @@ describe('generateSurface', () => {
     expect(surface).toContain('*Tags: important, frontend*');
   });
 
-  it('respects category budgets', () => {
-    // Create 30 architecture memories (budget is 25)
+  it('respects category budgets via allocateBudget', () => {
+    // Create 30 architecture memories (budget is 25 lines)
     const memories = Array.from({ length: 30 }, (_, i) =>
       createMemory({
         id: `arch-${i}`,
@@ -406,11 +406,10 @@ describe('generateSurface', () => {
       })
     );
 
-    const surface = generateSurface(memories, 'main', null, { allowOverflow: false });
+    // Budget enforcement lives in allocateBudget, not generateSurface
+    const allocated = allocateBudget(memories, CATEGORY_BUDGETS, false);
 
-    // Count bullet points in Architecture section
-    const lines = surface.split('\n').filter(line => line.startsWith('- Architecture'));
-    expect(lines.length).toBeLessThanOrEqual(25); // respects budget
+    expect(allocated.length).toBeLessThanOrEqual(25); // respects budget
   });
 
   it('truncates when token limit exceeded with no overflow', () => {

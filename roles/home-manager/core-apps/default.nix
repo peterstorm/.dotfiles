@@ -33,7 +33,6 @@
       sus = "systemctl suspend";
       warpc = "warp-cli connect";
       warpd = "warp-cli disconnect";
-      claude = "claude --plugin-dir ~/.claude/plugins/obsidian";
     };
   };
 

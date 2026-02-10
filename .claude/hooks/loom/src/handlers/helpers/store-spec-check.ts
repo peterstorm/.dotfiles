@@ -18,11 +18,11 @@ const handler: HookHandler = async (stdin) => {
 
   for (const line of stdin.split("\n")) {
     const critMatch = line.match(/^CRITICAL:\s*(.*)/);
-    if (critMatch) { critical.push(critMatch[1]); continue; }
+    if (critMatch) { const t = critMatch[1].trim(); if (t !== '') critical.push(t); continue; }
     const highMatch = line.match(/^HIGH:\s*(.*)/);
-    if (highMatch) { high.push(highMatch[1]); continue; }
+    if (highMatch) { const t = highMatch[1].trim(); if (t !== '') high.push(t); continue; }
     const medMatch = line.match(/^MEDIUM:\s*(.*)/);
-    if (medMatch) medium.push(medMatch[1]);
+    if (medMatch) { const t = medMatch[1].trim(); if (t !== '') medium.push(t); }
   }
 
   const critCount = stdin.match(/SPEC_CHECK_CRITICAL_COUNT:\s*(\d+)/);

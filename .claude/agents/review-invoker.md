@@ -1,6 +1,7 @@
 ---
 name: review-invoker
 description: Invokes /review-pr skill for task reviews with full tool access
+model: sonnet
 tools:
   - Skill
   - Bash

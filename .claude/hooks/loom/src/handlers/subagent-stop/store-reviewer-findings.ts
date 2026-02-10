@@ -10,6 +10,7 @@ import type { HookHandler, SubagentStopInput, TaskGraph, ReviewStatus } from "..
 import { StateManager } from "../../state-manager";
 import { parseTranscript } from "../../parsers/parse-transcript";
 import { extractTaskId } from "../../utils/extract-task-id";
+import { readTranscriptWithRetry } from "../../utils/read-transcript-with-retry";
 
 interface ParsedFindings {
   critical: string[];
@@ -71,20 +72,25 @@ export function parseLegacyFindings(output: string): ParsedFindings {
 const handler: HookHandler = async (stdin) => {
   const input: SubagentStopInput = JSON.parse(stdin);
 
-  if (input.agent_type !== "review-invoker") return { kind: "passthrough" };
+  if (input.agent_type !== "review-invoker") {
+    return { kind: "passthrough" };
+  }
 
   const mgr = StateManager.fromSession(input.session_id);
-  if (!mgr) return { kind: "passthrough" };
+  if (!mgr) {
+    return { kind: "passthrough" };
+  }
 
-  const rawPath = input.agent_transcript_path?.replace(/^~/, process.env.HOME ?? "~") ?? "";
-  const transcriptContent = rawPath && existsSync(rawPath)
-    ? readFileSync(rawPath, "utf-8")
-    : "";
-  const transcript = parseTranscript(transcriptContent);
-  if (!transcript) return { kind: "passthrough" };
+  const rawPath = input.agent_transcript_path ?? "";
+  const transcript = await readTranscriptWithRetry(rawPath, /CRITICAL_COUNT:\s*\d+/);
+  if (!transcript) {
+    return { kind: "passthrough" };
+  }
 
   const taskId = extractTaskId(transcript);
-  if (!taskId) return { kind: "passthrough" };
+  if (!taskId) {
+    return { kind: "passthrough" };
+  }
 
   // Try structured, then legacy
   const findings = parseMachineSummary(transcript) ?? parseLegacyFindings(transcript);

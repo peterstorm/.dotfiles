@@ -10,6 +10,8 @@
     
     # Organization token
     (util.sops.commonSecret "org-token" "github-org.yaml" "token")
+    # Gemini API key
+    (util.sops.userSecret "gemini-api-key" "gemini.yaml" "api_key")
   ]
   
   # 2. Define templates (these generate files with actual secret values)
@@ -17,8 +19,9 @@
     # Environment file template for development
     (util.sops.envTemplate "dev-env" {
       GITHUB_TOKEN = "github-token";
-      GITHUB_EMAIL = "github-email"; 
+      GITHUB_EMAIL = "github-email";
       ORG_TOKEN = "org-token";
+      GEMINI_API_KEY = "gemini-api-key";
     })
     
     # Git credentials template
@@ -64,6 +67,11 @@
       echo "The secrets are NOT exposed in the nix store."
     '';
     home.file."bin/test-secure-secrets".executable = true;
+
+    # Source dev-env (includes GEMINI_API_KEY, GitHub tokens) on shell init
+    programs.bash.initExtra = ''
+      source ${config.sops.templates."dev-env".path}
+    '';
 
     # Git configuration using the template
     programs.git = {

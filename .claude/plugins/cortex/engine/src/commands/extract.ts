@@ -52,6 +52,7 @@ import {
 import { extractMemories, isGeminiLlmAvailable } from '../infra/gemini-llm.js';
 import { getGitContext } from '../infra/git-context.js';
 import { runLifecycle } from './lifecycle.js';
+import { invalidateSurfaceCache } from './generate.js';
 
 // ============================================================================
 // RESULT TYPES
@@ -222,6 +223,17 @@ export async function executeExtract(
       const message = err instanceof Error ? err.message : String(err);
       logError(`Lifecycle failed: ${message}`);
       // Non-fatal - continue
+    }
+
+    // I/O: Invalidate surface cache since new memories were extracted (FR-022)
+    if (insertedMemories.length > 0) {
+      try {
+        invalidateSurfaceCache(input.cwd);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logError(`Cache invalidation failed: ${message}`);
+        // Non-fatal - continue
+      }
     }
 
     return {

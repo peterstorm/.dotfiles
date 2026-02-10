@@ -6,7 +6,7 @@ import * as os from 'node:os';
 import { randomUUID } from 'crypto';
 import { openDatabase, insertMemory, insertEdge } from '../infra/db.js';
 import { createMemory, createEdge } from '../core/types.js';
-import { runGenerate, loadCachedSurface } from './generate.js';
+import { runGenerate, loadCachedSurface, invalidateSurfaceCache } from './generate.js';
 
 describe('generate command', () => {
   let tempDir: string;
@@ -84,7 +84,7 @@ describe('generate command', () => {
     expect(result.memoryCount).toBe(2);
     expect(result.selectedCount).toBeGreaterThan(0);
     expect(result.branch).toBe('main');
-    expect(result.cached).toBe(true);
+    expect(result.cached).toBe(false); // Fresh generation, not from cache
     expect(result.durationMs).toBeGreaterThan(0);
 
     // Assert: Surface file written
@@ -482,4 +482,45 @@ describe('generate command', () => {
     expect(content).not.toContain('Foo function');
     expect(content).toContain('Architecture principle');
   });
+
+  test('invalidateSurfaceCache removes all cache files (FR-022)', () => {
+    // Arrange: Generate multiple cache files
+    const mem1 = createMemory({
+      id: randomUUID(),
+      content: 'Memory 1',
+      summary: 'Mem 1',
+      memory_type: 'decision',
+      scope: 'project',
+      confidence: 0.8,
+      priority: 5,
+      source_type: 'extraction',
+      source_session: 'session-1',
+      source_context: JSON.stringify({ branch: 'main', recent_commits: [], changed_files: [] }),
+    });
+
+    insertMemory(projectDb, mem1);
+    runGenerate({ projectDb, globalDb, cwd: tempDir });
+
+    // Verify cache exists
+    const cacheDir = path.join(tempDir, '.memory', 'surface-cache');
+    expect(fs.existsSync(cacheDir)).toBe(true);
+    const cacheFilesBefore = fs.readdirSync(cacheDir);
+    expect(cacheFilesBefore.length).toBe(1);
+
+    // Act: Invalidate cache
+    invalidateSurfaceCache(tempDir);
+
+    // Assert: Cache files removed
+    const cacheFilesAfter = fs.readdirSync(cacheDir);
+    expect(cacheFilesAfter.length).toBe(0);
+  });
+
+  test('invalidateSurfaceCache handles missing cache directory gracefully', () => {
+    // Arrange: No cache directory exists
+    const nonExistentDir = path.join(tempDir, 'nonexistent');
+
+    // Act & Assert: Should not throw
+    expect(() => invalidateSurfaceCache(nonExistentDir)).not.toThrow();
+  });
 });
+

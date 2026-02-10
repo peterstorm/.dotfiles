@@ -1,6 +1,7 @@
 ---
 name: spec-check-invoker
 description: Invokes /spec-check skill for wave-gate spec alignment verification
+model: sonnet
 tools:
   - Skill
   - Bash

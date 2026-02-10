@@ -242,3 +242,4 @@ describe('extract command - core logic', () => {
     });
   });
 });
+

@@ -407,6 +407,89 @@ export function getActiveMemories(db: Database): readonly Memory[] {
 }
 
 /**
+ * Get active code memories matching a file path in source_context.
+ * Uses SQL LIKE on source_context JSON to avoid full table scan.
+ */
+export function getActiveCodeMemoriesByFilePath(
+  db: Database,
+  filePath: string
+): readonly Memory[] {
+  // Escape LIKE wildcards and double quotes in file path
+  const escaped = filePath.replace(/"/g, '\\"').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const pattern = `%"file_path":"${escaped}"%`;
+  const stmt = db.prepare(`
+    SELECT * FROM memories
+    WHERE status = 'active'
+      AND memory_type = 'code'
+      AND source_context LIKE ? ESCAPE '\\'
+  `);
+  const rows = stmt.all(pattern) as any[];
+
+  return rows.map(row => createMemory({
+    id: row.id,
+    content: row.content,
+    summary: row.summary,
+    memory_type: row.memory_type,
+    scope: row.scope,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
+    local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
+    confidence: row.confidence,
+    priority: row.priority,
+    pinned: row.pinned === 1,
+    source_type: row.source_type,
+    source_session: row.source_session,
+    source_context: row.source_context,
+    tags: JSON.parse(row.tags),
+    access_count: row.access_count,
+    last_accessed_at: row.last_accessed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    status: row.status,
+  }));
+}
+
+/**
+ * Get active code_description (prose) memories matching a file path in source_context.
+ * Used for superseding old prose memories on re-index.
+ */
+export function getActiveProseMemoriesByFilePath(
+  db: Database,
+  filePath: string
+): readonly Memory[] {
+  const escaped = filePath.replace(/"/g, '\\"').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const pattern = `%"file_path":"${escaped}"%`;
+  const stmt = db.prepare(`
+    SELECT * FROM memories
+    WHERE status = 'active'
+      AND memory_type = 'code_description'
+      AND source_context LIKE ? ESCAPE '\\'
+  `);
+  const rows = stmt.all(pattern) as any[];
+
+  return rows.map(row => createMemory({
+    id: row.id,
+    content: row.content,
+    summary: row.summary,
+    memory_type: row.memory_type,
+    scope: row.scope,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
+    local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
+    confidence: row.confidence,
+    priority: row.priority,
+    pinned: row.pinned === 1,
+    source_type: row.source_type,
+    source_session: row.source_session,
+    source_context: row.source_context,
+    tags: JSON.parse(row.tags),
+    access_count: row.access_count,
+    last_accessed_at: row.last_accessed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    status: row.status,
+  }));
+}
+
+/**
  * Get all archived memories (status='archived')
  * I/O: Reads from database
  *
@@ -763,8 +846,22 @@ function validatePath(path: string): void {
  * @returns Path to checkpoint file
  */
 export function createCheckpoint(db: Database): string {
+  const filename = db.filename;
+
+  // Guard: :memory: or empty filename → use temp directory
+  if (!filename || filename === ':memory:' || filename === '') {
+    const os = require('node:os');
+    const path = require('node:path');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const checkpointPath = path.join(os.tmpdir(), `cortex-checkpoint-${timestamp}.db`);
+
+    validatePath(checkpointPath);
+    db.run(`VACUUM INTO '${checkpointPath}'`);
+    return checkpointPath;
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const checkpointPath = `${db.filename}.checkpoint-${timestamp}`;
+  const checkpointPath = `${filename}.checkpoint-${timestamp}`;
 
   // Validate path to prevent SQL injection
   validatePath(checkpointPath);

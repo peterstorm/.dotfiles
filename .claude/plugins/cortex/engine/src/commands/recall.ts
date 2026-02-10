@@ -1,16 +1,17 @@
 /**
- * Recall command - Semantic search via Voyage OR FTS5 fallback
+ * Recall command - Semantic search via Gemini embeddings OR FTS5 fallback
  * Orchestrates search across project+global DBs, follows graph edges, updates access stats
  */
 
 import type { Database } from 'bun:sqlite';
-import type { SearchResult, Memory } from '../core/types.js';
+import type { SearchResult, Memory, Edge } from '../core/types.js';
 import { isGeminiAvailable, embedTexts } from '../infra/gemini-embed.ts';
 import {
   searchByEmbedding,
   searchByKeyword,
   getEdgesForMemory,
   getMemoriesByIds,
+  getAllEdges,
   updateMemory,
 } from '../infra/db.js';
 import { mergeResults } from '../core/ranking.js';
@@ -23,6 +24,7 @@ export type RecallOptions = {
   readonly limit?: number; // Default 10
   readonly keyword?: boolean; // Force keyword search (default false)
   readonly geminiApiKey?: string; // Gemini API key
+  readonly projectName?: string; // Project name for embedding prefix (FR-039)
 };
 
 // Command result
@@ -34,18 +36,20 @@ export type RecallResult = {
 // Error result (discriminated union)
 export type RecallError =
   | { type: 'empty_query' }
-  | { type: 'gemini_unavailable' }
   | { type: 'embedding_failed'; message: string }
   | { type: 'search_failed'; message: string };
 
 /**
- * Parse query text with metadata prefix for embedding
- * Pure function - builds embedding text for semantic search
+ * Build query embedding text with project prefix for aligned search (FR-039)
+ * Pure function — prefixes query with [query] [project:name] to align with memory
+ * embeddings that use [memory_type] [project:name] prefix.
  */
-function buildQueryEmbeddingText(query: string): string {
-  // Query embeddings don't need memory_type or project prefix
-  // Just return the query text as-is for semantic search
-  return query.trim();
+function buildQueryEmbeddingText(query: string, projectName?: string): string {
+  const trimmed = query.trim();
+  if (projectName) {
+    return `[query] [project:${projectName}] ${trimmed}`;
+  }
+  return `[query] ${trimmed}`;
 }
 
 /**
@@ -97,23 +101,9 @@ function followSourceOfEdges(
  */
 function getRelatedMemories(
   db: Database,
-  memoryId: string
+  memoryId: string,
+  allEdges: readonly Edge[]
 ): readonly Memory[] {
-  // I/O: Get ALL edges in the database (not just for this memory)
-  const stmt = db.prepare('SELECT * FROM edges');
-  const rows = stmt.all() as any[];
-
-  const allEdges = rows.map(row => ({
-    id: row.id,
-    source_id: row.source_id,
-    target_id: row.target_id,
-    relation_type: row.relation_type,
-    strength: row.strength,
-    bidirectional: row.bidirectional === 1,
-    status: row.status,
-    created_at: row.created_at,
-  }));
-
   // Pure: Traverse graph to depth 2
   const traversalResults = traverseGraph(memoryId, allEdges, {
     maxDepth: 2,
@@ -157,9 +147,7 @@ export async function executeRecall(
   projectDb: Database,
   globalDb: Database,
   options: RecallOptions
-):
-  | Promise<{ success: true; result: RecallResult }>
-  | Promise<{ success: false; error: RecallError }> {
+): Promise<{ success: true; result: RecallResult } | { success: false; error: RecallError }> {
   const query = options.query.trim();
   const limit = options.limit ?? 10;
   const forceKeyword = options.keyword ?? false;
@@ -177,20 +165,25 @@ export async function executeRecall(
   let searchMethod: 'semantic' | 'keyword';
 
   // Determine search method
-  const useVoyage =
+  const useSemantic =
     !forceKeyword && isGeminiAvailable(options.geminiApiKey);
 
-  if (useVoyage) {
-    // Semantic search via Voyage
+  if (useSemantic) {
+    // Semantic search via Gemini embeddings
     try {
-      // Build embedding text with metadata prefix
-      const embeddingText = buildQueryEmbeddingText(query);
+      // Build embedding text with project prefix (FR-039)
+      const embeddingText = buildQueryEmbeddingText(query, options.projectName);
 
       // I/O: Embed query via Gemini
-      const [queryEmbedding] = await embedTexts(
+      const embeddings = await embedTexts(
         [embeddingText],
         options.geminiApiKey!
       );
+
+      const queryEmbedding = embeddings[0];
+      if (!queryEmbedding) {
+        return { success: false, error: { type: 'embedding_failed', message: 'No embedding returned' } };
+      }
 
       // I/O: Search both databases
       projectResults = searchByEmbedding(projectDb, queryEmbedding, limit);
@@ -249,17 +242,24 @@ export async function executeRecall(
     mergedResults = filterByBranch(mergedResults, options.branch);
   }
 
+  // Pre-fetch all edges once per DB (avoid per-result queries).
+  // NOTE: Loads entire edge table into memory — acceptable for current scale,
+  // but should be revisited if edge count exceeds ~10K per DB.
+  const projectEdges = getAllEdges(projectDb);
+  const globalEdgesCache = getAllEdges(globalDb);
+
   // For top results: follow source_of edges and get related memories
   const enrichedResults: SearchResult[] = [];
 
   for (const result of mergedResults) {
     const db = result.source === 'project' ? projectDb : globalDb;
+    const cachedEdges = result.source === 'project' ? projectEdges : globalEdgesCache;
 
     // Follow source_of edges to get linked code blocks
     const linkedCode = followSourceOfEdges(db, result.memory);
 
     // Get related memories via graph traversal (depth 2)
-    const related = getRelatedMemories(db, result.memory.id);
+    const related = getRelatedMemories(db, result.memory.id, cachedEdges);
 
     // Merge linked code and related (deduplicate by ID)
     const allRelated = new Map<string, Memory>();
@@ -313,8 +313,6 @@ export function formatRecallError(error: RecallError): string {
   switch (error.type) {
     case 'empty_query':
       return 'Query text is required and must not be empty.';
-    case 'gemini_unavailable':
-      return 'Gemini API is unavailable. Use --keyword flag for FTS5 search.';
     case 'embedding_failed':
       return `Embedding failed: ${error.message}`;
     case 'search_failed':

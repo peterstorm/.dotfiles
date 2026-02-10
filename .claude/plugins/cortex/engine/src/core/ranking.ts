@@ -1,19 +1,8 @@
 import type { Memory, MemoryType, SearchResult } from './types.js';
+import { CATEGORY_BUDGETS, estimateTokens } from './surface.js';
 
 // Memory with optional centrality (computed at runtime by caller)
 type MemoryWithCentrality = Memory & { readonly centrality?: number };
-
-// Per-category line budgets (FR-016)
-const CATEGORY_BUDGETS: Record<MemoryType, number> = {
-  architecture: 25,
-  decision: 25,
-  pattern: 25,
-  gotcha: 20,
-  progress: 30,
-  context: 15,
-  code_description: 10,
-  code: 0  // Raw code not included in push surface
-};
 
 // FR-015: Composite ranking formula
 // rank = (confidence * 0.5) + (priority/10 * 0.2) + (centrality * 0.15) + (log(access+1)/maxLog * 0.15)
@@ -43,11 +32,10 @@ export function computeRank(
   if (currentBranch) {
     try {
       const context = JSON.parse(memory.source_context);
-      if (context.branch === currentBranch) {
+      if (typeof context === 'object' && context !== null && context.branch === currentBranch) {
         rank += branchBoost;
       }
-    } catch (e) {
-      if (!(e instanceof SyntaxError)) throw e;
+    } catch {
       // Invalid JSON in source_context, no boost
     }
   }
@@ -64,7 +52,7 @@ export function selectForSurface(
     readonly targetTokens?: number;
     readonly maxTokens?: number;
   }
-): readonly Memory[] {
+): readonly (Memory & { readonly rank: number })[] {
   const { currentBranch, targetTokens = 400, maxTokens = 550 } = options;
 
   // Filter out code type (not included in surface)
@@ -150,7 +138,7 @@ export function selectForSurface(
   // Re-sort final selection by rank (fix for overflow pass ordering)
   selected.sort((a, b) => b.rank - a.rank);
 
-  return selected.map(s => s.memory);
+  return selected.map(s => ({ ...s.memory, rank: s.rank }));
 }
 
 // FR-015: Merge project and global search results, deduplicate, re-rank
@@ -184,13 +172,6 @@ export function mergeResults(
 
   // Return top N
   return merged.slice(0, limit);
-}
-
-// Helper: estimate tokens (word-based approximation)
-// Rough heuristic: 1 token ≈ 0.75 words
-function estimateTokens(text: string): number {
-  const words = text.trim().split(/\s+/).length;
-  return Math.ceil(words * 0.75);
 }
 
 // Helper: estimate lines (newline count + 1)

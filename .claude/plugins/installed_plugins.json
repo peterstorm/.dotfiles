@@ -113,6 +113,15 @@
         "lastUpdated": "2026-02-08T14:31:31.162Z",
         "gitCommitSha": "7059b231f3e4f60132825c2fdc47c16069eb6f92"
       }
+    ],
+    "cortex@local": [
+      {
+        "scope": "user",
+        "installPath": "/home/peterstorm/.claude/plugins/cortex",
+        "version": "0.1.0",
+        "installedAt": "2026-02-10T22:36:03.000Z",
+        "lastUpdated": "2026-02-10T22:36:03.000Z"
+      }
     ]
   }
 }

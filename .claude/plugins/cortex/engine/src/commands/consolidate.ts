@@ -157,12 +157,11 @@ export function buildMergedMemory(
   pair: MemoryPair,
   mergedSummary: string,
   mergedContent: string,
-  sessionId: string
+  sessionId: string,
+  id: string,
+  now: string
 ): Memory {
   const { memoryA, memoryB } = pair;
-
-  const id = randomUUID();
-  const now = new Date().toISOString();
 
   // Merge strategy
   const priority = Math.max(memoryA.priority, memoryB.priority);
@@ -282,36 +281,41 @@ export function mergePair(
   mergedContent: string,
   sessionId: string
 ): string {
-  // Pure: Build merged memory
-  const mergedMemory = buildMergedMemory(pair, mergedSummary, mergedContent, sessionId);
+  // Pure: Build merged memory (id + timestamp from I/O boundary)
+  const mergedMemory = buildMergedMemory(
+    pair, mergedSummary, mergedContent, sessionId,
+    randomUUID(), new Date().toISOString()
+  );
 
-  // I/O: Insert merged memory
-  insertMemory(db, mergedMemory);
+  // I/O: All DB writes in a single transaction for atomicity
+  const tx = db.transaction(() => {
+    insertMemory(db, mergedMemory);
 
-  // I/O: Create supersedes edges (FR-076)
-  // merged -> supersedes -> memoryA
-  insertEdge(db, {
-    source_id: mergedMemory.id,
-    target_id: pair.memoryA.id,
-    relation_type: 'supersedes',
-    strength: 1.0,
-    bidirectional: false,
-    status: 'active',
+    // Create supersedes edges (FR-076)
+    insertEdge(db, {
+      source_id: mergedMemory.id,
+      target_id: pair.memoryA.id,
+      relation_type: 'supersedes',
+      strength: 1.0,
+      bidirectional: false,
+      status: 'active',
+    });
+
+    insertEdge(db, {
+      source_id: mergedMemory.id,
+      target_id: pair.memoryB.id,
+      relation_type: 'supersedes',
+      strength: 1.0,
+      bidirectional: false,
+      status: 'active',
+    });
+
+    // Mark old memories as superseded (FR-077)
+    updateMemory(db, pair.memoryA.id, { status: 'superseded' });
+    updateMemory(db, pair.memoryB.id, { status: 'superseded' });
   });
 
-  // merged -> supersedes -> memoryB
-  insertEdge(db, {
-    source_id: mergedMemory.id,
-    target_id: pair.memoryB.id,
-    relation_type: 'supersedes',
-    strength: 1.0,
-    bidirectional: false,
-    status: 'active',
-  });
-
-  // I/O: Mark old memories as superseded (FR-077)
-  updateMemory(db, pair.memoryA.id, { status: 'superseded' });
-  updateMemory(db, pair.memoryB.id, { status: 'superseded' });
+  tx();
 
   return mergedMemory.id;
 }
@@ -339,7 +343,7 @@ export function executeConsolidate(
   options: ConsolidateOptions = {}
 ): ConsolidateResult {
   const threshold = options.threshold ?? 0.5;
-  const maxPasses = options.maxPasses ?? 3;
+  const maxPasses = options.maxPasses ?? 3; // FR-081: default 3, enforced below
   const sessionId = options.sessionId ?? 'consolidate-session';
 
   // FR-079: Create checkpoint before consolidation
@@ -356,26 +360,20 @@ export function executeConsolidate(
     let totalPairsSkipped = 0;
     let totalPairsFound = 0;
 
-    // FR-081: Max 3 passes per trigger to prevent infinite loops
+    // FR-081: Cap detection passes to prevent infinite loops.
+    // Each pass detects pairs; merging is human-only (FR-082).
+    // Currently single-pass since no auto-merge, but the guard
+    // ensures safety if iterative merge logic is added later.
     for (let pass = 0; pass < maxPasses; pass++) {
-      // I/O: Fetch active memories (refreshed each pass)
       const activeMemories = getActiveMemories(db);
-
-      // Pure: Find similar pairs
       const pairs = findSimilarPairs(activeMemories, threshold);
 
-      if (pairs.length === 0) {
-        // No more pairs to process
-        break;
-      }
-
       totalPairsFound += pairs.length;
-
-      // In a real implementation, each pair would be presented for human review
-      // For this function, we skip all pairs (FR-082: human-only)
       totalPairsSkipped += pairs.length;
 
-      // Break early since we're not auto-merging
+      // FR-082: human-only — pairs returned for review, not auto-merged.
+      // No merges happen here, so subsequent passes would find same pairs.
+      // Break after first pass since results won't change without merges.
       break;
     }
 

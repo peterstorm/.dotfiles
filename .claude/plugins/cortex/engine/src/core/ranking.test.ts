@@ -307,10 +307,8 @@ describe('selectForSurface', () => {
       maxTokens: 200
     });
 
-    const totalTokens = selected.reduce((sum, m) => {
-      const words = m.summary.trim().split(/\s+/).length;
-      return sum + Math.ceil(words * 0.75);
-    }, 0);
+    // Use same formula as estimateTokens: chars / 4
+    const totalTokens = selected.reduce((sum, m) => sum + Math.ceil(m.summary.length / 4), 0);
 
     expect(totalTokens).toBeLessThanOrEqual(220); // Allow 10% overflow
   });

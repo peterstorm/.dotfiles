@@ -9,6 +9,7 @@
     (util.sops.userSecret "flexii-db-password" "db_secrets.yaml" "flexii_database_password")
     (util.sops.userSecret "oister-db-password" "db_secrets.yaml" "oister_database_password")
     (util.sops.userSecret "keycloak-client-secret" "keycloak.yaml" "keycloak_client_secret")
+    (util.sops.userSecret "gemini-api-key" "gemini.yaml" "api_key")
   ]
   
   # Define templates
@@ -22,6 +23,9 @@
       FLEXII_DATABASE_PASSWORD = "flexii-db-password";
       OISTER_DATABASE_PASSWORD = "oister-db-password";
       KEYCLOAK_CLIENT_SECRET = "keycloak-client-secret";
+    })
+    (util.sops.envTemplate "gemini-env" {
+      GEMINI_API_KEY = "gemini-api-key";
     })
   ]
   
@@ -64,6 +68,7 @@
       initContent = ''
         # Source database environment variables
         source ${config.sops.templates."db-env".path}
+        source ${config.sops.templates."gemini-env".path}
 
         seal() {
           kubeseal --controller-namespace=sealed-secrets --format=yaml -o yaml < "$1" > "$2"

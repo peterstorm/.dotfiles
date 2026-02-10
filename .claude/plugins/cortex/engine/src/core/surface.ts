@@ -46,8 +46,8 @@ export function generateSurface(
     return '';
   }
 
-  // Allocate memories to categories respecting budgets
-  const allocated = allocateBudget(memories, CATEGORY_BUDGETS, allowOverflow);
+  // Memories are already budget-filtered by selectForSurface in ranking.ts.
+  // Use them directly to avoid double-filtering.
 
   // Generate markdown sections
   const sections: string[] = [];
@@ -64,7 +64,7 @@ export function generateSurface(
   sections.push('');
 
   // Group by category and render
-  const byCategory = groupByCategory(allocated);
+  const byCategory = groupByCategory(memories);
 
   for (const [category, mems] of Object.entries(byCategory)) {
     if (mems.length === 0) continue;

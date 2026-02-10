@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import type { HookHandler, SubagentStopInput, SpecCheck } from "../../types";
 import { StateManager } from "../../state-manager";
 import { parseTranscript } from "../../parsers/parse-transcript";
+import { readTranscriptWithRetry } from "../../utils/read-transcript-with-retry";
 
 interface SpecCheckFindings {
   critical: string[];
@@ -43,11 +44,11 @@ export function parseSpecCheckOutput(output: string): SpecCheckFindings {
 
   for (const line of searchBlock.split("\n")) {
     const critMatch = line.match(/^CRITICAL:\s*(.*)/);
-    if (critMatch) { critical.push(critMatch[1]); continue; }
+    if (critMatch) { const t = critMatch[1].trim(); if (t !== '') critical.push(t); continue; }
     const highMatch = line.match(/^HIGH:\s*(.*)/);
-    if (highMatch) { high.push(highMatch[1]); continue; }
+    if (highMatch) { const t = highMatch[1].trim(); if (t !== '') high.push(t); continue; }
     const medMatch = line.match(/^MEDIUM:\s*(.*)/);
-    if (medMatch) medium.push(medMatch[1]);
+    if (medMatch) { const t = medMatch[1].trim(); if (t !== '') medium.push(t); }
   }
 
   const critCount = searchBlock.match(/SPEC_CHECK_CRITICAL_COUNT:\s*(\d+)/);
@@ -74,11 +75,8 @@ const handler: HookHandler = async (stdin) => {
   const mgr = StateManager.fromSession(input.session_id);
   if (!mgr) return { kind: "passthrough" };
 
-  const rawPath = input.agent_transcript_path?.replace(/^~/, process.env.HOME ?? "~") ?? "";
-  const transcriptContent = rawPath && existsSync(rawPath)
-    ? readFileSync(rawPath, "utf-8")
-    : "";
-  const transcript = parseTranscript(transcriptContent);
+  const rawPath = input.agent_transcript_path ?? "";
+  const transcript = await readTranscriptWithRetry(rawPath, /SPEC_CHECK_CRITICAL_COUNT:\s*\d+/);
   if (!transcript) return { kind: "passthrough" };
 
   const findings = parseSpecCheckOutput(transcript);

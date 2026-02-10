@@ -273,7 +273,7 @@ describe('buildProseMemory', () => {
     };
 
     const embedding = new Float64Array([0.1, 0.2, 0.3]);
-    const memory = buildProseMemory(args, embedding);
+    const memory = buildProseMemory(args, embedding, 'test-prose-id', '2026-01-01T00:00:00.000Z');
 
     expect(memory.memory_type).toBe('code_description');
     expect(memory.scope).toBe('global');
@@ -302,7 +302,7 @@ describe('buildProseMemory', () => {
       sessionId: 'session-123',
     };
 
-    const memory = buildProseMemory(args, null);
+    const memory = buildProseMemory(args, null, 'test-id', '2026-01-01T00:00:00.000Z');
 
     expect(memory.embedding).toBeNull();
     expect(memory.local_embedding).toBeNull();
@@ -318,7 +318,7 @@ describe('buildProseMemory', () => {
       sessionId: 'session-123',
     };
 
-    const memory = buildProseMemory(args, null);
+    const memory = buildProseMemory(args, null, 'test-id', '2026-01-01T00:00:00.000Z');
 
     expect(memory.content).toBe(longSummary);
     expect(memory.summary.length).toBe(200);
@@ -339,7 +339,7 @@ describe('buildCodeMemory', () => {
     };
 
     const codeContent = 'export function handler(req: Request) {\n  return Response.json({ ok: true });\n}';
-    const memory = buildCodeMemory(args, codeContent);
+    const memory = buildCodeMemory(args, codeContent, 'test-code-id', '2026-01-01T00:00:00.000Z');
 
     expect(memory.memory_type).toBe('code');
     expect(memory.scope).toBe('project');
@@ -366,11 +366,11 @@ describe('buildCodeMemory', () => {
     };
 
     const shortCode = 'const x = 42;';
-    const memory1 = buildCodeMemory(args, shortCode);
+    const memory1 = buildCodeMemory(args, shortCode, 'id-1', '2026-01-01T00:00:00.000Z');
     expect(memory1.summary).toBe(shortCode);
 
     const longCode = 'a'.repeat(300);
-    const memory2 = buildCodeMemory(args, longCode);
+    const memory2 = buildCodeMemory(args, longCode, 'id-2', '2026-01-01T00:00:00.000Z');
     expect(memory2.summary.length).toBe(200);
     expect(memory2.summary.endsWith('...')).toBe(true);
   });
@@ -386,7 +386,9 @@ describe('formatSuccessResult', () => {
         tags: [],
         sessionId: 'session-123',
       },
-      null
+      null,
+      'prose-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     const codeMemory = buildCodeMemory(
@@ -397,7 +399,9 @@ describe('formatSuccessResult', () => {
         tags: [],
         sessionId: 'session-123',
       },
-      'const x = 1;'
+      'const x = 1;',
+      'code-id',
+      '2026-01-01T00:00:00.000Z'
     );
 
     const result = formatSuccessResult(proseMemory, codeMemory, '/src/file.ts', 2);
@@ -607,12 +611,15 @@ export function multiply(a: number, b: number): number {
     expect(result2.success).toBe(true);
     if (!result2.success) return;
 
-    expect(result2.superseded_count).toBe(1);
+    expect(result2.superseded_count).toBe(2); // 1 code + 1 prose
 
     // Check old code memory is superseded
     const oldCodeMem = getMemory(projectDb, result1.code_memory_id);
-
     expect(oldCodeMem!.status).toBe('superseded');
+
+    // Check old prose memory is also superseded
+    const oldProseMem = getMemory(projectDb, result1.prose_memory_id);
+    expect(oldProseMem!.status).toBe('superseded');
   });
 
   test('creates supersedes edge on re-indexing', async () => {
@@ -727,3 +734,4 @@ describe('extractLineRange - properties', () => {
     }
   });
 });
+
