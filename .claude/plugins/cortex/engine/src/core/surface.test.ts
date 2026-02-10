@@ -21,7 +21,7 @@ const createMemory = (overrides: Partial<RankedMemory> = {}): RankedMemory => ({
   summary: overrides.summary ?? 'Test summary',
   memory_type: overrides.memory_type ?? 'decision',
   scope: overrides.scope ?? 'project',
-  voyage_embedding: null,
+  embedding: null,
   local_embedding: null,
   confidence: overrides.confidence ?? 0.8,
   priority: overrides.priority ?? 5,

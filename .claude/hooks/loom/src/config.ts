@@ -3,6 +3,9 @@
  * Skills reference these values — update docs if changed.
  */
 
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Phase } from "./types";
 
 /** Markers above this trigger mandatory clarify phase */
@@ -92,8 +95,27 @@ export const VALID_TRANSITIONS: Record<string, Phase[]> = {
   "execute":      ["execute"],
 };
 
-/** Default task graph path (relative) */
-export const TASK_GRAPH_PATH = ".claude/state/active_task_graph.json";
+/** Relative path within a repo root */
+const TASK_GRAPH_RELATIVE = ".claude/state/active_task_graph.json";
+
+/** Find task graph by walking up from cwd to git root */
+function findTaskGraphPath(): string {
+  // Try relative first (works when cwd = repo root)
+  if (existsSync(TASK_GRAPH_RELATIVE)) return TASK_GRAPH_RELATIVE;
+
+  // Walk up via git rev-parse
+  try {
+    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
+    const abs = join(root, TASK_GRAPH_RELATIVE);
+    if (existsSync(abs)) return abs;
+  } catch {}
+
+  // Fallback to relative (callers check existsSync anyway)
+  return TASK_GRAPH_RELATIVE;
+}
+
+/** Task graph path — resolved from cwd or git root */
+export const TASK_GRAPH_PATH = findTaskGraphPath();
 
 /** Subagent tracking directory */
 export const SUBAGENT_DIR = "/tmp/claude-subagents";

@@ -12,7 +12,7 @@ function createTestMemory(overrides: Partial<Memory> = {}): Memory {
     summary: 'test summary',
     memory_type: 'decision',
     scope: 'project',
-    voyage_embedding: null,
+    embedding: null,
     local_embedding: null,
     confidence: 0.8,
     priority: 5,

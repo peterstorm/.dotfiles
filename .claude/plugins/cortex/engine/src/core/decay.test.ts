@@ -21,7 +21,7 @@ function createMemory(overrides: Partial<Memory> = {}): Memory {
     summary: 'test summary',
     memory_type: 'pattern',
     scope: 'project',
-    voyage_embedding: null,
+    embedding: null,
     local_embedding: null,
     confidence: 0.8,
     priority: 5,
@@ -433,7 +433,7 @@ describe('decay engine', () => {
         fc.property(
           confidenceArb,
           fc.nat({ max: 100 }),
-          fc.double({ min: 0.51, max: 1.0 }),
+          fc.double({ min: 0.51, max: 1.0, noNaN: true }),
           (conf, days, cent) => {
             const memory = createMemory({ status: 'active', pinned: false });
             const action = determineLifecycleAction(

@@ -1,5 +1,5 @@
 /**
- * Haiku API client for memory extraction and edge classification.
+ * Gemini API client for memory extraction and edge classification.
  * Pure functional API wrapper with no side effects beyond API calls.
  *
  * FR-001: Extract memories automatically at session end
@@ -7,12 +7,10 @@
  * FR-056: Support typed edges between memories
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { EdgeRelation } from '../core/types.js';
 import { EDGE_RELATIONS, isEdgeRelation } from '../core/types.js';
 
-const MODEL = 'claude-haiku-4-5-20251001';
-const MAX_TOKENS = 4096;
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const TEMPERATURE = 0;
 
 /**
@@ -34,7 +32,7 @@ export interface MemoryPair {
 }
 
 /**
- * Edge classification result from Haiku.
+ * Edge classification result from Gemini.
  */
 export interface EdgeClassification {
   readonly source_id: string;
@@ -44,17 +42,17 @@ export interface EdgeClassification {
 }
 
 /**
- * Check if Haiku API is available (has valid key).
+ * Check if Gemini API is available (has valid key).
  *
  * @param apiKey - API key (may be undefined)
  * @returns true if key is non-empty string
  */
-export function isHaikuAvailable(apiKey: string | undefined): boolean {
+export function isGeminiLlmAvailable(apiKey: string | undefined): boolean {
   return typeof apiKey === 'string' && apiKey.trim().length > 0;
 }
 
 /**
- * Extract memories from transcript using Haiku.
+ * Extract memories from transcript using Gemini.
  * Sends extraction prompt and returns raw response text.
  * Caller is responsible for parsing via parseExtractionResponse.
  *
@@ -62,8 +60,8 @@ export function isHaikuAvailable(apiKey: string | undefined): boolean {
  * FR-002: Parse transcript format
  *
  * @param prompt - Extraction prompt (from buildExtractionPrompt)
- * @param apiKey - Anthropic API key
- * @returns Raw Haiku response text
+ * @param apiKey - Gemini API key
+ * @returns Raw Gemini response text
  * @throws Error if API call fails
  */
 export async function extractMemories(
@@ -71,41 +69,70 @@ export async function extractMemories(
   apiKey: string
 ): Promise<string> {
   try {
-    const client = new Anthropic({ apiKey });
+    const url = `${API_URL}?key=${apiKey}`;
 
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: TEMPERATURE,
         },
-      ],
+      }),
     });
 
-    // Extract text from response
-    const textBlock = response.content.find((block) => block.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') {
-      throw new Error('No text content in Haiku response');
+    // Handle HTTP errors
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`Gemini API authentication failed (${response.status}): ${errorText}`);
+      }
+
+      if (response.status === 429) {
+        throw new Error(`Gemini API rate limit exceeded (429): ${errorText}`);
+      }
+
+      throw new Error(`Gemini API error (${response.status}): ${errorText}`);
     }
 
-    return textBlock.text;
+    const data = await response.json();
+
+    // Extract text from response
+    const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textContent) {
+      throw new Error('No text content in Gemini response');
+    }
+
+    return textContent;
   } catch (error) {
+    // Re-throw if already wrapped
+    if (error instanceof Error && error.message.startsWith('Gemini')) {
+      throw error;
+    }
+
+    // Network failures
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Haiku extraction failed: ${message}`);
+    throw new Error(`Network failure calling Gemini API: ${message}`);
   }
 }
 
 /**
- * Classify edges between memory pairs using Haiku.
+ * Classify edges between memory pairs using Gemini.
  * Returns typed edge relationships with strength scores.
  *
  * FR-056: Typed edges between memories
  *
  * @param pairs - Memory pairs to classify
- * @param apiKey - Anthropic API key
+ * @param apiKey - Gemini API key
  * @returns Array of edge classifications
  * @throws Error if API call fails
  */
@@ -121,38 +148,67 @@ export async function classifyEdges(
   const prompt = buildEdgeClassificationPrompt(pairs);
 
   try {
-    const client = new Anthropic({ apiKey });
+    const url = `${API_URL}?key=${apiKey}`;
 
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: TEMPERATURE,
         },
-      ],
+      }),
     });
 
-    // Extract text from response
-    const textBlock = response.content.find((block) => block.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') {
-      throw new Error('No text content in Haiku response');
+    // Handle HTTP errors
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`Gemini API authentication failed (${response.status}): ${errorText}`);
+      }
+
+      if (response.status === 429) {
+        throw new Error(`Gemini API rate limit exceeded (429): ${errorText}`);
+      }
+
+      throw new Error(`Gemini API error (${response.status}): ${errorText}`);
     }
 
-    return parseEdgeClassificationResponse(textBlock.text);
+    const data = await response.json();
+
+    // Extract text from response
+    const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textContent) {
+      throw new Error('No text content in Gemini response');
+    }
+
+    return parseEdgeClassificationResponse(textContent);
   } catch (error) {
+    // Re-throw if already wrapped
+    if (error instanceof Error && error.message.startsWith('Gemini')) {
+      throw error;
+    }
+
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Haiku edge classification failed: ${message}`);
+    throw new Error(`Gemini edge classification failed: ${message}`);
   }
 }
 
 /**
  * Build prompt for edge classification.
  * Pure function - no side effects.
+ * Exported for testing.
  */
-function buildEdgeClassificationPrompt(
+export function buildEdgeClassificationPrompt(
   pairs: readonly MemoryPair[]
 ): string {
   const pairDescriptions = pairs
@@ -208,10 +264,11 @@ If no strong relationships, return empty array [].`;
 }
 
 /**
- * Parse edge classification response from Haiku.
+ * Parse edge classification response from Gemini.
  * Pure function - returns parsed edges or empty array on failure.
+ * Exported for testing.
  */
-function parseEdgeClassificationResponse(
+export function parseEdgeClassificationResponse(
   response: string
 ): readonly EdgeClassification[] {
   try {

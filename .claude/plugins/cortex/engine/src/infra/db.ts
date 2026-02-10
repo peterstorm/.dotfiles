@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS memories (
   summary TEXT NOT NULL,
   memory_type TEXT NOT NULL,
   scope TEXT NOT NULL,
-  voyage_embedding BLOB,
+  embedding BLOB,
   local_embedding BLOB,
   confidence REAL NOT NULL,
   priority INTEGER NOT NULL,
@@ -168,7 +168,7 @@ export function insertMemory(db: Database, memory: Memory): string {
   const stmt = db.prepare(`
     INSERT INTO memories (
       id, content, summary, memory_type, scope,
-      voyage_embedding, local_embedding,
+      embedding, local_embedding,
       confidence, priority, pinned,
       source_type, source_session, source_context,
       tags, access_count, last_accessed_at,
@@ -182,7 +182,7 @@ export function insertMemory(db: Database, memory: Memory): string {
     memory.summary,
     memory.memory_type,
     memory.scope,
-    memory.voyage_embedding ? serializeEmbedding(memory.voyage_embedding) : null,
+    memory.embedding ? serializeEmbedding(memory.embedding) : null,
     memory.local_embedding ? serializeEmbedding(memory.local_embedding) : null,
     memory.confidence,
     memory.priority,
@@ -230,9 +230,9 @@ export function updateMemory(db: Database, id: string, fields: Partial<Memory>):
     updates.push('scope = ?');
     values.push(fields.scope);
   }
-  if (fields.voyage_embedding !== undefined) {
-    updates.push('voyage_embedding = ?');
-    values.push(fields.voyage_embedding ? serializeEmbedding(fields.voyage_embedding) : null);
+  if (fields.embedding !== undefined) {
+    updates.push('embedding = ?');
+    values.push(fields.embedding ? serializeEmbedding(fields.embedding) : null);
   }
   if (fields.local_embedding !== undefined) {
     updates.push('local_embedding = ?');
@@ -308,7 +308,7 @@ export function getMemory(db: Database, id: string): Memory | null {
     summary: row.summary,
     memory_type: row.memory_type,
     scope: row.scope,
-    voyage_embedding: row.voyage_embedding ? deserializeFloat64Array(row.voyage_embedding) : null,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
     local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
     confidence: row.confidence,
     priority: row.priority,
@@ -323,6 +323,50 @@ export function getMemory(db: Database, id: string): Memory | null {
     updated_at: row.updated_at,
     status: row.status,
   });
+}
+
+/**
+ * Get multiple memories by IDs in a single query
+ * I/O: Reads from database
+ *
+ * @param db - Database instance
+ * @param ids - Array of memory IDs
+ * @returns Readonly array of memories (matching IDs only)
+ */
+export function getMemoriesByIds(db: Database, ids: readonly string[]): readonly Memory[] {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  // Build parameterized query with placeholders
+  const placeholders = ids.map(() => '?').join(',');
+  const stmt = db.prepare(`
+    SELECT * FROM memories WHERE id IN (${placeholders})
+  `);
+
+  const rows = stmt.all(...ids) as any[];
+
+  return rows.map(row => createMemory({
+    id: row.id,
+    content: row.content,
+    summary: row.summary,
+    memory_type: row.memory_type,
+    scope: row.scope,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
+    local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
+    confidence: row.confidence,
+    priority: row.priority,
+    pinned: row.pinned === 1,
+    source_type: row.source_type,
+    source_session: row.source_session,
+    source_context: row.source_context,
+    tags: JSON.parse(row.tags),
+    access_count: row.access_count,
+    last_accessed_at: row.last_accessed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    status: row.status,
+  }));
 }
 
 /**
@@ -345,7 +389,44 @@ export function getActiveMemories(db: Database): readonly Memory[] {
     summary: row.summary,
     memory_type: row.memory_type,
     scope: row.scope,
-    voyage_embedding: row.voyage_embedding ? deserializeFloat64Array(row.voyage_embedding) : null,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
+    local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
+    confidence: row.confidence,
+    priority: row.priority,
+    pinned: row.pinned === 1,
+    source_type: row.source_type,
+    source_session: row.source_session,
+    source_context: row.source_context,
+    tags: JSON.parse(row.tags),
+    access_count: row.access_count,
+    last_accessed_at: row.last_accessed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    status: row.status,
+  }));
+}
+
+/**
+ * Get all archived memories (status='archived')
+ * I/O: Reads from database
+ *
+ * @param db - Database instance
+ * @returns Readonly array of archived memories
+ */
+export function getArchivedMemories(db: Database): readonly Memory[] {
+  const stmt = db.prepare(`
+    SELECT * FROM memories WHERE status = 'archived'
+  `);
+
+  const rows = stmt.all() as any[];
+
+  return rows.map(row => createMemory({
+    id: row.id,
+    content: row.content,
+    summary: row.summary,
+    memory_type: row.memory_type,
+    scope: row.scope,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
     local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
     confidence: row.confidence,
     priority: row.priority,
@@ -377,10 +458,10 @@ export function searchByEmbedding(
   limit: number
 ): readonly Memory[] {
   // Determine if query is voyage (Float64) or local (Float32)
-  const isVoyage = embedding instanceof Float64Array;
+  const isFloat64 = embedding instanceof Float64Array;
 
   // Load all memories with embeddings of matching type
-  const column = isVoyage ? 'voyage_embedding' : 'local_embedding';
+  const column = isFloat64 ? 'embedding' : 'local_embedding';
   const stmt = db.prepare(`
     SELECT * FROM memories WHERE ${column} IS NOT NULL
   `);
@@ -395,7 +476,7 @@ export function searchByEmbedding(
       summary: row.summary,
       memory_type: row.memory_type,
       scope: row.scope,
-      voyage_embedding: row.voyage_embedding ? deserializeFloat64Array(row.voyage_embedding) : null,
+      embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
       local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
       confidence: row.confidence,
       priority: row.priority,
@@ -411,7 +492,7 @@ export function searchByEmbedding(
       status: row.status,
     });
 
-    const memoryEmbedding = isVoyage ? memory.voyage_embedding : memory.local_embedding;
+    const memoryEmbedding = isFloat64 ? memory.embedding : memory.local_embedding;
     if (!memoryEmbedding) {
       throw new Error(`Missing ${column} for memory ${memory.id}`);
     }
@@ -459,7 +540,7 @@ export function searchByKeyword(
     summary: row.summary,
     memory_type: row.memory_type,
     scope: row.scope,
-    voyage_embedding: row.voyage_embedding ? deserializeFloat64Array(row.voyage_embedding) : null,
+    embedding: row.embedding ? deserializeFloat64Array(row.embedding) : null,
     local_embedding: row.local_embedding ? deserializeFloat32Array(row.local_embedding) : null,
     confidence: row.confidence,
     priority: row.priority,

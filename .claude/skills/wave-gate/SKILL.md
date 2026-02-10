@@ -117,8 +117,11 @@ gh issue comment {ISSUE} --body "$(cat <<'EOF'
 ### Code Review
 
 #### T1: {description}
-**Status:** PASSED | BLOCKED - {N} critical findings
-- {findings list}
+**Status:** PASSED | BLOCKED - {N} critical, {N} advisory
+**Critical:**
+- {critical findings list, if any}
+**Advisory:**
+- {ALL advisory findings — always include, even for PASSED tasks}
 
 #### T2: {description}
 ...

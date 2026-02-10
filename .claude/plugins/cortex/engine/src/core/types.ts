@@ -49,7 +49,7 @@ export interface Memory {
   readonly summary: string;
   readonly memory_type: MemoryType;
   readonly scope: MemoryScope;
-  readonly voyage_embedding: Float64Array | null;
+  readonly embedding: Float64Array | null;
   readonly local_embedding: Float32Array | null;
   readonly confidence: number; // 0-1
   readonly priority: number; // 1-10
@@ -170,7 +170,7 @@ export function createMemory(input: {
   source_context: string;
   tags?: readonly string[];
   pinned?: boolean;
-  voyage_embedding?: Float64Array | null;
+  embedding?: Float64Array | null;
   local_embedding?: Float32Array | null;
   access_count?: number;
   last_accessed_at?: string;
@@ -228,7 +228,7 @@ export function createMemory(input: {
     summary: trimmedSummary,
     memory_type: input.memory_type,
     scope: input.scope,
-    voyage_embedding: input.voyage_embedding ?? null,
+    embedding: input.embedding ?? null,
     local_embedding: input.local_embedding ?? null,
     confidence: input.confidence,
     priority: input.priority,

@@ -7,7 +7,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@huggingface/transformers": "^3.0.0",
     "better-sqlite3": "^11.7.0",
     "ts-pattern": "^5.9.0"

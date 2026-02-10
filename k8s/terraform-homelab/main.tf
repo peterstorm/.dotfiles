@@ -4,7 +4,7 @@ terraform {
   required_providers {
     helm = {
       source  = "hashicorp/helm"
-      version = ">= 2.12"
+      version = "~> 2.17"
     }
     kubectl = {
       source  = "alekc/kubectl"
@@ -12,7 +12,7 @@ terraform {
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = ">= 4.0"
+      version = "~> 4.48"
     }
     time = {
       source  = "hashicorp/time"

@@ -45,7 +45,7 @@ describe('createMemory', () => {
     expect(memory.tags).toEqual([]);
     expect(memory.access_count).toBe(0);
     expect(memory.status).toBe('active');
-    expect(memory.voyage_embedding).toBeNull();
+    expect(memory.embedding).toBeNull();
     expect(memory.local_embedding).toBeNull();
   });
 
@@ -64,14 +64,14 @@ describe('createMemory', () => {
       source_context: '{}',
       tags: ['tag1', 'tag2'],
       pinned: true,
-      voyage_embedding: embedding,
+      embedding: embedding,
       access_count: 5,
       status: 'superseded',
     });
 
     expect(memory.tags).toEqual(['tag1', 'tag2']);
     expect(memory.pinned).toBe(true);
-    expect(memory.voyage_embedding).toBe(embedding);
+    expect(memory.embedding).toBe(embedding);
     expect(memory.access_count).toBe(5);
     expect(memory.status).toBe('superseded');
   });
@@ -920,7 +920,7 @@ describe('property tests', () => {
             expect(memory.tags).toEqual([]);
             expect(memory.access_count).toBe(0);
             expect(memory.status).toBe('active');
-            expect(memory.voyage_embedding).toBeNull();
+            expect(memory.embedding).toBeNull();
             expect(memory.local_embedding).toBeNull();
           }
         )

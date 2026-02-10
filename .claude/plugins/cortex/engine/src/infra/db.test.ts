@@ -110,7 +110,7 @@ describe('Database Layer', () => {
         source_type: 'manual',
         source_session: 'session-2',
         source_context: '{}',
-        voyage_embedding: voyageEmbedding,
+        embedding: voyageEmbedding,
         local_embedding: localEmbedding,
       });
 
@@ -118,7 +118,7 @@ describe('Database Layer', () => {
 
       const retrieved = getMemory(db, 'mem-emb');
       expect(retrieved).toBeDefined();
-      expect(retrieved?.voyage_embedding).toEqual(voyageEmbedding);
+      expect(retrieved?.embedding).toEqual(voyageEmbedding);
       expect(retrieved?.local_embedding).toEqual(localEmbedding);
 
       db.close();
@@ -309,7 +309,7 @@ describe('Database Layer', () => {
         source_type: 'extraction',
         source_session: 'session-6',
         source_context: '{}',
-        voyage_embedding: new Float64Array([1, 0, 0, 0]),
+        embedding: new Float64Array([1, 0, 0, 0]),
       });
 
       const mem2 = createMemory({
@@ -323,7 +323,7 @@ describe('Database Layer', () => {
         source_type: 'extraction',
         source_session: 'session-6',
         source_context: '{}',
-        voyage_embedding: new Float64Array([0.9, 0.1, 0, 0]),
+        embedding: new Float64Array([0.9, 0.1, 0, 0]),
       });
 
       const mem3 = createMemory({
@@ -337,7 +337,7 @@ describe('Database Layer', () => {
         source_type: 'extraction',
         source_session: 'session-6',
         source_context: '{}',
-        voyage_embedding: new Float64Array([0, 1, 0, 0]),
+        embedding: new Float64Array([0, 1, 0, 0]),
       });
 
       insertMemory(db, mem1);
