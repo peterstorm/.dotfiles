@@ -15,37 +15,28 @@ variable "cloudflare_tunnel_id" {
   type = string
 }
 
-# echo-server via Cloudflare tunnel (proxied)
-resource "cloudflare_dns_record" "echo_server" {
-  zone_id = var.cloudflare_zone_id
-  name    = "echo-server"
-  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
-  type    = "CNAME"
-  proxied = true
-  ttl     = 1
-}
-
-# Services on shared LB IP (not proxied, local DNS)
+# Services via Cloudflare tunnel (proxied)
 locals {
-  shared_lb_services = [
+  tunnel_services = [
+    "echo-server",
+    "argocd",
+    "grafana",
     "sonarr",
     "radarr",
     "prowlarr",
     "overseerr",
     "transmission",
-    "grafana",
-    "argocd",
   ]
 }
 
-resource "cloudflare_dns_record" "shared_lb" {
-  for_each = toset(local.shared_lb_services)
+resource "cloudflare_dns_record" "tunnel" {
+  for_each = toset(local.tunnel_services)
 
   zone_id = var.cloudflare_zone_id
   name    = each.key
-  content = "192.168.0.240"
-  type    = "A"
-  proxied = false
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
   ttl     = 1
 }
 
