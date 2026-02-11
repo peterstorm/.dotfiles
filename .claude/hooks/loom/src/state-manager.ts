@@ -59,7 +59,7 @@ export class StateManager {
     // Default tasks and wave_gates for early phases (populated in Phase 4)
     if (!("tasks" in obj)) (obj as Record<string, unknown>).tasks = [];
     if (!("wave_gates" in obj)) (obj as Record<string, unknown>).wave_gates = {};
-    return obj as TaskGraph;
+    return obj as unknown as TaskGraph;
   }
 
   getPath(): string {

@@ -49,6 +49,15 @@ export function extractTestEvidence(bashOutput: string): TestEvidence {
     if (!vitestFailed) return { passed: true, evidence: `vitest: ${vitest[0]}` };
   }
 
+  // Rust/cargo test: "test result: ok. N passed; 0 failed"
+  const cargoTest = bashOutput.match(/test result: ok\. (\d+) passed/);
+  if (cargoTest) {
+    const cargoFail = bashOutput.match(/test result:.*(\d+) failed/);
+    if (!cargoFail || cargoFail[1] === "0") {
+      return { passed: true, evidence: `cargo: ${cargoTest[1]} passed` };
+    }
+  }
+
   // pytest: "N passed" without "N failed"
   const pytest = bashOutput.match(/(\d+) passed/);
   if (pytest) {
@@ -93,6 +102,7 @@ export function analyzeNewTests(
       tests.java > 0 ? `java: ${tests.java} @Test/@Property` : "",
       tests.ts > 0 ? `ts: ${tests.ts} it/test/describe` : "",
       tests.python > 0 ? `python: ${tests.python} test functions` : "",
+      tests.rust > 0 ? `rust: ${tests.rust} #[test]` : "",
     ].filter(Boolean).join("; ");
     return {
       written: true,
