@@ -53,7 +53,7 @@ export function selectForSurface(
     readonly maxTokens?: number;
   }
 ): readonly (Memory & { readonly rank: number })[] {
-  const { currentBranch, targetTokens = 400, maxTokens = 550 } = options;
+  const { currentBranch, targetTokens = 800, maxTokens = 1000 } = options;
 
   // Filter out code type (not included in surface)
   const candidates = memories.filter(m => m.memory_type !== 'code');

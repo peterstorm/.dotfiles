@@ -184,6 +184,7 @@ export async function backfill(
 
     // Imperative Shell: choose method and process
     if (isGeminiAvailable(geminiApiKey)) {
+      process.stderr.write(`[cortex:backfill] INFO: Using Gemini for ${unembedded.length} embeddings\n`);
       const { processed, failed, errors } = await backfillGemini(
         db,
         unembedded,
@@ -192,6 +193,7 @@ export async function backfill(
       );
       return { ok: true, processed, failed, errors, method: 'gemini' };
     } else {
+      process.stderr.write(`[cortex:backfill] INFO: Gemini unavailable — falling back to local model for ${unembedded.length} embeddings\n`);
       const { processed, failed, errors } = await backfillLocal(db, unembedded, texts);
       return { ok: true, processed, failed, errors, method: 'local' };
     }

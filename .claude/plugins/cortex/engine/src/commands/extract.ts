@@ -89,7 +89,7 @@ export async function executeExtract(
   try {
     // Validate API key availability
     if (!isGeminiLlmAvailable(apiKey)) {
-      logError('GEMINI_API_KEY not available - skipping extraction');
+      logInfo('GEMINI_API_KEY not set — extraction skipped (no memories will be extracted this session)');
       return {
         success: false,
         extracted_count: 0,
@@ -145,7 +145,8 @@ export async function executeExtract(
     // Pure: Build extraction prompt
     const prompt = buildExtractionPrompt(truncated, gitContext, projectName);
 
-    // I/O: Call Haiku for extraction (async)
+    // I/O: Call Gemini for extraction (async)
+    logInfo('Using Gemini for memory extraction');
     let response: string;
     try {
       response = await extractMemories(prompt, apiKey!);
@@ -410,4 +411,11 @@ function computeSimilarityAndCreateEdges(
  */
 function logError(message: string): void {
   process.stderr.write(`[cortex:extract] ERROR: ${message}\n`);
+}
+
+/**
+ * Log info to stderr
+ */
+function logInfo(message: string): void {
+  process.stderr.write(`[cortex:extract] INFO: ${message}\n`);
 }

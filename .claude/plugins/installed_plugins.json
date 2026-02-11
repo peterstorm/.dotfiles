@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "plugins": {
+    "frontend-design@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/frontend-design/2cd88e7947b7",
+        "version": "2cd88e7947b7",
+        "installedAt": "2026-02-11T07:07:20.362Z",
+        "lastUpdated": "2026-02-11T07:07:20.362Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "code-review@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/code-review/2cd88e7947b7",
+        "version": "2cd88e7947b7",
+        "installedAt": "2026-02-11T07:07:23.053Z",
+        "lastUpdated": "2026-02-11T07:07:23.053Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "typescript-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-11T07:07:23.661Z",
+        "lastUpdated": "2026-02-11T07:07:23.661Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "security-guidance@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/security-guidance/2cd88e7947b7",
+        "version": "2cd88e7947b7",
+        "installedAt": "2026-02-11T07:07:24.333Z",
+        "lastUpdated": "2026-02-11T07:07:24.333Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "pr-review-toolkit@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/pr-review-toolkit/2cd88e7947b7",
+        "version": "2cd88e7947b7",
+        "installedAt": "2026-02-11T07:07:24.966Z",
+        "lastUpdated": "2026-02-11T07:07:24.966Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "agent-sdk-dev@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/2cd88e7947b7",
+        "version": "2cd88e7947b7",
+        "installedAt": "2026-02-11T07:07:25.610Z",
+        "lastUpdated": "2026-02-11T07:07:25.610Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "jdtls-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/jdtls-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-11T07:07:26.364Z",
+        "lastUpdated": "2026-02-11T07:07:26.364Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "plugin-dev@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/plugin-dev/2cd88e7947b7",
+        "version": "2cd88e7947b7",
+        "installedAt": "2026-02-11T07:07:27.126Z",
+        "lastUpdated": "2026-02-11T07:07:27.126Z",
+        "gitCommitSha": "2cd88e7947b7382e045666abee790c7f55f669f3"
+      }
+    ],
+    "atlassian@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/claude-plugins-official/atlassian/25068023d507",
+        "version": "25068023d507",
+        "installedAt": "2026-02-11T07:07:28.982Z",
+        "lastUpdated": "2026-02-11T07:07:28.982Z",
+        "gitCommitSha": "25068023d5078c7f1050c533da139304d8bc204d"
+      }
+    ],
+    "marketing-skills@marketingskills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/marketingskills/marketing-skills/a04cb61a577a",
+        "version": "a04cb61a577a",
+        "installedAt": "2026-02-11T07:07:29.768Z",
+        "lastUpdated": "2026-02-11T07:07:29.768Z",
+        "gitCommitSha": "a04cb61a577a20d9ab0f3da2a2d99c17a0476ded"
+      }
+    ],
+    "obsidian@local": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/local/obsidian/0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-02-11T07:08:09.748Z",
+        "lastUpdated": "2026-02-11T07:08:09.748Z",
+        "gitCommitSha": "1fe84be1f7a21d056c8637cf9b9931a04a320593"
+      }
+    ],
+    "cortex@local": [
+      {
+        "scope": "user",
+        "installPath": "/Users/hansen142/.claude/plugins/cache/local/cortex/0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-02-11T07:08:10.029Z",
+        "lastUpdated": "2026-02-11T07:08:10.029Z",
+        "gitCommitSha": "1fe84be1f7a21d056c8637cf9b9931a04a320593"
+      }
+    ]
+  }
+}
