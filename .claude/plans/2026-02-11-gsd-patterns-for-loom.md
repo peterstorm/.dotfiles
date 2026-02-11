@@ -29,11 +29,12 @@ Enhance loom with 4 GSD-derived patterns: (1) enhanced brainstorm with parallel 
 
 ### AD-3: Brainstorm Research Agents as Task Tool Spawns Within Brainstorm Agent
 
-**Choice:** Brainstorm agent spawns 3 Task tool calls in single message (codebase explorer, external researcher, risk analyst). Agents write to separate files, brainstorm agent synthesizes into final brainstorm.md.
-**Why:** Spec FR-001/NFR-020 requires brainstorm agent to spawn internally via Task tool. No separate research artifact files required per NFR-020 — but Open Questions #3 in spec says agents write separate files and orchestrator synthesizes. We follow the spec resolution: agents write research-{codebase,external,risks}.md, brainstorm agent synthesizes.
+**Choice:** Brainstorm agent spawns 3 Task tool calls in single message (codebase explorer via Explore, external researcher via general-purpose with web search, risk analyst via general-purpose). No intermediate files — brainstorm agent reads Task return values and synthesizes in-context before writing brainstorm.md.
+**Why:** Spec FR-001/NFR-020 requires brainstorm agent to spawn internally via Task tool with no separate research artifact files. Simplest orchestration — brainstorm agent owns entire research+synthesis flow. Nested agents (Task-in-Task) don't trigger loom hooks since they're utility agents inside a phase agent.
 **Rejected:**
 - Sequential research by brainstorm agent — defeats parallelism purpose (US2, SC-002)
 - Separate research phase — spec says no new PHASE_ORDER entries
+- File-based handoff (agents write .md files) — unnecessary indirection, hooks block utility agent writes during pre-execute
 
 ### AD-4: Decision-Locking as Template Section (not state field)
 
@@ -249,15 +250,16 @@ Same data path as existing parseFilesModified and parseBashTestOutput — added 
 ### Brainstorm Research Flow
 
 ```
-/loom "feature" --> brainstorm-agent spawns 3 Task calls:
-  Task(codebase-explorer) --> writes research findings
-  Task(external-researcher) --> writes research findings
-  Task(risk-analyst) --> writes research findings
---> brainstorm-agent synthesizes all 3 + runs decision-locking step
---> writes brainstorm.md with Decisions section
+/loom "feature" --> brainstorm-agent spawns 3 Task calls (single message):
+  Task(Explore, "scan codebase for patterns...") --> returns findings as text
+  Task(general-purpose, "web search for best practices...") --> returns findings as text
+  Task(general-purpose, "identify risks and pitfalls...") --> returns findings as text
+--> brainstorm-agent reads all 3 return values in-context
+--> synthesizes into approach options + runs decision-locking step
+--> writes brainstorm.md with Decisions section (locked/discretion/deferred)
 ```
 
-All orchestration happens within brainstorm-agent via its enhanced template. No hooks involved.
+All orchestration happens within brainstorm-agent via its enhanced template. No intermediate files, no hooks involved. Nested Task-in-Task agents don't trigger loom hooks.
 
 ### Archive Flow
 
@@ -349,4 +351,4 @@ All orchestration happens within brainstorm-agent via its enhanced template. No 
 
 - Spec anchor extraction regex: exact patterns to match FR-xxx, SC-xxx, US.acceptance in spec markdown? Plan assumes `/(?:FR|SC|NFR|US\d+\.acceptance)-\d+/g` but spec might use other formats.
 - Decision-locking skip heuristic: what constitutes "simple feature with no detected ambiguity" (FR-004)? Template says brainstorm agent decides — no automated detection.
-- Research agent model: should research sub-tasks use Explore agent type (for codebase) vs general-purpose (for external/risk)? Spec says codebase explorer = Explore, others = general-purpose.
+- Research agent model: resolved — codebase explorer = Explore agent, external researcher + risk analyst = general-purpose.
