@@ -1,7 +1,7 @@
 {
   "description": "Cortex memory extraction and surface loading hooks",
   "hooks": {
-    "Stop": [
+    "SessionEnd": [
       {
         "hooks": [
           {
