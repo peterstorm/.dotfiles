@@ -3,5 +3,3 @@ marketplaces/
 repos/
 .DS_Store
 install-counts-cache.json
-installed_plugins.json
-known_marketplaces.json

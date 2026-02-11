@@ -1,0 +1,26 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "git",
+      "url": "https://github.com/anthropics/claude-plugins-official.git"
+    },
+    "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/claude-plugins-official",
+    "lastUpdated": "2026-02-11T07:06:55.079Z"
+  },
+  "marketingskills": {
+    "source": {
+      "source": "git",
+      "url": "https://github.com/coreyhaines31/marketingskills.git"
+    },
+    "installLocation": "/Users/hansen142/.claude/plugins/marketplaces/marketingskills",
+    "lastUpdated": "2026-02-11T07:07:04.290Z"
+  },
+  "local": {
+    "source": {
+      "source": "directory",
+      "path": "/Users/hansen142/.dotfiles/.claude/local-marketplace"
+    },
+    "installLocation": "/Users/hansen142/.dotfiles/.claude/local-marketplace",
+    "lastUpdated": "2026-02-11T07:08:05.592Z"
+  }
+}
