@@ -14,6 +14,16 @@
       },
       "source": "./plugins/obsidian",
       "category": "productivity"
+    },
+    {
+      "name": "cortex",
+      "description": "Persistent memory plugin for Claude Code - extracts session knowledge, surfaces ranked context, provides semantic recall",
+      "version": "0.1.0",
+      "author": {
+        "name": "peterstorm"
+      },
+      "source": "./plugins/cortex",
+      "category": "productivity"
     }
   ]
 }

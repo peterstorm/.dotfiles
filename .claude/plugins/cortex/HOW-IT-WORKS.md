@@ -139,21 +139,33 @@ The "push surface" is the markdown file Claude reads at session start. It's gene
 
 ## Memory Graph (Similarity Edges)
 
-When new memories are inserted, they're compared to all existing active memories using **Jaccard similarity** on tokenized content:
+When new memories are inserted, they're compared to all existing active memories. The system uses a **two-tier similarity** approach, though currently only Jaccard is wired up at insertion time:
 
-| Jaccard Score | Classification | Action |
+### Tier 1: Jaccard Pre-Filter (active)
+
+Cheap token-overlap comparison used for edge creation during extraction:
+
+| Jaccard Score | Pre-filter | Action |
 |---|---|---|
-| < 0.1 | Definitely different | Skip |
-| 0.1 - 0.3 | Maybe related | Create weak "suggested" edge |
-| 0.3 - 0.7 | Related | Create "relates_to" edge |
-| > 0.7 | Definitely similar | Create strong edge (consolidation candidate) |
+| < 0.1 | `definitely_different` | Skip entirely |
+| 0.1 - 0.4 | `maybe` | Create `relates_to` edge (strength = score) |
+| 0.4 - 0.5 | `maybe` | Create `suggested` edge for review |
+| 0.5+ | `maybe` | Flag for consolidation (logged, not auto-merged in v1) |
+| 0.6+ | `definitely_similar` | Create strong `relates_to` edge (strength = 0.9) |
 
-Edge types: `relates_to`, `derived_from`, `contradicts`, `exemplifies`, `refines`, `supersedes`, `source_of`
+### Tier 2: Cosine Similarity on Embeddings (plumbed but not yet wired)
 
-The graph is used for:
-- **Centrality scoring** in ranking
+`cosineSimilarity()` exists in `core/similarity.ts` and is used by `/recall` for search ranking. The plan is to use it during edge creation for the "maybe" range (0.1-0.6 Jaccard) once embeddings are backfilled — giving much more accurate similarity than token overlap. Currently, the "maybe" range falls through to Jaccard-only classification.
+
+### Edge Types
+
+`relates_to`, `derived_from`, `contradicts`, `exemplifies`, `refines`, `supersedes`, `source_of`
+
+### Graph Uses
+
+- **Centrality scoring** in surface ranking formula
 - **Graph traversal** in `/recall` (depth-2 BFS finds related memories)
-- **Consolidation candidates** (high similarity → merge)
+- **Consolidation candidates** (high similarity → `/consolidate` can merge them)
 
 ---
 

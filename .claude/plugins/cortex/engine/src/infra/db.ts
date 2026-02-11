@@ -615,7 +615,14 @@ export function searchByKeyword(
     LIMIT ?
   `);
 
-  const rows = stmt.all(query, limit) as any[];
+  // Quote each token individually to prevent FTS5 syntax injection (e.g. hyphens
+  // in UUIDs being parsed as column/NOT operators) while preserving AND semantics.
+  const safeQuery = query
+    .split(/\s+/)
+    .filter(t => t.length > 0)
+    .map(t => '"' + t.replace(/"/g, '""') + '"')
+    .join(' ');
+  const rows = stmt.all(safeQuery, limit) as any[];
 
   return rows.map(row => createMemory({
     id: row.id,

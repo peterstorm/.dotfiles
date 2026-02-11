@@ -381,16 +381,16 @@ async function handleRemember(args: string[]): Promise<CommandResult> {
   const rememberArgs = args.slice(1);
 
   try {
-    const result = await executeRemember(
+    const result = executeRemember(
       rememberArgs,
+      'manual-session', // Session ID for manual memories
       projectDb,
-      globalDb,
-      'manual-session' // Session ID for manual memories
+      globalDb
     );
 
     return {
       success: result.success,
-      output: result.success ? `Created memory: ${result.memory?.id}` : undefined,
+      output: result.success ? `Created memory: ${result.memory_id}` : undefined,
       error: result.error,
     };
   } catch (err) {
@@ -466,24 +466,37 @@ async function handleForget(args: string[]): Promise<CommandResult> {
   const [projectDb, globalDb] = initDatabases(cwd);
 
   try {
-    // Try as ID first
+    // Try as ID first (both DBs)
     let result = forgetById(projectDb, idOrQuery);
-    if (!result.found) {
+    if (result.status === 'not_found') {
       result = forgetById(globalDb, idOrQuery);
     }
 
-    // If still not found, try as query
-    if (!result.found) {
+    // If still not found, try as keyword query
+    if (result.status === 'not_found') {
       result = forgetByQuery(projectDb, idOrQuery);
-      if (!result.found) {
+      if (result.status === 'candidates' && result.memories.length === 0) {
         result = forgetByQuery(globalDb, idOrQuery);
       }
     }
 
-    return {
-      success: result.found,
-      output: result.found ? `Archived memory: ${result.memoryId}` : 'Memory not found',
-    };
+    if (result.status === 'archived') {
+      return {
+        success: true,
+        output: `Archived memory: ${result.memoryId}`,
+      };
+    } else if (result.status === 'candidates' && result.memories.length > 0) {
+      const list = result.memories.map(m => `  ${m.id} - ${m.summary}`).join('\n');
+      return {
+        success: true,
+        output: `Found ${result.memories.length} candidate(s):\n${list}`,
+      };
+    } else {
+      return {
+        success: false,
+        output: 'Memory not found',
+      };
+    }
   } catch (err) {
     return {
       success: false,
@@ -640,15 +653,15 @@ async function handleInspect(args: string[]): Promise<CommandResult> {
   const [projectDb, globalDb] = initDatabases(cwd);
 
   try {
-    const result = runInspect({
+    runInspect(
       projectDb,
       globalDb,
-      telemetryPath: getTelemetryPath(cwd),
-    });
+      getTelemetryPath(cwd),
+      getSurfaceCacheDir(cwd)
+    );
 
     return {
       success: true,
-      output: result.formatted,
     };
   } catch (err) {
     return {

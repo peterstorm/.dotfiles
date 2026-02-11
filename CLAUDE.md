@@ -80,6 +80,23 @@ The repository uses a role-based system where:
 
 The system supports multiple architectures (x86_64-linux, aarch64-darwin) and uses sops-nix for secrets management.
 
+## Plugin Setup (Per-Machine)
+
+Plugin state files (`known_marketplaces.json`, `installed_plugins.json`) are gitignored — they contain absolute paths and must be regenerated per machine.
+
+**On a fresh machine after cloning:**
+```bash
+# 1. Update plugin marketplaces (fetches repos, generates known_marketplaces.json)
+claude /plugin update
+
+# 2. Install all plugins (generates installed_plugins.json with correct local paths)
+claude /plugin install claude-plugins-official  # official plugins
+claude /plugin install marketingskills          # marketing skills
+claude /plugin install local                    # local plugins (obsidian, cortex)
+```
+
+The obsidian symlink at `.claude/local-marketplace/plugins/obsidian` uses a relative path so it works on both Linux and macOS.
+
 ## Quick Start
 
 ### Adding a New NixOS Host
