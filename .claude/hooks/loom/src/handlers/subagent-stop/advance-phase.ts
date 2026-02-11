@@ -45,7 +45,9 @@ export function resolveTransition(
 ): { nextPhase: Phase; artifact: string; skipClarify?: boolean } | null {
   return match(completedPhase)
     .with("brainstorm", () => {
-      const file = findFile(".claude/specs", "brainstorm.md");
+      // Scope search to current run's spec_dir to avoid finding stale artifacts
+      const searchDir = state.spec_dir ?? ".claude/specs";
+      const file = findFile(searchDir, "brainstorm.md");
       if (!file) return null;
       return { nextPhase: "specify" as Phase, artifact: file };
     })
@@ -96,7 +98,7 @@ const handler: HookHandler = async (stdin) => {
   // Extract artifacts from transcript before checking transition
   if (input.agent_transcript_path && existsSync(input.agent_transcript_path)) {
     const transcriptContent = readFileSync(input.agent_transcript_path, "utf-8");
-    const artifacts = parsePhaseArtifacts(transcriptContent);
+    const artifacts = parsePhaseArtifacts(transcriptContent, currentState.spec_dir);
 
     await mgr.update((s) => {
       const updates: Partial<TaskGraph> = {};

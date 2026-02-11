@@ -10,7 +10,10 @@ export interface PhaseArtifacts {
   plan_file?: string;
 }
 
-export function parsePhaseArtifacts(content: string): PhaseArtifacts {
+/**
+ * @param specDir - If provided, only accept spec files under this directory
+ */
+export function parsePhaseArtifacts(content: string, specDir?: string | null): PhaseArtifacts {
   const artifacts: PhaseArtifacts = {};
 
   for (const line of parseJsonl(content)) {
@@ -26,6 +29,8 @@ export function parsePhaseArtifacts(content: string): PhaseArtifacts {
       if (typeof filePath !== "string") continue;
 
       if (filePath.includes(".claude/specs/") && filePath.endsWith(".md")) {
+        // Scope to current run's spec_dir if available
+        if (specDir && !filePath.includes(specDir)) continue;
         if (!artifacts.spec_file || filePath.length > artifacts.spec_file.length) {
           artifacts.spec_file = filePath;
         }

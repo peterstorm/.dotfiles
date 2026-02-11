@@ -311,6 +311,7 @@ cat > .claude/state/active_task_graph.json << 'EOF'
   "current_phase": "init",
   "phase_artifacts": {},
   "skipped_phases": [],
+  "spec_dir": ".claude/specs/{date_slug}",
   "spec_file": null,
   "plan_file": null,
   "tasks": []

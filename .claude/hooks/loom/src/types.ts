@@ -89,6 +89,7 @@ export interface TaskGraph {
   current_phase: Phase;
   phase_artifacts: Record<string, string>;
   skipped_phases: string[];
+  spec_dir?: string | null;
   spec_file: string | null;
   plan_file: string | null;
   plan_title?: string;
