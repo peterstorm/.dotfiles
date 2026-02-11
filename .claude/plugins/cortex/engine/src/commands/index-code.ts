@@ -374,6 +374,7 @@ export async function executeIndexCode(
   let proseEmbedding: Float64Array | null = null;
 
   if (isGeminiAvailable(geminiApiKey)) {
+    process.stderr.write(`[cortex:index-code] INFO: Using Gemini to embed prose summary\n`);
     try {
       // Build embedding text with metadata prefix
       const embeddingText = buildEmbeddingText(
@@ -397,6 +398,8 @@ export async function executeIndexCode(
       // Non-fatal: queue embedding for backfill
       console.error(`Warning: failed to embed prose, will queue for backfill: ${message}`);
     }
+  } else {
+    process.stderr.write(`[cortex:index-code] INFO: Gemini unavailable — prose embedding queued for backfill\n`);
   }
 
   // Build memories (pure — ids and timestamps generated at I/O boundary)

@@ -45,6 +45,31 @@ const getDiscount = (customer: Customer): number =>
     .otherwise(() => 0);
 ```
 
+## Branded Types for Stringly-Typed Parameters
+Prevent argument-swap bugs by branding primitive types that represent distinct domain concepts.
+
+```typescript
+// BAD: two strings, easy to swap silently
+function backfill(projectName: string, apiKey: string): void
+
+// GOOD: branded types catch swaps at compile time
+type ProjectName = string & { readonly __brand: 'ProjectName' };
+type ApiKey = string & { readonly __brand: 'ApiKey' };
+
+const ProjectName = (s: string): ProjectName => s as ProjectName;
+const ApiKey = (s: string): ApiKey => s as ApiKey;
+
+function backfill(projectName: ProjectName, apiKey: ApiKey): void
+
+// Compile error: Argument of type 'ApiKey' is not assignable to 'ProjectName'
+backfill(apiKey, projectName);
+```
+
+Use branded types when:
+- Multiple same-typed params could be confused (IDs, keys, names)
+- Domain concepts deserve distinct types (UserId vs OrderId)
+- Bugs from argument swaps would be silent at runtime
+
 ## Database Operations
 - Extract query logic from business logic
 - Pass query results as data to pure functions

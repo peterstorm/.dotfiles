@@ -170,6 +170,7 @@ export async function executeRecall(
 
   if (useSemantic) {
     // Semantic search via Gemini embeddings
+    process.stderr.write(`[cortex:recall] INFO: Using Gemini semantic search\n`);
     try {
       // Build embedding text with project prefix (FR-039)
       const embeddingText = buildQueryEmbeddingText(query, options.projectName);
@@ -200,6 +201,7 @@ export async function executeRecall(
     }
   } else {
     // Keyword search via FTS5 (fallback)
+    process.stderr.write(`[cortex:recall] INFO: Gemini unavailable — falling back to keyword search\n`);
     try {
       projectResults = searchByKeyword(projectDb, query, limit);
       globalResults = searchByKeyword(globalDb, query, limit);

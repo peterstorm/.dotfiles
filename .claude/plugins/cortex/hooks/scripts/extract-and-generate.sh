@@ -4,9 +4,10 @@
 # Satisfies:
 # - FR-119: Receives Stop hook input as JSON stdin (session_id, transcript_path, cwd)
 # - FR-022: Generate triggers after extraction completes
+# - FR-046: Backfill missing embeddings after extraction
 #
 # Architecture:
-# Thin shell orchestrator - reads stdin JSON, pipes to extract CLI, then calls generate.
+# Thin shell orchestrator - reads stdin JSON, pipes to extract CLI, then backfills embeddings, then generates surface.
 # ALL errors caught and logged, NEVER block session (exit 0 always).
 #
 # Usage (invoked by Stop hook):
@@ -18,6 +19,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CLI_PATH="${PLUGIN_ROOT}/engine/src/cli.ts"
+
+# Source GEMINI_API_KEY for embedding backfill (zsh initContent doesn't apply in hook bash context)
+GEMINI_ENV="$HOME/.config/sops-nix/secrets/rendered/gemini-env"
+if [[ -f "$GEMINI_ENV" ]]; then
+  source "$GEMINI_ENV"
+fi
 
 # Logging helper
 log_error() {
@@ -51,7 +58,15 @@ main() {
     # Continue to generate anyway - may have partial results
   fi
 
-  # Step 2: Generate push surface (if we got cwd)
+  # Step 2: Backfill embeddings for newly extracted memories (FR-046)
+  if [[ -n "$cwd" ]]; then
+    log_info "Backfilling embeddings for cwd: $cwd"
+    if ! bun "$CLI_PATH" backfill "$cwd" 2>&1 | tee /tmp/cortex-backfill.log; then
+      log_error "Backfill failed (see /tmp/cortex-backfill.log)"
+    fi
+  fi
+
+  # Step 3: Generate push surface (if we got cwd)
   if [[ -n "$cwd" ]]; then
     log_info "Generating push surface for cwd: $cwd"
     if ! bun "$CLI_PATH" generate "$cwd" 2>&1 | tee /tmp/cortex-generate.log; then

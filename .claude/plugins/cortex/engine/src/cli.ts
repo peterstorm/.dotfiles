@@ -692,12 +692,13 @@ async function handleBackfill(args: string[]): Promise<CommandResult> {
   const apiKey = getGeminiApiKey();
 
   try {
-    const projectResult = await backfill(projectDb, apiKey, getProjectName(cwd));
-    const globalResult = await backfill(globalDb, apiKey, 'global');
+    const projectResult = await backfill(projectDb, getProjectName(cwd), apiKey);
+    const globalResult = await backfill(globalDb, 'global', apiKey);
 
+    const processed = (projectResult.ok ? projectResult.processed : 0) + (globalResult.ok ? globalResult.processed : 0);
     return {
       success: true,
-      output: `Backfill complete: processed ${projectResult.processedCount + globalResult.processedCount} memories`,
+      output: `Backfill complete: processed ${processed} memories`,
     };
   } catch (err) {
     return {
