@@ -143,6 +143,8 @@ Substitute variables:
 - `{spec_file_path}` - Path to spec from Phase 1
 - `{marker_count}` - Number of `[NEEDS CLARIFICATION]` markers
 
+**IMPORTANT: Do NOT pre-resolve markers in the agent prompt.** The clarify agent MUST ask the user via AskUserQuestion. Pass only the spec path and marker count — let the agent drive the questioning.
+
 **Wait for agent completion.** Verify markers resolved.
 
 If still >3 markers: Ask user to resolve remaining, or proceed with caveats.

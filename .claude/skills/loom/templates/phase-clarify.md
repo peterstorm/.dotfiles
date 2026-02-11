@@ -13,6 +13,17 @@ Template for spawning clarify-agent. Variables in `{braces}` must be substituted
 
 ---
 
+## CRITICAL: You MUST Ask the User
+
+**Every `[NEEDS CLARIFICATION]` marker requires a user decision.** You are NOT allowed to resolve markers on your own or accept pre-resolved answers from the orchestrator.
+
+- Use `AskUserQuestion` tool for each marker (batch related ones, max 4 questions per call)
+- Present multiple-choice options with clear trade-offs
+- Only update the spec AFTER receiving user answers
+- Technical uncertainties (HOW not WHAT) should be flagged for architecture phase, not asked here
+
+---
+
 ## Clarify: {spec_file_path}
 
 Resolve uncertainties in the specification.
