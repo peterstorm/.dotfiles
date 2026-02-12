@@ -1,85 +1,83 @@
-# Async Session Loading with Loading State
+# Show assistant reasoning in activity stream
 
 ## Context
-`list_sessions()` reads+deserializes **full** `SessionArchive` files (events, agents, task_graph) at startup via `load_existing_files()`. The sessions view only needs `SessionMeta` for the table. With many/large archives this blocks the TUI from rendering.
+Activity stream only shows tool use events from hooks. The actual reasoning/thinking text lives in Claude Code transcript files (`~/.claude/projects/<hash>/<session-id>.jsonl`). User wants to see what agents are thinking inline with tool events.
 
-## Root Cause
-`session::list_sessions()` calls `load_session()` per file which deserializes full JSON archives. This runs synchronously on the watcher thread at startup. Even the sessions *list* view only uses `archive.meta`.
+## Data source
+Claude Code transcript JSONL has `type: "assistant"` entries with `.message.content[]` blocks:
+- `type: "text"` — visible reasoning (what agent says before/after tool use)
+- `type: "thinking"` — extended thinking (internal chain of thought)
 
-## Fix
+Each entry has `sessionId`, `timestamp`, `cwd`. The `transcript_path` field is sent in all hook events including SessionStart.
 
-### 1. New `list_session_metas()` — meta-only loading (`session/mod.rs`)
-- Add `fn list_session_metas(dir) -> Result<Vec<(PathBuf, SessionMeta)>, String>`
-- Reads each JSON file, deserializes only the `"meta"` field via a helper struct: `struct MetaOnly { meta: SessionMeta }`
-- Returns `(path, meta)` tuples so we can load full archive later by path
-- Much faster: skips deserializing events/agents/task_graph
+## Approach
 
-### 2. State: store lightweight session index (`state.rs`)
-- Replace `sessions: Vec<SessionArchive>` with `sessions: Vec<ArchivedSession>`
-- New struct:
-  ```rust
-  pub struct ArchivedSession {
-      pub meta: SessionMeta,
-      pub path: PathBuf,
-      pub data: Option<SessionArchive>,  // None = not loaded yet
-  }
-  ```
-- Sessions list uses `meta` directly (always available)
-- Session detail uses `data` (loaded on demand)
+### 1. Capture `transcript_path` in hook script + store per session
 
-### 3. New `AppEvent::SessionMetasLoaded` (`event/mod.rs`)
-- `SessionMetasLoaded(Vec<(PathBuf, SessionMeta)>)` — replaces `SessionListRefreshed` for startup
-- Keep `SessionListRefreshed(Vec<SessionArchive>)` for full-load path (backward compat)
+**`~/.claude/hooks/send_event.sh`** — extract `transcript_path` from hook JSON, include in `session_start` event (alongside existing `cwd`)
 
-### 4. Update handler for `SessionMetasLoaded` (`update.rs`)
-- Maps `(path, meta)` pairs into `ArchivedSession { meta, path, data: None }`
-- Sets `state.sessions`
+**`src/model/session.rs`** — add `transcript_path: Option<String>` to `SessionMeta`
 
-### 5. Async full-archive loading on Enter (`navigation.rs` + `main.rs`)
-- When user presses Enter on a session in Sessions view:
-  - If `data.is_some()` → navigate to SessionDetail immediately
-  - If `data.is_none()` → set `state.loading_session = Some(idx)`, emit `AppEvent::LoadSessionRequested(idx)`
-- In main event loop or watcher: spawn background load, send `SessionLoaded` on completion
-- `SessionLoaded` handler: populate `sessions[idx].data = Some(archive)`, clear loading flag, navigate to detail
+**`src/app/update.rs`** — on `SessionStart`, extract `transcript_path` from `event.raw` and store in session meta
 
-### 6. Loading indicator in sessions view (`sessions.rs`)
-- If `state.loading_session == Some(idx)` → show "Loading..." spinner/text on that row
-- Or render a centered loading overlay on the content area
+### 2. Add new HookEventKind variant
 
-### 7. Watcher: use `list_session_metas` at startup (`watcher/mod.rs`)
-- Replace `session::list_sessions(&paths.archive_dir)` with `session::list_session_metas(&paths.archive_dir)`
-- Send `SessionMetasLoaded` instead of `SessionListRefreshed`
+**`src/model/hook_event.rs`** — add:
+```rust
+HookEventKind::AssistantText { content: String }
+```
 
-### 8. Session detail: handle unloaded state (`session_detail.rs`)
-- `get_selected_session_data` for archived sessions: check `sessions[idx].data`
-- If `None` → return special "loading" variant or `None` (render loading screen)
+Constructor: `HookEventKind::assistant_text(content)`. Also add to `parse_hook_events` (event tag: `"assistant_text"`).
 
-### 9. Adapt existing `SessionLoaded` handler (`update.rs`)
-- When `SessionLoaded(archive)` arrives, find matching session in `state.sessions` by meta.id
-- Set `data = Some(archive)`, clear `loading_session`
-- Navigate to `SessionDetail`
+### 3. Tail transcript files, emit assistant text events
 
-### 10. Tests
-- `list_session_metas` returns correct meta + path pairs
-- `ArchivedSession` with `data: None` renders in session list
-- Enter on unloaded session sets loading state
-- `SessionLoaded` populates data and navigates
+**`src/watcher/parsers.rs`** — add:
+```rust
+pub fn parse_claude_transcript_incremental(content: &str, byte_offset: usize) -> Vec<HookEvent>
+```
+Pure function. Reads JSONL from `byte_offset`, extracts `assistant` entries, returns `HookEvent` with `AssistantText` kind, `session_id`, and `timestamp`.
+
+Only extracts `text` blocks (visible reasoning). Skips `thinking` blocks (too verbose, internal). Truncates content to 500 chars per block.
+
+**`src/watcher/mod.rs`** — new function `poll_transcripts()`:
+- Runs on same 200ms polling loop as events
+- Iterates `state.active_sessions` to get `transcript_path` values
+- Uses `TailState` to track byte offset per transcript file
+- Calls `parse_claude_transcript_incremental()` on new content
+- Emits `AppEvent::HookEventReceived` for each extracted message
+
+Discovery: pass active session transcript paths from main loop to watcher thread via a shared `Arc<Mutex<Vec<(String, PathBuf)>>>` (session_id → transcript_path pairs).
+
+### 4. Render in event stream
+
+**`src/view/components/event_stream.rs`** — extend `format_event_lines()`:
+```rust
+HookEventKind::AssistantText { content } => {
+    ("💭", "Thinking".into(), Some(content.clone()), Theme::MUTED_TEXT, None)
+}
+```
+
+Uses existing detail rendering (word wrap, clean_detail). Shows inline with tool events, sorted by timestamp.
+
+### 5. Wire transcript paths from state to watcher
+
+**`src/main.rs`** — share `Arc<Mutex<BTreeMap<String, String>>>` between main loop and watcher. On each tick or SessionStart, update the map with `session_id → transcript_path`. Watcher reads from this map.
+
+Alternative simpler approach: have `update()` emit `AppEvent::WatchTranscript(session_id, path)` which the main loop forwards to the watcher. But this requires a second channel. The shared map is simpler.
 
 ## File summary
 | File | Change |
 |------|--------|
-| `src/model/session.rs` | Add `ArchivedSession` struct |
-| `src/session/mod.rs` | Add `list_session_metas()` |
-| `src/event/mod.rs` | Add `SessionMetasLoaded` variant |
-| `src/app/state.rs` | `sessions: Vec<ArchivedSession>`, `loading_session: Option<usize>` |
-| `src/app/update.rs` | Handle `SessionMetasLoaded`, adapt `SessionLoaded` |
-| `src/app/navigation.rs` | Enter triggers load-or-navigate |
-| `src/view/sessions.rs` | Use `ArchivedSession.meta`, show loading row |
-| `src/view/session_detail.rs` | Handle unloaded data |
-| `src/watcher/mod.rs` | Use `list_session_metas` at startup |
-| Tests | New + adapted tests |
+| `~/.claude/hooks/send_event.sh` | Add `transcript_path` to session_start event |
+| `src/model/session.rs` | Add `transcript_path: Option<String>` to SessionMeta |
+| `src/model/hook_event.rs` | Add `AssistantText { content }` variant + constructor |
+| `src/watcher/parsers.rs` | Add `parse_claude_transcript_incremental()` |
+| `src/watcher/mod.rs` | Add transcript polling, shared path map |
+| `src/app/update.rs` | Extract transcript_path on SessionStart |
+| `src/view/components/event_stream.rs` | Render AssistantText in format_event_lines |
+| `src/main.rs` | Wire shared transcript path map between state + watcher |
 
 ## Verification
 1. `cargo build` — clean compile
 2. `cargo test` — all pass
-3. Run TUI with many archived sessions — instant Sessions view, detail loads on Enter
+3. Run TUI with active Claude Code session — reasoning text appears inline in activity stream between tool events

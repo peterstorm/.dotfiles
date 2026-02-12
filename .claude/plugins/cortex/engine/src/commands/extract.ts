@@ -15,7 +15,7 @@
  * 3. Truncate if needed (pure)
  * 4. Get git context
  * 5. Build extraction prompt (pure)
- * 6. Call Haiku
+ * 6. Call Claude CLI
  * 7. Parse response (pure)
  * 8. For each candidate:
  *    - Insert memory
@@ -49,7 +49,7 @@ import {
   getActiveMemories,
   insertEdge,
 } from '../infra/db.js';
-import { extractMemories, isGeminiLlmAvailable } from '../infra/gemini-llm.js';
+import { extractMemories, isClaudeLlmAvailable } from '../infra/claude-llm.js';
 import { getGitContext } from '../infra/git-context.js';
 import { runLifecycle } from './lifecycle.js';
 import { invalidateSurfaceCache } from './generate.js';
@@ -78,24 +78,22 @@ export interface ExtractionResult {
  *
  * @param input - Hook input from stdin
  * @param projectDb - Project database instance
- * @param apiKey - Anthropic API key
  * @returns Extraction result
  */
 export async function executeExtract(
   input: HookInput,
-  projectDb: Database,
-  apiKey: string | undefined
+  projectDb: Database
 ): Promise<ExtractionResult> {
   try {
-    // Validate API key availability
-    if (!isGeminiLlmAvailable(apiKey)) {
-      logInfo('GEMINI_API_KEY not set — extraction skipped (no memories will be extracted this session)');
+    // Validate Claude CLI availability
+    if (!isClaudeLlmAvailable()) {
+      logInfo('Claude CLI not found on PATH — extraction skipped');
       return {
         success: false,
         extracted_count: 0,
         edge_count: 0,
         cursor_position: 0,
-        error: 'API key not available',
+        error: 'Claude CLI not available',
       };
     }
 
@@ -145,20 +143,26 @@ export async function executeExtract(
     // Pure: Build extraction prompt
     const prompt = buildExtractionPrompt(truncated, gitContext, projectName);
 
-    // I/O: Call Gemini for extraction (async)
-    logInfo('Using Gemini for memory extraction');
+    // I/O: Call Claude CLI for extraction (async)
+    logInfo('Using Claude for memory extraction');
     let response: string;
     try {
-      response = await extractMemories(prompt, apiKey!);
+      response = await extractMemories(prompt);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logError(`Haiku extraction failed: ${message}`);
+      logError(`Claude extraction failed: ${message}`);
+      // Save checkpoint at newCursor to advance past failed chunk (no retry)
+      saveExtractionCheckpoint(projectDb, {
+        session_id: input.session_id,
+        cursor_position: newCursor,
+        extracted_at: new Date().toISOString(),
+      });
       return {
         success: false,
         extracted_count: 0,
         edge_count: 0,
-        cursor_position: cursorStart,
-        error: `Haiku extraction failed: ${message}`,
+        cursor_position: newCursor,
+        error: `Claude extraction failed: ${message}`,
       };
     }
 
@@ -181,7 +185,9 @@ export async function executeExtract(
       };
     }
 
-    // Process each candidate
+    // Process each candidate — individual insert failures are non-fatal.
+    // Intentional: we continue inserting remaining candidates even if one fails,
+    // because partial extraction is better than none (FR-010).
     const insertedMemories: Memory[] = [];
     for (const candidate of candidates) {
       try {
@@ -191,7 +197,6 @@ export async function executeExtract(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logError(`Failed to insert memory: ${message}`);
-        // Continue processing other candidates
       }
     }
 

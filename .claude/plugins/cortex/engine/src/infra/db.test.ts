@@ -352,9 +352,13 @@ describe('Database Layer', () => {
       expect(results.length).toBe(3);
 
       // Should be sorted by similarity (mem1 is identical, mem2 is close, mem3 is orthogonal)
-      expect(results[0].id).toBe('mem-emb-1');
-      expect(results[1].id).toBe('mem-emb-2');
-      expect(results[2].id).toBe('mem-emb-3');
+      // searchByEmbedding returns {memory, score}[]
+      expect(results[0].memory.id).toBe('mem-emb-1');
+      expect(results[1].memory.id).toBe('mem-emb-2');
+      expect(results[2].memory.id).toBe('mem-emb-3');
+      // Scores should be descending
+      expect(results[0].score).toBeGreaterThan(results[1].score);
+      expect(results[1].score).toBeGreaterThan(results[2].score);
 
       db.close();
     });
@@ -364,8 +368,8 @@ describe('Database Layer', () => {
 
       const results = searchByEmbedding(db, queryEmbedding, 2);
       expect(results).toHaveLength(2);
-      expect(results[0].id).toBe('mem-emb-1');
-      expect(results[1].id).toBe('mem-emb-2');
+      expect(results[0].memory.id).toBe('mem-emb-1');
+      expect(results[1].memory.id).toBe('mem-emb-2');
 
       db.close();
     });
@@ -393,7 +397,8 @@ describe('Database Layer', () => {
       const results = searchByEmbedding(db2, queryEmbedding, 10);
 
       expect(results).toHaveLength(1);
-      expect(results[0].id).toBe('mem-local');
+      expect(results[0].memory.id).toBe('mem-local');
+      expect(results[0].score).toBeGreaterThan(0);
 
       db2.close();
       db.close();

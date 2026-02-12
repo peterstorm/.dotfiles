@@ -69,12 +69,11 @@ export async function extractMemories(
   apiKey: string
 ): Promise<string> {
   try {
-    const url = `${API_URL}?key=${apiKey}`;
-
-    const response = await fetch(url, {
+    const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
         contents: [
@@ -148,12 +147,11 @@ export async function classifyEdges(
   const prompt = buildEdgeClassificationPrompt(pairs);
 
   try {
-    const url = `${API_URL}?key=${apiKey}`;
-
-    const response = await fetch(url, {
+    const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
         contents: [

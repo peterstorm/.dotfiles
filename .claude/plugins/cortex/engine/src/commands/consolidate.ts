@@ -8,6 +8,7 @@
 import type { Database } from 'bun:sqlite';
 import type { Memory } from '../core/types.js';
 import { randomUUID } from 'crypto';
+import { unlinkSync } from 'fs';
 import {
   getActiveMemories,
   createCheckpoint,
@@ -376,6 +377,9 @@ export function executeConsolidate(
       // Break after first pass since results won't change without merges.
       break;
     }
+
+    // Clean up checkpoint file on success
+    try { unlinkSync(checkpointPath); } catch { /* already gone */ }
 
     return {
       pairs_found: totalPairsFound,

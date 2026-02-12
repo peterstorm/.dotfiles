@@ -13,6 +13,7 @@ import {
   getMemoriesByIds,
   getAllEdges,
   updateMemory,
+  type EmbeddingSearchResult,
 } from '../infra/db.js';
 import { mergeResults } from '../core/ranking.js';
 import { traverseGraph } from '../core/graph.js';
@@ -160,8 +161,8 @@ export async function executeRecall(
     });
   }
 
-  let projectResults: readonly Memory[];
-  let globalResults: readonly Memory[];
+  let projectSearchResults: SearchResult[];
+  let globalSearchResults: SearchResult[];
   let searchMethod: 'semantic' | 'keyword';
 
   // Determine search method
@@ -183,28 +184,59 @@ export async function executeRecall(
 
       const queryEmbedding = embeddings[0];
       if (!queryEmbedding) {
-        return { success: false, error: { type: 'embedding_failed', message: 'No embedding returned' } };
+        throw new Error('No embedding returned');
       }
 
-      // I/O: Search both databases
-      projectResults = searchByEmbedding(projectDb, queryEmbedding, limit);
-      globalResults = searchByEmbedding(globalDb, queryEmbedding, limit);
+      // I/O: Search both databases — scores propagated from cosine similarity
+      const projectEmbedResults = searchByEmbedding(projectDb, queryEmbedding, limit);
+      const globalEmbedResults = searchByEmbedding(globalDb, queryEmbedding, limit);
+
+      projectSearchResults = projectEmbedResults.map(({ memory, score }) => ({
+        memory,
+        score,
+        source: 'project' as const,
+        related: [],
+      }));
+
+      globalSearchResults = globalEmbedResults.map(({ memory, score }) => ({
+        memory,
+        score,
+        source: 'global' as const,
+        related: [],
+      }));
 
       searchMethod = 'semantic';
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
-      return Promise.resolve({
-        success: false,
-        error: { type: 'embedding_failed', message },
-      });
+      // #8: Fallback to keyword search on semantic failure instead of returning error
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      process.stderr.write(`[cortex:recall] WARN: Semantic search failed (${message}) — falling back to keyword\n`);
+      try {
+        const projectKw = searchByKeyword(projectDb, query, limit);
+        const globalKw = searchByKeyword(globalDb, query, limit);
+        projectSearchResults = projectKw.map((memory) => ({
+          memory, score: 1.0, source: 'project' as const, related: [],
+        }));
+        globalSearchResults = globalKw.map((memory) => ({
+          memory, score: 1.0, source: 'global' as const, related: [],
+        }));
+        searchMethod = 'keyword';
+      } catch (kwError) {
+        const kwMessage = kwError instanceof Error ? kwError.message : 'Unknown error';
+        return { success: false, error: { type: 'search_failed', message: kwMessage } };
+      }
     }
   } else {
     // Keyword search via FTS5 (fallback)
     process.stderr.write(`[cortex:recall] INFO: Gemini unavailable — falling back to keyword search\n`);
     try {
-      projectResults = searchByKeyword(projectDb, query, limit);
-      globalResults = searchByKeyword(globalDb, query, limit);
+      const projectKw = searchByKeyword(projectDb, query, limit);
+      const globalKw = searchByKeyword(globalDb, query, limit);
+      projectSearchResults = projectKw.map((memory) => ({
+        memory, score: 1.0, source: 'project' as const, related: [],
+      }));
+      globalSearchResults = globalKw.map((memory) => ({
+        memory, score: 1.0, source: 'global' as const, related: [],
+      }));
       searchMethod = 'keyword';
     } catch (error) {
       const message =
@@ -215,23 +247,6 @@ export async function executeRecall(
       });
     }
   }
-
-  // Pure: Merge results from both databases
-  const projectSearchResults: SearchResult[] = projectResults.map(
-    (memory) => ({
-      memory,
-      score: 1.0, // Score not available from DB search
-      source: 'project' as const,
-      related: [],
-    })
-  );
-
-  const globalSearchResults: SearchResult[] = globalResults.map((memory) => ({
-    memory,
-    score: 1.0,
-    source: 'global' as const,
-    related: [],
-  }));
 
   let mergedResults = mergeResults(
     projectSearchResults,

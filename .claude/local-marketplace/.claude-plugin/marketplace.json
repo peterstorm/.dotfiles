@@ -24,6 +24,16 @@
       },
       "source": "./plugins/cortex",
       "category": "productivity"
+    },
+    {
+      "name": "feynman",
+      "description": "Interactive Feynman technique teaching — learn any concept through simplified explanation, gap detection, and iterative refinement",
+      "version": "0.1.0",
+      "author": {
+        "name": "peterstorm"
+      },
+      "source": "./plugins/feynman",
+      "category": "learning"
     }
   ]
 }

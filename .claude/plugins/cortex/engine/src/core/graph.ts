@@ -68,10 +68,17 @@ export function isDuplicateEdge(existing: Edge, candidate: Edge): boolean {
  *
  * Centrality is the count of incoming edges, normalized to [0, 1].
  * Returns 0 if memory has no incoming edges.
+ *
+ * Accepts optional precomputed map to avoid redundant computation
+ * when called in a loop (see computeAllCentrality).
  */
-export function computeCentrality(memoryId: string, edges: ReadonlyArray<Edge>): number {
-  const all = computeAllCentrality(edges);
-  return all.get(memoryId) ?? 0;
+export function computeCentrality(
+  memoryId: string,
+  edges: ReadonlyArray<Edge>,
+  precomputed?: ReadonlyMap<string, number>
+): number {
+  const map = precomputed ?? computeAllCentrality(edges);
+  return map.get(memoryId) ?? 0;
 }
 
 /**

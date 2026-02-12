@@ -195,8 +195,9 @@ export function parseExtractionResponse(
         priority: Number(c.priority),
         tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
       }));
-  } catch {
-    // Parse failure - return empty array
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[cortex:extraction] WARN: Parse failure: ${message}. Response (truncated): ${response.slice(0, 200)}\n`);
     return [];
   }
 }

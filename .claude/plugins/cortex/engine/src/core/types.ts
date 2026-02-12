@@ -4,6 +4,37 @@
  * Factory functions validate invariants at construction time.
  */
 
+// ============================================================================
+// BRANDED TYPES
+// ============================================================================
+
+/** Branded type for memory IDs — prevents argument-swap bugs */
+export type MemoryId = string & { readonly __brand: 'MemoryId' };
+export const MemoryId = (s: string): MemoryId => s as MemoryId;
+
+/** Branded type for edge IDs */
+export type EdgeId = string & { readonly __brand: 'EdgeId' };
+export const EdgeId = (s: string): EdgeId => s as EdgeId;
+
+/** Branded type for Gemini embeddings (Float64, 768-dim) */
+export type GeminiEmbedding = Float64Array & { readonly __brand: 'GeminiEmbedding' };
+export const GeminiEmbedding = (a: Float64Array): GeminiEmbedding => a as GeminiEmbedding;
+
+/** Branded type for local embeddings (Float32, 384-dim) */
+export type LocalEmbedding = Float32Array & { readonly __brand: 'LocalEmbedding' };
+export const LocalEmbedding = (a: Float32Array): LocalEmbedding => a as LocalEmbedding;
+
+// ============================================================================
+// SOURCE CONTEXT
+// ============================================================================
+
+/** Shared schema for source_context JSON — used by extract, remember, index-code */
+export type SourceContext =
+  | { readonly source: 'extraction'; readonly session_id: string; readonly branch?: string }
+  | { readonly source: 'manual'; readonly session_id: string }
+  | { readonly source: 'code_index'; readonly file_path: string; readonly start_line?: number; readonly end_line?: number; readonly session_id?: string }
+  | { readonly source: 'consolidation'; readonly merged_from: readonly string[]; readonly session_id: string };
+
 // Memory Type (FR-103)
 export type MemoryType =
   | 'architecture'
@@ -236,7 +267,7 @@ export function createMemory(input: {
     source_type: input.source_type,
     source_session: trimmedSourceSession,
     source_context: input.source_context,
-    tags: input.tags ?? [],
+    tags: [...(input.tags ?? [])],
     access_count: input.access_count ?? 0,
     last_accessed_at: input.last_accessed_at ?? now,
     created_at: input.created_at ?? now,
@@ -345,7 +376,7 @@ export function createMemoryCandidate(input: {
     scope: input.scope,
     confidence: input.confidence,
     priority: input.priority,
-    tags: input.tags ?? [],
+    tags: [...(input.tags ?? [])],
   };
 }
 

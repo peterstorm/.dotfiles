@@ -24,7 +24,7 @@
  */
 
 import { Database } from 'bun:sqlite';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { HookInput } from './core/types.js';
 import {
@@ -39,12 +39,13 @@ import {
   DEFAULT_SEARCH_LIMIT,
   GITIGNORE_PATTERNS,
 } from './config.js';
-import { openDatabase } from './infra/db.js';
+import { openDatabase, getActiveMemories } from './infra/db.js';
 import { ensureGitignored } from './infra/filesystem.js';
 
 // Command imports
 import { executeExtract } from './commands/extract.js';
 import { runGenerate, loadCachedSurface } from './commands/generate.js';
+import { wrapInMarkers } from './core/surface.js';
 import { executeRecall, formatRecallResult, formatRecallError } from './commands/recall.js';
 import type { RecallOptions } from './commands/recall.js';
 import { executeRemember } from './commands/remember.js';
@@ -216,10 +217,9 @@ async function handleExtract(): Promise<CommandResult> {
   }
 
   const projectDb = openDatabase(projectDbPath);
-  const apiKey = getGeminiApiKey();
 
   try {
-    const result = await executeExtract(input, projectDb, apiKey);
+    const result = await executeExtract(input, projectDb);
     return {
       success: result.success,
       output: JSON.stringify(result),
@@ -423,19 +423,19 @@ async function handleIndexCode(args: string[]): Promise<CommandResult> {
   const [projectDb, globalDb] = initDatabases(cwd);
 
   try {
-    const result = await executeIndexCode({
+    const result = await executeIndexCode(
+      [proseId, codePath],
+      'manual-index',
       projectDb,
       globalDb,
-      proseId,
-      codePath,
-      sessionId: 'manual-index',
-      cwd,
-    });
+      getGeminiApiKey(),
+      getProjectName(cwd)
+    );
 
     return {
       success: result.success,
-      output: result.success ? `Indexed code: ${result.codeMemoryId}` : undefined,
-      error: result.error,
+      output: result.success && 'code_memory_id' in result ? `Indexed code: ${result.code_memory_id}` : undefined,
+      error: !result.success ? result.error : undefined,
     };
   } catch (err) {
     return {
@@ -538,7 +538,8 @@ async function handleConsolidate(args: string[]): Promise<CommandResult> {
   const projectDb = openDatabase(projectDbPath);
 
   try {
-    const pairs = findSimilarPairs(projectDb);
+    const memories = getActiveMemories(projectDb);
+    const pairs = findSimilarPairs(memories);
     return {
       success: true,
       output: `Found ${pairs.length} similar pairs`,
@@ -575,7 +576,7 @@ async function handleLifecycle(args: string[]): Promise<CommandResult> {
 
     return {
       success: true,
-      output: `Lifecycle complete: archived ${projectResult.archivedCount + globalResult.archivedCount}, pruned ${projectResult.prunedCount + globalResult.prunedCount}`,
+      output: `Lifecycle complete: archived ${projectResult.archived + globalResult.archived}, pruned ${projectResult.pruned + globalResult.pruned}`,
     };
   } catch (err) {
     return {
@@ -608,22 +609,22 @@ async function handleTraverse(args: string[]): Promise<CommandResult> {
 
   try {
     // Try project DB first
-    let result = executeTraverse(projectDb, { memoryId, maxDepth });
-    if ('error' in result) {
+    let result = executeTraverse(projectDb, { id: memoryId, depth: maxDepth });
+    if (!result.success) {
       // Try global DB
-      result = executeTraverse(globalDb, { memoryId, maxDepth });
+      result = executeTraverse(globalDb, { id: memoryId, depth: maxDepth });
     }
 
-    if ('error' in result) {
+    if (!result.success) {
       return {
         success: false,
-        error: result.error,
+        error: JSON.stringify(result.error),
       };
     }
 
     return {
       success: true,
-      output: JSON.stringify(result),
+      output: JSON.stringify(result.result),
     };
   } catch (err) {
     return {
@@ -729,6 +730,13 @@ async function handleLoadSurface(args: string[]): Promise<CommandResult> {
   try {
     const result = loadCachedSurface(cwd, getSurfaceCacheDir(cwd));
 
+    if (result !== null) {
+      // Write cached surface to .claude/cortex-memory.local.md
+      const outputPath = getSurfaceOutputPath(cwd);
+      mkdirSync(dirname(outputPath), { recursive: true });
+      writeFileSync(outputPath, wrapInMarkers(result.surface), 'utf8');
+    }
+
     return {
       success: true,
       output: result !== null ? 'Loaded cached surface' : 'No cached surface available',
@@ -813,6 +821,12 @@ async function main() {
       error: `Unhandled error: ${err}`,
     };
   }
+
+  // Safety: close DBs on uncaught exceptions to prevent WAL corruption
+  process.on('uncaughtException', (err) => {
+    logError(`Uncaught exception: ${err}`);
+    process.exit(1);
+  });
 
   // Output result
   if (result.output) {

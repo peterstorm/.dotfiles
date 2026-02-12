@@ -84,11 +84,12 @@ describe('extractMemories', () => {
 
     expect(result).toBe(responseText);
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=test-api-key',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': 'test-api-key',
         },
         body: JSON.stringify({
           contents: [

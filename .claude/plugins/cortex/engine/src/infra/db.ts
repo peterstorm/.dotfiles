@@ -13,7 +13,7 @@ import type {
   MemoryScope,
   EdgeRelation,
 } from '../core/types.js';
-import { createMemory, createEdge, createExtractionCheckpoint } from '../core/types.js';
+import { createMemory, createEdge, createExtractionCheckpoint, isEdgeRelation, isMemoryType } from '../core/types.js';
 import { cosineSimilarity } from '../core/similarity.js';
 
 // ============================================================================
@@ -527,20 +527,29 @@ export function getArchivedMemories(db: Database): readonly Memory[] {
 }
 
 /**
+ * Search result with cosine similarity score
+ */
+export interface EmbeddingSearchResult {
+  readonly memory: Memory;
+  readonly score: number;
+}
+
+/**
  * Search memories by embedding similarity
- * I/O: Reads from database, performs in-memory similarity computation
+ * I/O: Reads from database
+ * Cosine similarity computed in-memory, returned with results
  *
  * @param db - Database instance
- * @param embedding - Query embedding (voyage or local)
+ * @param embedding - Query embedding (Gemini or local)
  * @param limit - Maximum number of results
- * @returns Readonly array of memories sorted by similarity (descending)
+ * @returns Readonly array of {memory, score} sorted by similarity (descending)
  */
 export function searchByEmbedding(
   db: Database,
   embedding: Float64Array | Float32Array,
   limit: number
-): readonly Memory[] {
-  // Determine if query is voyage (Float64) or local (Float32)
+): readonly EmbeddingSearchResult[] {
+  // Determine if query is Gemini (Float64) or local (Float32)
   const isFloat64 = embedding instanceof Float64Array;
 
   // Load all memories with embeddings of matching type
@@ -552,7 +561,8 @@ export function searchByEmbedding(
   const rows = stmt.all() as any[];
 
   // Compute similarity scores in-memory
-  const results = rows.map(row => {
+  const results: EmbeddingSearchResult[] = [];
+  for (const row of rows) {
     const memory = createMemory({
       id: row.id,
       content: row.content,
@@ -577,19 +587,19 @@ export function searchByEmbedding(
 
     const memoryEmbedding = isFloat64 ? memory.embedding : memory.local_embedding;
     if (!memoryEmbedding) {
-      throw new Error(`Missing ${column} for memory ${memory.id}`);
+      // Skip corrupt row instead of crashing (#9)
+      console.warn(`[cortex:db] Skipping memory ${memory.id}: ${column} deserialized to null`);
+      continue;
     }
 
     const score = cosineSimilarity(embedding, memoryEmbedding);
-
-    return { memory, score };
-  });
+    results.push({ memory, score });
+  }
 
   // Sort by score descending and return top N
   return results
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(r => r.memory);
+    .slice(0, limit);
 }
 
 /**
@@ -713,16 +723,22 @@ export function getEdgesForMemory(db: Database, memoryId: string): readonly Edge
 
   const rows = stmt.all(memoryId, memoryId) as any[];
 
-  return rows.map(row => createEdge({
-    id: row.id,
-    source_id: row.source_id,
-    target_id: row.target_id,
-    relation_type: row.relation_type as EdgeRelation,
-    strength: row.strength,
-    bidirectional: row.bidirectional === 1,
-    status: row.status,
-    created_at: row.created_at,
-  }));
+  return rows.flatMap(row => {
+    if (!isEdgeRelation(row.relation_type)) {
+      console.warn(`[cortex:db] Skipping edge ${row.id}: invalid relation_type '${row.relation_type}'`);
+      return [];
+    }
+    return [createEdge({
+      id: row.id,
+      source_id: row.source_id,
+      target_id: row.target_id,
+      relation_type: row.relation_type,
+      strength: row.strength,
+      bidirectional: row.bidirectional === 1,
+      status: row.status,
+      created_at: row.created_at,
+    })];
+  });
 }
 
 /**
@@ -736,16 +752,22 @@ export function getAllEdges(db: Database): readonly Edge[] {
   const stmt = db.prepare(`SELECT * FROM edges`);
   const rows = stmt.all() as any[];
 
-  return rows.map(row => createEdge({
-    id: row.id,
-    source_id: row.source_id,
-    target_id: row.target_id,
-    relation_type: row.relation_type as EdgeRelation,
-    strength: row.strength,
-    bidirectional: row.bidirectional === 1,
-    status: row.status,
-    created_at: row.created_at,
-  }));
+  return rows.flatMap(row => {
+    if (!isEdgeRelation(row.relation_type)) {
+      console.warn(`[cortex:db] Skipping edge ${row.id}: invalid relation_type '${row.relation_type}'`);
+      return [];
+    }
+    return [createEdge({
+      id: row.id,
+      source_id: row.source_id,
+      target_id: row.target_id,
+      relation_type: row.relation_type,
+      strength: row.strength,
+      bidirectional: row.bidirectional === 1,
+      status: row.status,
+      created_at: row.created_at,
+    })];
+  });
 }
 
 // ============================================================================

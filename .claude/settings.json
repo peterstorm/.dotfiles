@@ -193,7 +193,8 @@
     "atlassian@claude-plugins-official": true,
     "obsidian@local": true,
     "cortex@local": true,
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "feynman@local": true
   },
   "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {

@@ -24,12 +24,17 @@ export type BackfillResult =
   | { ok: false; error: string };
 
 /**
- * Functional Core: filter memories missing both embeddings
+ * Functional Core: filter memories missing Gemini embedding
  */
-function filterUnembedded(memories: readonly Memory[]): readonly Memory[] {
-  return memories.filter(
-    (m) => m.embedding === null && m.local_embedding === null
-  );
+function filterGeminiUnembedded(memories: readonly Memory[]): readonly Memory[] {
+  return memories.filter((m) => m.embedding === null);
+}
+
+/**
+ * Functional Core: filter memories missing local embedding
+ */
+function filterLocalUnembedded(memories: readonly Memory[]): readonly Memory[] {
+  return memories.filter((m) => m.local_embedding === null);
 }
 
 /**
@@ -173,17 +178,14 @@ export async function backfill(
   try {
     // Imperative Shell: fetch data (I/O)
     const allMemories = getActiveMemories(db);
-    const unembedded = filterUnembedded(allMemories);
 
-    if (unembedded.length === 0) {
-      return { ok: true, processed: 0, failed: 0, errors: [], method: 'gemini' };
-    }
-
-    // Functional Core: build embedding texts
-    const texts = buildEmbeddingTexts(unembedded, projectName);
-
-    // Imperative Shell: choose method and process
+    // Imperative Shell: choose method and use appropriate filter
     if (isGeminiAvailable(geminiApiKey)) {
+      const unembedded = filterGeminiUnembedded(allMemories);
+      if (unembedded.length === 0) {
+        return { ok: true, processed: 0, failed: 0, errors: [], method: 'gemini' };
+      }
+      const texts = buildEmbeddingTexts(unembedded, projectName);
       process.stderr.write(`[cortex:backfill] INFO: Using Gemini for ${unembedded.length} embeddings\n`);
       const { processed, failed, errors } = await backfillGemini(
         db,
@@ -193,6 +195,11 @@ export async function backfill(
       );
       return { ok: true, processed, failed, errors, method: 'gemini' };
     } else {
+      const unembedded = filterLocalUnembedded(allMemories);
+      if (unembedded.length === 0) {
+        return { ok: true, processed: 0, failed: 0, errors: [], method: 'local' };
+      }
+      const texts = buildEmbeddingTexts(unembedded, projectName);
       process.stderr.write(`[cortex:backfill] INFO: Gemini unavailable — falling back to local model for ${unembedded.length} embeddings\n`);
       const { processed, failed, errors } = await backfillLocal(db, unembedded, texts);
       return { ok: true, processed, failed, errors, method: 'local' };

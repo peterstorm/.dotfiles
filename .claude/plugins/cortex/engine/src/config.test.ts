@@ -8,7 +8,6 @@ import {
   getProjectDbPath,
   getGlobalDbPath,
   getSurfaceCacheDir,
-  getSurfaceCachePath,
   getSurfaceOutputPath,
   getLockDir,
   getTelemetryPath,
@@ -34,16 +33,6 @@ describe('config - path resolution', () => {
   it('getSurfaceCacheDir returns correct path', () => {
     const result = getSurfaceCacheDir('/project');
     expect(result).toBe('/project/.memory/surface-cache');
-  });
-
-  it('getSurfaceCachePath sanitizes branch name with slashes', () => {
-    const result = getSurfaceCachePath('/project', 'feature/my-feature');
-    expect(result).toBe('/project/.memory/surface-cache/feature-my-feature.json');
-  });
-
-  it('getSurfaceCachePath handles simple branch name', () => {
-    const result = getSurfaceCachePath('/project', 'main');
-    expect(result).toBe('/project/.memory/surface-cache/main.json');
   });
 
   it('getSurfaceOutputPath returns correct path', () => {

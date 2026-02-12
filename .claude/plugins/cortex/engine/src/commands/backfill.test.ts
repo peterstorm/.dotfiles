@@ -427,20 +427,21 @@ embedTextsSpy.mockResolvedValue([
 
       const result = await backfill(db, 'test-project', 'fake-api-key');
 
+      // With split filters: filterGeminiUnembedded picks memories missing Gemini embedding.
+      // memoryNoEmbeddings has no Gemini embedding → included
+      // memoryWithLocal has no Gemini embedding → also included
+      // memoryWithGemini already has Gemini embedding → excluded
       expect(result).toEqual({
         ok: true,
-        processed: 1,
+        processed: 2,
         failed: 0,
         errors: [],
         method: 'gemini',
       });
 
-      // Should only process the one without embeddings
+      // Should process both memories missing Gemini embeddings
       expect(embedTextsSpy).toHaveBeenCalledTimes(1);
-      expect(embedTextsSpy).toHaveBeenCalledWith(
-        ['[decision] [project:test-project] No embeddings'],
-        'fake-api-key'
-      );
+      expect(embedTextsSpy.mock.calls[0][0]).toHaveLength(2);
     });
 
     it('handles unexpected errors gracefully', async () => {

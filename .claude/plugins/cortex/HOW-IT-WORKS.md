@@ -5,7 +5,7 @@ Cortex is a persistent memory plugin for Claude Code. It automatically learns fr
 ## The 30-Second Version
 
 ```
-Session ends → reads transcript → Gemini extracts memories → stored in SQLite
+Session ends → reads transcript → Claude CLI extracts memories → stored in SQLite
 Session starts → loads ranked memories → writes to .claude/cortex-memory.local.md
 ```
 
@@ -58,7 +58,7 @@ When your session ends:
 
 1. **Read transcript** — the JSONL file Claude Code writes during the session
 2. **Resume from checkpoint** — if transcript > 100KB, extraction is resumable; picks up where it left off
-3. **Send to Gemini** — with an extraction prompt (see below)
+3. **Send to Claude CLI** — pipes extraction prompt to `claude -p` (uses your Anthropic subscription)
 4. **Parse response** — validate each memory candidate (type, confidence, priority)
 5. **Store in DB** — insert memories, compute similarity edges to existing memories
 6. **Run lifecycle** — decay old memories, archive stale ones, prune ancient ones
@@ -241,7 +241,9 @@ Memories are inserted without embeddings (to avoid blocking extraction). A backg
 
 | Variable | Purpose | Required |
 |---|---|---|
-| `GEMINI_API_KEY` | Embedding + extraction LLM calls | Yes (for extraction + semantic search) |
+| `GEMINI_API_KEY` | Embedding backfill + semantic search | Yes (for embeddings + semantic recall) |
 | `CLAUDE_PLUGIN_ROOT` | Plugin directory (set by Claude Code) | Auto |
 
-Without `GEMINI_API_KEY`, extraction is skipped and recall falls back to keyword search.
+Extraction uses `claude -p` (Claude CLI) — no API key needed, uses your Anthropic subscription. The `claude` binary must be on PATH (it is when running inside Claude Code hooks).
+
+Without `GEMINI_API_KEY`, embeddings are skipped and recall falls back to keyword search. Extraction still works via Claude CLI.

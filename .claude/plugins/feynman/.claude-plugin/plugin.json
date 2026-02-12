@@ -1,0 +1,8 @@
+{
+  "name": "feynman",
+  "version": "0.1.0",
+  "description": "Interactive Feynman technique teaching — learn any concept through simplified explanation, gap detection, and iterative refinement",
+  "author": {
+    "name": "peterstorm"
+  }
+}

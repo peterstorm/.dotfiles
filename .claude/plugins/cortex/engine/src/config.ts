@@ -20,14 +20,6 @@ export function getGeminiApiKey(): string | undefined {
 }
 
 /**
- * Get Anthropic API key from environment (legacy/fallback)
- * Returns undefined if not set
- */
-export function getAnthropicApiKey(): string | undefined {
-  return Bun.env.ANTHROPIC_API_KEY;
-}
-
-/**
  * Get plugin root directory from environment
  * Returns undefined if not set
  */
@@ -69,21 +61,6 @@ export function getGlobalDbPath(): string {
  */
 export function getSurfaceCacheDir(projectRoot: string): string {
   return join(projectRoot, '.memory', 'surface-cache');
-}
-
-/**
- * Resolve surface cache file path for a specific branch
- * Pure function - cache key is (branch, cwd)
- *
- * @param projectRoot - Absolute path to project root
- * @param branch - Git branch name
- * @returns Absolute path to cached surface file
- */
-export function getSurfaceCachePath(projectRoot: string, branch: string): string {
-  const cacheDir = getSurfaceCacheDir(projectRoot);
-  // Sanitize branch name for filesystem (replace slashes with dashes)
-  const safeBranch = branch.replace(/\//g, '-');
-  return join(cacheDir, `${safeBranch}.json`);
 }
 
 /**
@@ -145,9 +122,14 @@ export const MAX_TRANSCRIPT_BYTES = 100 * 1024;
 export const EXTRACTION_TIMEOUT_MS = 30_000;
 
 /**
- * Surface generation token budget
+ * Surface generation token budget (includes ~200 tokens markdown overhead)
  */
 export const SURFACE_MAX_TOKENS = 2000;
+
+/**
+ * Tokens reserved for markdown formatting overhead (headers, markers, metadata)
+ */
+export const SURFACE_OVERHEAD_TOKENS = 200;
 
 /**
  * Recency decay half-life in days for ranking formula.

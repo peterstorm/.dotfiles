@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Memory } from '../core/types.js';
 import type { RankedMemory } from '../core/surface.js';
+import { SURFACE_STALE_HOURS, SURFACE_OVERHEAD_TOKENS } from '../config.js';
 import { getActiveMemories, getAllEdges } from '../infra/db.js';
 import { computeAllCentrality } from '../core/graph.js';
 import { selectForSurface } from '../core/ranking.js';
@@ -81,10 +82,11 @@ export function runGenerate(options: GenerateOptions): GenerateResult {
   }));
 
   // Pure: Select and rank memories for surface with branch boost
+  // Reserve SURFACE_OVERHEAD_TOKENS for markdown formatting (headers, markers, tags)
   const rankedMemories: RankedMemory[] = selectForSurface(memoriesWithCentrality, {
     currentBranch: branch,
-    targetTokens: 1500,
-    maxTokens: 2000,
+    targetTokens: 1500 - SURFACE_OVERHEAD_TOKENS,
+    maxTokens: 2000 - SURFACE_OVERHEAD_TOKENS,
   });
 
   // Pure: Generate surface markdown
@@ -152,8 +154,7 @@ export function loadCachedSurface(
     const ageMs = now.getTime() - generatedAt.getTime();
     const ageHours = ageMs / (1000 * 60 * 60);
 
-    // Cache is stale if >24h old
-    const stale = ageHours > 24;
+    const stale = ageHours > SURFACE_STALE_HOURS;
 
     return {
       surface: parsed.surface,

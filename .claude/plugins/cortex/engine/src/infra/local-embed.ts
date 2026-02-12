@@ -100,13 +100,28 @@ export function isLocalModelAvailable(): boolean {
  * Attempts to load the model if not already cached.
  * Returns true if model is available, false otherwise.
  */
+// Track when a failure was cached, so we can retry after TTL
+let failureCachedAt: number | null = null;
+const FAILURE_TTL_MS = 5 * 60 * 1000; // 5 min TTL on failure cache
+
 export async function ensureModelLoaded(): Promise<boolean> {
   if (modelAvailabilityCache !== null) {
-    return modelAvailabilityCache.ok;
+    // On success, return cached result forever
+    if (modelAvailabilityCache.ok) return true;
+    // On failure, retry after TTL expires
+    if (failureCachedAt !== null && Date.now() - failureCachedAt < FAILURE_TTL_MS) {
+      return false;
+    }
+    // TTL expired — clear cache and retry
+    modelAvailabilityCache = null;
+    failureCachedAt = null;
   }
 
   const result = await loadModel();
   modelAvailabilityCache = result;
+  if (!result.ok) {
+    failureCachedAt = Date.now();
+  }
   return result.ok;
 }
 
@@ -165,6 +180,7 @@ export async function embedLocal(text: string): Promise<Float32Array> {
 export function resetLocalEmbedCache(): void {
   cachedPipeline = null;
   modelAvailabilityCache = null;
+  failureCachedAt = null;
   transformersModule = null;
   importError = null;
 }
