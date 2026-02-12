@@ -8,7 +8,7 @@
 
 ## Critical Issues (must fix)
 
-### 1. 4 Runtime Bugs: cli.ts signature mismatches *(architecture-agent)*
+### 1. [FIXED] 4 Runtime Bugs: cli.ts signature mismatches *(architecture-agent)*
 
 The CLI dispatcher calls several commands with **wrong argument shapes**. These will crash at runtime:
 
@@ -19,7 +19,7 @@ The CLI dispatcher calls several commands with **wrong argument shapes**. These 
 | `cli.ts:611` — `handleTraverse` | Passes `{ memoryId, maxDepth }` but `TraverseOptions` has `{ id, depth }` | Use correct field names |
 | `cli.ts:578` — `handleLifecycle` | Accesses `.archivedCount` / `.prunedCount` but `LifecycleResult` has `.archived` / `.pruned` | Drop `Count` suffix |
 
-### 2. Checkpoint not saved on API failure → infinite retry loop *(silent-failure-hunter, code-reviewer)*
+### 2. [FIXED] Checkpoint not saved on API failure → infinite retry loop *(silent-failure-hunter, code-reviewer)*
 
 **File:** `engine/src/commands/extract.ts:152-162`
 
@@ -27,7 +27,7 @@ When Gemini API fails after transcript truncation, returns `cursorStart` (old po
 
 **Fix:** Save checkpoint at `newCursor` even on failure, so the system advances past the chunk.
 
-### 3. `loadCachedSurface` doesn't write `.local.md` file *(architecture-agent)*
+### 3. [FIXED] `loadCachedSurface` doesn't write `.local.md` file *(architecture-agent)*
 
 **File:** `engine/src/commands/generate.ts:126-166`
 
@@ -35,7 +35,7 @@ When Gemini API fails after transcript truncation, returns `cursorStart` (old po
 
 **Impact:** SessionStart hook reports "Loaded cached surface" but Claude has no surface file. Silent data loss.
 
-### 4. `filterUnembedded` prevents dual-embedding backfill *(code-reviewer, architecture-agent)*
+### 4. [FIXED] `filterUnembedded` prevents dual-embedding backfill *(code-reviewer, architecture-agent)*
 
 **File:** `engine/src/commands/backfill.ts:29-32`
 
@@ -51,7 +51,7 @@ Requires **both** to be null. If Gemini runs first and sets `embedding`, local b
 
 ## Important Issues (should fix)
 
-### 5. Staleness check hardcoded instead of using config constant *(code-reviewer)*
+### 5. [FIXED] Staleness check hardcoded instead of using config constant *(code-reviewer)*
 
 **File:** `engine/src/commands/generate.ts:156`
 
@@ -59,79 +59,87 @@ Requires **both** to be null. If Gemini runs first and sets `embedding`, local b
 const stale = ageHours > 24; // Should use SURFACE_STALE_HOURS from config.ts
 ```
 
-### 6. `getSurfaceCachePath` in config.ts is dead code *(code-reviewer)*
+### 6. [FIXED] `getSurfaceCachePath` in config.ts is dead code *(code-reviewer)*
 
 **File:** `engine/src/config.ts:82-86`
 
 Uses branch-name-based filenames (`{safeBranch}.json`) but actual cache uses `sha256(branch:cwd)` hashes. Function is never called. Remove or align.
 
-### 7. Recall discards similarity scores *(architecture-agent)*
+### 7. [FIXED] Recall discards similarity scores *(architecture-agent)*
 
 **File:** `engine/src/commands/recall.ts:221-234`
 
 After `searchByEmbedding` returns memories sorted by cosine similarity, all results get `score: 1.0` hardcoded. `mergeResults()` then sorts by score — but all scores are 1.0, so cross-DB ranking is effectively random.
 
-### 8. No fallback to keyword search on semantic failure *(silent-failure-hunter)*
+**Fix:** Keyword results now get position-based scores [1.0→0.5] preserving FTS5 rank order; semantic results propagate cosine scores via `rankBySimilarity`.
+
+### 8. [FIXED] No fallback to keyword search on semantic failure *(silent-failure-hunter)*
 
 **File:** `engine/src/commands/recall.ts:174-201`
 
 When embedding API fails (timeout, rate limit), recall returns error. Should auto-fallback to keyword search.
 
-### 9. `searchByEmbedding` throws on null embedding instead of skipping *(silent-failure-hunter)*
+### 9. [FIXED] `searchByEmbedding` throws on null embedding instead of skipping *(silent-failure-hunter)*
 
 **File:** `engine/src/infra/db.ts:577-582`
 
 Single corrupt memory with null embedding (despite `WHERE embedding IS NOT NULL` filter) crashes entire search. Should log warning and skip.
 
-### 10. Local model load failure cached forever *(silent-failure-hunter)*
+### 10. [FIXED] Local model load failure cached forever *(silent-failure-hunter)*
 
 **File:** `engine/src/infra/local-embed.ts:103-111`
 
 If model fails to load (transient network error), failure is cached permanently. No retry mechanism. Must restart process.
 
-### 11. FC/IS boundary violation: db.ts imports core/similarity.ts *(architecture-agent)*
+### 11. [FIXED] FC/IS boundary violation: db.ts imports core/similarity.ts *(architecture-agent)*
 
 **File:** `engine/src/infra/db.ts:17`
 
 `searchByEmbedding()` does cosine similarity inside the DB module. Should split: (1) fetch candidates (I/O), (2) rank by similarity (pure function in core/).
 
-### 12. Extract script continues after extraction failure *(silent-failure-hunter)*
+**Fix:** Replaced `searchByEmbedding` with `getMemoriesWithEmbedding` (I/O only) + `rankBySimilarity` in core/similarity.ts (pure). recall.ts orchestrates both.
+
+### 12. [FIXED] Extract script continues after extraction failure *(silent-failure-hunter)*
 
 **File:** `hooks/scripts/extract-and-generate.sh:56-59`
 
 If extraction fails mid-way, script proceeds to backfill + generate. Backfill processes corrupt/incomplete data; generate creates surface from stale memories.
 
-### 13. Extraction parse failure returns empty array silently *(silent-failure-hunter)*
+**Fix:** Backfill now skipped on extract failure; generate always runs (stale memories still need fresh surface).
+
+### 13. [FIXED] Extraction parse failure returns empty array silently *(silent-failure-hunter)*
 
 **File:** `engine/src/core/extraction.ts:169-202`
 
 When Gemini returns malformed JSON, `parseExtractionResponse` returns `[]` with no logging. Caller treats this as "no memories found" — session content silently lost.
 
+**Fix:** Added stderr warnings for non-array parsed results and when all candidates filtered out (0 valid from N raw).
+
 ---
 
 ## Type Design Issues
 
-### 14. No branded types for IDs *(type-design-analyzer)*
+### 14. [FIXED] No branded types for IDs *(type-design-analyzer)*
 
 `Memory.id`, `Edge.source_id`, `Edge.target_id` are all plain `string`. Easy to swap or pass wrong ID type. Branded types (`MemoryId`, `EdgeId`) would catch this at compile time.
 
-### 15. Embedding types not branded *(type-design-analyzer)*
+### 15. [FIXED] Embedding types not branded *(type-design-analyzer)*
 
 `Float64Array` (Gemini 768-dim) and `Float32Array` (local 384-dim) are used but could accidentally be swapped. `db.ts:544` uses `instanceof` check — post-hoc. Branded types would prevent this.
 
-### 16. Tags not defensively copied in factory *(type-design-analyzer)*
+### 16. [FIXED] Tags not defensively copied in factory *(type-design-analyzer)*
 
 **File:** `engine/src/core/types.ts:239`
 
 `tags: input.tags ?? []` doesn't copy. Mutable external array could break immutability.
 
-### 17. Type assertions bypass validation in DB deserialization *(type-design-analyzer)*
+### 17. [FIXED] Type assertions bypass validation in DB deserialization *(type-design-analyzer)*
 
 **File:** `engine/src/infra/db.ts:720,743`
 
 `row.relation_type as EdgeRelation` and `row.memory_type as MemoryType` bypass validation. Should use type guards (`isEdgeRelation`, `isMemoryType`) first.
 
-### 18. Non-exhaustive matching in surface.ts *(type-design-analyzer)*
+### 18. [FIXED] Non-exhaustive matching in surface.ts *(type-design-analyzer)*
 
 **File:** `engine/src/core/surface.ts:114,149`
 
@@ -139,7 +147,7 @@ When Gemini returns malformed JSON, `parseExtractionResponse` returns `[]` with 
 const budget = budgets[category as MemoryType] ?? 0;
 ```
 
-Silently falls back to 0 for invalid categories. Should use ts-pattern exhaustive matching.
+**Fix:** Replaced `as MemoryType` casts with `isMemoryType()` type guard + `continue` for invalid categories. Also fixed in extraction.ts.
 
 ---
 
@@ -154,6 +162,12 @@ Silently falls back to 0 for invalid categories. Should use ts-pattern exhaustiv
 | 23 | `source_context` JSON has different schemas across extract/remember/index-code | multiple | code-reviewer |
 | 24 | Gemini API key passed as URL query param in LLM but header in embed (inconsistent) | `gemini-llm.ts:72` vs `gemini-embed.ts:104` | architecture-agent |
 | 25 | `computeAllCentrality()` called 3x per pipeline (redundant DB reads) | `generate.ts`, `lifecycle.ts`, `recall.ts` | architecture-agent |
+
+---
+
+## Test Infrastructure [FIXED]
+
+All `bun:test` imports removed (6 files), `spyOn` → `vi.spyOn`, `toEndWith` → `endsWith()`. **731/731 tests pass.**
 
 ---
 
@@ -172,13 +186,14 @@ Silently falls back to 0 for invalid categories. Should use ts-pattern exhaustiv
 
 ## Architecture Metrics
 
-| Metric | Current | After Fixes |
-|--------|---------|-------------|
+| Metric | Before | After Fixes |
+|--------|--------|-------------|
 | Runtime bugs | 4 | 0 |
 | FC/IS violations | 2 | 0 |
 | Pure function % | ~80% | ~85% |
 | Mock-free testable | ~80% | ~90% |
 | Data loss paths | 2 (score discard, surface file) | 0 |
+| Test suite | mixed bun:test/vitest | 731/731 vitest ✅ |
 
 ---
 

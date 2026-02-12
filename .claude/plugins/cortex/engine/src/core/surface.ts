@@ -2,6 +2,7 @@
 // Pure functional core - no I/O
 
 import type { Memory, MemoryType } from './types.js';
+import { isMemoryType } from './types.js';
 
 // Ranked memory - memory with rank attached by ranking module
 export type RankedMemory = Memory & { readonly rank: number };
@@ -111,7 +112,8 @@ export function allocateBudget(
 
   // First pass: allocate within LINE budgets
   for (const [category, mems] of Object.entries(byCategory)) {
-    const budget = budgets[category as MemoryType] ?? 0;
+    if (!isMemoryType(category)) continue;
+    const budget = budgets[category] ?? 0;
     if (budget === 0) continue; // skip code blocks
 
     let linesUsed = 0;
@@ -146,7 +148,8 @@ export function allocateBudget(
   // Third pass: redistribute unused budget to high-value overflow memories
   const overflow: RankedMemory[] = [];
   for (const [category, mems] of Object.entries(byCategory)) {
-    const budget = budgets[category as MemoryType] ?? 0;
+    if (!isMemoryType(category)) continue;
+    const budget = budgets[category] ?? 0;
 
     let linesUsed = 0;
     let overflowStart = 0;

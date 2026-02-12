@@ -28,13 +28,10 @@ export function parsePhaseArtifacts(content: string, specDir?: string | null): P
 
       if (typeof filePath !== "string") continue;
 
-      if (filePath.includes(".claude/specs/") && filePath.endsWith(".md")) {
+      if (filePath.includes(".claude/specs/") && filePath.endsWith("/spec.md")) {
         if (specDir && !filePath.includes(specDir)) continue;
-        // Prefer spec.md over other .md files; among same priority prefer deeper path
-        const isSpec = filePath.endsWith("/spec.md");
-        const prevIsSpec = artifacts.spec_file?.endsWith("/spec.md") ?? false;
-        if (!artifacts.spec_file || (isSpec && !prevIsSpec)
-            || (isSpec === prevIsSpec && filePath.length > artifacts.spec_file!.length)) {
+        // Among spec.md files, prefer deeper path
+        if (!artifacts.spec_file || filePath.length > artifacts.spec_file.length) {
           artifacts.spec_file = filePath;
         }
       }

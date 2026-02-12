@@ -3,7 +3,7 @@
  * Uses in-memory SQLite and mocked Voyage API
  */
 
-import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+
 import { Database } from 'bun:sqlite';
 import {
   executeRecall,
@@ -55,12 +55,12 @@ describe('recall command', () => {
 
   beforeEach(() => {
     // Reset and recreate mocks for each test
-    embedTextsSpy = spyOn(geminiEmbed, 'embedTexts').mockImplementation(async (texts: readonly string[]) => {
+    embedTextsSpy = vi.spyOn(geminiEmbed, 'embedTexts').mockImplementation(async (texts: readonly string[]) => {
       // Return mock embeddings (768 dimensions for gemini)
       return texts.map(() => new Float64Array(768).fill(0.5));
     });
 
-    isGeminiAvailableSpy = spyOn(geminiEmbed, 'isGeminiAvailable').mockImplementation((apiKey: string | undefined) => {
+    isGeminiAvailableSpy = vi.spyOn(geminiEmbed, 'isGeminiAvailable').mockImplementation((apiKey: string | undefined) => {
       return typeof apiKey === 'string' && apiKey.trim().length > 0;
     });
   });

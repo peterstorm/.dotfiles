@@ -7,14 +7,14 @@ import type { Database } from 'bun:sqlite';
 import type { SearchResult, Memory, Edge } from '../core/types.js';
 import { isGeminiAvailable, embedTexts } from '../infra/gemini-embed.ts';
 import {
-  searchByEmbedding,
+  getMemoriesWithEmbedding,
   searchByKeyword,
   getEdgesForMemory,
   getMemoriesByIds,
   getAllEdges,
   updateMemory,
-  type EmbeddingSearchResult,
 } from '../infra/db.js';
+import { rankBySimilarity } from '../core/similarity.js';
 import { mergeResults } from '../core/ranking.js';
 import { traverseGraph } from '../core/graph.js';
 
@@ -136,6 +136,23 @@ function updateAccessStats(db: Database, memories: readonly Memory[]): void {
 }
 
 /**
+ * Assign position-based scores to keyword results to preserve FTS5 rank ordering.
+ * Score range [1.0 → 0.5] ensures keyword results interleave naturally with
+ * semantic cosine scores (typically 0.3–0.9) in mergeResults sort.
+ */
+function assignPositionScores(
+  memories: readonly Memory[],
+  source: 'project' | 'global'
+): SearchResult[] {
+  return memories.map((memory, i) => ({
+    memory,
+    score: memories.length > 1 ? 1 - (i / (memories.length - 1)) * 0.5 : 1.0,
+    source,
+    related: [],
+  }));
+}
+
+/**
  * Execute recall command
  * Imperative shell - orchestrates I/O with pure search logic
  *
@@ -187,9 +204,12 @@ export async function executeRecall(
         throw new Error('No embedding returned');
       }
 
-      // I/O: Search both databases — scores propagated from cosine similarity
-      const projectEmbedResults = searchByEmbedding(projectDb, queryEmbedding, limit);
-      const globalEmbedResults = searchByEmbedding(globalDb, queryEmbedding, limit);
+      // I/O: Fetch candidates, then pure ranking
+      const embType = queryEmbedding instanceof Float64Array ? 'gemini' : 'local' as const;
+      const projectCandidates = getMemoriesWithEmbedding(projectDb, embType);
+      const globalCandidates = getMemoriesWithEmbedding(globalDb, embType);
+      const projectEmbedResults = rankBySimilarity(projectCandidates, queryEmbedding, limit);
+      const globalEmbedResults = rankBySimilarity(globalCandidates, queryEmbedding, limit);
 
       projectSearchResults = projectEmbedResults.map(({ memory, score }) => ({
         memory,
@@ -213,12 +233,8 @@ export async function executeRecall(
       try {
         const projectKw = searchByKeyword(projectDb, query, limit);
         const globalKw = searchByKeyword(globalDb, query, limit);
-        projectSearchResults = projectKw.map((memory) => ({
-          memory, score: 1.0, source: 'project' as const, related: [],
-        }));
-        globalSearchResults = globalKw.map((memory) => ({
-          memory, score: 1.0, source: 'global' as const, related: [],
-        }));
+        projectSearchResults = assignPositionScores(projectKw, 'project');
+        globalSearchResults = assignPositionScores(globalKw, 'global');
         searchMethod = 'keyword';
       } catch (kwError) {
         const kwMessage = kwError instanceof Error ? kwError.message : 'Unknown error';
@@ -231,12 +247,8 @@ export async function executeRecall(
     try {
       const projectKw = searchByKeyword(projectDb, query, limit);
       const globalKw = searchByKeyword(globalDb, query, limit);
-      projectSearchResults = projectKw.map((memory) => ({
-        memory, score: 1.0, source: 'project' as const, related: [],
-      }));
-      globalSearchResults = globalKw.map((memory) => ({
-        memory, score: 1.0, source: 'global' as const, related: [],
-      }));
+      projectSearchResults = assignPositionScores(projectKw, 'project');
+      globalSearchResults = assignPositionScores(globalKw, 'global');
       searchMethod = 'keyword';
     } catch (error) {
       const message =

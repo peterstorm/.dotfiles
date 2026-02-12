@@ -4,7 +4,7 @@ import {
   insertMemory,
   updateMemory,
   getMemory,
-  searchByEmbedding,
+  getMemoriesWithEmbedding,
   searchByKeyword,
   getActiveMemories,
   insertEdge,
@@ -16,6 +16,7 @@ import {
   restoreCheckpoint,
   routeToDatabase,
 } from './db.js';
+import { rankBySimilarity } from '../core/similarity.js';
 import { createMemory, createEdge } from '../core/types.js';
 import type { Memory, Edge, MemoryScope } from '../core/types.js';
 
@@ -291,7 +292,7 @@ describe('Database Layer', () => {
     });
   });
 
-  describe('searchByEmbedding', () => {
+  describe('getMemoriesWithEmbedding + rankBySimilarity', () => {
     let db: ReturnType<typeof openDatabase>;
 
     beforeEach(() => {
@@ -345,14 +346,14 @@ describe('Database Layer', () => {
       insertMemory(db, mem3);
     });
 
-    it('searches by voyage embedding similarity', () => {
+    it('fetches and ranks by gemini embedding similarity', () => {
       const queryEmbedding = new Float64Array([1, 0, 0, 0]);
 
-      const results = searchByEmbedding(db, queryEmbedding, 10);
+      const candidates = getMemoriesWithEmbedding(db, 'gemini');
+      const results = rankBySimilarity(candidates, queryEmbedding, 10);
       expect(results.length).toBe(3);
 
       // Should be sorted by similarity (mem1 is identical, mem2 is close, mem3 is orthogonal)
-      // searchByEmbedding returns {memory, score}[]
       expect(results[0].memory.id).toBe('mem-emb-1');
       expect(results[1].memory.id).toBe('mem-emb-2');
       expect(results[2].memory.id).toBe('mem-emb-3');
@@ -366,7 +367,8 @@ describe('Database Layer', () => {
     it('respects limit parameter', () => {
       const queryEmbedding = new Float64Array([1, 0, 0, 0]);
 
-      const results = searchByEmbedding(db, queryEmbedding, 2);
+      const candidates = getMemoriesWithEmbedding(db, 'gemini');
+      const results = rankBySimilarity(candidates, queryEmbedding, 2);
       expect(results).toHaveLength(2);
       expect(results[0].memory.id).toBe('mem-emb-1');
       expect(results[1].memory.id).toBe('mem-emb-2');
@@ -374,7 +376,7 @@ describe('Database Layer', () => {
       db.close();
     });
 
-    it('searches by local embedding similarity', () => {
+    it('fetches and ranks by local embedding similarity', () => {
       const db2 = openDatabase(':memory:');
 
       const mem = createMemory({
@@ -394,7 +396,8 @@ describe('Database Layer', () => {
       insertMemory(db2, mem);
 
       const queryEmbedding = new Float32Array([0.95, 0.05, 0]);
-      const results = searchByEmbedding(db2, queryEmbedding, 10);
+      const candidates = getMemoriesWithEmbedding(db2, 'local');
+      const results = rankBySimilarity(candidates, queryEmbedding, 10);
 
       expect(results).toHaveLength(1);
       expect(results[0].memory.id).toBe('mem-local');

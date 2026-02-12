@@ -13,7 +13,8 @@
       "Bash(gh pr:*)",
       "Bash(gh repo:*)",
       "Bash(gh api:*)",
-      "Bash(gh search:*)"
+      "Bash(gh search:*)",
+      "Bash"
     ]
   },
   "hooks": {

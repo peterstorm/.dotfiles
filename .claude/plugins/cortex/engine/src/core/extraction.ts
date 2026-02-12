@@ -4,7 +4,7 @@
  */
 
 import type { MemoryType, MemoryScope, MemoryCandidate, GitContext } from './types.js';
-import { MEMORY_TYPES } from './types.js';
+import { MEMORY_TYPES, isMemoryType } from './types.js';
 
 export interface TruncationResult {
   readonly truncated: string;
@@ -180,21 +180,25 @@ export function parseExtractionResponse(
     const parsed = JSON.parse(jsonText.trim());
 
     if (!Array.isArray(parsed)) {
+      process.stderr.write(`[cortex:extraction] WARN: Expected array, got ${typeof parsed}. Returning empty.\n`);
       return [];
     }
 
     // Validate and filter candidates
-    return parsed
-      .filter(isValidCandidate)
-      .map((c) => ({
-        content: String(c.content),
-        summary: String(c.summary),
-        memory_type: c.memory_type as MemoryType,
-        scope: c.scope as MemoryScope,
-        confidence: Number(c.confidence),
-        priority: Number(c.priority),
-        tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
-      }));
+    const valid = parsed.filter(isValidCandidate);
+    if (valid.length === 0 && parsed.length > 0) {
+      process.stderr.write(`[cortex:extraction] WARN: 0 valid from ${parsed.length} raw candidates\n`);
+    }
+
+    return valid.map((c) => ({
+      content: String(c.content),
+      summary: String(c.summary),
+      memory_type: isMemoryType(c.memory_type) ? c.memory_type : 'context',
+      scope: c.scope === 'global' ? 'global' as const : 'project' as const,
+      confidence: Number(c.confidence),
+      priority: Number(c.priority),
+      tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
+    }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[cortex:extraction] WARN: Parse failure: ${message}. Response (truncated): ${response.slice(0, 200)}\n`);

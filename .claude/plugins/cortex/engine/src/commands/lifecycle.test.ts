@@ -3,7 +3,7 @@
  * Uses in-memory SQLite database for isolation
  */
 
-import { describe, test, expect } from 'bun:test';
+
 import { openDatabase } from '../infra/db.js';
 import { insertMemory, insertEdge, getMemory } from '../infra/db.js';
 import { createMemory, createEdge } from '../core/types.js';

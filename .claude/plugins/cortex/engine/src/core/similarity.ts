@@ -3,7 +3,7 @@
  * Pure functional implementations with no I/O
  */
 
-import type { SimilarityAction } from './types.js';
+import type { SimilarityAction, Memory } from './types.js';
 
 /**
  * Discriminated union for Jaccard pre-filter results
@@ -164,4 +164,24 @@ export function batchCosineSimilarity(
       return { targetIndex: index, score, action };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Rank memory candidates by cosine similarity to a query embedding.
+ * Pure function — takes pre-fetched candidates and returns sorted results.
+ *
+ * @param candidates - Memories with their embeddings (from I/O layer)
+ * @param queryEmbedding - Query embedding vector
+ * @param limit - Maximum results to return
+ * @returns Sorted array of {memory, score} by similarity descending
+ */
+export function rankBySimilarity(
+  candidates: readonly { memory: Memory; embedding: Float64Array | Float32Array }[],
+  queryEmbedding: Float64Array | Float32Array,
+  limit: number
+): readonly { memory: Memory; score: number }[] {
+  return candidates
+    .map(({ memory, embedding }) => ({ memory, score: cosineSimilarity(queryEmbedding, embedding) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }

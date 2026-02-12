@@ -33,7 +33,7 @@ export async function extractMemories(prompt: string): Promise<string> {
   }
 
   const proc = Bun.spawn(
-    ['claude', '-p', '--output-format', 'text', '--allowedTools', ''],
+    ['claude', '-p', '--model', 'haiku', '--output-format', 'text', '--allowedTools', ''],
     {
       stdin: 'pipe',
       stdout: 'pipe',

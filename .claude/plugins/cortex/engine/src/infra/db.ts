@@ -14,7 +14,6 @@ import type {
   EdgeRelation,
 } from '../core/types.js';
 import { createMemory, createEdge, createExtractionCheckpoint, isEdgeRelation, isMemoryType } from '../core/types.js';
-import { cosineSimilarity } from '../core/similarity.js';
 
 // ============================================================================
 // SCHEMA INITIALIZATION
@@ -527,41 +526,25 @@ export function getArchivedMemories(db: Database): readonly Memory[] {
 }
 
 /**
- * Search result with cosine similarity score
- */
-export interface EmbeddingSearchResult {
-  readonly memory: Memory;
-  readonly score: number;
-}
-
-/**
- * Search memories by embedding similarity
- * I/O: Reads from database
- * Cosine similarity computed in-memory, returned with results
+ * Fetch all memories with embeddings of a given type.
+ * I/O only — returns raw candidates for pure ranking in core/similarity.ts.
  *
  * @param db - Database instance
- * @param embedding - Query embedding (Gemini or local)
- * @param limit - Maximum number of results
- * @returns Readonly array of {memory, score} sorted by similarity (descending)
+ * @param type - 'gemini' (Float64) or 'local' (Float32)
+ * @returns Readonly array of {memory, embedding} pairs
  */
-export function searchByEmbedding(
+export function getMemoriesWithEmbedding(
   db: Database,
-  embedding: Float64Array | Float32Array,
-  limit: number
-): readonly EmbeddingSearchResult[] {
-  // Determine if query is Gemini (Float64) or local (Float32)
-  const isFloat64 = embedding instanceof Float64Array;
-
-  // Load all memories with embeddings of matching type
-  const column = isFloat64 ? 'embedding' : 'local_embedding';
+  type: 'gemini' | 'local'
+): readonly { memory: Memory; embedding: Float64Array | Float32Array }[] {
+  const column = type === 'gemini' ? 'embedding' : 'local_embedding';
   const stmt = db.prepare(`
     SELECT * FROM memories WHERE ${column} IS NOT NULL
   `);
 
   const rows = stmt.all() as any[];
+  const results: { memory: Memory; embedding: Float64Array | Float32Array }[] = [];
 
-  // Compute similarity scores in-memory
-  const results: EmbeddingSearchResult[] = [];
   for (const row of rows) {
     const memory = createMemory({
       id: row.id,
@@ -585,21 +568,17 @@ export function searchByEmbedding(
       status: row.status,
     });
 
-    const memoryEmbedding = isFloat64 ? memory.embedding : memory.local_embedding;
+    const memoryEmbedding = type === 'gemini' ? memory.embedding : memory.local_embedding;
     if (!memoryEmbedding) {
       // Skip corrupt row instead of crashing (#9)
       console.warn(`[cortex:db] Skipping memory ${memory.id}: ${column} deserialized to null`);
       continue;
     }
 
-    const score = cosineSimilarity(embedding, memoryEmbedding);
-    results.push({ memory, score });
+    results.push({ memory, embedding: memoryEmbedding });
   }
 
-  // Sort by score descending and return top N
-  return results
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  return results;
 }
 
 /**

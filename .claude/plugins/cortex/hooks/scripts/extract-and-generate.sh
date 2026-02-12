@@ -53,20 +53,21 @@ main() {
   cwd=$(echo "$stdin_json" | bun -e "console.log(JSON.parse(require('fs').readFileSync(0, 'utf8')).cwd)" 2>/dev/null || echo "")
 
   # Step 1: Extract (pipe stdin JSON to CLI)
+  local extract_ok=true
   if ! echo "$stdin_json" | bun "$CLI_PATH" extract 2>&1 | tee /tmp/cortex-extract.log; then
     log_error "Extract failed (see /tmp/cortex-extract.log)"
-    # Continue to generate anyway - may have partial results
+    extract_ok=false
   fi
 
-  # Step 2: Backfill embeddings for newly extracted memories (FR-046)
-  if [[ -n "$cwd" ]]; then
+  # Step 2: Backfill embeddings only if extraction succeeded (FR-046)
+  if [[ "$extract_ok" == true ]] && [[ -n "$cwd" ]]; then
     log_info "Backfilling embeddings for cwd: $cwd"
     if ! bun "$CLI_PATH" backfill "$cwd" 2>&1 | tee /tmp/cortex-backfill.log; then
       log_error "Backfill failed (see /tmp/cortex-backfill.log)"
     fi
   fi
 
-  # Step 3: Generate push surface (if we got cwd)
+  # Step 3: Generate push surface (always — stale memories still need fresh surface)
   if [[ -n "$cwd" ]]; then
     log_info "Generating push surface for cwd: $cwd"
     if ! bun "$CLI_PATH" generate "$cwd" 2>&1 | tee /tmp/cortex-generate.log; then

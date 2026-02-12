@@ -726,7 +726,7 @@ describe("buildEmbeddingText", () => {
       fc.assert(
         fc.property(memoryArb, fc.string({ minLength: 1 }), (memory, project) => {
           const result = buildEmbeddingText(memory, project);
-          expect(result).toEndWith(memory.summary);
+          expect(result.endsWith(memory.summary)).toBe(true);
         })
       );
     });

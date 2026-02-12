@@ -64,7 +64,7 @@ export function resolveTransition(
       const spec = state.spec_file;
       if (!spec || !existsSync(spec)) return null;
       const markers = countMarkers(spec);
-      if (markers > CLARIFY_THRESHOLD) return null; // Not resolved yet
+      if (markers > 0) return null; // All markers must be resolved before advancing
       return { nextPhase: "architecture" as Phase, artifact: spec };
     })
     .with("architecture", () => {
@@ -103,7 +103,7 @@ const handler: HookHandler = async (stdin) => {
     await mgr.update((s) => {
       const updates: Partial<TaskGraph> = {};
 
-      if (!s.spec_file && artifacts.spec_file && existsSync(artifacts.spec_file)
+      if (artifacts.spec_file && existsSync(artifacts.spec_file)
           && artifacts.spec_file.includes(".claude/specs/")) {
         updates.spec_file = artifacts.spec_file;
       }

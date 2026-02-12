@@ -174,7 +174,7 @@ describe("resolveTransition", () => {
 
   // ── clarify ──
 
-  it("clarify → architecture when markers resolved (≤ threshold)", () => {
+  it("clarify → architecture when all markers resolved (0 remaining)", () => {
     const specFile = join(tmpDir, ".claude", "specs", "feat", "spec.md");
     mkdirSync(join(tmpDir, ".claude", "specs", "feat"), { recursive: true });
     writeFileSync(specFile, "Clean spec.");
@@ -184,7 +184,15 @@ describe("resolveTransition", () => {
     expect(r!.nextPhase).toBe("architecture");
   });
 
-  it("clarify → null when markers still > threshold", () => {
+  it("clarify → null when markers still remain (even below trigger threshold)", () => {
+    const specFile = join(tmpDir, ".claude", "specs", "feat", "spec.md");
+    mkdirSync(join(tmpDir, ".claude", "specs", "feat"), { recursive: true });
+    writeFileSync(specFile, Array.from({ length: CLARIFY_THRESHOLD }, () => "NEEDS CLARIFICATION").join("\n"));
+
+    expect(resolveTransition("clarify", mkState({ spec_file: specFile }))).toBeNull();
+  });
+
+  it("clarify → null when markers above threshold", () => {
     const specFile = join(tmpDir, ".claude", "specs", "feat", "spec.md");
     mkdirSync(join(tmpDir, ".claude", "specs", "feat"), { recursive: true });
     writeFileSync(specFile, Array.from({ length: CLARIFY_THRESHOLD + 1 }, () => "NEEDS CLARIFICATION").join("\n"));

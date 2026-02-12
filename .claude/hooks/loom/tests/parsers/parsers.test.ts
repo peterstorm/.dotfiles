@@ -199,6 +199,13 @@ describe("parsePhaseArtifacts", () => {
     expect(result.spec_file).toBe("/p/.claude/specs/2025-01-15-auth/spec.md");
   });
 
+  it("brainstorm.md alone → spec_file undefined", () => {
+    const content =
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/2025-01-15-auth/brainstorm.md"}}]}}';
+    const result = parsePhaseArtifacts(content);
+    expect(result.spec_file).toBeUndefined();
+  });
+
   it("deeply nested spec path → longest path wins", () => {
     const content = [
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/spec.md"}}]}}',

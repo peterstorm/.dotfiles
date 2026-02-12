@@ -4,7 +4,7 @@
  * Unit tests for pure functions + integration tests with in-memory SQLite
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import {
   parseIndexCodeArgs,
   extractLineRange,
