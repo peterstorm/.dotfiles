@@ -32,6 +32,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/PreToolUse/validate-template-substitution.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/PreToolUse/validate-agent-model.sh"
           }
         ]
       },
@@ -70,6 +74,26 @@
             "command": "bash ~/.claude/hooks/PreToolUse/guard-state-file.sh"
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -78,6 +102,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/SubagentStop/dispatch.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
           }
         ]
       }
@@ -89,6 +117,40 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/SubagentStart/mark-subagent-active.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
           }
         ]
       }
@@ -99,6 +161,20 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/SessionStart/cleanup-stale-subagents.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/send_event.sh"
           }
         ]
       }
@@ -116,7 +192,8 @@
     "marketing-skills@marketingskills": true,
     "atlassian@claude-plugins-official": true,
     "obsidian@local": true,
-    "cortex@local": true
+    "cortex@local": true,
+    "rust-analyzer-lsp@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
   "feedbackSurveyState": {

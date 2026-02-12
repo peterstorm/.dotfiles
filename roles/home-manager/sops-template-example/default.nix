@@ -18,12 +18,16 @@
   [
     # Environment file template for development
     (util.sops.envTemplate "dev-env" {
-      GITHUB_TOKEN = "github-token";
       GITHUB_EMAIL = "github-email";
       ORG_TOKEN = "org-token";
       GEMINI_API_KEY = "gemini-api-key";
     })
-    
+
+    # Gemini API key (standalone for cortex plugin hook)
+    (util.sops.envTemplate "gemini-env" {
+      GEMINI_API_KEY = "gemini-api-key";
+    })
+
     # Git credentials template
     (util.sops.configTemplate "git-credentials" ''
       https://github.com

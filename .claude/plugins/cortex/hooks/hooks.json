@@ -1,7 +1,7 @@
 {
   "description": "Cortex memory extraction and surface loading hooks",
   "hooks": {
-    "Stop": [
+    "SessionEnd": [
       {
         "hooks": [
           {
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/load-surface.sh",
-            "timeout": 5
+            "timeout": 30
           }
         ]
       }

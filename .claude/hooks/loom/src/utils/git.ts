@@ -109,6 +109,7 @@ export interface TestCount {
   java: number;
   ts: number;
   python: number;
+  rust: number;
   total: number;
 }
 
@@ -118,15 +119,17 @@ export function countNewTests(diffContent: string): TestCount {
   let java = 0;
   let ts = 0;
   let python = 0;
+  let rust = 0;
 
   for (const line of lines) {
     if (!line.startsWith("+")) continue;
     if (/@(Test|Property|ParameterizedTest)\b/.test(line)) java++;
     if (/\s(it|test|describe)\(/.test(line)) ts++;
     if (/(def test_|class Test)/.test(line)) python++;
+    if (/#\[test\]/.test(line)) rust++;
   }
 
-  return { java, ts, python, total: java + ts + python };
+  return { java, ts, python, rust, total: java + ts + python + rust };
 }
 
 /** Count assertions in a diff string (pure) */
@@ -140,6 +143,7 @@ export function countAssertions(diffContent: string): number {
     if (/(assertThat|assertEquals|assertNotNull|assertThrows|verify\()/.test(line)) { count++; continue; }
     if (/(expect\(|toEqual|toBe|toHaveBeenCalled|toThrow|\.should\.)/.test(line)) { count++; continue; }
     if (/(assert\w*\(|assert [^=]|self\.assert|pytest\.raises)/.test(line)) { count++; continue; }
+    if (/(assert(_eq)?!|assert_ne!)/.test(line)) { count++; continue; }
   }
 
   return count;

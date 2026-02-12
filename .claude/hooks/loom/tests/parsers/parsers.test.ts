@@ -181,6 +181,24 @@ describe("parsePhaseArtifacts", () => {
     expect(result).toEqual({});
   });
 
+  it("prefers spec.md over brainstorm.md in same dir", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/2025-01-15-auth/brainstorm.md"}}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/2025-01-15-auth/spec.md"}}]}}',
+    ].join("\n");
+    const result = parsePhaseArtifacts(content);
+    expect(result.spec_file).toBe("/p/.claude/specs/2025-01-15-auth/spec.md");
+  });
+
+  it("prefers spec.md even when brainstorm.md written after", () => {
+    const content = [
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/2025-01-15-auth/spec.md"}}]}}',
+      '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/2025-01-15-auth/brainstorm.md"}}]}}',
+    ].join("\n");
+    const result = parsePhaseArtifacts(content);
+    expect(result.spec_file).toBe("/p/.claude/specs/2025-01-15-auth/spec.md");
+  });
+
   it("deeply nested spec path → longest path wins", () => {
     const content = [
       '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/p/.claude/specs/spec.md"}}]}}',

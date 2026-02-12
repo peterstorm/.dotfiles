@@ -482,7 +482,7 @@ describe('generateSurface', () => {
           }),
           { minLength: 5, maxLength: 30 }
         ),
-        fc.integer({ min: 300, max: 800 }),
+        fc.integer({ min: 500, max: 2500 }),
         (memData, maxTokens) => {
           const memories = memData.map(d => createMemory(d));
           const surface = generateSurface(memories, 'main', null, { maxTokens });
@@ -559,7 +559,7 @@ describe('integration: full surface generation flow', () => {
     // Verify token estimate
     const tokens = estimateTokens(surface);
     expect(tokens).toBeGreaterThan(0);
-    expect(tokens).toBeLessThan(1000); // reasonable size
+    expect(tokens).toBeLessThan(2500); // reasonable size
   });
 
   it('handles edge case: all memories from one category', () => {

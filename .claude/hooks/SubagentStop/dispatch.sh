@@ -1,9 +1,18 @@
 #!/bin/bash
-# Debug: capture stdin and stderr for inspection
-INPUT=$(cat)
-echo "---$(date)---" >> /tmp/loom-subagent-stop-debug.log
-echo "$INPUT" >> /tmp/loom-subagent-stop-debug.log
-echo "$INPUT" | bun ~/.claude/hooks/loom/src/cli.ts subagent-stop dispatch 2>> /tmp/loom-subagent-stop-debug.log
+START=$(date +%s%N)
+echo "---$(date)--- START dispatch.sh PID=$$ PPID=$PPID CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-unset}" >> /tmp/loom-hook-debug.log
+
+GRAPH="${CLAUDE_PROJECT_DIR:-.}/.claude/state/active_task_graph.json"
+if [ ! -f "$GRAPH" ]; then
+  END=$(date +%s%N)
+  ELAPSED=$(( (END - START) / 1000000 ))
+  echo "  SKIPPED (no graph) ${ELAPSED}ms" >> /tmp/loom-hook-debug.log
+  exit 0
+fi
+
+cat | bun ~/.claude/hooks/loom/src/cli.ts subagent-stop dispatch 2>> /tmp/loom-hook-debug.log
 EXIT_CODE=$?
-echo "EXIT_CODE=$EXIT_CODE" >> /tmp/loom-subagent-stop-debug.log
+END=$(date +%s%N)
+ELAPSED=$(( (END - START) / 1000000 ))
+echo "  DONE bun ${ELAPSED}ms exit=$EXIT_CODE" >> /tmp/loom-hook-debug.log
 exit $EXIT_CODE

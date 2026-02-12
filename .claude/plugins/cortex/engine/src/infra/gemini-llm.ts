@@ -10,7 +10,7 @@
 import type { EdgeRelation } from '../core/types.js';
 import { EDGE_RELATIONS, isEdgeRelation } from '../core/types.js';
 
-const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 const TEMPERATURE = 0;
 
 /**

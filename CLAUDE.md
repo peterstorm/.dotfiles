@@ -82,20 +82,71 @@ The system supports multiple architectures (x86_64-linux, aarch64-darwin) and us
 
 ## Plugin Setup (Per-Machine)
 
-Plugin state files (`known_marketplaces.json`, `installed_plugins.json`) are gitignored — they contain absolute paths and must be regenerated per machine.
+### Architecture
 
-**On a fresh machine after cloning:**
+Plugins live in the dotfiles repo, marketplace state lives per-machine:
+
+```
+.dotfiles/.claude/
+├── plugins/
+│   ├── cortex/          ← plugin source (committed)
+│   └── obsidian/        ← plugin source (committed)
+└── local-marketplace/
+    ├── .claude-plugin/
+    │   └── marketplace.json   ← registry (committed)
+    └── plugins/
+        ├── cortex → ../../plugins/cortex     ← relative symlink (committed, portable)
+        └── obsidian → ../../plugins/obsidian  ← relative symlink (committed, portable)
+
+~/.claude/plugins/
+├── known_marketplaces.json    ← per-machine, gitignored (absolute paths)
+├── installed_plugins.json     ← per-machine, gitignored (absolute paths)
+└── cache/                     ← per-machine runtime copies
+    └── local/
+        ├── cortex/0.1.0/      ← what Claude actually reads at runtime
+        └── obsidian/0.1.0/
+```
+
+**Key points:**
+- Plugin source in dotfiles repo → portable, version-controlled
+- Relative symlinks in local-marketplace → work on any OS/user
+- `known_marketplaces.json` and `installed_plugins.json` are **per-machine** (contain absolute paths) → must be regenerated after clone
+- Runtime cache at `~/.claude/plugins/cache/` is what Claude reads — `install` copies source there
+
+### Fresh Machine Setup
+
 ```bash
-# 1. Update plugin marketplaces (fetches repos, generates known_marketplaces.json)
+# 1. Update marketplaces (fetches git repos, registers local marketplace)
 claude /plugin update
 
-# 2. Install all plugins (generates installed_plugins.json with correct local paths)
+# 2. Install all plugins (copies to cache with correct local paths)
 claude /plugin install claude-plugins-official  # official plugins
 claude /plugin install marketingskills          # marketing skills
 claude /plugin install local                    # local plugins (obsidian, cortex)
 ```
 
-The obsidian symlink at `.claude/local-marketplace/plugins/obsidian` uses a relative path so it works on both Linux and macOS.
+**Must run from inside the dotfiles directory** — the local marketplace path is resolved relative to the project.
+
+### After Editing a Local Plugin
+
+When you edit plugin source (commands, hooks, engine) the cache goes stale:
+
+```bash
+# Option A: Re-install (proper way)
+claude /plugin install local
+
+# Option B: Manual sync (faster, works mid-session)
+cp -r .claude/plugins/cortex/commands/* ~/.claude/plugins/cache/local/cortex/0.1.0/commands/
+cp .claude/plugins/cortex/hooks/hooks.json ~/.claude/plugins/cache/local/cortex/0.1.0/hooks/hooks.json
+```
+
+### Adding a New Local Plugin
+
+1. Create plugin dir: `.claude/plugins/new-plugin/`
+2. Add `.claude-plugin/plugin.json` manifest
+3. Symlink in marketplace: `cd .claude/local-marketplace/plugins && ln -s ../../plugins/new-plugin new-plugin`
+4. Register in `local-marketplace/.claude-plugin/marketplace.json`
+5. Install: `claude /plugin install local`
 
 ## Quick Start
 
