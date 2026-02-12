@@ -39,7 +39,7 @@ export function generateSurface(
   staleness: StalenessInfo | null,
   options: SurfaceOptions = {}
 ): string {
-  const maxTokens = options.maxTokens ?? 1000;
+  const maxTokens = options.maxTokens ?? 2000;
   const allowOverflow = options.allowOverflow ?? true;
 
   if (memories.length === 0) {

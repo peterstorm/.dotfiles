@@ -83,8 +83,8 @@ export function runGenerate(options: GenerateOptions): GenerateResult {
   // Pure: Select and rank memories for surface with branch boost
   const rankedMemories: RankedMemory[] = selectForSurface(memoriesWithCentrality, {
     currentBranch: branch,
-    targetTokens: 400,
-    maxTokens: 550,
+    targetTokens: 1500,
+    maxTokens: 2000,
   });
 
   // Pure: Generate surface markdown

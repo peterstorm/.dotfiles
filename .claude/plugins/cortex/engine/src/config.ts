@@ -145,10 +145,16 @@ export const MAX_TRANSCRIPT_BYTES = 100 * 1024;
 export const EXTRACTION_TIMEOUT_MS = 30_000;
 
 /**
- * Surface generation token budget (from plan: category budgets total ~150 lines)
- * Estimate: 4 tokens per line = ~600 tokens
+ * Surface generation token budget
  */
-export const SURFACE_MAX_TOKENS = 600;
+export const SURFACE_MAX_TOKENS = 2000;
+
+/**
+ * Recency decay half-life in days for ranking formula.
+ * At this age, a memory's recency multiplier = 0.5.
+ * 0 days → ×1.0, 7 days → ×0.67, 14 days → ×0.5, 30 days → ×0.31
+ */
+export const RECENCY_HALF_LIFE_DAYS = 14;
 
 /**
  * Surface staleness threshold in hours (24h per FR-022)

@@ -1,5 +1,6 @@
 import type { Memory, MemoryType, SearchResult } from './types.js';
 import { CATEGORY_BUDGETS, estimateTokens } from './surface.js';
+import { RECENCY_HALF_LIFE_DAYS } from '../config.js';
 
 // Memory with optional centrality (computed at runtime by caller)
 type MemoryWithCentrality = Memory & { readonly centrality?: number };
@@ -12,6 +13,8 @@ export function computeRank(
     readonly maxAccessLog: number;
     readonly currentBranch?: string;
     readonly branchBoost?: number;
+    readonly recencyHalfLifeDays?: number;
+    readonly now?: Date;
   }
 ): number {
   const { maxAccessLog, currentBranch, branchBoost = 0.1 } = options;
@@ -40,6 +43,16 @@ export function computeRank(
     }
   }
 
+  // Recency decay: multiplicative, pinned memories exempt
+  if (!memory.pinned) {
+    const halfLife = options.recencyHalfLifeDays ?? RECENCY_HALF_LIFE_DAYS;
+    const now = options.now ?? new Date();
+    const createdAt = new Date(memory.created_at);
+    const ageDays = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    const recencyMultiplier = 1 / (1 + Math.max(0, ageDays) / halfLife);
+    rank *= recencyMultiplier;
+  }
+
   // Ensure rank is in [0, 1] range
   return Math.max(0, Math.min(1, rank));
 }
@@ -51,9 +64,11 @@ export function selectForSurface(
     readonly currentBranch: string;
     readonly targetTokens?: number;
     readonly maxTokens?: number;
+    readonly now?: Date;
   }
 ): readonly (Memory & { readonly rank: number })[] {
-  const { currentBranch, targetTokens = 800, maxTokens = 1000 } = options;
+  const { currentBranch, targetTokens = 1500, maxTokens = 2000 } = options;
+  const now = options.now ?? new Date();
 
   // Filter out code type (not included in surface)
   const candidates = memories.filter(m => m.memory_type !== 'code');
@@ -68,7 +83,7 @@ export function selectForSurface(
   const ranked = candidates
     .map(memory => ({
       memory,
-      rank: computeRank(memory, { maxAccessLog, currentBranch })
+      rank: computeRank(memory, { maxAccessLog, currentBranch, now })
     }))
     .sort((a, b) => b.rank - a.rank);
 

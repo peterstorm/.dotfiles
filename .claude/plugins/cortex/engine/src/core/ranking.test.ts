@@ -132,6 +132,95 @@ describe('computeRank', () => {
   });
 });
 
+describe('computeRank recency decay', () => {
+  it('reduces rank for older memories', () => {
+    const now = new Date('2024-06-15T00:00:00Z');
+    const recent = createTestMemory({
+      id: '1',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      created_at: '2024-06-15T00:00:00Z',
+    });
+    const old = createTestMemory({
+      id: '2',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      created_at: '2024-05-16T00:00:00Z',
+    });
+
+    const recentRank = computeRank(recent, { maxAccessLog: 1, now });
+    const oldRank = computeRank(old, { maxAccessLog: 1, now });
+
+    expect(recentRank).toBeGreaterThan(oldRank);
+  });
+
+  it('applies correct decay at half-life boundary', () => {
+    const now = new Date('2024-06-15T00:00:00Z');
+    const atHalfLife = createTestMemory({
+      id: '1',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      created_at: '2024-06-01T00:00:00Z',
+    });
+    const fresh = createTestMemory({
+      id: '2',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      created_at: '2024-06-15T00:00:00Z',
+    });
+
+    const halfLifeRank = computeRank(atHalfLife, { maxAccessLog: 1, now });
+    const freshRank = computeRank(fresh, { maxAccessLog: 1, now });
+
+    expect(halfLifeRank).toBeCloseTo(freshRank * 0.5, 1);
+  });
+
+  it('exempts pinned memories from recency decay', () => {
+    const now = new Date('2024-06-15T00:00:00Z');
+    const pinned = createTestMemory({
+      id: '1',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      pinned: true,
+      created_at: '2024-01-01T00:00:00Z',
+    });
+    const unpinned = createTestMemory({
+      id: '2',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      pinned: false,
+      created_at: '2024-01-01T00:00:00Z',
+    });
+
+    const pinnedRank = computeRank(pinned, { maxAccessLog: 1, now });
+    const unpinnedRank = computeRank(unpinned, { maxAccessLog: 1, now });
+
+    expect(pinnedRank).toBeGreaterThan(unpinnedRank);
+  });
+
+  it('allows custom half-life', () => {
+    const now = new Date('2024-06-15T00:00:00Z');
+    const memory = createTestMemory({
+      id: '1',
+      confidence: 0.8,
+      priority: 5,
+      access_count: 0,
+      created_at: '2024-06-08T00:00:00Z',
+    });
+
+    const rank7 = computeRank(memory, { maxAccessLog: 1, now, recencyHalfLifeDays: 7 });
+    const rank14 = computeRank(memory, { maxAccessLog: 1, now, recencyHalfLifeDays: 14 });
+
+    expect(rank7).toBeLessThan(rank14);
+  });
+});
+
 // Property-based tests
 describe('computeRank properties', () => {
   it('always returns non-negative rank', () => {
@@ -160,12 +249,13 @@ describe('computeRank properties', () => {
         fc.integer({ min: 1, max: 10 }),
         (baseMemory, priority1, priority2) => {
           fc.pre(priority1 !== priority2);
+          const now = new Date();
 
           const mem1 = createTestMemory({ ...baseMemory, priority: priority1 });
           const mem2 = createTestMemory({ ...baseMemory, priority: priority2 });
 
-          const rank1 = computeRank(mem1, { maxAccessLog: 1 });
-          const rank2 = computeRank(mem2, { maxAccessLog: 1 });
+          const rank1 = computeRank(mem1, { maxAccessLog: 1, now });
+          const rank2 = computeRank(mem2, { maxAccessLog: 1, now });
 
           if (priority1 > priority2) {
             expect(rank1).toBeGreaterThanOrEqual(rank2);
@@ -180,13 +270,14 @@ describe('computeRank properties', () => {
   it('branch boost increases rank', () => {
     fc.assert(
       fc.property(memoryArb, fc.string(), (baseMemory, branch) => {
+        const now = new Date();
         const memory = createTestMemory({
           ...baseMemory,
           source_context: JSON.stringify({ branch, commits: [], files: [] })
         });
 
-        const withoutBoost = computeRank(memory, { maxAccessLog: 1 });
-        const withBoost = computeRank(memory, { maxAccessLog: 1, currentBranch: branch });
+        const withoutBoost = computeRank(memory, { maxAccessLog: 1, now });
+        const withBoost = computeRank(memory, { maxAccessLog: 1, currentBranch: branch, now });
 
         expect(withBoost).toBeGreaterThanOrEqual(withoutBoost);
       })
@@ -201,12 +292,13 @@ describe('computeRank properties', () => {
         fc.double({ min: 0, max: 1, noNaN: true }),
         (baseMemory, conf1, conf2) => {
           fc.pre(Math.abs(conf1 - conf2) > 0.1);
+          const now = new Date();
 
           const mem1 = createTestMemory({ ...baseMemory, confidence: conf1 });
           const mem2 = createTestMemory({ ...baseMemory, confidence: conf2 });
 
-          const rank1 = computeRank(mem1, { maxAccessLog: 1 });
-          const rank2 = computeRank(mem2, { maxAccessLog: 1 });
+          const rank1 = computeRank(mem1, { maxAccessLog: 1, now });
+          const rank2 = computeRank(mem2, { maxAccessLog: 1, now });
 
           // Confidence contributes 0.5 weight to rank
           // With diff > 0.1, we expect rank diff > 0.05
@@ -327,7 +419,8 @@ describe('selectForSurface properties', () => {
   it('returns memories in descending rank order', () => {
     fc.assert(
       fc.property(fc.array(memoryArb, { minLength: 2, maxLength: 20 }), fc.string(), (memories, branch) => {
-        const selected = selectForSurface(memories, { currentBranch: branch });
+        const now = new Date();
+        const selected = selectForSurface(memories, { currentBranch: branch, now });
 
         if (selected.length < 2) return;
 
@@ -339,7 +432,7 @@ describe('selectForSurface properties', () => {
         );
 
         const ranks = selected.map(m =>
-          computeRank(m, { maxAccessLog, currentBranch: branch })
+          computeRank(m, { maxAccessLog, currentBranch: branch, now })
         );
 
         for (let i = 0; i < ranks.length - 1; i++) {
