@@ -42,6 +42,9 @@ Before analyzing test coverage, identify the languages in the PR. Read ONLY the 
 - `~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md`
 - For deep test gaps, read: `~/.dotfiles/claude/project/typescript/skills/ts-test-engineer/SKILL.md`
 
+**Rust** (*.rs):
+- `~/.dotfiles/claude/project/rust/rules/rust-patterns.md`
+
 Use the loaded patterns to evaluate test coverage quality and identify gaps.
 
 ## Delegation

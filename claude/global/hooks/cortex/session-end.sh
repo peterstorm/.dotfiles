@@ -4,6 +4,11 @@
 
 set -euo pipefail
 
+# Guard: prevent recursive hook storm (belt-and-suspenders with extract-and-generate.sh)
+if [[ "${CORTEX_EXTRACTING:-}" == "1" ]]; then
+  exit 0
+fi
+
 # Find cortex plugin (could be in cache or installed location)
 CORTEX_PLUGIN=$(find ~/.claude/plugins -name "cortex" -type d | grep -E "plugins/(cache/)?cortex" | head -1)
 

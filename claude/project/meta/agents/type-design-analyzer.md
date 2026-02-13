@@ -21,7 +21,10 @@ Before analyzing types, identify the language. Read ONLY the relevant files:
 **TypeScript** (*.ts, *.tsx):
 - `~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md`
 
-Use the loaded patterns as the reference for preferred type design (records, sealed types, discriminated unions, etc.).
+**Rust** (*.rs):
+- `~/.dotfiles/claude/project/rust/rules/rust-patterns.md`
+
+Use the loaded patterns as the reference for preferred type design (records, sealed types, discriminated unions, newtypes, typestates, etc.).
 
 ## Analysis Framework
 

@@ -21,6 +21,15 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/force_explore_haiku.sh"
+          }
+        ]
+      },
+      {
         "matcher": "*",
         "hooks": [
           {
@@ -98,11 +107,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/send_event.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/cortex/session-start.sh",
-            "timeout": 30
           }
         ]
       }
@@ -113,11 +117,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/send_event.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/cortex/session-end.sh",
-            "timeout": 120
           }
         ]
       }
@@ -129,7 +128,9 @@
   },
   "enabledPlugins": {
     "cortex@plugins": true,
-    "obsidian@plugins": true
+    "obsidian@plugins": true,
+    "loom@plugins": true,
+    "feynman@plugins": true
   },
   "alwaysThinkingEnabled": true
 }

@@ -21,6 +21,9 @@ Before reviewing, identify the languages in the files under review. Read ONLY th
 **TypeScript** (*.ts, *.tsx, *.js, *.jsx):
 - `~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md`
 
+**Rust** (*.rs):
+- `~/.dotfiles/claude/project/rust/rules/rust-patterns.md`
+
 Apply the loaded rules as your review criteria for language-specific patterns.
 
 ## Review Scope

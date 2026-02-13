@@ -20,6 +20,9 @@ Before simplifying, identify the languages in the files under review. Read ONLY 
 **TypeScript** (*.ts, *.tsx, *.js, *.jsx):
 - `~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md`
 
+**Rust** (*.rs):
+- `~/.dotfiles/claude/project/rust/rules/rust-patterns.md`
+
 Apply the loaded patterns as your simplification targets.
 
 ## Core Responsibilities

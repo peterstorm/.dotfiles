@@ -61,7 +61,10 @@ Before analyzing, identify the languages in the files under review. Read ONLY th
 **TypeScript** (*.ts, *.tsx, *.js, *.jsx):
 - `~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md`
 
-Use the loaded patterns to evaluate whether comments accurately describe the codebase's conventions (e.g. Either-based error handling, sealed type hierarchies, discriminated unions).
+**Rust** (*.rs):
+- `~/.dotfiles/claude/project/rust/rules/rust-patterns.md`
+
+Use the loaded patterns to evaluate whether comments accurately describe the codebase's conventions (e.g. Either/Result-based error handling, sealed type hierarchies, discriminated unions, enum-based domain modeling).
 
 ## Output Format
 

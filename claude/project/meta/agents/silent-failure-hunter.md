@@ -28,7 +28,10 @@ Before hunting, identify the languages in the files under review. Read ONLY the 
 **TypeScript** (*.ts, *.tsx, *.js, *.jsx):
 - `~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md`
 
-Use the loaded patterns to identify violations of the project's error handling conventions (Either-based in core, throws at boundaries).
+**Rust** (*.rs):
+- `~/.dotfiles/claude/project/rust/rules/rust-patterns.md`
+
+Use the loaded patterns to identify violations of the project's error handling conventions (Result-based in core, error enums with thiserror, no unwrap in application code).
 
 ## Review Process
 

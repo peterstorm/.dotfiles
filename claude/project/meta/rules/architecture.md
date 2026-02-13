@@ -1,6 +1,6 @@
 ---
 description: Core architectural principles for all code - always apply
-globs: "**/*.{ts,tsx,js,jsx,java,kt,hs,scala}"
+globs: "**/*.{ts,tsx,js,jsx,java,kt,hs,scala,rs}"
 ---
 
 # Architecture Principles
