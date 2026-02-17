@@ -17,7 +17,6 @@
       "Bash"
     ]
   },
-  "model": "sonnet",
   "hooks": {
     "PreToolUse": [
       {
@@ -129,8 +128,8 @@
   "enabledPlugins": {
     "cortex@plugins": true,
     "obsidian@plugins": true,
-    "loom@plugins": true,
-    "feynman@plugins": true
+    "feynman@plugins": true,
+    "loom@plugins": true
   },
   "alwaysThinkingEnabled": true
 }

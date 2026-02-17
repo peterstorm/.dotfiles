@@ -1,70 +1,35 @@
 ---
 name: security-expert
-description: "This skill should be used when the user asks to 'secure my API', 'implement authentication', 'configure Keycloak', 'add authorization', 'fix JWT issues', 'set up OAuth', 'review security', 'security audit', 'pen test prep', 'prevent SQL injection', 'fix XSS', 'CSRF protection', or works with JWT tokens, OAuth 2.0/OIDC flows, Spring Security, ABAC/RBAC policies, CORS, CSRF, XSS prevention, SQL injection, OWASP guidelines, or debugging auth failures in Spring/Keycloak environments."
+version: 1.0.0
+description: "This skill should be used when the user asks to 'secure my API', 'implement authentication', 'configure Keycloak', 'add authorization', 'fix JWT issues', 'set up OAuth', 'review security', 'security audit', 'pen test prep', 'prevent SQL injection', 'fix XSS', 'CSRF protection', 'prevent command injection', 'file upload security', 'password hashing', 'secrets management', 'fix deserialization', 'prevent XXE', or works with JWT tokens, OAuth 2.0/OIDC flows, Spring Security, ABAC/RBAC policies, CORS, CSRF, XSS, SQL injection, command injection, path traversal, deserialization attacks, XXE, file upload validation, password hashing, secrets/credentials management, OWASP guidelines, or debugging auth failures in Spring/Keycloak environments. NOT for infrastructure security, network security, container hardening, or cloud IAM policies."
 ---
 
 # Security Expert Skill
 
 Expert guidance for API security, authentication, authorization, and identity management.
 
-## Core Competencies
+## Reference Routing
 
-- **Authentication**: JWT, OAuth 2.0, OpenID Connect, SAML, session management
-- **Authorization**: RBAC, ABAC, ReBAC, policy engines
-- **Identity Providers**: Keycloak, Okta, Auth0, Azure AD
-- **Frameworks**: Spring Security, Spring Boot, Jakarta EE Security
-- **Web Security**: OWASP Top 10, CSP, CORS, CSRF, XSS prevention
-- **Injection Prevention**: SQL injection, parameterized queries, input validation
-- **Frontend Security**: React XSS protection, DOMPurify, URL sanitization, CSP for SPAs
+Load the reference that matches the user's problem:
 
-## Quick Reference
-
-### JWT Best Practices
-- Always validate: signature, expiration (`exp`), issuer (`iss`), audience (`aud`)
-- Use RS256/ES256 for distributed systems (asymmetric), HS256 only for single-service
-- Keep tokens short-lived (5-15 min access, hours-days refresh)
-- Never store sensitive data in JWT payload (it's base64, not encrypted)
-- Implement token revocation via blacklist or short expiry + refresh rotation
-
-### Spring Security + Keycloak Integration Pattern
-```java
-// Minimal resource server config
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http.oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/public/**").permitAll()
-                .requestMatchers("/admin/**").hasRole("ADMIN")
-                .anyRequest().authenticated());
-        return http.build();
-    }
-}
-```
-
-### ABAC vs RBAC Decision Matrix
-| Use RBAC when | Use ABAC when |
-|---------------|---------------|
-| Simple role hierarchy | Context-dependent access (time, location) |
-| Static permissions | Resource-level attributes matter |
-| Small number of roles | Complex business rules |
-| Audit simplicity needed | Fine-grained, dynamic policies |
-
-## Reference Files
-
-For detailed guidance, consult these references:
-
-- **[references/jwt-security.md](references/jwt-security.md)**: JWT vulnerabilities, attack vectors, secure implementation
-- **[references/keycloak.md](references/keycloak.md)**: Keycloak realm setup, client types, mappers, flows
-- **[references/spring-security.md](references/spring-security.md)**: Filter chain, method security, OAuth2 client/resource server
-- **[references/authorization-patterns.md](references/authorization-patterns.md)**: RBAC, ABAC, ReBAC patterns and policy engines
-- **[references/owasp-api-security.md](references/owasp-api-security.md)**: OWASP API Security Top 10 with mitigations
-- **[references/security-headers.md](references/security-headers.md)**: HTTP security headers, CSP, CORS configuration
-- **[references/injection-prevention.md](references/injection-prevention.md)**: SQL injection prevention, parameterized queries, JPA patterns
-- **[references/xss-prevention.md](references/xss-prevention.md)**: React XSS protection, DOMPurify, URL validation, CSP for SPAs
-- **[references/csrf-prevention.md](references/csrf-prevention.md)**: CSRF tokens, double submit, SameSite cookies, Spring CSRF
+| User needs | Load reference |
+|------------|---------------|
+| JWT issues, token validation, storage | `references/jwt-security.md` |
+| Keycloak setup, realms, mappers, flows | `references/keycloak.md` |
+| Spring Security filter chain, OAuth2 config | `references/spring-security.md` |
+| RBAC vs ABAC, policy engines | `references/authorization-patterns.md` |
+| Security audit, threat modeling | `references/owasp-api-security.md` |
+| CORS, CSP, security headers | `references/security-headers.md` |
+| SQL injection, parameterized queries | `references/injection-prevention.md` |
+| XSS, DOMPurify, React sanitization | `references/xss-prevention.md` |
+| CSRF tokens, SameSite cookies | `references/csrf-prevention.md` |
+| Java deserialization, Jackson polymorphic typing | `references/deserialization-attacks.md` |
+| File path manipulation, directory traversal | `references/path-traversal.md` |
+| OS command execution with user input | `references/command-injection.md` |
+| XML parsing, SOAP, DTD attacks | `references/xxe-prevention.md` |
+| Upload validation, zip bombs, magic bytes | `references/file-upload-security.md` |
+| Credentials, env vars, Vault, key rotation | `references/secrets-management.md` |
+| bcrypt, Argon2, password policy, rehashing | `references/password-hashing.md` |
 
 ## Workflow: Security Review
 
@@ -75,29 +40,11 @@ For detailed guidance, consult these references:
 5. **Examine configuration**: Security headers, CORS, error handling, logging
 6. **Test edge cases**: Token expiry, concurrent sessions, privilege escalation
 
-## Common Security Pitfalls
+## Debugging Auth Failures
 
-```
-❌ Trusting JWT without signature validation
-❌ Storing tokens in localStorage (XSS vulnerable)
-❌ Using symmetric keys across services
-❌ Missing audience validation
-❌ Exposing stack traces in errors
-❌ Permissive CORS (Access-Control-Allow-Origin: *)
-❌ Missing rate limiting on auth endpoints
-❌ Logging sensitive data (tokens, passwords)
-❌ String concatenation in SQL queries (injection)
-❌ Using innerHTML without sanitization
-❌ Allowing javascript: URLs in user-controlled hrefs
-❌ Disabling CSRF for cookie-authenticated APIs
-❌ GET requests with side effects (CSRF vulnerable)
-```
-
-## Debugging Security Issues
-
-For auth failures, check in order:
-1. Token format and encoding (is it valid JWT structure?)
-2. Signature verification (correct algorithm and key?)
-3. Claims validation (exp, iss, aud correct?)
-4. Role/scope mapping (Keycloak mappers configured?)
-5. Spring Security filter chain (debug with `logging.level.org.springframework.security=DEBUG`)
+Check in order:
+1. Token format/encoding — valid JWT structure?
+2. Signature — correct algorithm and key?
+3. Claims — exp, iss, aud correct?
+4. Role/scope mapping — Keycloak mappers configured?
+5. Filter chain — `logging.level.org.springframework.security=DEBUG`

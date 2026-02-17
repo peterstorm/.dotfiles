@@ -56,13 +56,19 @@ case "$HOOK_NAME" in
       elif .subject then .subject
       else tostring
       end' 2>/dev/null | head -c 500)
+    # For Task tool, capture full prompt for agent correlation in TUI
+    TASK_PROMPT=""
+    if [ "$TOOL_NAME" = "Task" ]; then
+      TASK_PROMPT=$(echo "$HOOK_JSON" | jq -r '.tool_input.prompt // empty' 2>/dev/null | head -c 32000)
+    fi
     jq -cn \
       --arg ts "$TIMESTAMP" \
       --arg sid "$SESSION_ID" \
       --arg aid "$AGENT_ID" \
       --arg tn "$TOOL_NAME" \
       --arg inp "$INPUT" \
-      '{timestamp: $ts, event: "pre_tool_use", tool_name: $tn, input_summary: $inp, session_id: (if $sid == "" then null else $sid end), agent_id: (if $aid == "" then null else $aid end)}' \
+      --arg tp "$TASK_PROMPT" \
+      '{timestamp: $ts, event: "pre_tool_use", tool_name: $tn, input_summary: $inp, task_prompt: (if $tp == "" then null else $tp end), session_id: (if $sid == "" then null else $sid end), agent_id: (if $aid == "" then null else $aid end)}' \
       >> "$EVENT_FILE"
     ;;
   PostToolUse|post-tool-use)
@@ -92,13 +98,13 @@ case "$HOOK_NAME" in
       >> "$EVENT_FILE"
     ;;
   SubagentStart|subagent-start)
-    TASK_DESC=$(echo "$HOOK_JSON" | jq -r '.agent_type // .task_description // empty' 2>/dev/null || echo "")
+    AGENT_TYPE=$(echo "$HOOK_JSON" | jq -r '.agent_type // empty' 2>/dev/null || echo "")
     jq -cn \
       --arg ts "$TIMESTAMP" \
       --arg sid "$SESSION_ID" \
       --arg aid "$AGENT_ID" \
-      --arg td "$TASK_DESC" \
-      '{timestamp: $ts, event: "subagent_start", task_description: (if $td == "" then null else $td end), session_id: (if $sid == "" then null else $sid end), agent_id: (if $aid == "" then null else $aid end)}' \
+      --arg at "$AGENT_TYPE" \
+      '{timestamp: $ts, event: "subagent_start", agent_type: (if $at == "" then null else $at end), session_id: (if $sid == "" then null else $sid end), agent_id: (if $aid == "" then null else $aid end)}' \
       >> "$EVENT_FILE"
     ;;
   SubagentStop|subagent-stop)

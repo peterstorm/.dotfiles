@@ -4,37 +4,37 @@ Testing patterns for Next.js App Router applications.
 
 ## Testing Server Components
 
-Server Components run on the server and return JSX. Test them as async functions.
+**Important**: Vitest does not reliably support async Server Components. For async Server Components, prefer Playwright E2E tests. For synchronous Server Components or the client-side parts, unit testing works fine.
 
+### Synchronous Server Components (testable with Vitest)
 ```typescript
+// components/UserCard.tsx (synchronous, receives data as props)
+export function UserCard({ user }: { user: User }) {
+  return <div>{user.name}</div>;
+}
+
+// __tests__/UserCard.test.tsx
+it('should render user name', () => {
+  render(<UserCard user={{ id: '1', name: 'Test User' }} />);
+  expect(screen.getByText('Test User')).toBeInTheDocument();
+});
+```
+
+### Async Server Components (use E2E or extract logic)
+```typescript
+// Strategy: extract data fetching, test the pure rendering separately
 // app/users/[id]/page.tsx
 export default async function UserPage({ params }: { params: { id: string } }) {
   const user = await fetchUser(params.id);
-  return <UserProfile user={user} />;
+  return <UserProfile user={user} />;  // Test UserProfile directly
 }
 
-// __tests__/UserPage.test.tsx
-import { render, screen } from '@testing-library/react';
-import UserPage from '@/app/users/[id]/page';
-
-// Mock the data fetching
-vi.mock('@/lib/api', () => ({
-  fetchUser: vi.fn().mockResolvedValue({
-    id: '1',
-    name: 'Test User',
-    email: 'test@example.com',
-  }),
-}));
-
-describe('UserPage', () => {
-  it('should render user data', async () => {
-    // Server component returns JSX directly
-    const Component = await UserPage({ params: { id: '1' } });
-    render(Component);
-
-    expect(screen.getByText('Test User')).toBeInTheDocument();
-  });
+// Test the synchronous child component instead:
+it('should render user profile', () => {
+  render(<UserProfile user={{ id: '1', name: 'Test User', email: 'test@example.com' }} />);
+  expect(screen.getByText('Test User')).toBeInTheDocument();
 });
+```
 ```
 
 ## Testing Client Components
