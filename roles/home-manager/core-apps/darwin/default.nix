@@ -57,6 +57,10 @@
       inputs.llm-agents.packages.${pkgs.system}.codex
     ];
 
+    programs.bash.initExtra = ''
+      source ${config.sops.templates."gemini-env".path}
+    '';
+
     programs.zsh = {
       enable = true;
       shellAliases = {
