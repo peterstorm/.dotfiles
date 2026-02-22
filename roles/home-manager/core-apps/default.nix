@@ -7,6 +7,7 @@
 
   programs.ssh = {
     enable = true;
+    enableDefaultConfig = false;
     matchBlocks = {
       homelab = {
         hostname = "192.168.0.28";
@@ -54,10 +55,11 @@
     docker-compose
     light
     bun
-    inputs.llm-agents.packages.${pkgs.system}.claude-code
-    inputs.llm-agents.packages.${pkgs.system}.copilot-cli
-    inputs.llm-agents.packages.${pkgs.system}.opencode
-    # inputs.llm-agents.packages.${pkgs.system}.codex
+    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
+    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.copilot-cli
+    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.opencode
+    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.codex
+    antigravity
   ];
 
 }

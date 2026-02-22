@@ -26,7 +26,7 @@ let
     };
   };
 
-  info = platformInfo.${stdenv.system} or (throw "Unsupported system: ${stdenv.system}");
+  info = platformInfo.${stdenv.hostPlatform.system} or (throw "Unsupported system: ${stdenv.hostPlatform.system}");
 
   darwinInstallPhase = ''
     mkdir -p "$out/Applications" "$out/bin"

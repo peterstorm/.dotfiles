@@ -80,8 +80,7 @@
     # Git configuration using the template
     programs.git = {
       enable = true;
-      extraConfig = {
-        # Use the credential file template (contains actual secrets)
+      settings = {
         credential.helper = "store --file=${config.sops.templates."git-credentials".path}";
       };
     };

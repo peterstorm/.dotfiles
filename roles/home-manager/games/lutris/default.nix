@@ -3,7 +3,7 @@
   home.packages = with pkgs; [
     (lutris.override {
       extraPkgs = pkgs: [
-        wineWowPackages.stable
+        wineWow64Packages.stable
         winetricks
       ];
     })
