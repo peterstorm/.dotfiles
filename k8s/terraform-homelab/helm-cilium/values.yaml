@@ -3,10 +3,10 @@ kubeProxyReplacement: true
 k8sServiceHost: "192.168.0.28"
 k8sServicePort: "6443"
 
-# Disable BPF masquerading due to Cilium bug #37537 (breaks CoreDNS → K8s API)
-# Falls back to iptables masquerading which works correctly
+# BPF masquerade required - iptables fallback doesn't work with Cilium's BPF datapath.
+# Bug #37537 was caused by k8sServiceHost=127.0.0.1, fixed by using actual node IP.
 bpf:
-  masquerade: false
+  masquerade: true
 
 l2announcements:
   enabled: true
