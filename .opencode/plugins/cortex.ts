@@ -1,7 +1,33 @@
 import type { Plugin } from "@opencode-ai/plugin";
+import { Glob } from "bun";
 
-const CORTEX_CLI = `${process.env.HOME}/.claude/plugins/cortex/engine/src/cli.ts`;
 const GEMINI_ENV = `${process.env.HOME}/.config/sops-nix/secrets/rendered/gemini-env`;
+
+// Resolve the cortex CLI path dynamically, checking multiple known locations.
+// Falls back to the cache directory with glob-based version resolution.
+async function resolveCortexCli(): Promise<string> {
+  const home = process.env.HOME!;
+
+  // Preferred: direct plugin path (Claude Code installs here)
+  const directPath = `${home}/.claude/plugins/cortex/engine/src/cli.ts`;
+  if (await Bun.file(directPath).exists()) return directPath;
+
+  // Fallback: OpenCode cache directory — find the latest version
+  const cacheBase = `${home}/.claude/plugins/cache/local-plugins/cortex`;
+  const glob = new Glob("*/engine/src/cli.ts");
+  const candidates: string[] = [];
+  for await (const match of glob.scan({ cwd: cacheBase, absolute: true })) {
+    candidates.push(match);
+  }
+  if (candidates.length > 0) {
+    // Sort descending by version segment to pick the latest
+    candidates.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    return candidates[0];
+  }
+
+  // Nothing found — return the direct path and let callers fail with a clear error
+  return directPath;
+}
 
 // Track message count per session to avoid redundant extractions
 const sessionMessageCount = new Map<string, number>();
@@ -16,6 +42,10 @@ export const CortexPlugin: Plugin = async ({ client, $, directory }) => {
     client.app.log({
       body: { service: "cortex", level: "error", message, extra: extra ?? {} },
     }).catch(() => {});
+
+  // Resolve CLI path once at plugin init
+  const CORTEX_CLI = await resolveCortexCli();
+  await log("resolved cortex CLI", { path: CORTEX_CLI });
 
   let env: Record<string, string>;
   try {

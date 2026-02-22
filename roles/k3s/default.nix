@@ -7,6 +7,10 @@
     extraFlags = "--disable servicelb --disable traefik --disable-kube-proxy --write-kubeconfig-mode=644 --flannel-backend=none --disable-network-policy";
   };
 
+  # Cilium manages its own network security via BPF; NixOS iptables firewall
+  # conflicts with Cilium's datapath and blocks pod-to-host traffic.
+  networking.firewall.enable = lib.mkForce false;
+
   systemd.services.k3s-sops-age-key-sync = {
     description = "Sync SOPS age key to argocd namespace";
     after = [ "k3s.service" ];

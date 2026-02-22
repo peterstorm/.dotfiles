@@ -1,0 +1,53 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Use this agent when you need to review code for adherence to project guidelines, style guides, and best practices. This agent should be used proactively after writing or modifying code, especially before committing changes or creating pull requests. It will check for style violations, potential issues, and ensure code follows the established patterns in CLAUDE.md. Also the agent needs to know which files to focus on for the review. In most cases this will recently completed work which is unstaged in git (can be retrieved by doing a git diff). However there can be cases where this is different, make sure to specify this as the agent input when calling the agent.",
+      "mode": "subagent",
+      "color": "#00FF00",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/code-reviewer.md}"
+    },
+    "silent-failure-hunter": {
+      "description": "Use this agent when reviewing code changes in a pull request to identify silent failures, inadequate error handling, and inappropriate fallback behavior. This agent should be invoked proactively after completing a logical chunk of work that involves error handling, catch blocks, fallback logic, or any code that could potentially suppress errors.",
+      "mode": "subagent",
+      "color": "#FFFF00",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/silent-failure-hunter.md}"
+    },
+    "pr-test-analyzer": {
+      "description": "Use this agent when you need to review a pull request for test coverage quality and completeness. This agent should be invoked after a PR is created or updated to ensure tests adequately cover new functionality and edge cases.",
+      "mode": "subagent",
+      "color": "#00FFFF",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/pr-test-analyzer.md}"
+    },
+    "type-design-analyzer": {
+      "description": "Use this agent when you need expert analysis of type design in your codebase. Specifically use it when introducing new types, during PR creation to review types being added, or when refactoring existing types. Provides quantitative ratings on encapsulation, invariant expression, usefulness, and enforcement.",
+      "mode": "subagent",
+      "color": "#FFC0CB",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/type-design-analyzer.md}"
+    },
+    "comment-analyzer": {
+      "description": "Use this agent when you need to analyze code comments for accuracy, completeness, and long-term maintainability. Use after generating documentation, before finalizing PRs with comment changes, or when reviewing existing comments for technical debt.",
+      "mode": "subagent",
+      "color": "#00FF00",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/comment-analyzer.md}"
+    },
+    "architecture-agent": {
+      "description": "Use this agent for architectural review of large PRs or features. Evaluates Functional Core/Imperative Shell adherence, coupling, testability, state management, and concurrency patterns. Auto-triggered by /review-pr for PRs with >500 additions or >10 files.",
+      "mode": "subagent",
+      "color": "#800080",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/architecture-tech-lead.md}"
+    },
+    "code-simplifier": {
+      "description": "Use this agent when code has been written or modified and needs to be simplified for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.",
+      "mode": "subagent",
+      "color": "#0000FF",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/code-simplifier.md}"
+    },
+    "skill-content-reviewer": {
+      "description": "This agent should be used when a skill needs content quality review - evaluating whether guidance is comprehensive, accurate, and actionable. Works for any domain by first researching what good guidance in that domain should include, then evaluating the skill against those criteria.",
+      "mode": "subagent",
+      "color": "#800080",
+      "prompt": "{file:~/.dotfiles/claude/project/meta/agents/skill-content-reviewer.md}"
+    }
+  }
+}
