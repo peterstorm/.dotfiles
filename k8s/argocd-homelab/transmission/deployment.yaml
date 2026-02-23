@@ -45,9 +45,9 @@ spec:
             - name: TRANSMISSION_PEER_PORT
               value: "47444"
             - name: TRANSMISSION_DOWNLOAD_DIR
-              value: /torrents/complete
+              value: /data/torrents/complete
             - name: TRANSMISSION_INCOMPLETE_DIR
-              value: /torrents/incomplete
+              value: /data/torrents/incomplete
             - name: TRANSMISSION_INCOMPLETE_DIR_ENABLED
               value: "true"
             - name: PUID
@@ -64,11 +64,9 @@ spec:
                 - NET_ADMIN
           volumeMounts:
             - name: config
+              mountPath: /config
+            - name: data
               mountPath: /data
-            - name: torrents
-              mountPath: /torrents
-            - name: media
-              mountPath: /media
             - name: dev-tun
               mountPath: /dev/net/tun
       volumes:
@@ -76,13 +74,9 @@ spec:
           hostPath:
             path: /var/data/configs/transmission
             type: DirectoryOrCreate
-        - name: torrents
+        - name: data
           hostPath:
-            path: /var/data/torrents
-            type: DirectoryOrCreate
-        - name: media
-          hostPath:
-            path: /var/data/media
+            path: /var/data
             type: DirectoryOrCreate
         - name: dev-tun
           hostPath:

@@ -16,6 +16,20 @@ spec:
       labels:
         app: sonarr
     spec:
+      initContainers:
+        - name: migrate-paths
+          image: alpine:3.21
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              apk add --no-cache sqlite > /dev/null 2>&1
+              DB=/config/sonarr.db
+              [ ! -f "$DB" ] && exit 0
+              sqlite3 "$DB" "UPDATE RootFolders SET Path = REPLACE(Path, '/media/', '/data/media/') WHERE Path LIKE '/media/%';"
+              sqlite3 "$DB" "UPDATE Series SET Path = REPLACE(Path, '/media/', '/data/media/') WHERE Path LIKE '/media/%';"
+          volumeMounts:
+            - name: config
+              mountPath: /config
       containers:
         - name: sonarr
           image: linuxserver/sonarr:4.0.13
@@ -31,20 +45,14 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
-            - name: media
-              mountPath: /media
-            - name: torrents
-              mountPath: /torrents
+            - name: data
+              mountPath: /data
       volumes:
         - name: config
           hostPath:
             path: /var/data/configs/sonarr
             type: DirectoryOrCreate
-        - name: media
+        - name: data
           hostPath:
-            path: /var/data/media
-            type: DirectoryOrCreate
-        - name: torrents
-          hostPath:
-            path: /var/data/torrents
+            path: /var/data
             type: DirectoryOrCreate
