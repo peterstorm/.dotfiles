@@ -3,8 +3,8 @@
 (util.sops.mkSecretsAndTemplatesConfig
   # 1. Secrets — decrypted to /run/secrets/
   [
-    (util.sops.hostSecret "reclaw-telegram-token" "reclaw.yaml" "telegram_token" {})
-    (util.sops.hostSecret "reclaw-gemini-api-key" "reclaw.yaml" "gemini_api_key" {})
+    (util.sops.hostSecret "reclaw-telegram-token" "reclaw.yaml" "telegram_token" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-gemini-api-key" "reclaw.yaml" "gemini_api_key" { owner = "peterstorm"; group = "users"; })
   ]
 
   # 2. Templates — env file with actual secret values
