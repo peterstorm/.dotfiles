@@ -46,6 +46,8 @@
       };
 
       environment = {
+        HOME = "/home/peterstorm";
+        PATH = "/home/peterstorm/.nix-profile/bin:/nix/profile/bin:/home/peterstorm/.local/state/nix/profile/bin:/etc/profiles/per-user/peterstorm/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin:/run/wrappers/bin";
         REDIS_HOST = "127.0.0.1";
         REDIS_PORT = "6380";
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
