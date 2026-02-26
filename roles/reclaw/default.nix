@@ -17,6 +17,14 @@
 
   # 3. NixOS configuration
   {
+    # Passwordless nixos-rebuild for peterstorm
+    security.sudo.extraRules = [{
+      users = [ "peterstorm" ];
+      commands = [
+        { command = "/run/current-system/sw/bin/nixos-rebuild"; options = [ "NOPASSWD" ]; }
+      ];
+    }];
+
     # Redis instance for reclaw on port 6380
     services.redis.servers.reclaw = {
       enable = true;
