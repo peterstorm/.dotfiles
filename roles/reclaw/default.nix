@@ -51,7 +51,7 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        CLAUDE_BINARY_PATH = "claude";
+        CLAUDE_BINARY_PATH = "/home/peterstorm/.nix-profile/bin/claude";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes";
         CHAT_TIMEOUT_MS = "120000";
         SCHEDULED_TIMEOUT_MS = "300000";
