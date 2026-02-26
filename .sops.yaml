@@ -33,6 +33,7 @@ creation_rules:
     - age:
       - *peterstorm
       - *hansen142
+      - *homelab
   # Legacy: Direct files in secrets/ (for backward compatibility)
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
     key_groups:
