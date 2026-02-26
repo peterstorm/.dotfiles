@@ -7,12 +7,12 @@
     (util.sops.hostSecret "reclaw-gemini-api-key" "reclaw.yaml" "gemini_api_key" { owner = "peterstorm"; group = "users"; })
   ]
 
-  # 2. Templates — env file with actual secret values
+  # 2. Templates — systemd env file (no 'export' prefix)
   [
-    (util.sops.envTemplate "reclaw-env" {
-      TELEGRAM_TOKEN = "reclaw-telegram-token";
-      GEMINI_API_KEY = "reclaw-gemini-api-key";
-    })
+    (util.sops.configTemplate "reclaw-env" ''
+      TELEGRAM_TOKEN=${config.sops.placeholder."reclaw-telegram-token"}
+      GEMINI_API_KEY=${config.sops.placeholder."reclaw-gemini-api-key"}
+    '')
   ]
 
   # 3. NixOS configuration
