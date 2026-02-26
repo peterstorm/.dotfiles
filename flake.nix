@@ -28,6 +28,7 @@
 
         overlays = [
           (import ./overlays/vscode-insiders.nix)
+          (import ./overlays/antigravity.nix)
           inputs.nix-vscode-extensions.overlays.default
         ];
 
@@ -133,7 +134,7 @@
 
           homelab = host.mkHost {
             name = "homelab";
-            roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" ];
+            roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" "reclaw" ];
             machine = [ "homelab" ];
             NICs = [ "wlp3s0" ];
             initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];

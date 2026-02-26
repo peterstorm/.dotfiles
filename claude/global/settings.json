@@ -128,8 +128,9 @@
   "enabledPlugins": {
     "cortex@plugins": true,
     "obsidian@plugins": true,
-    "feynman@plugins": true,
-    "loom@plugins": true
+    "loom@plugins": true,
+    "feynman@plugins": true
   },
-  "alwaysThinkingEnabled": true
+  "alwaysThinkingEnabled": true,
+  "skipDangerousModePermissionPrompt": true
 }
