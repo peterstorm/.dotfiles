@@ -30,6 +30,13 @@
 
   users.mutableUsers = false;
 
+  security.sudo.extraRules = [{
+    users = [ "peterstorm" ];
+    commands = [
+      { command = "/run/current-system/sw/bin/nixos-rebuild"; options = [ "NOPASSWD" ]; }
+    ];
+  }];
+
   virtualisation.docker.enable = true;
 
 
