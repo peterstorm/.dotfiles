@@ -10,5 +10,9 @@
       GEMINI_API_KEY = "gemini-api-key";
     })
   ]
-  {}
+  {
+    programs.bash.profileExtra = ''
+      source ${config.sops.templates."gemini-env".path}
+    '';
+  }
 ) { inherit config lib; }

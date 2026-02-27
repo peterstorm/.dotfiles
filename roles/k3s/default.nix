@@ -4,7 +4,16 @@
   services.k3s = {
     enable = true;
     role = "server";
-    extraFlags = "--disable servicelb --disable traefik --disable-kube-proxy --write-kubeconfig-mode=644 --flannel-backend=none --disable-network-policy";
+    extraFlags = lib.concatStringsSep " " [
+      "--disable servicelb"
+      "--disable traefik"
+      "--disable-kube-proxy"
+      "--write-kubeconfig-mode=644"
+      "--flannel-backend=none"
+      "--disable-network-policy"
+      "--kubelet-arg=eviction-hard=imagefs.available<5%,nodefs.available<5%"
+      "--kubelet-arg=eviction-minimum-reclaim=imagefs.available=5%,nodefs.available=5%"
+    ];
   };
 
   # Cilium manages its own network security via BPF; NixOS iptables firewall

@@ -45,3 +45,12 @@ override.tf.json
 terraform.rc
 .memory/
 .claude/cortex-memory.local.md
+
+# Claude machine-specific (absolute symlinks, local state)
+.claude/local-marketplace/
+.claude/plans/
+claude/plugins/cortex
+claude/plugins/feynman
+claude/plugins/loom
+claude/plugins/obsidian
+claude/global/
