@@ -17,17 +17,6 @@
 
   # 3. NixOS configuration
   {
-    # Allow peterstorm to restart reclaw without sudo password
-    security.sudo.extraRules = [{
-      users = [ "peterstorm" ];
-      commands = [
-        { command = "/run/current-system/sw/bin/systemctl restart reclaw.service"; options = [ "NOPASSWD" ]; }
-        { command = "/run/current-system/sw/bin/systemctl stop reclaw.service"; options = [ "NOPASSWD" ]; }
-        { command = "/run/current-system/sw/bin/systemctl start reclaw.service"; options = [ "NOPASSWD" ]; }
-        { command = "/run/current-system/sw/bin/systemctl status reclaw.service"; options = [ "NOPASSWD" ]; }
-      ];
-    }];
-
     # Redis instance for reclaw on port 6380
     services.redis.servers.reclaw = {
       enable = true;
@@ -38,17 +27,17 @@
       };
     };
 
-    # Reclaw systemd service
-    systemd.services.reclaw = {
+    # Linger so user services run without active login
+    users.users.peterstorm.linger = true;
+
+    # Reclaw user service — restartable without sudo/polkit
+    systemd.user.services.reclaw = {
       description = "Reclaw Telegram AI Agent";
-      after = [ "network.target" "redis-reclaw.service" ];
-      requires = [ "redis-reclaw.service" ];
-      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+      wantedBy = [ "default.target" ];
 
       serviceConfig = {
         Type = "simple";
-        User = "peterstorm";
-        Group = "users";
         WorkingDirectory = "/home/peterstorm/dev/claude-plugins/reclaw";
         EnvironmentFile = config.sops.templates."reclaw-env".path;
         ExecStart = "${pkgs.bun}/bin/bun run src/main.ts";
