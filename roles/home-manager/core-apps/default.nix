@@ -34,10 +34,13 @@
       sus = "systemctl suspend";
       warpc = "warp-cli connect";
       warpd = "warp-cli disconnect";
+      system-apply = "cd /home/peterstorm/.dotfiles && ./system-apply.sh";
+      hm-apply = "cd /home/peterstorm/.dotfiles && ./hm-apply.sh";
     };
   };
 
   home.packages = with pkgs;[
+    jq
     gh
     vscode
     cloudflare-warp
@@ -58,7 +61,6 @@
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.copilot-cli
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.opencode
-    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.codex
     antigravity
   ];
 

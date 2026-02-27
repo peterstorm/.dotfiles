@@ -60,7 +60,7 @@
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
         CLAUDE_BINARY_PATH = "/home/peterstorm/.nix-profile/bin/claude";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes";
-        CHAT_TIMEOUT_MS = "120000";
+        CHAT_TIMEOUT_MS = "3600000";
         SCHEDULED_TIMEOUT_MS = "300000";
         AUTHORIZED_USER_IDS = "5061662914";
         TZ = "Europe/Copenhagen";
