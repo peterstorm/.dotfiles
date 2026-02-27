@@ -9,10 +9,15 @@
 
   # 2. Templates — systemd env file (no 'export' prefix)
   [
-    (util.sops.configTemplate "reclaw-env" ''
-      TELEGRAM_TOKEN=${config.sops.placeholder."reclaw-telegram-token"}
-      GEMINI_API_KEY=${config.sops.placeholder."reclaw-gemini-api-key"}
-    '')
+    {
+      name = "reclaw-env";
+      content = ''
+        TELEGRAM_TOKEN=${config.sops.placeholder."reclaw-telegram-token"}
+        GEMINI_API_KEY=${config.sops.placeholder."reclaw-gemini-api-key"}
+      '';
+      owner = "peterstorm";
+      group = "users";
+    }
   ]
 
   # 3. NixOS configuration
