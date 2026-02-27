@@ -17,6 +17,17 @@
 
   # 3. NixOS configuration
   {
+    # Allow peterstorm to restart reclaw without sudo password
+    security.sudo.extraRules = [{
+      users = [ "peterstorm" ];
+      commands = [
+        { command = "/run/current-system/sw/bin/systemctl restart reclaw.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl stop reclaw.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl start reclaw.service"; options = [ "NOPASSWD" ]; }
+        { command = "/run/current-system/sw/bin/systemctl status reclaw.service"; options = [ "NOPASSWD" ]; }
+      ];
+    }];
+
     # Redis instance for reclaw on port 6380
     services.redis.servers.reclaw = {
       enable = true;
