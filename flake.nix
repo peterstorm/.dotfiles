@@ -85,7 +85,7 @@
             kernelParams = [ "acpi_rev_override" ];
             users = [{
               name = "peterstorm";
-              groups = [ "wheel" "networkmanager" "docker" ];
+              groups = [ "wheel" "networkmanager" "docker" "video" ];
               uid = 1000;
               ssh_keys = [];
             }];
@@ -105,7 +105,7 @@
             kernelParams = [ "acpi_rev_override" ];
             users = [{
               name = "peterstorm";
-              groups = [ "wheel" "networkmanager" "docker" ];
+              groups = [ "wheel" "networkmanager" "docker" "video" ];
               uid = 1000;
               ssh_keys = [];
             }];
