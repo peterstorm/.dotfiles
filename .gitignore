@@ -55,4 +55,3 @@ claude/plugins/loom
 claude/plugins/obsidian
 claude/global/settings.json
 claude/global/settings.local.json
-claude/global/hooks/
