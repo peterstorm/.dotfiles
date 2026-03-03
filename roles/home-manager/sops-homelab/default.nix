@@ -14,5 +14,8 @@
     programs.bash.profileExtra = ''
       source ${config.sops.templates."gemini-env".path}
     '';
+    programs.bash.initExtra = ''
+      [ -z "$GEMINI_API_KEY" ] && [ -f ${config.sops.templates."gemini-env".path} ] && source ${config.sops.templates."gemini-env".path}
+    '';
   }
 ) { inherit config lib; }
