@@ -35,7 +35,7 @@
 
     Timer = {
       OnBootSec = "5min";
-      OnUnitActiveSec = "5min";
+      OnUnitActiveSec = "30min";
       Persistent = true;
     };
 
