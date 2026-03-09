@@ -5,6 +5,8 @@
   [
     (util.sops.hostSecret "reclaw-telegram-token" "reclaw.yaml" "telegram_token" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-gemini-api-key" "reclaw.yaml" "gemini_api_key" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-notebooklm-auth-token" "reclaw.yaml" "notebooklm_auth_token" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-notebooklm-cookies" "reclaw.yaml" "notebooklm_cookies" { owner = "peterstorm"; group = "users"; })
   ]
 
   # 2. Templates — systemd env file (no 'export' prefix)
@@ -14,6 +16,8 @@
       content = ''
         TELEGRAM_TOKEN=${config.sops.placeholder."reclaw-telegram-token"}
         GEMINI_API_KEY=${config.sops.placeholder."reclaw-gemini-api-key"}
+        NOTEBOOKLM_AUTH_TOKEN=${config.sops.placeholder."reclaw-notebooklm-auth-token"}
+        NOTEBOOKLM_COOKIES=${config.sops.placeholder."reclaw-notebooklm-cookies"}
       '';
       owner = "peterstorm";
       group = "users";
@@ -60,6 +64,7 @@
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
         CLAUDE_BINARY_PATH = "/home/peterstorm/.nix-profile/bin/claude";
         AUTHORIZED_USER_IDS = "5061662914";
+        OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
       };
     };
