@@ -95,7 +95,55 @@ ln -s ~/.dotfiles/claude/project/typescript/skills/ts-test-engineer .claude/skil
 
 ## Plugins
 
-Plugins live in `~/dev/claude-plugins/` and are symlinked into `plugins/`. Enabled in `global/settings.json` under `enabledPlugins`:
+Plugin source lives in `~/dev/claude-plugins/`, registered as a local marketplace so `/plugins` shows them.
+
+### Initial marketplace setup (one-time)
+
+1. Create the plugins repo with a marketplace manifest:
+
+```bash
+mkdir -p ~/dev/claude-plugins/.claude-plugin
+```
+
+2. Create `~/dev/claude-plugins/.claude-plugin/marketplace.json`:
+
+```json
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "plugins",
+  "description": "Local development plugins",
+  "owner": { "name": "your-name" },
+  "plugins": [
+    {
+      "name": "my-plugin",
+      "description": "What the plugin does",
+      "version": "0.1.0",
+      "author": { "name": "your-name" },
+      "source": "./my-plugin",
+      "category": "development"
+    }
+  ]
+}
+```
+
+3. Register the local marketplace with Claude Code:
+
+```bash
+claude /plugins add-marketplace ~/dev/claude-plugins
+```
+
+This writes to `~/.claude/plugins/known_marketplaces.json`, telling Claude Code where to find your plugins when you run `/plugins`.
+
+### Installing and enabling plugins
+
+After the marketplace is registered:
+
+```bash
+# Browse and install via the interactive marketplace
+claude /plugins
+
+# Enable installed plugins in ~/.claude/settings.json
+```
 
 ```json
 {
@@ -108,18 +156,19 @@ Plugins live in `~/dev/claude-plugins/` and are symlinked into `plugins/`. Enabl
 }
 ```
 
-To add a new plugin:
+### Adding a new plugin
 
 ```bash
-# Clone/create the plugin
+# Create or clone the plugin into the marketplace repo
 cd ~/dev/claude-plugins
-git clone <plugin-repo> my-plugin
+mkdir my-plugin  # or: git clone <repo> my-plugin
 
-# Symlink into dotfiles
-ln -s ~/dev/claude-plugins/my-plugin ~/.dotfiles/claude/plugins/my-plugin
+# Add entry to .claude-plugin/marketplace.json plugins array
 
-# Enable in settings.json — add "my-plugin@plugins": true to enabledPlugins
+# Install via /plugins, then enable in settings.json
 ```
+
+Each plugin needs its own `plugin.json` manifest — see existing plugins (cortex, loom, etc.) for the format.
 
 ## Adding new domain configs
 
