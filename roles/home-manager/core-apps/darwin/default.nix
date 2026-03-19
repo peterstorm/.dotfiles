@@ -55,6 +55,7 @@
       bun
       inputs.llm-agents.packages.${pkgs.system}.opencode
       inputs.llm-agents.packages.${pkgs.system}.codex
+      inputs.loom-tui.packages.${pkgs.system}.default
     ];
 
     programs.bash.initExtra = ''
