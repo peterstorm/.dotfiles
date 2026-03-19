@@ -57,10 +57,10 @@
             roles = [
               "core-apps/neovim"
               "core-apps/darwin"
-              "core-apps/vscode"
               "core-apps/tmux"
               "core-apps/nix-direnv-zsh"
               "core-apps/starship"
+              "core-apps/alacritty"
             ];
             username = "hansen142";
           };
