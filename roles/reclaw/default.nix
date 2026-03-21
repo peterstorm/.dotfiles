@@ -7,6 +7,8 @@
     (util.sops.hostSecret "reclaw-gemini-api-key" "reclaw.yaml" "gemini_api_key" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-google-email" "reclaw.yaml" "google_email" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-google-password" "reclaw.yaml" "google_password" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-garmin-email" "reclaw.yaml" "garmin_email" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-garmin-password" "reclaw.yaml" "garmin_password" { owner = "peterstorm"; group = "users"; })
   ]
 
   # 2. Templates — systemd env file (no 'export' prefix)
@@ -18,6 +20,8 @@
         GEMINI_API_KEY=${config.sops.placeholder."reclaw-gemini-api-key"}
         GOOGLE_EMAIL=${config.sops.placeholder."reclaw-google-email"}
         GOOGLE_PASSWORD=${config.sops.placeholder."reclaw-google-password"}
+        GARMIN_EMAIL=${config.sops.placeholder."reclaw-garmin-email"}
+        GARMIN_PASSWORD=${config.sops.placeholder."reclaw-garmin-password"}
       '';
       owner = "peterstorm";
       group = "users";
@@ -50,6 +54,7 @@
         WorkingDirectory = "/home/peterstorm/dev/claude-plugins/reclaw";
         EnvironmentFile = config.sops.templates."reclaw-env".path;
         ExecStart = "${pkgs.bun}/bin/bun run src/main.ts";
+        ExecStopPost = "${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/mkdir -p /home/peterstorm/.local/share/reclaw && echo \"[$(${ pkgs.coreutils}/bin/date -Iseconds)] stopped: result=$SERVICE_RESULT exit=$EXIT_CODE/$EXIT_STATUS sessions=$(${pkgs.systemd}/bin/loginctl list-sessions --no-legend 2>/dev/null | ${pkgs.coreutils}/bin/wc -l)\" >> /home/peterstorm/.local/share/reclaw/stop-audit.log'";
         Restart = "on-failure";
         RestartSec = "10s";
       };
