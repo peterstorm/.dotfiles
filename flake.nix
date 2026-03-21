@@ -14,6 +14,7 @@
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
     nix-vscode-extensions.inputs.nixpkgs.follows = "nixpkgs";
     llm-agents.url = "github:numtide/llm-agents.nix";
+    loom-tui.url = "github:peterstorm/loom-tui";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:

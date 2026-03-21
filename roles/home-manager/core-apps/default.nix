@@ -60,6 +60,7 @@
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.copilot-cli
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.opencode
+    inputs.loom-tui.packages.${pkgs.stdenv.hostPlatform.system}.default
     antigravity
   ];
 

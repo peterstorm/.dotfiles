@@ -54,6 +54,8 @@
       jq
       bun
       inputs.llm-agents.packages.${pkgs.system}.opencode
+      inputs.llm-agents.packages.${pkgs.system}.codex
+      inputs.loom-tui.packages.${pkgs.system}.default
       # inputs.llm-agents.packages.${pkgs.system}.codex
     ];
 
