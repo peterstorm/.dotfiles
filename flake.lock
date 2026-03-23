@@ -143,11 +143,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1773949496,
-        "narHash": "sha256-gQU4YsTsTx27QRW/amqShYrB79bw6rk6WmOoGiSH3zk=",
+        "lastModified": 1773950409,
+        "narHash": "sha256-qkIyd3CAR3VlKOIP3ApzO88coqRu1tHb4mwaZt4jnv0=",
         "owner": "peterstorm",
         "repo": "loom-tui",
-        "rev": "a2c5054becc4627fc14a8d0168aa1e387becdb7a",
+        "rev": "0c70d19f2a585d698d9ec094e344de6c778d5495",
         "type": "github"
       },
       "original": {
