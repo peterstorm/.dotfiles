@@ -47,6 +47,7 @@ terraform.rc
 .claude/cortex-memory.local.md
 
 # Claude machine-specific (absolute symlinks, local state)
+.claude/skills/
 .claude/local-marketplace/
 .claude/plans/
 claude/plugins/cortex
