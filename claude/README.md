@@ -129,31 +129,26 @@ mkdir -p ~/dev/claude-plugins/.claude-plugin
 3. Register the local marketplace with Claude Code:
 
 ```bash
-claude /plugins add-marketplace ~/dev/claude-plugins
+claude plugin marketplace add ~/dev/claude-plugins
 ```
 
-This writes to `~/.claude/plugins/known_marketplaces.json`, telling Claude Code where to find your plugins when you run `/plugins`.
+This writes to `~/.claude/plugins/known_marketplaces.json`, telling Claude Code where to find your plugins.
 
 ### Installing and enabling plugins
 
-After the marketplace is registered:
+After the marketplace is registered, install plugins via the CLI (this both installs and enables them):
 
 ```bash
-# Browse and install via the interactive marketplace
-claude /plugins
-
-# Enable installed plugins in ~/.claude/settings.json
+claude plugin install cortex@plugins
+claude plugin install loom@plugins
+claude plugin install feynman@plugins
 ```
 
-```json
-{
-  "enabledPlugins": {
-    "cortex@plugins": true,
-    "loom@plugins": true,
-    "obsidian@plugins": true,
-    "feynman@plugins": true
-  }
-}
+Verify with:
+
+```bash
+claude plugin list
+claude plugin marketplace list
 ```
 
 ### Adding a new plugin
@@ -165,7 +160,8 @@ mkdir my-plugin  # or: git clone <repo> my-plugin
 
 # Add entry to .claude-plugin/marketplace.json plugins array
 
-# Install via /plugins, then enable in settings.json
+# Install via the CLI
+claude plugin install my-plugin@plugins
 ```
 
 Each plugin needs its own `plugin.json` manifest — see existing plugins (cortex, loom, etc.) for the format.

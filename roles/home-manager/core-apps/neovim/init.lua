@@ -157,18 +157,13 @@ vim.lsp.enable('lua_ls')
 -- java lsp
 vim.lsp.enable('jdtls')
 
--- neoformat
-
-g.neoformat_try_node_exe = 1
-
-api.nvim_create_autocmd("BufWritePre", {
-  pattern = { "*.js", "*.jsx", "*.ts", "*.tsx" },
-  command = "Neoformat prettier",
-})
-
 require("conform").setup({
   formatters_by_ft = {
     java = { "google-java-format" },
+    javascript = { "prettier" },
+    javascriptreact = { "prettier" },
+    typescript = { "prettier" },
+    typescriptreact = { "prettier" },
   },
   format_on_save = function(bufnr)
     -- Disable autoformat on certain filetypes

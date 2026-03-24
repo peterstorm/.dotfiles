@@ -10,7 +10,7 @@ Template for spawning architecture-agent. Variables in `{braces}` must be substi
 
 Design implementation approach for this feature.
 
-**Output location:** `.opencode/plans/{date_slug}.md`
+**Output location:** `.claude/plans/{date_slug}.md`
 
 **Your output must include:**
 - Path to created plan file

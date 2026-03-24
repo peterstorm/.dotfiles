@@ -21,7 +21,7 @@ Scan specifications for ambiguities and resolve them through structured question
 Find active spec:
 ```bash
 # Most recent spec
-ls -t .opencode/specs/*/spec.md | head -1
+ls -t .claude/specs/*/spec.md | head -1
 ```
 
 Or use provided path.
@@ -29,7 +29,7 @@ Or use provided path.
 ### 2. Extract Markers
 
 ```bash
-grep -n "NEEDS CLARIFICATION" .opencode/specs/*/spec.md
+grep -n "NEEDS CLARIFICATION" .claude/specs/*/spec.md
 ```
 
 Parse each marker:
@@ -107,7 +107,7 @@ D) Custom business rules (please specify)
 After each answer:
 
 1. Update spec.md - replace marker with resolved requirement
-2. Log to `.opencode/specs/{slug}/clarifications/log.md`
+2. Log to `.claude/specs/{slug}/clarifications/log.md`
 
 **Before:**
 ```markdown
@@ -240,12 +240,12 @@ Clarify session complete when:
 ## Output
 
 Updates to:
-- `.opencode/specs/{slug}/spec.md` - markers replaced with answers
-- `.opencode/specs/{slug}/clarifications/log.md` - decision history
+- `.claude/specs/{slug}/spec.md` - markers replaced with answers
+- `.claude/specs/{slug}/clarifications/log.md` - decision history
 
 Commit changes:
 ```bash
-git add .opencode/specs/{slug}/
+git add .claude/specs/{slug}/
 git commit -m "clarify: resolve {N} uncertainties in {slug}"
 ```
 

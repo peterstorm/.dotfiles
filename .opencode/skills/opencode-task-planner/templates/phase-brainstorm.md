@@ -1,18 +1,50 @@
-# Brainstorm Phase Context
+# Brainstorm Phase — Artifact Format
 
-Template for spawning brainstorm-agent. Variables in `{braces}` must be substituted.
+This is an **orchestrator-driven** phase. The orchestrator asks the user questions via the `question` tool, gathers context, and writes this artifact directly. Do NOT spawn a brainstorm-agent.
 
 ---
 
-## Brainstorm: {feature_description}
+## Brainstorm artifact format
 
-{prior_context}
+Write the following to `.claude/specs/{date_slug}/brainstorm.md`:
 
-Explore this feature idea and help refine it.
+```markdown
+# Brainstorm: {feature_description}
 
-**Your output must include:**
-- What we're building (1-2 sentences)
-- Selected approach (from options you propose)
-- Key constraints identified
+## What we're building
+{1-2 sentence summary of the feature/change}
 
-The brainstorm-agent has the `brainstorming` skill preloaded which guides the exploration process.
+## Motivation
+{Why this work is needed — from user's answers}
+
+## Selected approach
+{The approach chosen from options explored with the user}
+
+### Alternatives considered
+{Other approaches discussed and why they were rejected}
+
+## Key constraints
+{Hard constraints, compatibility requirements, team/timeline limits}
+
+## Open questions resolved
+{Questions asked and user's answers, for traceability}
+
+## Scope boundary
+- **In scope:** {what's included}
+- **Out of scope:** {what's explicitly excluded}
+```
+
+## Orchestrator checklist
+
+Before writing the artifact, ensure you've explored:
+- [ ] Motivation / pain points driving the work
+- [ ] Technical constraints (compatibility, dependencies, deployment)
+- [ ] User preferences (frameworks, tools, patterns)
+- [ ] Scope boundaries (what's in, what's out)
+- [ ] Incremental strategy (if applicable)
+- [ ] Any prior decisions already made
+
+After writing, advance phase:
+```bash
+bun ~/dev/claude-plugins/loom/engine/src/cli.ts helper set-phase --phase specify
+```

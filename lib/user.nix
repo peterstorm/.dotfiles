@@ -21,6 +21,7 @@ with builtins;
       nixpkgs.overlays = overlays;
       nixpkgs.config.allowUnfree = true;
       systemd.user.startServices = true;
+      manual.manpages.enable = false;
       home.stateVersion = "22.11";
       home.username = username;
       home.homeDirectory = homeDirectory;

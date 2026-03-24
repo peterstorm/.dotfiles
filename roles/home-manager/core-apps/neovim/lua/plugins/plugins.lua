@@ -46,9 +46,6 @@ return {
     opts = {}
   },
   {
-    'sbdchd/neoformat'
-  },
-  {
     'hrsh7th/vim-vsnip'
   },
   {

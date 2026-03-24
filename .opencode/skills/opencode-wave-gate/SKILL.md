@@ -18,7 +18,7 @@ Executes the gate sequence after all wave tasks reach "implemented". Verifies te
 ### Step 1: Verify State
 
 ```bash
-jq '{wave: .current_wave, impl_complete: .wave_gates[.current_wave | tostring].impl_complete}' .opencode/state/active_task_graph.json
+jq '{wave: .current_wave, impl_complete: .wave_gates[.current_wave | tostring].impl_complete}' .claude/state/active_task_graph.json
 ```
 
 Abort if `impl_complete != true`.
@@ -29,10 +29,10 @@ Test evidence is set **automatically** by the `update-task-status` plugin hook w
 
 **Check evidence status (read-only):**
 ```bash
-jq '.tasks[] | select(.wave == .current_wave) | {id, tests_passed, test_evidence}' .opencode/state/active_task_graph.json
+jq '[.tasks[] | select(.wave == (.current_wave // 0)) | {id, tests_passed, test_evidence, new_tests_written, new_tests_required}]' .claude/state/active_task_graph.json
 ```
 
-The plugin's `verify-new-tests` hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass.
+The plugin's `verify-new-tests` hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass (unless `new_tests_required == false`).
 
 **If evidence missing** → re-spawn the implementation agent for that task. The agent MUST run tests and the plugin hook must see pass markers in the transcript.
 
@@ -44,8 +44,8 @@ Spawn **spec-check AND code reviewers** in a single message with multiple Task c
 
 **Get wave info:**
 ```bash
-WAVE=$(jq -r '.current_wave' .opencode/state/active_task_graph.json)
-TASKS=$(jq -r ".tasks[] | select(.wave == $WAVE) | .id" .opencode/state/active_task_graph.json | tr '\n' ',')
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
+TASKS=$(jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json | tr '\n' ',')
 ```
 
 **Get wave changes:**
@@ -56,7 +56,7 @@ git diff --name-only $BASE...HEAD
 
 **Get tasks needing review:**
 ```bash
-jq -r ".tasks[] | select(.wave == $WAVE) | select(.review_status == \"pending\" or .review_status == \"blocked\") | .id" .opencode/state/active_task_graph.json
+jq -r ".tasks[] | select(.wave == $WAVE) | select(.review_status == \"pending\" or .review_status == \"blocked\") | .id" .claude/state/active_task_graph.json
 ```
 
 **Spawn ALL in parallel (single message, multiple Task calls):**
@@ -75,7 +75,14 @@ Output format required:
 - SPEC_CHECK_VERDICT: PASSED | BLOCKED
 ```
 
-2. **Review invoker per task** (for each task needing review):
+2. **Review sub-agents per task** (for each task needing review, spawn ALL in parallel):
+   - `code-reviewer` — style, patterns, best practices
+   - `silent-failure-hunter` — error handling, silent swallowing
+   - `pr-test-analyzer` — test coverage and quality
+   - `type-design-analyzer` — type safety and design
+   - `comment-analyzer` — comment accuracy and completeness
+
+Each review agent gets the same prompt:
 ```markdown
 ## Task: {task_id}
 **Description:** {task description}
@@ -83,21 +90,25 @@ Output format required:
 Files: {comma-separated files relevant to this task}
 Task: {task_id}
 
-Call: Skill(skill: "review-pr", args: "--files {files} --task {task_id}")
+Review these files and produce a Machine Summary with CRITICAL_COUNT, CRITICAL, and ADVISORY lines.
 ```
 
 **What happens automatically on completion:**
 
 | Agent | Plugin Hook | Effect |
 |-------|-------------|--------|
-| spec-check-invoker | `parse-spec-check` | Sets `spec_check.critical_count`, `spec_check.verdict` |
-| review-invoker | `store-review-findings` | Sets `review_status` per task |
+| spec-check-invoker | `store-spec-check-findings` | Sets `spec_check.critical_count`, `spec_check.verdict` |
+| code-reviewer | `store-reviewer-findings` | Merges findings into task `review_status` |
+| silent-failure-hunter | `store-reviewer-findings` | Merges findings into task `review_status` |
+| pr-test-analyzer | `store-reviewer-findings` | Merges findings into task `review_status` |
+| type-design-analyzer | `store-reviewer-findings` | Merges findings into task `review_status` |
+| comment-analyzer | `store-reviewer-findings` | Merges findings into task `review_status` |
 
 **File-to-task mapping algorithm (for reviewers):**
-1. Get task description keywords (e.g., "JWT service" → jwt, token, auth)
-2. Filter wave changes to files matching keywords or parent directories
-3. If <3 files match, include all wave changes for that task
-4. If ambiguous, prefer over-inclusion (review more rather than miss files)
+1. Read `task.files_modified` from state (set by `update-task-status` hook via transcript parsing)
+2. If `files_modified` is non-empty: use those files directly
+3. Fallback (empty `files_modified`): use all wave changes from `git diff`
+4. Pass to review sub-agents: `--files {files_modified}`
 
 ### Step 4: Post GH Comment
 
@@ -114,8 +125,11 @@ gh issue comment {ISSUE} --body "$(cat <<'EOF'
 ### Code Review
 
 #### T1: {description}
-**Status:** PASSED | BLOCKED - {N} critical findings
-- {findings list}
+**Status:** PASSED | BLOCKED - {N} critical, {N} advisory
+**Critical:**
+- {critical findings list, if any}
+**Advisory:**
+- {ALL advisory findings — always include, even for PASSED tasks}
 
 #### T2: {description}
 ...
@@ -127,7 +141,7 @@ EOF
 ```
 
 **If GH comment fails** (rate limit, auth, network):
-- Log summary to `.opencode/state/wave-{N}-review.md` as fallback
+- Log summary to `.claude/state/wave-{N}-review.md` as fallback
 - Proceed with gate logic - don't block on comment failure
 - Retry comment post after gate decision
 
@@ -137,7 +151,7 @@ The `complete-wave-gate` plugin hook handles ALL verification and advancement wh
 
 The hook performs **five checks** before advancing:
 1. **Per-task test evidence** — all wave tasks must have `tests_passed == true`
-2. **New tests written** — all wave tasks must satisfy `!new_tests_required || new_tests_written`
+2. **New tests written** — all wave tasks must have `new_tests_written == true` OR `new_tests_required == false`
 3. **Spec alignment** — `spec_check.critical_count == 0`
 4. **Per-task review status** — all wave tasks must have `review_status != "pending"`
 5. **No critical findings** — code review `critical_findings` count must be 0
@@ -171,7 +185,7 @@ When issues fixed, run `/opencode-wave-gate` again. It will:
 **Debugging:**
 ```bash
 # Check spec-check status
-jq '.spec_check' .opencode/state/active_task_graph.json
+jq '.spec_check' .claude/state/active_task_graph.json
 ```
 
 ### Review Failures
@@ -185,20 +199,20 @@ jq '.spec_check' .opencode/state/active_task_graph.json
 **Debugging:**
 ```bash
 # Check per-task review status
-jq '.tasks[] | {id, review_status, tests_passed}' .opencode/state/active_task_graph.json
+jq '.tasks[] | {id, review_status, tests_passed}' .claude/state/active_task_graph.json
 
 # Check wave tasks
-WAVE=$(jq -r '.current_wave' .opencode/state/active_task_graph.json)
-jq -r ".tasks[] | select(.wave == $WAVE) | .id" .opencode/state/active_task_graph.json
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
+jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json
 ```
 
 ---
 
 ## Constraints
 
-- MUST spawn spec-check AND reviewers in parallel (single message)
+- MUST spawn spec-check AND review agents in parallel (single message)
 - MUST use `spec-check-invoker` agent for spec alignment
-- MUST use `review-invoker` agent with `--files` and `--task` args
+- MUST spawn review sub-agents directly (`code-reviewer`, `silent-failure-hunter`, `pr-test-analyzer`, `type-design-analyzer`, `comment-analyzer`) per task
 - MUST post GH comment before advancing
 - NEVER advance if spec-check has critical findings
 - NEVER advance if code review has critical findings

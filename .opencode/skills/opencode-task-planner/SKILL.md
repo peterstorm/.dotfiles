@@ -1,13 +1,19 @@
 ---
 name: opencode-task-planner
-description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through automated hooks."
+description: "This skill should be used when the user asks to 'plan this', 'orchestrate', 'break down', 'split into phases', 'coordinate tasks', 'create a plan', 'multi-step feature', or has complex tasks needing structured decomposition. Decomposes work into wave-based parallel tasks, assigns specialized agents, creates GitHub Issue for tracking, and manages execution through phase artifacts on disk."
 ---
 
 # Task Planner - Full Orchestration Skill
 
-Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify → architecture → decompose → execute.
+Orchestrates the COMPLETE feature lifecycle: brainstorm -> specify -> clarify -> architecture -> plan-alignment -> decompose -> execute.
 
-**This is the SINGLE ENTRY POINT** for multi-step features. Spawns specialized agents for each phase.
+**This is the SINGLE ENTRY POINT** for multi-step features. Spawns specialized agents for autonomous phases; drives interactive phases (brainstorm, clarify) directly via the question tool.
+
+**Interactive vs Agent-driven phases:**
+- **Orchestrator-driven (interactive):** Brainstorm, Clarify -- require multi-turn user input, so the orchestrator (you) asks questions directly using the `question` tool, writes artifacts, and tracks progress via artifact files on disk.
+- **Agent-driven (autonomous):** Specify, Architecture, Plan-Alignment, Decompose, Execute -- produce artifacts autonomously, orchestrator verifies artifacts exist before advancing.
+
+**Progress tracking:** The orchestrator tracks the current phase in conversation context. Artifact files on disk serve as the source of truth for phase completion. No external state file is used.
 
 ---
 
@@ -17,11 +23,11 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 - `/task-planner --skip-brainstorm` - Skip brainstorm phase (scope already clear)
 - `/task-planner --skip-clarify` - Skip clarify phase (accept markers as-is)
 - `/task-planner --skip-specify` - Skip brainstorm/specify/clarify (use existing spec)
-- `/task-planner --status` - Show current task graph status
-- `/task-planner --complete` - Finalize, clean up state
-- `/task-planner --abort` - Cancel mid-execution, clean state
+- `/task-planner --skip-plan-alignment` - Skip plan-alignment phase (proceed directly to decompose)
 
 **Note:** All phases are MANDATORY by default. Skip flags allow explicit bypass with user acknowledgment.
+
+**Clarify threshold:** Markers > 3 triggers mandatory clarify phase.
 
 ---
 
@@ -29,72 +35,109 @@ Orchestrates the COMPLETE feature lifecycle: brainstorm → specify → clarify 
 
 ```
 /task-planner "feature description"
-        │
-        ▼
-┌─────────────────────────────────────────────────────────┐
-│ Phase 0: BRAINSTORM [MANDATORY]                         │
-│   Agent: brainstorm-agent                               │
-│   Output: Refined understanding, selected approach      │
-│   Skip: --skip-brainstorm                               │
-└─────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────────────────────────┐
-│ Phase 1: SPECIFY [MANDATORY]                            │
-│   Agent: specify-agent                                  │
-│   Output: .opencode/specs/{slug}/spec.md                │
-└─────────────────────────────────────────────────────────┘
-        │
-        ▼ (if >3 markers, else skip to ARCHITECTURE)
-┌─────────────────────────────────────────────────────────┐
-│ Phase 2: CLARIFY [MANDATORY if markers > 3]             │
-│   Agent: clarify-agent                                  │
-│   Output: Updated spec.md with resolved uncertainties   │
-│   Skip: --skip-clarify                                  │
-└─────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────────────────────────┐
-│ Phase 3: ARCHITECTURE                                   │
-│   Agent: architecture-agent                             │
-│   Output: .opencode/plans/{slug}.md                     │
-└─────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────────────────────────┐
-│ Phase 4: DECOMPOSE                                      │
-│   Extract tasks, assign agents, schedule waves          │
-│   Output: Task graph + GitHub Issue                     │
-└─────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────────────────────────┐
-│ Phase 5: EXECUTE (wave by wave)                         │
-│   Spawn impl agents → wave-gate → advance               │
-│   Output: Working implementation                        │
-└─────────────────────────────────────────────────────────┘
+        |
+        v
++---------------------------------------------------------+
+| Phase 0: BRAINSTORM [MANDATORY]                         |
+|   Driver: ORCHESTRATOR (interactive Q&A with user)      |
+|   Output: .claude/specs/{slug}/brainstorm.md            |
+|   Skip: --skip-brainstorm                               |
++---------------------------------------------------------+
+        |
+        v
++---------------------------------------------------------+
+| Phase 1: SPECIFY [MANDATORY]                            |
+|   Agent: specify-agent                                  |
+|   Output: .claude/specs/{slug}/spec.md                  |
++---------------------------------------------------------+
+        |
+        v (if >3 markers, else skip to ARCHITECTURE)
++---------------------------------------------------------+
+| Phase 2: CLARIFY [MANDATORY if markers > 3]             |
+|   Driver: ORCHESTRATOR (interactive Q&A with user)      |
+|   Output: Updated spec.md with resolved uncertainties   |
+|   Skip: --skip-clarify                                  |
++---------------------------------------------------------+
+        |
+        v
++---------------------------------------------------------+
+| Phase 3: ARCHITECTURE                                   |
+|   Agent: architecture-agent                             |
+|   Output: .claude/plans/{slug}.md                       |
++---------------------------------------------------------+
+        |
+        v
++---------------------------------------------------------+
+| Phase 3.5: PLAN ALIGNMENT                               |
+|   Agent: plan-alignment-agent                           |
+|   Output: .claude/specs/{slug}/plan-alignment.md        |
+|   Skip: --skip-plan-alignment                           |
+|   Loop: gaps found -> re-run architecture (with context)|
++---------------------------------------------------------+
+        |
+        v
++---------------------------------------------------------+
+| Phase 4: DECOMPOSE                                      |
+|   Agent: decompose-agent                                |
+|   Output: Task graph JSON + GitHub Issue                 |
++---------------------------------------------------------+
+        |
+        v
++---------------------------------------------------------+
+| Phase 5: EXECUTE (wave by wave)                         |
+|   Spawn impl agents -> wave-gate -> advance             |
+|   Output: Working implementation                        |
++---------------------------------------------------------+
 ```
 
 ---
 
-## Phase 0: Brainstorm (MANDATORY)
+## Phase Tracking
+
+Progress is tracked by **artifact files on disk**. Before advancing to any phase, verify its prerequisites exist:
+
+| Phase | Prerequisite Artifacts |
+|-------|----------------------|
+| specify | `brainstorm.md` exists OR `--skip-brainstorm` |
+| clarify | `spec.md` exists with >3 markers |
+| architecture | `spec.md` exists with markers <= 3 OR `--skip-clarify` |
+| plan-alignment | Plan file exists at `.claude/plans/{slug}.md` |
+| decompose | Plan file exists + `plan-alignment.md` exists OR `--skip-plan-alignment` |
+| execute | Task graph defined (from decompose output) |
+
+The orchestrator maintains a mental model of the current phase in conversation context and advances by verifying artifacts, not by writing to a state file.
+
+---
+
+## Phase 0: Brainstorm (MANDATORY -- Orchestrator-Driven)
 
 **Always run** unless `--skip-brainstorm` flag provided.
 
-**Plugin enforcement:** `validate-phase-order` hook blocks specify-agent if brainstorm not complete (unless skipped).
+**This phase is INTERACTIVE.** The orchestrator (you) drives it directly -- do NOT spawn a brainstorm-agent. Subagents cannot have multi-turn conversations with the user.
 
-**Spawn brainstorm-agent** with context from `templates/phase-brainstorm.md`.
+### Steps:
 
-Substitute variables:
-- `{feature_description}` - User's original request
-- `{prior_context}` - Any notes from prior exploration
+1. **Explore the codebase** using the `explore` agent (Task tool) or direct search tools to gather context about existing code, architecture, dependencies, and constraints.
 
-**Wait for agent completion.** Extract:
-- Refined feature description
-- Selected approach
-- Key constraints
+2. **Ask the user questions** using the `question` tool. Cover these areas:
+   - Why are they building/changing this? (motivation, pain points)
+   - What constraints exist? (timeline, compatibility, team skills)
+   - What preferences do they have? (frameworks, tools, approaches)
+   - What's the scope boundary? (what's in, what's out)
+   - Any prior decisions already made?
 
-Pass to Phase 1.
+   Ask questions in batches of 3-5 using the `question` tool. Multiple rounds are fine -- iterate until the feature scope is clear.
+
+3. **Synthesize findings** into a brainstorm document. Use `templates/phase-brainstorm.md` as the artifact format guide.
+
+4. **Write the artifact** to `.claude/specs/{date_slug}/brainstorm.md`.
+
+5. **Present summary** to user and ask:
+   > "Approach: {selected approach}. Proceed to specification?"
+
+   If user wants changes -> revise the brainstorm document.
+
+6. **Advance** once approved. Brainstorm is complete when `brainstorm.md` exists on disk and the user has confirmed.
 
 ---
 
@@ -106,7 +149,6 @@ Pass to Phase 1.
 
 Substitute variables:
 - `{feature_description}` - Refined description (from brainstorm or original)
-- `{brainstorm_output}` - Summary from Phase 0 (or empty)
 - `{date_slug}` - `YYYY-MM-DD-feature-name` format
 
 **Wait for agent completion.** Extract:
@@ -118,21 +160,31 @@ If markers <= 3: Skip to Phase 3.
 
 ---
 
-## Phase 2: Clarify (MANDATORY if markers > 3)
+## Phase 2: Clarify (MANDATORY if markers > 3 -- Orchestrator-Driven)
 
 **Run if:** spec has >3 `[NEEDS CLARIFICATION]` markers. Skip via `--skip-clarify` if accepting markers as-is.
 
-**Plugin enforcement:** `validate-phase-order` hook blocks architecture-agent if markers > 3 (unless clarify skipped).
+**This phase is INTERACTIVE.** The orchestrator (you) drives it directly -- do NOT spawn a clarify-agent. Subagents cannot have multi-turn conversations with the user.
 
-**Spawn clarify-agent** with context from `templates/phase-clarify.md`.
+### Steps:
 
-Substitute variables:
-- `{spec_file_path}` - Path to spec from Phase 1
-- `{marker_count}` - Number of `[NEEDS CLARIFICATION]` markers
+1. **Read the spec file** and extract all `[NEEDS CLARIFICATION]` markers.
 
-**Wait for agent completion.** Verify markers resolved.
+2. **Present markers to the user** and ask them to resolve each one using the `question` tool. Group related markers into single questions where possible. For each marker, provide:
+   - The marker text and context from the spec
+   - Proposed options (if you can infer reasonable choices)
+   - A "Type your own answer" escape hatch (enabled by default in the question tool)
 
-If still >3 markers: Ask user to resolve remaining, or proceed with caveats.
+3. **Edit the spec file** to replace each `[NEEDS CLARIFICATION]` marker with the user's decision. Use clear, definitive language -- the resolved text should read as a firm requirement, not a question.
+
+4. **Verify** the spec has zero remaining markers:
+   ```bash
+   grep -c "NEEDS CLARIFICATION" <spec_file_path>
+   ```
+
+5. **Advance** once all markers are resolved. Clarify is complete when `spec.md` has <= 3 markers.
+
+If still >3 markers after user input: Ask user to resolve remaining, or proceed with caveats and `--skip-clarify` acknowledgment.
 
 ---
 
@@ -148,80 +200,61 @@ Substitute variables:
 - `{date_slug}` - `YYYY-MM-DD-feature-name` format
 
 **Wait for agent completion.** Extract:
-- Plan file path
+- Plan file path (should be at `.claude/plans/{slug}.md`)
 - Implementation phases
+
+Verify the plan file exists on disk before advancing.
+
+---
+
+## Phase 3.5: Plan Alignment
+
+**Always run** (unless `--skip-plan-alignment` flag provided).
+
+**Spawn plan-alignment-agent** with context from `templates/phase-plan-alignment.md`.
+
+Substitute variables:
+- `{spec_file_path}` - Path to spec from Phase 1
+- `{plan_file_path}` - Path to plan from Phase 3
+- `{spec_dir}` - Spec directory (e.g. `.claude/specs/{date_slug}`)
+
+**Wait for agent completion.** Read gap report at `.claude/specs/{slug}/plan-alignment.md`.
+
+**If gaps found:** Present gap report to user. Ask:
+> "N gaps found. Re-run architecture with this feedback, or proceed to decompose?"
+
+- **If re-run:** Delete the stale gap report, re-spawn architecture-agent with gap report appended to prompt as additional context. When architecture completes, re-run plan-alignment.
+- **If proceed:** Continue to Phase 4.
+
+**Loop-back warning:** If the user has chosen to re-run architecture 2 or more times, warn: "This is loop-back attempt N. Consider proceeding to decompose or refining the spec directly."
+
+**If no gaps:** Proceed to Phase 4.
+
+**Note:** The gap report is always written (even when no gaps). Its existence at `.claude/specs/{slug}/plan-alignment.md` is required to gate decompose entry.
 
 ---
 
 ## Phase 4: Decompose
 
-**Run inline** (no agent spawn needed).
+**Spawn decompose-agent** with context from `templates/phase-decompose.md`.
 
-### 4a. Extract Tasks
+Substitute variables:
+- `{feature_description}` - Feature name/description
+- `{spec_file_path}` - Path to spec from Phase 1
+- `{plan_file_path}` - Path to plan from Phase 3
 
-Parse plan into tasks. **Design = the plan itself, NOT a tracked task**:
+**Wait for agent completion.** Agent outputs pure JSON task graph.
 
-```
-T1: Create User domain model (+ tests)
-T2: Implement JWT service (+ tests)
-T3: Add login endpoint (+ tests)
-```
+### 4a. Validate Output
 
-**CRITICAL: Implementation tasks INCLUDE tests.** Do NOT create separate test tasks for new code. The `code-implementer-agent` writes both implementation AND tests (per impl-agent-context.md). Separate test tasks cause circular dependencies:
-- Test task depends on impl task (can't test what doesn't exist)
-- Impl task already writes tests
-- Test task blocked waiting for impl "completed", but wave-gate needs test task evidence → deadlock
+Verify the decompose output contains valid JSON with:
+- `tasks` array with `id`, `description`, `agent`, `wave`, `depends_on` for each task
+- `total_waves` count
+- Each task has `spec_anchors` linking to spec requirements
 
-**When to use test-only agents (`java-test-agent`, `ts-test-agent`):**
-- Adding tests to EXISTING code that lacks coverage
-- Task description: "Add missing tests for X" (not "Write tests for new X")
+If output is malformed -> re-spawn decompose-agent with error details.
 
-**Sizing heuristics** - decompose further if:
-- Task touches >5 files
-- Multiple unrelated concerns in one task
-- Description needs "and" to explain
-
-**Test requirements** - set `new_tests_required: false` for:
-- migration, config, schema, rename, bump, version, refactor, cleanup, typo, docs
-- Patterns: `→`, `->`, `interface update`
-
-### 4b. Map Spec Anchors
-
-Link each task to spec requirements (FR-xxx, SC-xxx, US-x.acceptance[N]):
-
-```json
-[{"anchor":"FR-003","score":0.85,"text":"System MUST validate email format"},...]
-```
-
-Review suggestions, adjust as needed, store as `spec_anchors: ["FR-003", "SC-002", "US1.acceptance"]`
-
-### 4c. Assign Agents
-
-| Agent (subagent_type) | Triggers |
-|-------|----------|
-| code-implementer-agent | implement, create, build, add, write code, model — **writes tests too** |
-| architecture-agent | design, architecture, pattern, refactor |
-| java-test-agent | add missing tests to EXISTING Java code only |
-| ts-test-agent | add missing tests to EXISTING TypeScript code only |
-| security-agent | security, auth, jwt, oauth, vulnerability |
-| dotfiles-agent | nix, nixos, home-manager, sops |
-| k8s-agent | kubernetes, k8s, kubectl, helm, argocd |
-| keycloak-agent | keycloak, realm, oidc, abac |
-| frontend-agent | frontend, ui, react, next.js, component — **writes tests too** |
-
-Fallback: `general-purpose`
-
-**Note:** `java-test-agent` and `ts-test-agent` are for backfilling tests on existing code, NOT for testing new implementations. New code gets tests from impl agents.
-
-### 4d. Schedule Waves
-
-```
-Wave 1: Tasks with no dependencies (run parallel)
-Wave 2: Tasks depending on Wave 1
-Wave N: Tasks depending on Wave N-1
-```
-
-### 4e. User Approval
+### 4b. User Approval
 
 Present plan summary:
 - Spec path
@@ -232,31 +265,65 @@ Present plan summary:
 
 Ask: "Proceed with this plan?"
 
-### 4f. Create Artifacts
+### 4c. Create Artifacts
 
 On approval:
 
-**A. GitHub Issue:**
-```bash
-gh issue create --title "Plan: {title}" --body "$(cat .opencode/plans/{slug}.md)"
-```
+**A. Save task graph** to `.claude/specs/{slug}/task-graph.json`.
 
-**B. State File:** `.opencode/state/active_task_graph.json`
-- Include `spec_file` and `plan_file` paths
-- Include `spec_anchors` per task
+**B. GitHub Issue:**
+```bash
+gh issue create --title "Plan: {title}" --body "$(cat <<'EOF'
+## Plan: {title}
+
+### Task Breakdown
+
+#### Wave 1: {description} (parallel)
+- [ ] T1: {task description}
+- [ ] T2: {task description}
+
+#### Wave 2: {description} (depends on Wave 1)
+- [ ] T3: {task description}
+
+### Execution Order
+
+| ID | Task | Agent | Wave | Depends |
+|----|------|-------|------|---------|
+| T1 | ... | code-implementer-agent | 1 | - |
+
+### Verification Checklist
+- [ ] All tests pass
+- [ ] No security vulnerabilities
+- [ ] Code reviewed
+EOF
+)"
+```
 
 ---
 
 ## Phase 5: Execute
 
-For each wave:
+The orchestrator manages execution using the task graph from Phase 4. Track task status in conversation context.
 
-1. Get pending tasks in current wave
-2. Spawn ALL wave tasks in parallel (single message, multiple Task calls)
-3. Wait for all to reach "implemented"
-4. Invoke `/opencode-wave-gate` (test + spec-check + review)
-5. If passed: advance to next wave
-6. If blocked: fix issues, re-run `/opencode-wave-gate`
+### Task Status Transitions
+
+```
+pending -> in_progress    (task spawned to agent)
+in_progress -> implemented (agent completes successfully)
+in_progress -> failed      (agent fails or produces broken code)
+failed -> in_progress      (retry, max 2 attempts)
+implemented -> completed   (wave gate passed)
+```
+
+### For each wave:
+
+1. **Identify pending tasks** for the current wave from the task graph
+2. **Spawn ALL wave tasks in parallel** (single message, multiple Task calls)
+3. **Wait for all to complete**
+4. **If any tasks failed:** re-spawn with error context (max 2 retries per task)
+5. **Run wave gate:** invoke `/opencode-wave-gate` (test + spec-check + review)
+6. **If passed:** mark wave tasks as completed, advance to next wave
+7. **If blocked:** fix issues, re-run `/opencode-wave-gate`
 
 **Agent context:** Use `templates/impl-agent-context.md` for each task.
 
@@ -268,6 +335,12 @@ Substitute variables:
 - `{file_list}` - Files to create/modify
 - `{plan_file_path}` - Path to full plan
 
+### Tracking Progress
+
+After each wave completes, update the GitHub Issue:
+- Check off completed task checkboxes
+- Add a comment with wave completion status and any issues encountered
+
 ---
 
 ## Quick Start Examples
@@ -276,168 +349,19 @@ Substitute variables:
 ```
 /task-planner "Add user authentication with email/password"
 ```
-Runs: brainstorm → specify → clarify → arch → decompose → execute
+Runs: brainstorm -> specify -> clarify -> arch -> plan-alignment -> decompose -> execute
 
 ### Skip to architecture (spec exists):
 ```
 /task-planner --skip-specify "Add user authentication"
 ```
-Runs: arch → decompose → execute (uses existing spec)
+Runs: arch -> plan-alignment -> decompose -> execute (uses existing spec)
 
 ### Simple feature (clear scope):
 ```
 /task-planner "Add logout button to navbar"
 ```
-Detects simple → may skip brainstorm, minimal spec
-
----
-
-## State Management
-
-### On `/task-planner "description"`:
-1. Run phases 0-4
-2. Create `.opencode/state/active_task_graph.json`
-3. Plugin hooks become active (block direct edits)
-
-### On `/task-planner --status`:
-```
-Plan: Issue #42 - User Authentication
-Phase: Execute (Wave 2/3)
-Spec: .opencode/specs/2025-01-29-user-auth/spec.md
-Plan: .opencode/plans/2025-01-29-user-auth.md
-
-[✓] T1: User model (code-implementer) — tests: PASS
-[✓] T2: JWT service (code-implementer) — tests: PASS
-[→] T3: Login endpoint (code-implementer) — tests: pending
-```
-
-### On `/task-planner --complete`:
-1. Verify all tasks completed
-2. Optionally close GitHub Issue
-3. Remove state file
-4. Invoke `/finalize` for PR
-
-### On `/task-planner --abort`:
-1. Ask: close issue or leave open?
-2. Remove state file
-3. Plugin hooks deactivate
-
----
-
-## Plugin Hook Integration
-
-Hooks auto-activate when `active_task_graph.json` exists:
-
-| Hook | Event | Purpose |
-|------|-------|---------|
-| `block-direct-edits` | tool.execute.before: Edit/Write | Forces Task tool |
-| `guard-state-file` | tool.execute.before: Bash | Blocks state writes |
-| `validate-task-execution` | tool.execute.before: Task | Validates wave order |
-| `update-task-status` | session.idle | Marks "implemented" |
-| `store-review-findings` | session.idle | Parses review findings |
-| `parse-spec-check` | session.idle | Parses spec-check findings |
-
-**NEVER write to state file directly.** All state updates happen via plugin hooks. Only exception during planning: initial state file creation.
-
----
-
-## Operations Reference
-
-### Status Transitions
-
-```
-pending → in_progress    (task spawned to agent)
-in_progress → implemented (agent completes, hook extracts test evidence)
-implemented → completed   (wave gate passed: tests + review + no critical findings)
-```
-
-### Observability
-
-```bash
-# Current state
-jq '.' .opencode/state/active_task_graph.json
-
-# Per-task status
-jq '.tasks[] | {id, status, tests_passed, review_status}' .opencode/state/active_task_graph.json
-
-# Wave gate status
-jq '.wave_gates' .opencode/state/active_task_graph.json
-```
-
-### Common Issues
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Task stuck `in_progress` | Agent crashed | Re-spawn same task |
-| `tests_passed` missing | No recognizable output | Re-spawn, ensure test markers in output |
-| Wave not advancing | Gate blocked | Check `wave_gates[N].blocked`, run `/opencode-wave-gate` |
-| State write blocked | Guard hook active | State writes via hooks only; reads OK |
-| Test task blocked, impl wrote tests | Separate test task for new code | Don't create separate test tasks; mark superseded or merge |
-
-### Fixing Blocked Waves
-
-When blocked (critical findings), Edit/Write blocked too. To fix:
-1. **Re-spawn via Task** — create fix agent with findings context (subagent CAN Edit/Write)
-2. **Run `/opencode-wave-gate`** — re-reviews only blocked tasks
-3. **Emergency**: remove state file, fix manually, rebuild from GH issue
-
----
-
-## Constraints
-
-- **ALL phases via agents** - brainstorm, specify, clarify, architecture agents
-- **ALL implementation via Task tool** - Edit/Write blocked
-- **ALL state writes via hooks** - Bash writes blocked
-- **NEVER skip phases** unless explicit `--skip-X` flag provided
-- **NEVER proceed with >3 unresolved markers** without user acknowledgment or `--skip-clarify`
-- Only ONE active plan at a time
-
----
-
-## Phase Enforcement (Plugin)
-
-The task-planner plugin enforces phase ordering:
-
-### tool.execute.before: `validate-phase-order`
-Blocks agent spawns if prerequisite phases not complete.
-
-| Target Agent | Requires |
-|--------------|----------|
-| specify-agent | brainstorm complete OR `--skip-brainstorm` |
-| clarify-agent | spec.md exists |
-| architecture-agent | spec.md exists + markers ≤ 3 OR `--skip-clarify` |
-| impl agents | plan.md exists |
-
-### session.idle: `advance-phase`
-Advances `current_phase` when phase agents complete.
-
-| Agent Completes | Next Phase |
-|-----------------|------------|
-| brainstorm-agent | specify |
-| specify-agent | clarify (if markers > 3) OR architecture |
-| clarify-agent | architecture |
-| architecture-agent | decompose |
-
-### State Tracking
-
-```json
-{
-  "current_phase": "specify",
-  "phase_artifacts": {
-    "brainstorm": "completed",
-    "specify": null,
-    "clarify": null,
-    "architecture": null
-  },
-  "skipped_phases": ["clarify"]
-}
-```
-
-### Skip Flags
-
-- `--skip-brainstorm` - Adds "brainstorm" to `skipped_phases`, starts at specify
-- `--skip-clarify` - Adds "clarify" to `skipped_phases`, proceeds to architecture regardless of markers
-- `--skip-specify` - Adds brainstorm, specify, clarify to skipped; requires existing spec.md
+Detects simple -> may skip brainstorm, minimal spec
 
 ---
 
@@ -445,11 +369,12 @@ Advances `current_phase` when phase agents complete.
 
 | Failure | Recovery |
 |---------|----------|
-| Brainstorm agent unclear | Re-spawn with more specific prompt |
+| Brainstorm incomplete | Ask more questions, revise brainstorm.md |
 | Specify agent too technical | Re-spawn with "focus on WHAT not HOW" |
-| Clarify agent stuck | Ask user to resolve remaining markers |
+| Clarify -- user can't resolve markers | Accept caveats with `--skip-clarify`, or narrow scope |
 | Architecture agent off-spec | Re-spawn referencing spec requirements |
-| Implementation agent fails tests | Re-spawn with error context |
+| Plan-alignment gaps unresolvable | Use `--skip-plan-alignment` or manually amend plan before proceeding |
+| Implementation agent fails tests | Re-spawn with error context (max 2 retries) |
 | Wave gate blocked | Fix issues, re-run `/opencode-wave-gate` |
 
 ---
@@ -462,11 +387,30 @@ Advances `current_phase` when phase agents complete.
 
 ---
 
-## CRITICAL: Agent Spawning
+## CRITICAL: Phase Execution Model
 
-Each phase spawns ONE agent (except Execute which spawns wave tasks in parallel).
+**Interactive phases (orchestrator-driven):** brainstorm, clarify
+- The orchestrator asks the user questions via the `question` tool
+- Writes artifact files directly
+- Advances by verifying artifact exists on disk
+- These phases CANNOT be delegated to subagents (subagents cannot interact with the user)
 
-**Sequential phases:** brainstorm → specify → clarify → architecture
-**Parallel within wave:** T1, T2, T3 in same message
+**Autonomous phases (agent-driven):** specify, architecture, plan-alignment, decompose
+- Each spawns ONE agent via the Task tool
+- Agent writes artifact, orchestrator verifies artifact exists before advancing
 
-Pass context forward between phases via agent outputs.
+**Parallel execution (execute phase):** T1, T2, T3 in same message
+
+Pass context forward between phases via artifact files.
+
+---
+
+## Artifact Locations Summary
+
+| Artifact | Path |
+|----------|------|
+| Brainstorm | `.claude/specs/{slug}/brainstorm.md` |
+| Specification | `.claude/specs/{slug}/spec.md` |
+| Plan alignment report | `.claude/specs/{slug}/plan-alignment.md` |
+| Architecture plan | `.claude/plans/{slug}.md` |
+| Task graph | `.claude/specs/{slug}/task-graph.json` |

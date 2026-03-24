@@ -21,11 +21,11 @@ Formalize requirements into structured specifications before architecture/planni
 
 ## Output
 
-Creates `.opencode/specs/{YYYY-MM-DD}-{slug}/spec.md`
+Creates `.claude/specs/{YYYY-MM-DD}-{slug}/spec.md`
 
 Structure:
 ```
-.opencode/specs/2025-01-29-user-auth/
+.claude/specs/2025-01-29-user-auth/
 ├── spec.md          # Main specification
 └── clarifications/  # Resolved uncertainty log (created by /opencode-clarify)
 ```
@@ -44,7 +44,7 @@ From description, derive 2-4 word slug:
 ### 2. Explore Context
 
 Before writing spec:
-- Check existing specs: `ls .opencode/specs/`
+- Check existing specs: `ls .claude/specs/`
 - Review related code areas
 - Understand current state
 
@@ -81,7 +81,7 @@ Categories of uncertainty:
 After writing spec, count markers:
 
 ```bash
-grep -c "NEEDS CLARIFICATION" .opencode/specs/*/spec.md
+grep -c "NEEDS CLARIFICATION" .claude/specs/*/spec.md
 ```
 
 If count > 3: Invoke `/opencode-clarify` before proceeding.
@@ -184,7 +184,7 @@ Before finalizing spec, verify:
 
 When spec is ready (markers <= 3 or clarified):
 
-1. Commit spec: `git add .opencode/specs/ && git commit -m "spec: {slug}"`
+1. Commit spec: `git add .claude/specs/ && git commit -m "spec: {slug}"`
 2. Invoke arch-lead: `/architecture-tech-lead`
 3. Arch-lead reads spec, produces plan with technical decisions
 

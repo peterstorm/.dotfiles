@@ -1,5 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "~/.dotfiles/claude/project/meta/rules/architecture.md",
+    "~/.dotfiles/claude/project/java/rules/java-patterns.md",
+    "~/.dotfiles/claude/project/java/rules/property-testing.md",
+    "~/.dotfiles/claude/project/typescript/rules/typescript-patterns.md",
+    "~/.dotfiles/claude/project/rust/rules/rust-patterns.md"
+  ],
   "agent": {
     "code-reviewer": {
       "description": "Use this agent when you need to review code for adherence to project guidelines, style guides, and best practices. This agent should be used proactively after writing or modifying code, especially before committing changes or creating pull requests. It will check for style violations, potential issues, and ensure code follows the established patterns in CLAUDE.md. Also the agent needs to know which files to focus on for the review. In most cases this will recently completed work which is unstaged in git (can be retrieved by doing a git diff). However there can be cases where this is different, make sure to specify this as the agent input when calling the agent.",
@@ -48,6 +55,78 @@
       "mode": "subagent",
       "color": "#800080",
       "prompt": "{file:~/.dotfiles/claude/project/meta/agents/skill-content-reviewer.md}"
+    },
+    "brainstorm-agent": {
+      "description": "Exploration agent for understanding intent, refining ideas, and proposing approaches before specification. Use when feature scope is unclear or multiple approaches possible. Spawned by task-planner during brainstorm phase.",
+      "mode": "subagent",
+      "color": "#FFFF00",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/brainstorm-agent.md}"
+    },
+    "specify-agent": {
+      "description": "Specification agent that produces formal requirements (WHAT/WHY) before architecture. Creates spec.md with user scenarios, functional requirements, and success criteria. Spawned by task-planner during specify phase.",
+      "mode": "subagent",
+      "color": "#00FFFF",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/specify-agent.md}"
+    },
+    "clarify-agent": {
+      "description": "Uncertainty resolution agent that systematically resolves [NEEDS CLARIFICATION] markers in specifications through structured questioning. Spawned by task-planner during clarify phase.",
+      "mode": "subagent",
+      "color": "#FFA500",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/clarify-agent.md}"
+    },
+    "plan-alignment-agent": {
+      "description": "Compares architecture plan against spec requirements, produces gap report. Spawned by task-planner during plan-alignment phase.",
+      "mode": "subagent",
+      "color": "#00FFFF",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/plan-alignment-agent.md}"
+    },
+    "decompose-agent": {
+      "description": "Decomposes feature spec + architecture plan into parallel task graph with wave scheduling. Outputs pure JSON. Spawned by task-planner during decompose phase.",
+      "mode": "subagent",
+      "color": "#808080",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/decompose-agent.md}"
+    },
+    "code-implementer-agent": {
+      "description": "Implementation agent for Java/Spring Boot or TypeScript/Next.js following FP, DDD, testability patterns. Writes both implementation AND tests. Spawned during execute phase.",
+      "mode": "subagent",
+      "color": "#0000FF",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/code-implementer-agent.md}"
+    },
+    "frontend-agent": {
+      "description": "Next.js frontend agent for App Router, React Server Components, distinctive UI design. Writes both implementation AND tests. Spawned during execute phase.",
+      "mode": "subagent",
+      "color": "#FFC0CB",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/frontend-agent.md}"
+    },
+    "security-agent": {
+      "description": "Security agent for auth, JWT, OAuth, OWASP, vulnerability assessment. Spawned during execute phase for security-related tasks.",
+      "mode": "subagent",
+      "color": "#FF0000",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/security-agent.md}"
+    },
+    "dotfiles-agent": {
+      "description": "NixOS/home-manager agent for flake-parts, SOPS secrets, role-based config. Spawned during execute phase for nix/dotfiles tasks.",
+      "mode": "subagent",
+      "color": "#00FFFF",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/dotfiles-agent.md}"
+    },
+    "spec-check-invoker": {
+      "description": "Invokes spec-check skill for wave-gate spec alignment verification. Spawned during wave-gate to check spec coverage.",
+      "mode": "subagent",
+      "color": "#808080",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/spec-check-invoker.md}"
+    },
+    "test-engineer": {
+      "description": "Test engineering specialist for Mocha unit tests, Playwright E2E tests. Use for writing, executing, or fixing tests. Spawned for test-specific tasks on existing code.",
+      "mode": "subagent",
+      "color": "#00FF00",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/test-engineer.md}"
+    },
+    "ts-test-agent": {
+      "description": "TypeScript testing agent for Vitest, React Testing Library, Playwright, fast-check. Use for adding tests to EXISTING TypeScript code only. Spawned during execute phase.",
+      "mode": "subagent",
+      "color": "#00FF00",
+      "prompt": "{file:~/dev/claude-plugins/loom/agents/ts-test-agent.md}"
     }
   }
 }

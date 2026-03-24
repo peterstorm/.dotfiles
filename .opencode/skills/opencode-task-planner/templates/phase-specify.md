@@ -10,7 +10,7 @@ Template for spawning specify-agent. Variables in `{braces}` must be substituted
 
 Create formal specification for this feature.
 
-**Output location:** `.opencode/specs/{date_slug}/spec.md`
+**Output location:** `.claude/specs/{date_slug}/spec.md`
 
 **Your output must include:**
 - Path to created spec file

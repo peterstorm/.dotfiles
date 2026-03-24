@@ -1,5 +1,6 @@
 {pkgs, config, lib, util, inputs, ...}:
 
+(util.sops.mkSecretsAndTemplatesConfig
   # Define secrets
   [
     (util.sops.userSecret "oc-dev-server" "openshift.yaml" "dev_server")
@@ -39,7 +40,7 @@
       kubectl
       discord
       ripgrep
-      inputs.llm-agents.packages.${pkgs.system}.claude-code
+      inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
       gh
       git
       podman-compose
@@ -50,11 +51,10 @@
       firefox
       kubeseal
       gemini-cli
-      inputs.llm-agents.packages.${pkgs.system}.copilot-cli
+      inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.copilot-cli
       jq
       bun
       inputs.llm-agents.packages.${pkgs.system}.opencode
-      inputs.llm-agents.packages.${pkgs.system}.codex
       inputs.loom-tui.packages.${pkgs.system}.default
       # inputs.llm-agents.packages.${pkgs.system}.codex
     ];

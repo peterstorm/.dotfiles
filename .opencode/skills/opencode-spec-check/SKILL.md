@@ -39,14 +39,14 @@ CRITICAL findings from spec-check block wave advancement.
 
 ```bash
 # Find spec
-SPEC=$(ls -t .opencode/specs/*/spec.md | head -1)
+SPEC=$(ls -t .claude/specs/*/spec.md | head -1)
 
 # Find plan
-PLAN=$(jq -r '.plan_file' .opencode/state/active_task_graph.json)
+PLAN=$(jq -r '.plan_file' .claude/state/active_task_graph.json)
 
 # Get current wave tasks
-WAVE=$(jq -r '.current_wave' .opencode/state/active_task_graph.json)
-jq -r ".tasks[] | select(.wave == $WAVE)" .opencode/state/active_task_graph.json
+WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
+jq -r ".tasks[] | select(.wave == $WAVE)" .claude/state/active_task_graph.json
 ```
 
 ### 2. Build Requirement Map
@@ -168,7 +168,7 @@ For each SC-xxx:
 ```
 ## Spec-Check Report
 
-**Spec:** .opencode/specs/2025-01-29-user-auth/spec.md
+**Spec:** .claude/specs/2025-01-29-user-auth/spec.md
 **Wave:** 2
 **Tasks Checked:** T3, T4, T5
 
