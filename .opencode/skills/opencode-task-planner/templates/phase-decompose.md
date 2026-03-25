@@ -6,8 +6,7 @@ Template for spawning decompose-agent. All template variables must be substitute
 
 ## CRITICAL: Scope Boundaries
 
-**You are a subagent. Do NOT read `.claude/hooks/` or `.claude/state/` files — they are irrelevant to you.**
-Focus ONLY on reading the spec and plan, then producing the task graph JSON.
+**You are a subagent.** Focus ONLY on reading the spec and plan, then producing the task graph JSON.
 
 ---
 

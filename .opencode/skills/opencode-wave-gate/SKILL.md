@@ -5,11 +5,9 @@ description: "Run after wave implementation complete. Executes test + spec-check
 
 # Wave Gate - Test, Spec & Review Sequence
 
-Executes the gate sequence after all wave tasks reach "implemented". Verifies test evidence, checks spec alignment, spawns code reviewers, and advances waves.
+Executes the gate sequence after all wave tasks are implemented. Verifies test evidence, checks spec alignment, spawns code reviewers, and decides whether to advance.
 
-**Run this after plugin hook outputs "Wave N implementation complete".**
-
-**Important:** State file writes via Bash are blocked by the `guard-state-file` plugin hook. All state mutations happen through plugin hooks. Read access (jq, cat) is allowed.
+**Run this after all tasks in a wave are complete.**
 
 ---
 
@@ -17,46 +15,38 @@ Executes the gate sequence after all wave tasks reach "implemented". Verifies te
 
 ### Step 1: Verify State
 
+Check the spec directory for the task graph artifact (produced by decompose phase):
+
 ```bash
-jq '{wave: .current_wave, impl_complete: .wave_gates[.current_wave | tostring].impl_complete}' .claude/state/active_task_graph.json
+SPEC_DIR=$(ls -td .claude/specs/*/ | head -1)
+ls "$SPEC_DIR"
 ```
 
-Abort if `impl_complete != true`.
+Verify the wave's tasks are all marked complete in your tracking. If tracking is done via a task-graph JSON artifact on disk, read it. Otherwise, rely on the orchestrator's knowledge of what was implemented.
 
 ### Step 2: Verify Test Evidence
 
-Test evidence is set **automatically** by the `update-task-status` plugin hook when implementation agents complete. It extracts pass markers (Maven, Node, Vitest, pytest) from agent transcripts and stores per-task `tests_passed` + `test_evidence`.
+For each task in the current wave, confirm that:
+1. Tests were run and passed (look for "BUILD SUCCESS", "X passing", "OK" markers in agent output)
+2. New tests were written (not just existing tests re-run)
 
-**Check evidence status (read-only):**
+**How to verify new tests:**
 ```bash
-jq '[.tasks[] | select(.wave == (.current_wave // 0)) | {id, tests_passed, test_evidence, new_tests_written, new_tests_required}]' .claude/state/active_task_graph.json
+# Check for new test files or test methods added in this wave
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~10")
+git diff --name-only $BASE..HEAD | grep -i test
 ```
 
-The plugin's `verify-new-tests` hook also checks that agents wrote NEW test methods (not just reran existing). It diffs against the per-task `start_sha` baseline (set by PreToolUse hook) to scope detection to each task's changes. Both `tests_passed` and `new_tests_written` must be true for the wave gate to pass (unless `new_tests_required == false`).
-
-**If evidence missing** → re-spawn the implementation agent for that task. The agent MUST run tests and the plugin hook must see pass markers in the transcript.
-
-**Do NOT manually run tests or set test flags.** The guard hook blocks direct state file writes. Evidence can only come from agent execution → plugin hook extraction.
+If test evidence is missing for a task, re-spawn the implementation agent for that task. The agent MUST run tests and produce visible pass markers.
 
 ### Step 3: Spawn Verification (Parallel)
 
 Spawn **spec-check AND code reviewers** in a single message with multiple Task calls.
 
-**Get wave info:**
-```bash
-WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
-TASKS=$(jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json | tr '\n' ',')
-```
-
 **Get wave changes:**
 ```bash
 BASE=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || echo "main")
 git diff --name-only $BASE...HEAD
-```
-
-**Get tasks needing review:**
-```bash
-jq -r ".tasks[] | select(.wave == $WAVE) | select(.review_status == \"pending\" or .review_status == \"blocked\") | .id" .claude/state/active_task_graph.json
 ```
 
 **Spawn ALL in parallel (single message, multiple Task calls):**
@@ -93,26 +83,9 @@ Task: {task_id}
 Review these files and produce a Machine Summary with CRITICAL_COUNT, CRITICAL, and ADVISORY lines.
 ```
 
-**What happens automatically on completion:**
-
-| Agent | Plugin Hook | Effect |
-|-------|-------------|--------|
-| spec-check-invoker | `store-spec-check-findings` | Sets `spec_check.critical_count`, `spec_check.verdict` |
-| code-reviewer | `store-reviewer-findings` | Merges findings into task `review_status` |
-| silent-failure-hunter | `store-reviewer-findings` | Merges findings into task `review_status` |
-| pr-test-analyzer | `store-reviewer-findings` | Merges findings into task `review_status` |
-| type-design-analyzer | `store-reviewer-findings` | Merges findings into task `review_status` |
-| comment-analyzer | `store-reviewer-findings` | Merges findings into task `review_status` |
-
-**File-to-task mapping algorithm (for reviewers):**
-1. Read `task.files_modified` from state (set by `update-task-status` hook via transcript parsing)
-2. If `files_modified` is non-empty: use those files directly
-3. Fallback (empty `files_modified`): use all wave changes from `git diff`
-4. Pass to review sub-agents: `--files {files_modified}`
-
 ### Step 4: Post GH Comment
 
-After all verification agents complete, read status and post summary:
+After all verification agents complete, post summary:
 
 ```bash
 gh issue comment {ISSUE} --body "$(cat <<'EOF'
@@ -129,7 +102,7 @@ gh issue comment {ISSUE} --body "$(cat <<'EOF'
 **Critical:**
 - {critical findings list, if any}
 **Advisory:**
-- {ALL advisory findings — always include, even for PASSED tasks}
+- {ALL advisory findings - always include, even for PASSED tasks}
 
 #### T2: {description}
 ...
@@ -141,33 +114,31 @@ EOF
 ```
 
 **If GH comment fails** (rate limit, auth, network):
-- Log summary to `.claude/state/wave-{N}-review.md` as fallback
+- Log summary to `.claude/specs/{date_slug}/wave-{N}-review.md` as fallback
 - Proceed with gate logic - don't block on comment failure
 - Retry comment post after gate decision
 
 ### Step 5: Advance
 
-The `complete-wave-gate` plugin hook handles ALL verification and advancement when triggered.
-
-The hook performs **five checks** before advancing:
-1. **Per-task test evidence** — all wave tasks must have `tests_passed == true`
-2. **New tests written** — all wave tasks must have `new_tests_written == true` OR `new_tests_required == false`
-3. **Spec alignment** — `spec_check.critical_count == 0`
-4. **Per-task review status** — all wave tasks must have `review_status != "pending"`
-5. **No critical findings** — code review `critical_findings` count must be 0
+Verify **five checks** before advancing:
+1. **Per-task test evidence** — all wave tasks must have tests passed
+2. **New tests written** — all wave tasks must have new tests (unless task is config/migration/docs)
+3. **Spec alignment** — spec-check critical count == 0
+4. **Per-task review status** — all wave tasks must have been reviewed
+5. **No critical findings** — code review critical findings count must be 0
 
 If any check fails, the wave does NOT advance. Fix the issue and re-run `/opencode-wave-gate`.
 
-On success: marks tasks "completed", updates GH issue checkboxes, advances to next wave.
+On success: mark tasks "completed", update GH issue checkboxes if applicable, proceed to next wave.
 
 ---
 
 ## Re-run After Fixes
 
 When issues fixed, run `/opencode-wave-gate` again. It will:
-- Skip test verification if evidence already present
+- Skip test verification if evidence already confirmed
 - Re-run spec-check (always runs, overwrites previous)
-- Re-review ONLY tasks with `review_status == "blocked"`
+- Re-review ONLY tasks that were blocked
 - Advance when all clear
 
 ---
@@ -179,14 +150,7 @@ When issues fixed, run `/opencode-wave-gate` again. It will:
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
 | No SPEC_CHECK_CRITICAL_COUNT | Output malformed | Re-spawn spec-check-invoker |
-| spec_check.verdict missing | Hook parse failed | Check hook output, re-spawn |
 | CRITICAL findings | Spec drift detected | Fix drift, re-run /opencode-wave-gate |
-
-**Debugging:**
-```bash
-# Check spec-check status
-jq '.spec_check' .claude/state/active_task_graph.json
-```
 
 ### Review Failures
 
@@ -194,17 +158,6 @@ jq '.spec_check' .claude/state/active_task_graph.json
 |---------|-------|----------|
 | No output from reviewer | Agent crashed/timed out | Re-spawn that specific reviewer |
 | Malformed output | Skill parsing issue | Re-spawn with explicit format reminder |
-| review_status still "pending" | Hook didn't fire/parse | Check hook output, re-spawn reviewer |
-
-**Debugging:**
-```bash
-# Check per-task review status
-jq '.tasks[] | {id, review_status, tests_passed}' .claude/state/active_task_graph.json
-
-# Check wave tasks
-WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
-jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.json
-```
 
 ---
 
@@ -216,6 +169,3 @@ jq -r ".tasks[] | select(.wave == $WAVE) | .id" .claude/state/active_task_graph.
 - MUST post GH comment before advancing
 - NEVER advance if spec-check has critical findings
 - NEVER advance if code review has critical findings
-- NEVER manually write to state file (guard hook blocks it)
-- All status comes from plugin hooks — cannot be set manually
-- `complete-wave-gate` plugin hook is the ONLY path to advance waves

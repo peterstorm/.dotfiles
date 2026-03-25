@@ -44,7 +44,4 @@ Before writing the artifact, ensure you've explored:
 - [ ] Incremental strategy (if applicable)
 - [ ] Any prior decisions already made
 
-After writing, advance phase:
-```bash
-bun ~/dev/claude-plugins/loom/engine/src/cli.ts helper set-phase --phase specify
-```
+After writing, proceed to the **specify** phase.

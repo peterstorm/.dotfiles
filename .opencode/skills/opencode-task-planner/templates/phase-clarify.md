@@ -23,10 +23,7 @@ This is an **orchestrator-driven** phase. The orchestrator reads `[NEEDS CLARIFI
    grep -c "NEEDS CLARIFICATION" <spec_file_path>
    ```
 
-5. **Advance phase**:
-   ```bash
-   bun ~/dev/claude-plugins/loom/engine/src/cli.ts helper set-phase --phase architecture
-   ```
+5. **Advance phase**: Proceed to the **architecture** phase.
 
 ## Output
 

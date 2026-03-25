@@ -23,10 +23,10 @@ Spec-check runs as part of wave-gate sequence, between test verification and cod
 
 ```
 Wave N complete
-    → verify test evidence
-    → /opencode-spec-check (NEW)
-    → spawn code reviewers
-    → advance wave
+    -> verify test evidence
+    -> /opencode-spec-check
+    -> spawn code reviewers
+    -> advance wave
 ```
 
 CRITICAL findings from spec-check block wave advancement.
@@ -41,12 +41,14 @@ CRITICAL findings from spec-check block wave advancement.
 # Find spec
 SPEC=$(ls -t .claude/specs/*/spec.md | head -1)
 
-# Find plan
-PLAN=$(jq -r '.plan_file' .claude/state/active_task_graph.json)
+# Find plan (look for architecture.md or plan.md in the spec dir)
+SPEC_DIR=$(dirname "$SPEC")
+PLAN=$(ls "$SPEC_DIR"/architecture.md "$SPEC_DIR"/plan.md 2>/dev/null | head -1)
+```
 
-# Get current wave tasks
-WAVE=$(jq -r '.current_wave' .claude/state/active_task_graph.json)
-jq -r ".tasks[] | select(.wave == $WAVE)" .claude/state/active_task_graph.json
+If a task graph JSON artifact exists on disk (from decompose phase), read it for wave/task info:
+```bash
+ls "$SPEC_DIR"/task-graph.json 2>/dev/null
 ```
 
 ### 2. Build Requirement Map
@@ -58,9 +60,9 @@ Extract from spec:
 
 Build mapping:
 ```
-FR-001 → {description, priority, related_scenarios}
-FR-002 → {description, priority, related_scenarios}
-SC-001 → {metric, threshold}
+FR-001 -> {description, priority, related_scenarios}
+FR-002 -> {description, priority, related_scenarios}
+SC-001 -> {metric, threshold}
 ...
 ```
 
@@ -69,7 +71,7 @@ SC-001 → {metric, threshold}
 From wave tasks and git diff:
 ```bash
 # Files changed in current wave
-BASE=$(git merge-base HEAD origin/main)
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~10")
 git diff --name-only $BASE..HEAD
 ```
 
@@ -94,7 +96,6 @@ Check every FR/SC has corresponding implementation:
 
 **Detection method:**
 - Parse task descriptions for requirement references (FR-xxx, SC-xxx)
-- Check `spec_anchors` in task state
 - Search code for requirement IDs in comments
 - Match test names to acceptance scenarios
 
@@ -157,7 +158,7 @@ For each SC-xxx:
 **Detection method:**
 - Check for performance tests
 - Check for metric assertions
-- Validate evidence in task state
+- Validate evidence in test output
 
 ---
 
@@ -208,29 +209,13 @@ For each SC-xxx:
 **Verdict:** BLOCKED - 2 critical findings must be resolved
 ```
 
-### State File Update
+### Artifact on Disk
 
-The `parse-spec-check` plugin hook parses findings and writes to task state:
+Write the spec-check results to the spec directory:
 
-```json
-{
-  "spec_check": {
-    "wave": 2,
-    "run_at": "2025-01-29T10:00:00Z",
-    "critical_count": 2,
-    "high_count": 1,
-    "findings": [
-      {
-        "severity": "CRITICAL",
-        "type": "coverage_gap",
-        "requirement": "FR-003",
-        "description": "email validation has no implementation",
-        "task": "T3"
-      }
-    ],
-    "verdict": "BLOCKED"
-  }
-}
+```bash
+SPEC_DIR=$(dirname "$SPEC")
+# Write to: $SPEC_DIR/spec-check-wave-N.md
 ```
 
 ---
@@ -240,17 +225,17 @@ The `parse-spec-check` plugin hook parses findings and writes to task state:
 ### Blocking Logic
 
 Wave advancement blocked if:
-- `spec_check.critical_count > 0`
+- Any CRITICAL findings exist
 
 Wave advancement proceeds if:
-- `spec_check.critical_count == 0` (HIGH/MEDIUM are advisory)
+- Zero CRITICAL findings (HIGH/MEDIUM are advisory)
 
 ### Re-Check After Fixes
 
 When critical issues fixed:
 1. Re-run `/opencode-spec-check`
 2. Updated findings replace previous
-3. If `critical_count == 0`, wave can advance
+3. If zero CRITICAL findings, wave can advance
 
 ---
 

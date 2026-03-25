@@ -49,7 +49,7 @@ Available at: {plan_file_path}
 3. Tests MUST pass - if they fail, fix the issues and re-run
 4. Your task is NOT complete until tests pass and output is shown
 
-The plugin hook extracts test evidence from your output to update the task graph.
+The orchestrator verifies test evidence from your output.
 Without visible test output showing pass markers (e.g., "BUILD SUCCESS", "X passing", "OK"),
 the task will NOT be marked as having tests passed.
 
@@ -57,5 +57,5 @@ the task will NOT be marked as having tests passed.
 
 - You MUST write NEW tests for your implementation
 - Rerunning existing tests alone is NOT sufficient
-- A hook will git-diff for new test patterns (@Test, it(, test(, describe()
+- The orchestrator will git-diff for new test patterns (@Test, it(, test(, describe()
 - If no new test patterns found, wave advancement is BLOCKED
