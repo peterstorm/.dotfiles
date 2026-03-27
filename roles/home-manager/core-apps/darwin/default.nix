@@ -78,6 +78,9 @@
         source ${config.sops.templates."db-env".path}
         source ${config.sops.templates."gemini-env".path}
 
+        # GitHub token for Maven/GitHub Packages authentication
+        export GITHUB_TOKEN=$(gh auth token 2>/dev/null)
+
         seal() {
           kubeseal --controller-namespace=sealed-secrets --format=yaml -o yaml < "$1" > "$2"
         }
