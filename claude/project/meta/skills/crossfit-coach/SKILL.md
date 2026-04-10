@@ -15,17 +15,6 @@ Creates structured CrossFit workouts (EMOM, AMRAP, For Time, Tabata) and schedul
 - **Input:** Workout JSON on stdin
 - **Max steps per workout:** 50 (Garmin limit)
 
-### Confirmed sportTypeId Mapping
-
-| ID | Key | Type |
-|----|-----|------|
-| 1 | `running` | Running |
-| 2 | `cycling` | Cycling |
-| 4 | `swimming` | Lap Swimming |
-| 5 | `strength_training` | Strength Training |
-| 6 | `cardio_training` | Cardio Training |
-| 9 | `hiit` | HIIT (use for CrossFit) |
-
 ## Input Parsing
 
 Parse `$ARGUMENTS` or conversational context for:
@@ -100,6 +89,7 @@ Populate `category` and `exerciseName` on each step to avoid "—" display on wa
 | Hang Power Clean | OLYMPIC_LIFT | BARBELL_HANG_POWER_CLEAN |
 | Snatch | OLYMPIC_LIFT | SNATCH |
 | Power Snatch | OLYMPIC_LIFT | POWER_SNATCH |
+| DB Hang Snatch | OLYMPIC_LIFT | DUMBBELL_HANG_SNATCH |
 | Push Press | SHOULDER_PRESS | PUSH_PRESS |
 | Push Jerk | SHOULDER_PRESS | PUSH_JERK |
 | Shoulder Press | SHOULDER_PRESS | OVERHEAD_PRESS |
@@ -109,6 +99,7 @@ Populate `category` and `exerciseName` on each step to avoid "—" display on wa
 | Muscle-Up (ring) | PULL_UP | MUSCLE_UP |
 | Burpee | TOTAL_BODY | BURPEE |
 | Box Jump | PLYO | BOX_JUMP |
+| Box Jump Over | PLYO | BOX_JUMP_OVERS |
 | Double Under | CARDIO | DOUBLE_UNDER |
 | Row (calories/meters) | ROW | INDOOR_ROW |
 | Bike (calories) | CARDIO | null |
@@ -123,7 +114,7 @@ Populate `category` and `exerciseName` on each step to avoid "—" display on wa
 | Rope Climb | PULL_UP | null |
 | REST | null | null |
 
-**Confirmed via Garmin API fetch (2026-04-07):** ROW/INDOOR_ROW, DEADLIFT/BARBELL_DEADLIFT, TOTAL_BODY/BURPEE, OLYMPIC_LIFT/BARBELL_HANG_POWER_CLEAN, SQUAT/BARBELL_FRONT_SQUAT. Other exercise names are best-effort — if a name shows "—" on the watch, try `null` and rely on the `description` field instead.
+Unverified names may show "—" on watch — use `null` for exerciseName and rely on `description`. For confirmed mappings, corrections history, and gotchas see vault: `~/dev/notes/remotevault/reclaw/skills/crossfit-coach.md`
 
 ## Workout JSON Structure
 
@@ -245,29 +236,7 @@ If it fails:
 
 ## Editing Existing Workouts
 
-Fetch → modify → PUT back. Use inline bun script:
-
-```bash
-cd /home/peterstorm/dev/claude-plugins/reclaw && bun -e '
-import { GarminConnect } from "@gooin/garmin-connect";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
-const tokenDir = join(process.env.HOME ?? "/home/peterstorm", ".cache", "garmin");
-const client = new GarminConnect({ username: process.env.GARMIN_EMAIL, password: process.env.GARMIN_PASSWORD });
-if (existsSync(join(tokenDir, "oauth2_token.json"))) await client.loadTokenByFile(tokenDir);
-
-const workout = await client.getWorkoutDetail({ workoutId: "WORKOUT_ID" });
-
-// ... modify workout object ...
-
-const url = "https://connectapi.garmin.com/workout-service/workout/" + workout.workoutId;
-const result = await client.put(url, workout);
-console.log(JSON.stringify({ success: true, workoutId: workout.workoutId }));
-'
-```
-
-**Important:** The PUT URL must use `connectapi.garmin.com`, not `connect.garmin.com`. The library's `client.put()` handles auth headers automatically.
+Fetch → modify → PUT back. See vault note for code template and gotchas: `~/dev/notes/remotevault/reclaw/skills/crossfit-coach.md` → "Editing Workouts"
 
 ## Output
 
