@@ -10,7 +10,7 @@ Creates structured CrossFit workouts (EMOM, AMRAP, For Time, Tabata) and schedul
 
 ## Garmin Workout Constraints
 
-- **Sport type:** HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }`
+- **Sport type:** HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }` (full sportTypeId table in vault note)
 - **Schedule script:** `bun /home/peterstorm/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts YYYY-MM-DD`
 - **Input:** Workout JSON on stdin
 - **Max steps per workout:** 50 (Garmin limit)
@@ -70,51 +70,7 @@ Structure: RepeatGroup of work/rest pairs.
 
 Populate `category` and `exerciseName` on each step to avoid "—" display on watch. Use `null` for exerciseName if the exact Garmin name is unknown — category alone helps.
 
-### CrossFit Movement → Garmin Mapping
-
-| Movement | category | exerciseName |
-|----------|----------|--------------|
-| Air Squat | SQUAT | SQUAT |
-| Back Squat | SQUAT | BARBELL_BACK_SQUAT |
-| Front Squat | SQUAT | BARBELL_FRONT_SQUAT |
-| Overhead Squat | SQUAT | OVERHEAD_SQUAT |
-| Goblet Squat | SQUAT | GOBLET_SQUAT |
-| Wall Ball | SQUAT | WALL_BALL |
-| Thruster | SQUAT | THRUSTERS |
-| Deadlift | DEADLIFT | BARBELL_DEADLIFT |
-| Sumo Deadlift | DEADLIFT | SUMO_DEADLIFT |
-| Clean | OLYMPIC_LIFT | CLEAN |
-| Clean & Jerk | OLYMPIC_LIFT | CLEAN_AND_JERK |
-| Power Clean | OLYMPIC_LIFT | POWER_CLEAN |
-| Hang Power Clean | OLYMPIC_LIFT | BARBELL_HANG_POWER_CLEAN |
-| Snatch | OLYMPIC_LIFT | SNATCH |
-| Power Snatch | OLYMPIC_LIFT | POWER_SNATCH |
-| DB Hang Snatch | OLYMPIC_LIFT | DUMBBELL_HANG_SNATCH |
-| Push Press | SHOULDER_PRESS | PUSH_PRESS |
-| Push Jerk | SHOULDER_PRESS | PUSH_JERK |
-| Shoulder Press | SHOULDER_PRESS | OVERHEAD_PRESS |
-| Pull-Up | PULL_UP | PULL_UP |
-| Chest-to-Bar | PULL_UP | CHEST_TO_BAR_PULL_UP |
-| Toes-to-Bar | CRUNCH | TOES_TO_BAR |
-| Muscle-Up (ring) | PULL_UP | MUSCLE_UP |
-| Burpee | TOTAL_BODY | BURPEE |
-| Box Jump | PLYO | BOX_JUMP |
-| Box Jump Over | PLYO | BOX_JUMP_OVERS |
-| Double Under | CARDIO | DOUBLE_UNDER |
-| Row (calories/meters) | ROW | INDOOR_ROW |
-| Bike (calories) | CARDIO | null |
-| Ski Erg | CARDIO | null |
-| Push-Up | PUSH_UP | PUSH_UP |
-| Handstand Push-Up | PUSH_UP | HANDSTAND_PUSH_UP |
-| Sit-Up | SIT_UP | SIT_UP |
-| Lunge | LUNGE | WALKING_LUNGE |
-| Kettlebell Swing | HIP_SWING | KETTLEBELL_SWING |
-| Turkish Get-Up | TOTAL_BODY | TURKISH_GET_UP |
-| Farmers Carry | CARRY | FARMERS_WALK |
-| Rope Climb | PULL_UP | null |
-| REST | null | null |
-
-Unverified names may show "—" on watch — use `null` for exerciseName and rely on `description`. For confirmed mappings, corrections history, and gotchas see vault: `~/dev/notes/remotevault/reclaw/skills/crossfit-coach.md`
+Full movement → Garmin mapping table, confirmed mappings, and correction history in vault: `~/dev/notes/remotevault/reclaw/skills/crossfit-coach.md` → "Exercise Metadata"
 
 ## Workout JSON Structure
 
