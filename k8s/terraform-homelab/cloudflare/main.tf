@@ -11,6 +11,10 @@ variable "cloudflare_zone_id" {
   type = string
 }
 
+variable "cloudflare_dotslash_zone_id" {
+  type = string
+}
+
 variable "cloudflare_tunnel_id" {
   type = string
 }
@@ -19,6 +23,25 @@ variable "cloudflare_tunnel_id" {
 resource "cloudflare_dns_record" "echo_server" {
   zone_id = var.cloudflare_zone_id
   name    = "echo-server"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+# dotslash.dev via Cloudflare tunnel (external access)
+resource "cloudflare_dns_record" "dotslash_dev" {
+  zone_id = var.cloudflare_dotslash_zone_id
+  name    = "@"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_dns_record" "dotslash_dev_www" {
+  zone_id = var.cloudflare_dotslash_zone_id
+  name    = "www"
   content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
   type    = "CNAME"
   proxied = true

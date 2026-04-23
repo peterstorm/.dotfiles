@@ -24,4 +24,6 @@ data:
         service: http://overseerr.overseerr:5055
       - hostname: transmission.peterstorm.io
         service: http://transmission.transmission:80
+      - hostname: dotslash.dev
+        service: http://dotslash-dev.dotslash-dev:3000
       - service: http_status:404
