@@ -27,7 +27,7 @@
     ];
 
     services.cloudflared = {
-      enable = true;
+      enable = false;
       tunnels = {
         "206b7a4a-a658-437d-a98b-c14c6e4cc286" = {
           credentialsFile = config.sops.templates."cloudflared-tunnel-credentials".path;

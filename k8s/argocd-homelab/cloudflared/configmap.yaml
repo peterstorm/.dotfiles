@@ -7,6 +7,8 @@ data:
     tunnel: homelab-k8s
     credentials-file: /etc/cloudflared/credentials.json
     no-autoupdate: true
+    warp-routing:
+      enabled: true
     ingress:
       - hostname: echo-server.peterstorm.io
         service: http://echo-server.echo-server:80
