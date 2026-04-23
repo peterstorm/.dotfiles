@@ -1,0 +1,1 @@
+/Users/hansen142/dev/opencode/loom/agents/loom-spec-check-invoker.md
