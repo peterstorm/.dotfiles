@@ -18,7 +18,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: dotslash-dev
-          image: ghcr.io/peterstorm/dotslash-dev:sha-45a39b2
+          image: ghcr.io/peterstorm/dotslash-dev:sha-88883a8
           ports:
             - containerPort: 3000
           env:
