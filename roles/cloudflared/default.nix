@@ -14,8 +14,8 @@
         TunnelSecret = config.sops.placeholder."cloudflared-tunnel-secret";
         TunnelID = config.sops.placeholder."cloudflared-tunnel-id";
       };
-      owner = "cloudflared";
-      group = "cloudflared";
+      owner = "root";
+      group = "root";
       mode = "0400";
     }
   ]

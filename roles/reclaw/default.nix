@@ -9,6 +9,8 @@
     (util.sops.hostSecret "reclaw-google-password" "reclaw.yaml" "google_password" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-garmin-email" "reclaw.yaml" "garmin_email" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-garmin-password" "reclaw.yaml" "garmin_password" { owner = "peterstorm"; group = "users"; })
+    # (util.sops.hostSecret "reclaw-notebooklm-auth-token" "reclaw.yaml" "notebooklm_auth_token" { owner = "peterstorm"; group = "users"; })
+    # (util.sops.hostSecret "reclaw-notebooklm-cookies" "reclaw.yaml" "notebooklm_cookies" { owner = "peterstorm"; group = "users"; })
   ]
 
   # 2. Templates — systemd env file (no 'export' prefix)
