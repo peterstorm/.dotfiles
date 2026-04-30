@@ -6,6 +6,8 @@ metadata:
     app: dotslash-dev
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: dotslash-dev
@@ -29,4 +31,5 @@ spec:
               mountPath: /app/data
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: dotslash-dev-data
