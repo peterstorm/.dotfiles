@@ -51,6 +51,12 @@
       after = [ "network.target" ];
       wantedBy = [ "default.target" ];
 
+      # Stop the crash-loop after 5 restarts within 5 minutes — without
+      # these, an unhandled rejection at boot would loop forever every 10s.
+      # These belong on the [Unit] section, not [Service].
+      startLimitBurst = 5;
+      startLimitIntervalSec = 300;
+
       serviceConfig = {
         Type = "simple";
         WorkingDirectory = "/home/peterstorm/dev/claude-plugins/reclaw";
@@ -73,6 +79,12 @@
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
+        # Location for skills that fetch weather/sun (open-meteo, etc).
+        # Defaults match Copenhagen — change here when travelling long-term.
+        LATITUDE = "55.665";
+        LONGITUDE = "12.57";
+        TZ_NAME = "Europe/Copenhagen";
+        LOCATION_NAME = "Copenhagen";
         PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
       };
