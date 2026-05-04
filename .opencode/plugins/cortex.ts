@@ -13,16 +13,22 @@ async function resolveCortexCli(): Promise<string> {
   if (await Bun.file(directPath).exists()) return directPath;
 
   // Fallback: OpenCode cache directory — find the latest version
-  const cacheBase = `${home}/.claude/plugins/cache/local-plugins/cortex`;
-  const glob = new Glob("*/engine/src/cli.ts");
-  const candidates: string[] = [];
-  for await (const match of glob.scan({ cwd: cacheBase, absolute: true })) {
-    candidates.push(match);
-  }
-  if (candidates.length > 0) {
-    // Sort descending by version segment to pick the latest
-    candidates.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-    return candidates[0];
+  // Check both local-plugins (dev installs) and plugins (marketplace installs)
+  const cacheBases = [
+    `${home}/.claude/plugins/cache/local-plugins/cortex`,
+    `${home}/.claude/plugins/cache/plugins/cortex`,
+  ];
+  for (const cacheBase of cacheBases) {
+    const glob = new Glob("*/engine/src/cli.ts");
+    const candidates: string[] = [];
+    for await (const match of glob.scan({ cwd: cacheBase, absolute: true })) {
+      candidates.push(match);
+    }
+    if (candidates.length > 0) {
+      // Sort descending by version segment to pick the latest
+      candidates.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      return candidates[0];
+    }
   }
 
   // Nothing found — return the direct path and let callers fail with a clear error
