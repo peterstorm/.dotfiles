@@ -49,7 +49,7 @@
         legacyPackages.homeManagerConfigurations = {
 
           peterstorm = user.mkHMUser {
-            roles = [ "core-apps" "window-manager/xmonad" "dunst" "games" "sops-homelab" "obsidian-git-sync" "obsidian-headless-sync" "vdirsyncer" ];
+            roles = [ "core-apps" "window-manager/xmonad" "dunst" "sops-homelab" "obsidian-git-sync" "obsidian-headless-sync" "vdirsyncer" ];
             username = "peterstorm";
           };
 
@@ -75,7 +75,7 @@
 
           laptop-xps = host.mkHost {
             name = "laptop-xps";
-            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" "sops-template-nixos-example" ];
+            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" ];
             machine = [ "laptop-xps" ];
             NICs = [ "wlp0s20f3" ];
             kernelPackage = pkgs.linuxPackages_latest;
