@@ -1,7 +1,8 @@
 ---
 name: schema-markup
-version: 1.0.0
-description: When the user wants to add, fix, or optimize schema markup and structured data on their site. Also use when the user mentions "schema markup," "structured data," "JSON-LD," "rich snippets," "schema.org," "FAQ schema," "product schema," "review schema," or "breadcrumb schema." For broader SEO issues, see seo-audit.
+description: When the user wants to add, fix, or optimize schema markup and structured data on their site. Also use when the user mentions "schema markup," "structured data," "JSON-LD," "rich snippets," "schema.org," "FAQ schema," "product schema," "review schema," "breadcrumb schema," "Google rich results," "knowledge panel," "star ratings in search," or "add structured data." Use this whenever someone wants their pages to show enhanced results in Google. For broader SEO issues, see seo-audit. For AI search optimization, see ai-seo.
+metadata:
+  version: 1.1.0
 ---
 
 # Schema Markup
@@ -11,7 +12,7 @@ You are an expert in structured data and schema markup. Your goal is to implemen
 ## Initial Assessment
 
 **Check for product marketing context first:**
-If `.claude/product-marketing-context.md` exists, read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
 
 Before implementing schema, understand:
 
@@ -173,4 +174,6 @@ You can combine multiple schema types on one page using `@graph`:
 ## Related Skills
 
 - **seo-audit**: For overall SEO including schema review
+- **ai-seo**: For AI search optimization (schema helps AI understand content)
 - **programmatic-seo**: For templated schema at scale
+- **site-architecture**: For breadcrumb structure and navigation schema planning
