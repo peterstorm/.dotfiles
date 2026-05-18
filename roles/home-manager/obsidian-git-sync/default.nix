@@ -17,13 +17,16 @@
       ExecStart = pkgs.writeShellScript "obsidian-git-sync" ''
         set -e
 
-        ${pkgs.git}/bin/git pull --rebase --autostash
-
+        # Commit local changes BEFORE pulling so that untracked files
+        # (created by reclaw skills, etc.) don't block the merge when
+        # the remote has same-pathed files from another machine.
         if [ -n "$(${pkgs.git}/bin/git status --porcelain)" ]; then
           ${pkgs.git}/bin/git add -A
           ${pkgs.git}/bin/git commit -m "vault: auto-sync $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          ${pkgs.git}/bin/git push
         fi
+
+        ${pkgs.git}/bin/git pull --rebase --autostash
+        ${pkgs.git}/bin/git push
       '';
     };
   };
