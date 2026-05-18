@@ -30,6 +30,7 @@
         overlays = [
           (import ./overlays/vscode-insiders.nix)
           (import ./overlays/antigravity.nix)
+          (import ./overlays/pi-coding-agent.nix)
           inputs.nix-vscode-extensions.overlays.default
         ];
 
@@ -75,7 +76,7 @@
 
           laptop-xps = host.mkHost {
             name = "laptop-xps";
-            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" "sops-template-nixos-example" ];
+            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" ];
             machine = [ "laptop-xps" ];
             NICs = [ "wlp0s20f3" ];
             kernelPackage = pkgs.linuxPackages_latest;

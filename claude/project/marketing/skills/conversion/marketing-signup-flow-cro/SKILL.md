@@ -1,7 +1,8 @@
 ---
 name: signup-flow-cro
-version: 1.0.0
-description: When the user wants to optimize signup, registration, account creation, or trial activation flows. Also use when the user mentions "signup conversions," "registration friction," "signup form optimization," "free trial signup," "reduce signup dropoff," or "account creation flow." For post-signup onboarding, see onboarding-cro. For lead capture forms (not account creation), see form-cro.
+description: When the user wants to optimize signup, registration, account creation, or trial activation flows. Also use when the user mentions "signup conversions," "registration friction," "signup form optimization," "free trial signup," "reduce signup dropoff," "account creation flow," "people aren't signing up," "signup abandonment," "trial conversion rate," "nobody completes registration," "too many steps to sign up," or "simplify our signup." Use this whenever the user has a signup or registration flow that isn't performing. For post-signup onboarding, see onboarding-cro. For lead capture forms (not account creation), see form-cro.
+metadata:
+  version: 1.1.0
 ---
 
 # Signup Flow CRO
@@ -11,7 +12,7 @@ You are an expert in optimizing signup and registration flows. Your goal is to r
 ## Initial Assessment
 
 **Check for product marketing context first:**
-If `.claude/product-marketing-context.md` exists, read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
 
 Before providing recommendations, understand:
 
@@ -160,7 +161,7 @@ Every field reduces conversion. For each field, ask:
 
 ### Microcopy
 - Placeholder text: Use for examples, not labels
-- Labels: Always visible (not just placeholders)
+- Labels: Keep visible (not just placeholders) — placeholders disappear when typing, leaving users unsure what they're filling in
 - Help text: Only when needed, placed close to field
 
 ---

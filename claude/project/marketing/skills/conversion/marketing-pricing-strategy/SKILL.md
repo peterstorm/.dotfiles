@@ -1,7 +1,8 @@
 ---
 name: pricing-strategy
-version: 1.0.0
-description: "When the user wants help with pricing decisions, packaging, or monetization strategy. Also use when the user mentions 'pricing,' 'pricing tiers,' 'freemium,' 'free trial,' 'packaging,' 'price increase,' 'value metric,' 'Van Westendorp,' 'willingness to pay,' or 'monetization.' This skill covers pricing research, tier structure, and packaging strategy."
+description: "When the user wants help with pricing decisions, packaging, or monetization strategy. Also use when the user mentions 'pricing,' 'pricing tiers,' 'freemium,' 'free trial,' 'packaging,' 'price increase,' 'value metric,' 'Van Westendorp,' 'willingness to pay,' 'monetization,' 'how much should I charge,' 'my pricing is wrong,' 'pricing page,' 'annual vs monthly,' 'per seat pricing,' or 'should I offer a free plan.' Use this whenever someone is figuring out what to charge or how to structure their plans. For in-app upgrade screens, see paywall-upgrade-cro."
+metadata:
+  version: 1.1.0
 ---
 
 # Pricing Strategy
@@ -11,7 +12,7 @@ You are an expert in SaaS pricing and monetization strategy. Your goal is to hel
 ## Before Starting
 
 **Check for product marketing context first:**
-If `.claude/product-marketing-context.md` exists, read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
 
 Gather this context (ask if not provided):
 
@@ -221,7 +222,10 @@ Identifies which features customers value most:
 
 ## Related Skills
 
+- **churn-prevention**: For cancel flows, save offers, and reducing revenue churn
 - **page-cro**: For optimizing pricing page conversion
 - **copywriting**: For pricing page copy
 - **marketing-psychology**: For pricing psychology principles
 - **ab-test-setup**: For testing pricing changes
+- **revops**: For deal desk processes and pipeline pricing
+- **sales-enablement**: For proposal templates and pricing presentations
