@@ -25,6 +25,7 @@
     ./starship
     ./neovim
     ./nix-direnv
+    ./pi
   ];
 
   programs.bash = {
@@ -58,11 +59,9 @@
     docker-compose
     bun
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
-    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.copilot-cli
-    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.opencode
-    inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.codex
     inputs.loom-tui.packages.${pkgs.stdenv.hostPlatform.system}.default
     antigravity
+    pi-coding-agent
   ];
 
 }

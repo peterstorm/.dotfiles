@@ -62,6 +62,7 @@
               "core-apps/nix-direnv-zsh"
               "core-apps/starship"
               "core-apps/alacritty"
+              "core-apps/pi"
             ];
             username = "hansen142";
           };

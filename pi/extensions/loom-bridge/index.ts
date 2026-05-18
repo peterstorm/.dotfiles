@@ -144,14 +144,24 @@ function messagesToJsonl(messages: PiMessage[]): string {
 
 function findLoomDir(): string | null {
   const home = process.env.HOME ?? "";
-  const loomBase = join(home, ".claude/plugins/cache/plugins/loom");
-  if (existsSync(loomBase)) {
+  // Check multiple possible loom locations
+  const candidates = [
+    join(home, ".claude/plugins/cache/local/loom"),
+    join(home, ".claude/plugins/cache/plugins/loom"),
+    join(home, "dev/claude-plugins/loom"),
+  ];
+  for (const loomBase of candidates) {
+    if (!existsSync(loomBase)) continue;
     try {
-      const versions = readdirSync(loomBase).filter((v) => !v.startsWith(".")).sort();
-      if (versions.length > 0) {
-        const candidate = join(loomBase, versions[versions.length - 1]);
-        if (existsSync(join(candidate, "engine/src/cli.ts"))) return candidate;
+      // Check if this is a versioned directory (cache layout)
+      const entries = readdirSync(loomBase).filter((v) => !v.startsWith(".")).sort();
+      if (entries.length > 0) {
+        // Try versioned layout first
+        const versioned = join(loomBase, entries[entries.length - 1]);
+        if (existsSync(join(versioned, "engine/src/cli.ts"))) return versioned;
       }
+      // Try direct layout (e.g. ~/dev/claude-plugins/loom)
+      if (existsSync(join(loomBase, "engine/src/cli.ts"))) return loomBase;
     } catch {}
   }
   return null;

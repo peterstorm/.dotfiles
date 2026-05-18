@@ -13,8 +13,9 @@ async function resolveCortexCli(): Promise<string> {
   if (await Bun.file(directPath).exists()) return directPath;
 
   // Fallback: OpenCode cache directory — find the latest version
-  // Check both local-plugins (dev installs) and plugins (marketplace installs)
+  // Check local (dev installs), local-plugins, and plugins (marketplace installs)
   const cacheBases = [
+    `${home}/.claude/plugins/cache/local/cortex`,
     `${home}/.claude/plugins/cache/local-plugins/cortex`,
     `${home}/.claude/plugins/cache/plugins/cortex`,
   ];
