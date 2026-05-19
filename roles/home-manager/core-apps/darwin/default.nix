@@ -56,13 +56,9 @@
       bytecode-viewer
       firefox
       kubeseal
-      gemini-cli
-      inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.copilot-cli
       jq
       bun
-      inputs.llm-agents.packages.${pkgs.system}.opencode
       inputs.loom-tui.packages.${pkgs.system}.default
-      inputs.llm-agents.packages.${pkgs.system}.codex
 
     ];
 
