@@ -6,5 +6,6 @@
     "../../dev/claude-plugins/loom",
     "../../dev/claude-plugins/cortex"
   ],
-  "defaultThinkingLevel": "high"
+  "defaultThinkingLevel": "high",
+  "hideThinkingBlock": true
 }

@@ -10,6 +10,8 @@
     (util.sops.userSecret "oister-db-password" "db_secrets.yaml" "oister_database_password")
     (util.sops.userSecret "keycloak-client-secret" "keycloak.yaml" "keycloak_client_secret")
     (util.sops.userSecret "azure-client-secret" "keycloak.yaml" "azure_client_secret")
+    (util.sops.userSecret "keycloak-admin-password-onr" "keycloak.yaml" "keycloak_admin_password_onr")
+    (util.sops.userSecret "keycloak-admin-password-opr" "keycloak.yaml" "keycloak_admin_password_opr")
     (util.sops.userSecret "gemini-api-key" "gemini.yaml" "api_key")
   ]
   
@@ -25,6 +27,8 @@
       OISTER_DATABASE_PASSWORD = "oister-db-password";
       KEYCLOAK_CLIENT_SECRET = "keycloak-client-secret";
       AZURE_CLIENT_SECRET = "azure-client-secret";
+      KEYCLOAK_ADMIN_PASSWORD_ONR = "keycloak-admin-password-onr";
+      KEYCLOAK_ADMIN_PASSWORD_OPR = "keycloak-admin-password-opr";
     })
     (util.sops.envTemplate "gemini-env" {
       GEMINI_API_KEY = "gemini-api-key";
