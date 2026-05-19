@@ -31,6 +31,8 @@ let
 
 in
 {
+  home.packages = [ pkgs.pi-coding-agent ];
+
   home.file = agentLinks // extensionLinks // promptLinks;
 
   # settings.json needs to be mutable (pi writes to it at runtime)

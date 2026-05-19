@@ -61,7 +61,6 @@
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
     inputs.loom-tui.packages.${pkgs.stdenv.hostPlatform.system}.default
     antigravity
-    pi-coding-agent
   ];
 
 }

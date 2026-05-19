@@ -63,7 +63,6 @@
       inputs.llm-agents.packages.${pkgs.system}.opencode
       inputs.loom-tui.packages.${pkgs.system}.default
       inputs.llm-agents.packages.${pkgs.system}.codex
-      pi-coding-agent
 
     ];
 
