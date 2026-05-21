@@ -62,7 +62,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     if (globalPath && globalInstructions) {
-      ctx.ui.setStatus("instructions", `📋 ${globalPath}`);
+      ctx.ui.setStatus("instructions", ctx.ui.theme.fg("dim", globalPath));
     }
   });
 

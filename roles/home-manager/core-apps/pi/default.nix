@@ -2,41 +2,47 @@
 
 let
   piDir = ../../../../pi;
-  agentFiles = builtins.readDir (piDir + "/agents");
-  extensionDirs = builtins.readDir (piDir + "/extensions");
-  promptFiles = builtins.readDir (piDir + "/prompts");
-
-  # Symlink all agent markdown files
-  agentLinks = lib.mapAttrs' (name: _:
-    lib.nameValuePair ".pi/agent/agents/${name}" {
-      source = piDir + "/agents/${name}";
-    }
-  ) (lib.filterAttrs (n: v: v == "regular" && lib.hasSuffix ".md" n) agentFiles);
-
-  # Symlink extension directories (each is a dir with index.ts + supporting files)
-  extensionLinks = lib.mapAttrs' (name: _:
-    lib.nameValuePair ".pi/agent/extensions/${name}" {
-      source = piDir + "/extensions/${name}";
-    }
-  ) (lib.filterAttrs (_: v: v == "directory") extensionDirs);
-
-  # Symlink prompt templates
-  promptLinks = lib.mapAttrs' (name: _:
-    lib.nameValuePair ".pi/agent/prompts/${name}" {
-      source = piDir + "/prompts/${name}";
-    }
-  ) (lib.filterAttrs (n: v: v == "regular" && lib.hasSuffix ".md" n) promptFiles);
-
   settingsFile = piDir + "/settings.json";
+
+  # Absolute path to pi source in dotfiles repo
+  piSrcDir = "${config.home.homeDirectory}/.dotfiles/pi";
 
 in
 {
   home.packages = [ pkgs.pi-coding-agent ];
 
-  home.file = agentLinks // extensionLinks // promptLinks;
+  # Symlink entire directories to dotfiles repo (not per-file).
+  # This means adding/editing/removing files needs NO rebuild.
+  home.activation.piSymlinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    piAgentDir="$HOME/.pi/agent"
+    mkdir -p "$piAgentDir"
+
+    # Create directory-level symlinks (idempotent)
+    for dir in agents extensions prompts; do
+      target="${piSrcDir}/$dir"
+      link="$piAgentDir/$dir"
+
+      if [ -L "$link" ]; then
+        # Already a symlink — update if target changed
+        current=$(readlink "$link")
+        if [ "$current" != "$target" ]; then
+          rm "$link"
+          ln -s "$target" "$link"
+          echo "pi: updated $dir symlink"
+        fi
+      elif [ -e "$link" ]; then
+        # Something else exists (file/dir) — back up and replace
+        mv "$link" "$link.bak.$(date +%s)"
+        ln -s "$target" "$link"
+        echo "pi: replaced $dir with symlink (old backed up)"
+      else
+        ln -s "$target" "$link"
+        echo "pi: created $dir symlink"
+      fi
+    done
+  '';
 
   # settings.json needs to be mutable (pi writes to it at runtime)
-  # Copy it on activation if the managed version is newer or target doesn't exist
   home.activation.piSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
     piSettingsDir="$HOME/.pi/agent"
     piSettingsTarget="$piSettingsDir/settings.json"
