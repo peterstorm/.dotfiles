@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/pr-test-analyzer.md
+../../../dev/claude-plugins/loom/agents/pr-test-analyzer.md

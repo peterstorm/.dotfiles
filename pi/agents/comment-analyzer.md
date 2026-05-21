@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/comment-analyzer.md
+../../../dev/claude-plugins/loom/agents/comment-analyzer.md

@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/java-test-agent.md
+../../../dev/claude-plugins/loom/agents/java-test-agent.md

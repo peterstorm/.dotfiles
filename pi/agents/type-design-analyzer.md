@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/type-design-analyzer.md
+../../../dev/claude-plugins/loom/agents/type-design-analyzer.md

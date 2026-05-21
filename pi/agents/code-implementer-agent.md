@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/code-implementer-agent.md
+../../../dev/claude-plugins/loom/agents/code-implementer-agent.md

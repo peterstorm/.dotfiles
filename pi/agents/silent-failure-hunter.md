@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/silent-failure-hunter.md
+../../../dev/claude-plugins/loom/agents/silent-failure-hunter.md

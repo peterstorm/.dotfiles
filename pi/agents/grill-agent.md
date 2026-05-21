@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/grill-agent.md
+../../../dev/claude-plugins/loom/agents/grill-agent.md

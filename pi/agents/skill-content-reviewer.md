@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/skill-content-reviewer.md
+../../../dev/claude-plugins/loom/agents/skill-content-reviewer.md

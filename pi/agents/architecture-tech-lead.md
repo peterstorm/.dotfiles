@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/architecture-tech-lead.md
+../../../dev/claude-plugins/loom/agents/architecture-tech-lead.md

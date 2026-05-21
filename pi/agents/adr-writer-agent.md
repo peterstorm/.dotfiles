@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/adr-writer-agent.md
+../../../dev/claude-plugins/loom/agents/adr-writer-agent.md

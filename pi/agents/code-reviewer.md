@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/code-reviewer.md
+../../../dev/claude-plugins/loom/agents/code-reviewer.md

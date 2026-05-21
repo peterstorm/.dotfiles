@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/spec-check-invoker.md
+../../../dev/claude-plugins/loom/agents/spec-check-invoker.md

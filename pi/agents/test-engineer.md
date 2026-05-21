@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/test-engineer.md
+../../../dev/claude-plugins/loom/agents/test-engineer.md

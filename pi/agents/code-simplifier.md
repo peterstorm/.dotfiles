@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/code-simplifier.md
+../../../dev/claude-plugins/loom/agents/code-simplifier.md

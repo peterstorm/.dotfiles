@@ -1,1 +1,1 @@
-/Users/hansen142/dev/claude-plugins/loom/agents/plan-alignment-agent.md
+../../../dev/claude-plugins/loom/agents/plan-alignment-agent.md
