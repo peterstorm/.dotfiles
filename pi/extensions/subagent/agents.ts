@@ -161,7 +161,16 @@ function loadAgentsFromDir(dir: string, source: "user" | "project", cwd: string)
 			continue;
 		}
 
-		const { frontmatter, body } = parseFrontmatter<Record<string, string>>(content);
+		let frontmatter: Record<string, string>;
+		let body: string;
+		try {
+			const parsed = parseFrontmatter<Record<string, string>>(content);
+			frontmatter = parsed.frontmatter;
+			body = parsed.body;
+		} catch {
+			// Skip files with malformed YAML frontmatter
+			continue;
+		}
 
 		if (!frontmatter.name || !frontmatter.description) {
 			continue;
