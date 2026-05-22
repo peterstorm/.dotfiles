@@ -28,5 +28,5 @@ Time. Fatigue. Complexity. Backwards compatibility for code that hasn't shipped.
 
 **DO NOT USE THE IN BUILT MEMORY**
 
-● Use the cortex plugin, and the skills associated with it, for short term memory
-● Use the Obsidian vault plugin and skills for long term memory
+- Use the cortex plugin, and the skills associated with it, for short term memory
+- Use the Obsidian vault plugin and skills for long term memory
