@@ -3,22 +3,16 @@ final: prev:
 {
   pi-coding-agent = prev.buildNpmPackage (finalAttrs: {
     pname = "pi-coding-agent";
-    version = "0.74.0";
+    version = "0.75.4";
 
     src = prev.fetchFromGitHub {
-      owner = "badlogic";
-      repo = "pi-mono";
+      owner = "earendil-works";
+      repo = "pi";
       tag = "v${finalAttrs.version}";
-      hash = "sha256-wEiqOezD8w08vyuenh3Kk+YCYBbQoEq67wATDEKy5XM=";
+      hash = "sha256-zyIgs2N7uVz+7E+NqxH78baRw0OwXvlrjZiDIP/v0M4=";
     };
 
-    npmDepsHash = "sha256-zu4cTy/DGdGu1BV4VDY5xiHTcAyUMgmroRaRaKis/p4=";
-
-    # The 0.74.0 lockfile is missing `resolved` and `integrity` fields.
-    # Replace it with a pre-patched version that has full metadata.
-    postPatch = ''
-      cp ${./pi-coding-agent-0.74.0-package-lock.json} package-lock.json
-    '';
+    npmDepsHash = "sha256-5Vl+0BBUS7Rtb6XqpGKbbNMyh+9UX2aAsgtn60QLX7A=";
 
     npmWorkspace = "packages/coding-agent";
 
