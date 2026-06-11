@@ -95,76 +95,56 @@ ln -s ~/.dotfiles/claude/project/typescript/skills/ts-test-engineer .claude/skil
 
 ## Plugins
 
-Plugin source lives in `~/dev/claude-plugins/`, registered as a local marketplace so `/plugins` shows them.
+Each Claude Code plugin is its **own git repo** that doubles as a one-plugin
+*marketplace* (`.claude-plugin/marketplace.json` with `"source": "."`):
 
-### Initial marketplace setup (one-time)
+| Plugin  | Repo                |
+|---------|---------------------|
+| loom    | `peterstorm/loom`   |
+| cortex  | `peterstorm/cortex` |
+| feynman | `peterstorm/feynman`|
 
-1. Create the plugins repo with a marketplace manifest:
+They install **from git**, not a local directory, and the whole wiring is
+managed by home-manager — a fresh machine just needs `hm-apply`.
 
-```bash
-mkdir -p ~/dev/claude-plugins/.claude-plugin
-```
+### How it's wired (home-manager)
 
-2. Create `~/dev/claude-plugins/.claude-plugin/marketplace.json`:
+`roles/home-manager/core-apps/claude/default.nix`:
 
-```json
-{
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "plugins",
-  "description": "Local development plugins",
-  "owner": { "name": "your-name" },
-  "plugins": [
-    {
-      "name": "my-plugin",
-      "description": "What the plugin does",
-      "version": "0.1.0",
-      "author": { "name": "your-name" },
-      "source": "./my-plugin",
-      "category": "development"
-    }
-  ]
-}
-```
+1. **Provisions the workspace** — clones `loom`, `cortex`, `feynman`, `reclaw`
+   into `~/dev/claude-plugins/` (idempotent). Other tools (pi, opencode, reclaw)
+   read these repos directly off disk.
+2. **Manages `~/.claude/settings.json`** — deep-merges `enabledPlugins`
+   (`loom@loom`, `cortex@cortex`, `feynman@feynman`) and `extraKnownMarketplaces`
+   (each → its GitHub repo) into the live file, preserving runtime-written keys.
 
-3. Register the local marketplace with Claude Code:
+`roles/home-manager/core-apps/git/default.nix` rewrites
+`git@github.com:peterstorm/*` → HTTPS, so the **public** plugin repos clone
+without an SSH key (GitHub SSH always needs a key, even for public repos; HTTPS
+does not).
 
-```bash
-claude plugin marketplace add ~/dev/claude-plugins
-```
+After `hm-apply`, restart Claude Code: the declared marketplaces register and the
+enabled plugins install automatically.
 
-This writes to `~/.claude/plugins/known_marketplaces.json`, telling Claude Code where to find your plugins.
-
-### Installing and enabling plugins
-
-After the marketplace is registered, install plugins via the CLI (this both installs and enables them):
+### Manual equivalent (reference / bootstrap)
 
 ```bash
-claude plugin install cortex@plugins
-claude plugin install loom@plugins
-claude plugin install feynman@plugins
-```
+# register a plugin repo as its own marketplace, then install it
+claude plugin marketplace add peterstorm/loom
+claude plugin install loom@loom
 
-Verify with:
-
-```bash
 claude plugin list
 claude plugin marketplace list
 ```
 
 ### Adding a new plugin
 
-```bash
-# Create or clone the plugin into the marketplace repo
-cd ~/dev/claude-plugins
-mkdir my-plugin  # or: git clone <repo> my-plugin
-
-# Add entry to .claude-plugin/marketplace.json plugins array
-
-# Install via the CLI
-claude plugin install my-plugin@plugins
-```
-
-Each plugin needs its own `plugin.json` manifest — see existing plugins (cortex, loom, etc.) for the format.
+1. Create the plugin repo with both `.claude-plugin/plugin.json` and
+   `.claude-plugin/marketplace.json` (marketplace `name` = plugin name, one
+   plugin entry, `"source": "."`).
+2. Add it to `workspaceRepos`, `enabledPlugins`, and `extraKnownMarketplaces` in
+   `core-apps/claude/default.nix`.
+3. `hm-apply`, then restart Claude Code.
 
 ## Adding new domain configs
 

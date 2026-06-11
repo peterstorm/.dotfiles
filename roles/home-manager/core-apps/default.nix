@@ -26,6 +26,7 @@
     ./neovim
     ./nix-direnv
     ./pi
+    ./claude
   ];
 
   programs.bash = {
