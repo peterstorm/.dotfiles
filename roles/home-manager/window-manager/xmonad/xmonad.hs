@@ -368,9 +368,7 @@ barFull = avoidStruts $ Simplest
 
 myLayoutHook = showWorkspaceName
              -- $ onWorkspace "AV" floatWorkSpace
-             -- Hide borders only for app-requested fullscreen floats.  Keep
-             -- normal tiling borders, but let fullscreen cover xmobar cleanly.
-             $ lessBorders OnlyScreenFloat
+             $ fullscreenFloat -- fixes floating windows going full screen, while retaining "bounded" fullscreen
              $ fullScreenToggle
              $ fullBarToggle
              $ mirrorToggle
@@ -383,7 +381,7 @@ myLayoutHook = showWorkspaceName
 
     -- floatWorkSpace      = simplestFloat
     fullBarToggle       = mkToggle (single FULLBAR)
-    fullScreenToggle    = mkToggle (single NBFULL)
+    fullScreenToggle    = mkToggle (single FULL)
     mirrorToggle        = mkToggle (single MIRROR)
     reflectToggle       = mkToggle (single REFLECTX)
     smallMonResWidth    = 1920
@@ -665,6 +663,7 @@ myScratchpads =
 myHandleEventHook = docksEventHook
                 <+> fadeWindowsEventHook
                 <+> handleEventHook def
+                <+> XMonad.Layout.Fullscreen.fullscreenEventHook
  
 forceCenterFloat :: ManageHook
 forceCenterFloat = doFloatDep move
@@ -682,6 +681,7 @@ myManageHook :: ManageHook
 myManageHook =
         manageDocks
     <+> namedScratchpadManageHook myScratchpads
+    <+> fullscreenManageHook
     <+> manageSpawn
   
 myLogHook :: X ()
@@ -707,7 +707,7 @@ myKeys =
         , ("M-S-<Backspace>", killAll)                         -- Kill all windows on current workspace
 
     -- Floating windows
-        , ("M-f", sendMessage $ MT.Toggle NBFULL)       -- True windowed fullscreen: no bar, no border
+    --  , ("M-f", sendMessage (MT.Toggle "floats"))       -- Toggles my 'floats' layout
         , ("M-<Delete>", withFocused $ windows . W.sink) -- Push floating window back to tile
         , ("M-S-<Delete>", sinkAll)                      -- Push ALL floating windows to tile
 
@@ -816,7 +816,6 @@ main = do
     -- the xmonad, ya know...what the WM is named after!
     xmonad $ dynamicProjects projects
            $ withNavigation2DConfig myNav2DConf
-           $ ewmhFullscreen
            $ ewmh def
         { manageHook = myManageHook
         -- Run xmonad commands from command line with "xmonadctl command". Commands include:
