@@ -30,9 +30,21 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+        - name: ensure-naming-config
+          image: alpine:3.21
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              apk add --no-cache sqlite > /dev/null 2>&1
+              DB=/config/sonarr.db
+              [ ! -f "$DB" ] && exit 0
+              sqlite3 "$DB" "UPDATE NamingConfig SET RenameEpisodes = 1 WHERE Id = 1;"
+          volumeMounts:
+            - name: config
+              mountPath: /config
       containers:
         - name: sonarr
-          image: linuxserver/sonarr:4.0.13
+          image: linuxserver/sonarr:4.0.19
           ports:
             - containerPort: 8989
           env:
