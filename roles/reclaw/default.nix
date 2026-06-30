@@ -75,7 +75,7 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        CLAUDE_BINARY_PATH = "/home/peterstorm/.nix-profile/bin/claude";
+        AGENT_BACKEND = "pi";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
