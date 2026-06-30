@@ -32,6 +32,20 @@
 
   # 3. NixOS configuration
   {
+    # nix-ld: run unpatched, dynamically-linked ELF binaries on NixOS.
+    # Reclaw is a bun/JS project; several npm devDependencies ship prebuilt
+    # generic-linux binaries (e.g. @biomejs/cli-linux-x64/biome, esbuild) that
+    # NixOS can't exec out of the box — `bun run lint` (biome 1.9.4) otherwise
+    # dies with "Could not start dynamically linked executable". Enabling nix-ld
+    # provides the stub loader + a base library set so the pinned npm binary
+    # runs as-is, with zero version drift from package.json / biome.json.
+    programs.nix-ld.enable = true;
+    programs.nix-ld.libraries = with pkgs; [
+      stdenv.cc.cc.lib  # libstdc++ / libgcc_s — Rust & native node addons
+      zlib
+      openssl
+    ];
+
     # Redis instance for reclaw on port 6380
     services.redis.servers.reclaw = {
       enable = true;
