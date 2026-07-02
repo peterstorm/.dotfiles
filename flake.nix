@@ -15,6 +15,8 @@
     nix-vscode-extensions.inputs.nixpkgs.follows = "nixpkgs";
     llm-agents.url = "github:numtide/llm-agents.nix";
     loom-tui.url = "github:peterstorm/loom-tui";
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:
@@ -77,7 +79,7 @@
 
           laptop-xps = host.mkHost {
             name = "laptop-xps";
-            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" ];
+            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" "warp" ];
             machine = [ "laptop-xps" ];
             NICs = [ "wlp0s20f3" ];
             kernelPackage = pkgs.linuxPackages_latest;
@@ -97,7 +99,7 @@
 
           laptop-work = host.mkHost {
             name = "laptop-work";
-            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" ];
+            roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "warp" ];
             machine = [ "laptop-work" ];
             NICs = [ "wlp0s20f3" ];
             kernelPackage = pkgs.linuxPackages_latest;
@@ -125,14 +127,14 @@
             kernelMods = [ "kvm-amd" ];
             kernelPatches = [];
             kernelParams = [];
-            kernelPackage = pkgs.linuxPackages_latest;
+            kernelPackage = pkgs.linuxPackages;
             users = [{
               name = "peterstorm";
-              groups = [ "wheel" "networkmanager" "docker" ];
+              groups = [ "wheel" "networkmanager" "docker" "video" "render" ];
               uid = 1000;
               ssh_keys = [];
             }];
-            cpuCores = 8;
+            cpuCores = 16;
           };
 
           homelab = host.mkHost {
@@ -165,6 +167,11 @@
 
         };
 
+      };
+
+      flake = {
+        nixosConfigurations = self.legacyPackages.x86_64-linux.nixosConfigurations;
+        homeConfigurations = self.legacyPackages.x86_64-linux.homeManagerConfigurations;
       };
 
     };
