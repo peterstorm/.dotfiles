@@ -119,7 +119,7 @@
 
           desktop = host.mkHost {
             name = "desktop";
-            roles = [ "core" "wifi" "efi" "bluetooth" "dual-desktop-plasma" "nvidia-graphics" ];
+            roles = [ "core" "ssh" "wifi" "efi" "bluetooth" "dual-desktop-plasma" "nvidia-graphics" ];
             machine = [ "desktop" ];
             NICs = [ "wlp5s0" "enp6s0" ];
             initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
@@ -132,7 +132,7 @@
               name = "peterstorm";
               groups = [ "wheel" "networkmanager" "docker" "video" "render" ];
               uid = 1000;
-              ssh_keys = [];
+              ssh_keys = builtins.readFile ./authorized_keys.txt;
             }];
             cpuCores = 16;
           };

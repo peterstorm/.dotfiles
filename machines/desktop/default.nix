@@ -35,4 +35,8 @@
   };
 
   hardware.cpu.amd.updateMicrocode = true;
+
+  # Expose the vLLM / DS4 v8 OpenAI-compatible server (PORT=8000, --network host)
+  # to the LAN. sshd opens 22 itself; the wifi role opens 8081. Merges with those.
+  networking.firewall.allowedTCPPorts = [ 8000 ];
 }

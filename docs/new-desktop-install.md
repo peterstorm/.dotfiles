@@ -1,6 +1,6 @@
 # New Desktop (AI Workstation) — NixOS Install Guide
 
-Target machine: AMD Ryzen + 2× NVIDIA RTX 6000 Pro (Blackwell), WiFi + Ethernet, single NVMe, ZFS root, KDE Plasma dual-monitor.
+Target machine: AMD Ryzen + 2× NVIDIA RTX 6000 Pro (Blackwell), WiFi + Ethernet, single NVMe, ZFS root, X11 + SDDM + XMonad dual-monitor.
 
 Host name: `desktop`. Everything is declarative — one command from the laptop wipes and installs.
 
@@ -10,9 +10,17 @@ Host name: `desktop`. Everything is declarative — one command from the laptop 
   - `disko` input added (`github:nix-community/disko`)
   - Top-level `flake.nixosConfigurations` / `homeConfigurations` (so `nixos-anywhere` and `nixos-rebuild` find the host by name)
   - `desktop` host:
+    - Roles: `core ssh wifi efi bluetooth dual-desktop-plasma nvidia-graphics`
+      (`ssh` is required for headless management — see below)
+    - Desktop env: `dual-desktop-plasma` role is **X11 + SDDM + XMonad** despite the name
+      (`defaultSession = "none+xmonad"`), not KDE Plasma. Dual-monitor via xrandr in
+      `services.xserver.displayManager.setupCommands`
     - Kernel: `pkgs.linuxPackages` (6.18+, ZFS-compatible, supports Blackwell)
-    - User `peterstorm` in `wheel`, `networkmanager`, `docker`, `video`, `render`
+    - User `peterstorm` in `wheel`, `networkmanager`, `docker`, `video`, `render`;
+      authorized SSH keys from `authorized_keys.txt`
     - `cpuCores = 16`
+- SSH: `roles/ssh` — publickey-only, hardened ciphers, no password auth. Post-install
+  remote access requires your key in `authorized_keys.txt` (already wired for `desktop`).
 - `machines/desktop/disks.nix` — declarative disko layout
   - 1 GiB EFI (vfat) at `/boot`
   - Rest as ZFS pool `rpool` (ashift=12, zstd, atime=off, xattr=sa, acltype=posixacl)
@@ -42,6 +50,8 @@ Read these once before `nixos-anywhere` — they're the only places hardware ass
 | `flake.nix` (desktop) | `NICs` | `[ "wlp5s0" "enp6s0" ]` | Update once you know real interface names (`ip -o link show`). Non-blocking — NetworkManager handles the rest |
 | `machines/desktop/default.nix` | `networking.hostId` | `"8a3f2c19"` | Only if it collides with an existing host |
 | `flake.nix` (desktop) | `cpuCores` | `16` | Set to actual core count for build parallelism |
+| `roles/dual-desktop-plasma/default.nix` | xrandr `setupCommands` | `DP-2` primary, `DP-0` rotated | **Will differ on this box** — two GPUs spread connectors across `DP-0..DP-3`. Check `xrandr` after boot and update, or monitors won't be positioned (non-fatal — greeter xrandr just no-ops) |
+| `authorized_keys.txt` | your pubkey | 4 keys | Must contain the key you SSH from — the `ssh` role is publickey-only |
 
 ## Prerequisites (one-time, on your laptop)
 
@@ -106,13 +116,14 @@ Expect 15–30 minutes on the first run — mostly NVIDIA driver + kernel build.
 
 ## Step 4 — Post-install setup
 
-Once the machine reboots into the installed system:
+Once the machine reboots into the installed system, the `ssh` role's sshd is running
+(publickey-only) and accepts your key from `authorized_keys.txt` for `peterstorm`.
 
-```bash
-# From your laptop
-ssh root@<new-desktop-ip>            # ISO's root password, if you set one, or key-based
-passwd peterstorm                    # set your user password
-```
+> **Password:** `users.mutableUsers = false`, so runtime `passwd` does **not** persist —
+> it reverts on the next `system-apply.sh switch`. The console/SDDM password is the
+> declarative `initialPassword` (`hunter2`, from `lib/user.nix`). To set a real one,
+> add a `hashedPasswordFile` (sops) to the user rather than running `passwd`. For
+> headless use you can ignore it and stay on key-based SSH.
 
 Copy your dotfiles and age key:
 
@@ -177,6 +188,13 @@ driver + P2P plumbing. The guide's own launch example is `GPUS=0,1 TP=2` — exa
 
 Above 4G Decoding **ON** and Resizable BAR **ON** (see Step 2). `EnableResizableBar=1`
 in modprobe is a no-op without ReBAR enabled in firmware.
+
+### Reaching the server from the LAN
+
+`machines/desktop/default.nix` opens TCP **8000** in the firewall, so the vLLM
+OpenAI-compatible endpoint (`PORT=8000`, container runs `--network host`) is reachable
+at `http://desktop:8000/v1` from other LAN machines. Change the port there if you launch
+the server on a different one.
 
 ### Model cache → /models
 
