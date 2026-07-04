@@ -35,7 +35,7 @@
     };
     displayManager = {
       setupCommands = ''
-          ${pkgs.xorg.xrandr}/bin/xrandr \
+          ${pkgs.xrandr}/bin/xrandr \
           --output DP-2 --primary --pos 1440x750 \
           --output DP-0 --pos 0x0 --rotate right;
       '';

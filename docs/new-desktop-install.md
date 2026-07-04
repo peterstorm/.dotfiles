@@ -181,8 +181,9 @@ driver + P2P plumbing. The guide's own launch example is `GPUS=0,1 TP=2` — exa
   board, `iommu=off` is the clean equivalent of the ACS-override `setpci` dance that
   PCIe-switch server boards need — skip all of that.
 - `roles/nvidia-graphics/default.nix` uses the `production` driver with `open = true`
-  (required for Blackwell). **After first boot, verify `nvidia-smi` shows CUDA Version ≥ 13.2.**
-  If `production` lags, bump `package` to `.beta` or `.latest`.
+  (required for Blackwell). `production` currently resolves to **driver 595.84 on kernel
+  6.18.37** — confirmed new enough for the container's CUDA 13.2. Still worth a glance:
+  after first boot verify `nvidia-smi` shows CUDA Version ≥ 13.2.
 
 ### BIOS
 
