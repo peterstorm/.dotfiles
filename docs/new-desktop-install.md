@@ -62,6 +62,7 @@ Replace `/dev/sdX` with the actual USB device. Double-check with `lsblk` before 
 ## Step 2 — Boot the new desktop from USB (only time it needs a monitor)
 
 - BIOS: UEFI mode, Secure Boot **off**, boot from USB.
+- BIOS (for multi-GPU P2P — see DS4 v8 section below): **Above 4G Decoding = ON**, **Resizable BAR = ON**.
 - At the shell prompt (auto-login as `nixos`):
 
 ```bash
@@ -150,6 +151,62 @@ cd ~/.dotfiles
 ```
 
 To wipe and reinstall from scratch (destructive!), boot the USB again and re-run `nixos-anywhere`.
+
+## Running DS4 v8 (DeepSeek-V4-Flash on vLLM)
+
+Guide: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v8.md>
+
+Everything (CUDA 13.2.1, PyTorch 2.12, vLLM) ships **inside the pinned container**
+(`voipmonitor/vllm:eldritch-enlightenment-...cu132-20260629`). The host only provides
+driver + P2P plumbing. The guide's own launch example is `GPUS=0,1 TP=2` — exactly our
+2-card single-node case, so TP2 is a first-class supported mode.
+
+### Host prep (already baked into the flake)
+
+- `machines/desktop/default.nix` sets `boot.kernelParams = [ "iommu=off" "amd_iommu=off" ]`
+  and the nvidia / nvidia_uvm modprobe overrides (`ForceP2P`, `EnableResizableBar`,
+  `uvm_disable_hmm`). RTX 6000 Pro has no NVLink, so the vLLM b12x PCIe allreduce and
+  `NCCL_P2P_LEVEL=SYS` depend on GPU↔GPU PCIe P2P working. On a direct-attach desktop
+  board, `iommu=off` is the clean equivalent of the ACS-override `setpci` dance that
+  PCIe-switch server boards need — skip all of that.
+- `roles/nvidia-graphics/default.nix` uses the `production` driver with `open = true`
+  (required for Blackwell). **After first boot, verify `nvidia-smi` shows CUDA Version ≥ 13.2.**
+  If `production` lags, bump `package` to `.beta` or `.latest`.
+
+### BIOS
+
+Above 4G Decoding **ON** and Resizable BAR **ON** (see Step 2). `EnableResizableBar=1`
+in modprobe is a no-op without ReBAR enabled in firmware.
+
+### Model cache → /models
+
+DeepSeek-V4-Flash is hundreds of GB. Point the HuggingFace cache at the dedicated
+`/models` ZFS dataset (recordsize=1M, compression=off — tuned for weights) before pulling.
+The run script mounts `/root/.cache/huggingface` and `/root/.cache/vllm-ds4-v8`, so either
+run docker as root with those under `/models` or symlink them:
+
+```bash
+sudo mkdir -p /models/hf /models/vllm-ds4-v8
+sudo ln -sfn /models/hf /root/.cache/huggingface
+sudo ln -sfn /models/vllm-ds4-v8 /root/.cache/vllm-ds4-v8
+```
+
+### Verify P2P before benchmarking
+
+After boot, confirm P2P is actually enabled (else the allreduce path silently falls back
+to DRAM staging):
+
+```bash
+nvidia-smi topo -m          # GPU0<->GPU1 should show a PCIe path, not "SYS" blocked
+# inside the container, or via cuda-samples: simpleP2P / p2pBandwidthLatencyTest
+```
+
+### Not applicable to us
+
+The guide's `NCCL_GRAPH_FILE=/mnt/nccl_graph_opt.xml` fix corrects a hardcoded NCCL
+bandwidth constant **for AMD EPYC Turin**. This box is Ryzen — skip it unless benchmarks
+show the 16 GB/s misdetection. The `pcie_acs_override` / `setpci` ACS-disable steps are
+switch-topology only.
 
 ## Notes
 
