@@ -89,7 +89,12 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        AGENT_BACKEND = "pi";
+        AGENT_BACKEND = "claude";
+        # Pin pi's provider/model explicitly. Without these, pi falls back to
+        # ~/.pi/agent/settings.json (github-copilot), whose quota exhausting
+        # made every reply fail with 429 and reclaw parrot prompts back.
+        RECLAW_PI_PROVIDER = "openai-codex";
+        RECLAW_PI_MODEL = "gpt-5.5";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";

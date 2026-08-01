@@ -8,7 +8,7 @@
   programs.ssh = {
     enable = true;
     enableDefaultConfig = false;
-    matchBlocks = {
+    settings = {
       homelab = {
         hostname = "192.168.0.28";
         user = "peterstorm";
@@ -61,7 +61,6 @@
     bun
     inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
     inputs.loom-tui.packages.${pkgs.stdenv.hostPlatform.system}.default
-    antigravity
   ];
 
 }

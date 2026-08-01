@@ -23,7 +23,7 @@ Parse `$ARGUMENTS` or conversational context for:
 2. **Movements** — exercises with reps/cals (e.g., "15 cal row", "8 deadlifts", "12 burpees")
 3. **Duration/rounds** — total time or number of cycles
 4. **Weights** — if mentioned (e.g., "60kg deadlifts")
-5. **Target date** — when to schedule (default: today, `{{date}}`)
+5. **Target date** — when to schedule (default: today; resolve with `date +%F`)
 
 If the user gives a WOD description, parse it. If they ask for a workout, design one appropriate for CrossFit.
 
@@ -128,121 +128,15 @@ Full movement → Garmin mapping table, confirmed mappings, and correction histo
 
 ## Workout JSON Structure
 
-### Required Fields
-
-```json
-{
-  "workoutName": "[Format] [Duration] — [Brief description]",
-  "description": "[Full human-readable workout description with all movements, reps, weights]",
-  "sportType": { "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 },
-  "workoutSegments": [{
-    "segmentOrder": 1,
-    "sportType": { "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 },
-    "workoutSteps": [...]
-  }]
-}
-```
-
-### ExecutableStepDTO Template
-
-```json
-{
-  "type": "ExecutableStepDTO",
-  "stepId": null,
-  "stepOrder": N,
-  "stepType": { "stepTypeId": ID, "stepTypeKey": "KEY", "displayOrder": ID },
-  "childStepId": null,
-  "description": "Human-readable — reps, movement, weight",
-  "endCondition": { "conditionTypeId": ID, "conditionTypeKey": "KEY", "displayOrder": ID, "displayable": true },
-  "endConditionValue": VALUE_OR_NULL,
-  "preferredEndConditionUnit": null,
-  "endConditionCompare": null,
-  "targetType": { "workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1 },
-  "targetValueOne": null,
-  "targetValueTwo": null,
-  "targetValueUnit": null,
-  "zoneNumber": null,
-  "secondaryTargetType": null,
-  "secondaryTargetValueOne": null,
-  "secondaryTargetValueTwo": null,
-  "secondaryTargetValueUnit": null,
-  "secondaryZoneNumber": null,
-  "endConditionZone": null,
-  "strokeType": { "strokeTypeId": 0, "strokeTypeKey": null, "displayOrder": 0 },
-  "equipmentType": { "equipmentTypeId": 0, "equipmentTypeKey": null, "displayOrder": 0 },
-  "category": "EXERCISE_CATEGORY_OR_NULL",
-  "exerciseName": "EXERCISE_NAME_OR_NULL",
-  "workoutProvider": null,
-  "providerExerciseSourceId": null,
-  "weightValue": WEIGHT_KG_OR_0,
-  "weightUnit": { "unitId": 8, "unitKey": "kilogram", "factor": 1000 }
-}
-```
-
-### RepeatGroupDTO Template
-
-```json
-{
-  "type": "RepeatGroupDTO",
-  "stepId": null,
-  "stepOrder": N,
-  "stepType": { "stepTypeId": 6, "stepTypeKey": "repeat", "displayOrder": 6 },
-  "childStepId": CHILD_GROUP_ID,
-  "numberOfIterations": COUNT,
-  "endCondition": { "conditionTypeId": 7, "conditionTypeKey": "iterations", "displayOrder": 7, "displayable": false },
-  "endConditionValue": COUNT,
-  "preferredEndConditionUnit": null,
-  "endConditionCompare": null,
-  "skipLastRestStep": null,
-  "smartRepeat": false,
-  "workoutSteps": [...]
-}
-```
-
-### Step Type Reference
-
-| Step | stepTypeId | stepTypeKey |
-|------|-----------|-------------|
-| warmup | 1 | `warmup` |
-| cooldown | 2 | `cooldown` |
-| interval | 3 | `interval` |
-| recovery | 4 | `recovery` |
-| rest | 5 | `rest` |
-| repeat | 6 | `repeat` |
-
-### End Condition Reference
-
-| Condition | conditionTypeId | conditionTypeKey | Use |
-|-----------|----------------|------------------|-----|
-| Lap button | 1 | `lap.button` | For Time steps — athlete presses when done |
-| Time | 2 | `time` | EMOM/AMRAP/Tabata — value in seconds |
-| Iterations | 7 | `iterations` | Repeat groups — number of rounds |
-
-### Rules
-
-- **stepOrder** must be sequential across ALL steps including children of repeat groups, starting at 1
-- **childStepId** for repeat children: all children of the same repeat group share the same childStepId (incrementing integer, starting at 1 for first repeat group)
-- **Rest steps:** set `targetType` to `null` (not no.target)
-- **Lap.button steps:** set `endConditionValue` to `null`
-- **Weight:** set `weightValue` in kg if specified, otherwise `0`. Always include `weightUnit: { "unitId": 8, "unitKey": "kilogram", "factor": 1000 }`
-- **endConditionCompare:** Garmin returns `""` (empty string) — safe to send as `null` on creation
-
-## Creating & Scheduling
-
-Write the workout JSON to a temp file and pipe to the schedule script:
+The Garmin workout JSON schema is **shared with the running coach** — read the canonical
+reference and follow its **Sport deltas → Strength / CrossFit** section (this replaces the copy
+that used to live inline here and had drifted from the running copy):
 
 ```bash
-cat > /tmp/workout.json << 'WORKOUT_EOF'
-{ ... the workout JSON ... }
-WORKOUT_EOF
-cat /tmp/workout.json | bun /home/peterstorm/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts YYYY-MM-DD
+cat /home/peterstorm/dev/claude-plugins/reclaw/workspace/skills/shared/garmin-workout-schema.md
 ```
 
-Replace `YYYY-MM-DD` with the target date (default: `{{date}}`). Check output for success/failure.
-
-If it fails:
-- Auth error → report and stop
-- API error → report the error, show the JSON so the user can debug
+It covers: the top-level shape (CrossFit uses `sportType` HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }`), the ExecutableStepDTO / RepeatGroupDTO templates, the step-type and end-condition tables, the shared gotchas (stepOrder, childStepId, rest steps, lap.button, `endConditionCompare` empty-string), and the strength delta (`category`, `exerciseName`, `weightValue` in kg, always with `weightUnit`). Build the workout JSON inline following those templates, then schedule it with the command in the shared file's **Creating & scheduling** section (`garmin-schedule-workout.ts <date>`, default today `$(date +%F)`). On failure: auth error → report and stop; API error → report the error and show the JSON so the user can debug.
 
 ## Editing Existing Workouts
 
