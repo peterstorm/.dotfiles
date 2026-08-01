@@ -8,8 +8,7 @@ This directory contains the pi coding agent configuration managed by home-manage
 pi/
 ├── agents/           # Agent markdown files (→ ~/.pi/agent/agents/)
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
-│   ├── subagent/     # Subagent tool with skill injection
-│   ├── loom-bridge/  # Bridges pi subagent results to loom orchestration
+│   ├── subagent/     # Generic subagent tool with skill injection
 │   └── global-instructions.ts  # Standalone extension
 ├── prompts/          # Prompt templates (→ ~/.pi/agent/prompts/)
 ├── settings.json     # Pi settings (copied, not symlinked — mutable at runtime)
@@ -49,7 +48,7 @@ Pi loads packages from `settings.json`:
 }
 ```
 
-Paths are relative to `~/.pi/agent/` (the agentDir). Each package has a `package.json` with a `pi` manifest declaring its extensions, skills, and prompts.
+Paths are relative to `~/.pi/agent/` (the agentDir). Each package has a `package.json` with a `pi` manifest declaring its extensions, skills, and prompts. Loom's native `pi/extension.ts` owns Loom guards and subagent-result state transitions; do not add a separate Loom bridge extension because it would process the same completion events twice.
 
 ## Skill Injection into Subagents
 
