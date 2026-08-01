@@ -262,7 +262,10 @@ async function runSingleAgent(
 		};
 	}
 
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
+	// A delegated agent must execute its task directly. Inheriting this extension's
+	// subagent tool allows accidental self-delegation loops that spawn nested pi
+	// processes until the user aborts. Chaining remains available to the parent.
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--exclude-tools", "subagent"];
 	if (agent.model) args.push("--model", agent.model);
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
 
