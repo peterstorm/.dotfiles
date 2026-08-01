@@ -1,65 +1,42 @@
-{ pkgs, lib, config, ...}:
+{ pkgs, lib, config, inputs, ... }:
 {
+  imports = [
+    inputs.disko.nixosModules.disko
+    ./disks.nix
+  ];
 
-  fileSystems."/" =
-    { device = "/dev/disk/by-uuid/4599e228-a6ce-4bf8-82da-f900e46b508d";
-      fsType = "ext4";
-    };
+  boot.loader.systemd-boot.enable = true;
+  boot.loader.efi.canTouchEfiVariables = true;
 
-  fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/DDF7-F2D8";
-      fsType = "vfat";
-    };
+  # GPU-to-GPU PCIe P2P for multi-GPU inference (DS4 v8 / vLLM b12x allreduce).
+  # RTX 6000 Pro (Blackwell) has no NVLink, so the allreduce path relies on
+  # PCIe P2P. Disabling IOMMU is the clean direct-attach equivalent of the
+  # ACS-override dance needed on PCIe-switch boards, and is required by the
+  # nvidia_uvm fix. Requires "Above 4G Decoding" + "Resizable BAR" ON in BIOS.
+  boot.kernelParams = [ "iommu=off" "amd_iommu=off" ];
+  boot.extraModprobeConfig = ''
+    options nvidia_uvm uvm_disable_hmm=1
+    options nvidia NVreg_RegistryDwords="ForceP2P=0x11;RMForceP2PType=1;RMPcieP2PType=2;GrdmaPciTopoCheckOverride=1;EnableResizableBar=1"
+  '';
 
-  swapDevices =
-    [ { device = "/dev/disk/by-uuid/edab49d9-d6b5-47ef-a74f-c1edf349069e"; }
-    ];
+  boot.supportedFilesystems = [ "zfs" ];
+  boot.zfs.forceImportRoot = false;
+  networking.hostId = "8a3f2c19";
+
+  services.zfs = {
+    autoScrub.enable = true;
+    trim.enable = true;
+  };
+
+  zramSwap = {
+    enable = true;
+    algorithm = "zstd";
+    memoryPercent = 50;
+  };
 
   hardware.cpu.amd.updateMicrocode = true;
 
-  hardware.fancontrol = {
-    enable = true;
-    config = ''
-      Common Settings:
-      INTERVAL=10
-
-      Settings of hwmon3/pwm3:
-      Depends on hwmon0/temp3_input
-      Controls hwmon3/fan3_input
-      FCTEMPS=hwmon3/device/pwm3=hwmon0/temp3_input
-      FCFANS=hwmon3/device/pwm3=hwmon3/fan3_input
-      MINTEMP=20
-      MAXTEMP=60
-      MINSTART=50
-      MINSTOP=50
-      MINPWM=0
-      MAXPWM=255
-
-      Settings of hwmon3/pwm2:
-      Depends on hwmon0/temp3_input
-      Controls hwmon3/fan2_input
-      FCTEMPS=hwmon3/device/pwm2=hwmon0/temp3_input
-      FCFANS=hwmon3/device/pwm2=hwmon3/fan2_input
-      MINTEMP=20
-      MAXTEMP=60
-      MINSTART=50
-      MINSTOP=50
-      MINPWM=0
-      MAXPWM=255
-
-      Settings of hwmon3/pwm1:
-      Depends on hwmon0/temp3_input
-      Controls hwmon3/fan1_input
-      FCTEMPS=hwmon3/device/pwm1=hwmon0/temp3_input
-      FCFANS=hwmon3/device/pwm1=hwmon3/fan1_input
-      MINTEMP=20
-      MAXTEMP=60
-      MINSTART=50
-      MINSTOP=100
-      MINPWM=0
-      MAXPWM=255
-    '';
-  };
-
+  # Expose the vLLM / DS4 v8 OpenAI-compatible server (PORT=8000, --network host)
+  # to the LAN. sshd opens 22 itself; the wifi role opens 8081. Merges with those.
+  networking.firewall.allowedTCPPorts = [ 8000 ];
 }
-
