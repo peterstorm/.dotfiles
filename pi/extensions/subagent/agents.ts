@@ -5,8 +5,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, loadSkills, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { resolveLocalPackageRoots, resolvePackageAgentDirs as resolvePackageAgentDirsFrom } from "./package-resources.js";
 
 export type AgentScope = "user" | "project" | "both";
+
+export type AgentSource = "package" | "user" | "project";
 
 export interface AgentConfig {
 	name: string;
@@ -14,7 +17,7 @@ export interface AgentConfig {
 	tools?: string[];
 	model?: string;
 	systemPrompt: string;
-	source: "user" | "project";
+	source: AgentSource;
 	filePath: string;
 }
 
@@ -49,31 +52,28 @@ function parseToolNames(raw: unknown): string[] | undefined {
 	return tools.length > 0 ? tools : undefined;
 }
 
+/** Resolve local package agent directories from the active Pi settings. */
+export function resolvePackageAgentDirs(agentDir: string = getAgentDir()): string[] {
+	return resolvePackageAgentDirsFrom(agentDir);
+}
+
 /**
- * Resolve skill paths from packages declared in settings.json.
+ * Resolve skill paths from local packages declared in settings.json.
  * loadSkills doesn't resolve packages itself — we must expand them.
  */
 function resolvePackageSkillPaths(): string[] {
-	try {
-		const agentDir = getAgentDir();
-		const settingsPath = path.join(agentDir, "settings.json");
-		if (!fs.existsSync(settingsPath)) return [];
-
-		const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-		const packages: string[] = settings.packages ?? [];
-
-		return packages.flatMap((pkg: string) => {
-			const resolved = path.resolve(agentDir, pkg);
-			const pkgJsonPath = path.join(resolved, "package.json");
-			if (!fs.existsSync(pkgJsonPath)) return [];
-
-			const manifest = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
-			const piSkills: string[] = manifest.pi?.skills ?? [];
-			return piSkills.map((s: string) => path.resolve(resolved, s));
-		});
-	} catch {
-		return [];
-	}
+	return resolveLocalPackageRoots(getAgentDir()).flatMap((root) => {
+		try {
+			const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
+			const piSkills: unknown = manifest.pi?.skills;
+			if (!Array.isArray(piSkills)) return [];
+			return piSkills
+				.filter((skill): skill is string => typeof skill === "string")
+				.map((skill) => path.resolve(root, skill));
+		} catch {
+			return [];
+		}
+	});
 }
 
 /**
@@ -132,10 +132,11 @@ function resolveSkillContents(skillNames: string[], cwd: string): string {
 
 export interface AgentDiscoveryResult {
 	agents: AgentConfig[];
+	packageAgentsDirs: string[];
 	projectAgentsDir: string | null;
 }
 
-function loadAgentsFromDir(dir: string, source: "user" | "project", cwd: string): AgentConfig[] {
+function loadAgentsFromDir(dir: string, source: AgentSource, cwd: string): AgentConfig[] {
 	const agents: AgentConfig[] = [];
 
 	if (!fs.existsSync(dir)) {
@@ -221,24 +222,26 @@ export function discoverAgents(cwd: string, scope: AgentScope): AgentDiscoveryRe
 	// Reset skill cache so skills are discovered fresh for this cwd
 	skillPathCache = null;
 
-	const userDir = path.join(getAgentDir(), "agents");
+	const agentDir = getAgentDir();
+	const userDir = path.join(agentDir, "agents");
+	const packageAgentsDirs = resolvePackageAgentDirs(agentDir);
 	const projectAgentsDir = findNearestProjectAgentsDir(cwd);
 
+	const packageAgents = scope === "project"
+		? []
+		: packageAgentsDirs.flatMap((dir) => loadAgentsFromDir(dir, "package", cwd));
 	const userAgents = scope === "project" ? [] : loadAgentsFromDir(userDir, "user", cwd);
 	const projectAgents = scope === "user" || !projectAgentsDir ? [] : loadAgentsFromDir(projectAgentsDir, "project", cwd);
 
 	const agentMap = new Map<string, AgentConfig>();
 
-	if (scope === "both") {
-		for (const agent of userAgents) agentMap.set(agent.name, agent);
-		for (const agent of projectAgents) agentMap.set(agent.name, agent);
-	} else if (scope === "user") {
-		for (const agent of userAgents) agentMap.set(agent.name, agent);
-	} else {
-		for (const agent of projectAgents) agentMap.set(agent.name, agent);
-	}
+	// Precedence is package < user < project. A user can override a packaged
+	// agent globally, and a trusted project can override either for that repo.
+	for (const agent of packageAgents) agentMap.set(agent.name, agent);
+	for (const agent of userAgents) agentMap.set(agent.name, agent);
+	for (const agent of projectAgents) agentMap.set(agent.name, agent);
 
-	return { agents: Array.from(agentMap.values()), projectAgentsDir };
+	return { agents: Array.from(agentMap.values()), packageAgentsDirs, projectAgentsDir };
 }
 
 export function formatAgentList(agents: AgentConfig[], maxItems: number): { text: string; remaining: number } {

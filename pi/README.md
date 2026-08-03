@@ -50,6 +50,19 @@ Pi loads packages from `settings.json`:
 
 Paths are relative to `~/.pi/agent/` (the agentDir). Each package has a `package.json` with a `pi` manifest declaring its extensions, skills, and prompts. Loom's native `pi/extension.ts` owns Loom guards and subagent-result state transitions; do not add a separate Loom bridge extension because it would process the same completion events twice.
 
+## Package Agents
+
+Pi packages do not natively expose an `agents` resource. The custom subagent extension therefore discovers a conventional `agents/` directory from every configured **local** package in `settings.json`. Package agents load before user agents, and project agents load last, giving this override order:
+
+`package < user < project`
+
+This makes Loom's full roster available automatically when the Loom checkout adds an agent. The tracked per-agent symlinks remain for compatibility and immediate use in already-running Pi sessions, but correctness no longer depends on manually updating that list. In particular, both panel workflows are covered:
+
+- Architecture panel: `arch-interviewer-agent`, `arch-designer-agent`, `arch-judge-agent`
+- Review refutation panel: `review-verifier-agent`
+
+The package resolver supports string and object-form local package entries and ignores npm/git sources that Pi installs elsewhere.
+
 ## Skill Injection into Subagents
 
 ### The Problem
@@ -104,7 +117,16 @@ for (const a of agents.filter(a => a.systemPrompt.includes("Preloaded Skill"))) 
 '
 ```
 
-Expected output (8 agents with skills):
+Run the complete install verification after changing Pi package or agent wiring:
+
+```bash
+cd ~/.dotfiles
+bun test pi/extensions/subagent/agents.test.ts
+bun pi/verify-agent-install.ts
+nix flake check --no-build
+```
+
+Expected skill-injection output includes:
 ```
 architecture-agent → [architecture-tech-lead]
 grill-agent → [grill]

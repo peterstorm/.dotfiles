@@ -12,7 +12,9 @@ in
   home.packages = [ pkgs.pi-coding-agent ];
 
   # Symlink entire directories to dotfiles repo (not per-file).
-  # This means adding/editing/removing files needs NO rebuild.
+  # This means adding/editing/removing files needs NO rebuild. The installed
+  # subagent extension also discovers agents/ from configured local Pi packages,
+  # so new Loom panel agents become available without changing this Nix module.
   home.activation.piSymlinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
     piAgentDir="$HOME/.pi/agent"
     mkdir -p "$piAgentDir"
