@@ -22,6 +22,18 @@
 
   hardware.nvidia-container-toolkit.enable = true;
 
+  # Make `docker run --gpus all` work, not just `--device=nvidia.com/gpu=all`.
+  #
+  # Since moby 29.2 (PR #50228) dockerd translates --gpus into a CDI request, but
+  # only if it can `exec.LookPath("nvidia-cdi-hook")` at daemon startup. NixOS
+  # gives dockerd a minimal unit PATH (kmod, coreutils, findutils, grep, sed,
+  # systemd), so the lookup fails, no "gpu" capability is registered, and --gpus
+  # dies with `could not select device driver "" with capabilities: [[gpu]]`.
+  # The toolkit's `tools` output carries nvidia-cdi-hook; put it on that PATH.
+  systemd.services.docker.path = [
+    (lib.getOutput "tools" config.hardware.nvidia-container-toolkit.package)
+  ];
+
   environment.systemPackages = with pkgs; [
     nvtopPackages.nvidia
   ];
