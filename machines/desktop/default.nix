@@ -8,6 +8,23 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+  # Two boot entries: the default is the workstation (X11 + SDDM + XMonad on the
+  # RTX 6000 Pros), "headless" boots to a console so the GPUs start empty for
+  # inference. systemd-boot lists specialisations as their own entries.
+  #
+  # Only the default systemd unit changes, so the desktop stays one command away:
+  #   systemctl isolate graphical.target    # bring XMonad up without rebooting
+  #   systemctl isolate multi-user.target   # drop it again
+  #
+  # mkForce is required, not optional: nixpkgs sets
+  #   systemd.defaultUnit = mkIf (xserver.autorun || displayManager.enable) "graphical.target"
+  # in services/misc/graphical-desktop.nix. That is a normal-priority definition,
+  # so a second one here conflicts rather than overrides — and it is also why
+  # `services.xserver.autorun = false` does nothing while SDDM is enabled.
+  specialisation.headless.configuration = {
+    systemd.defaultUnit = lib.mkForce "multi-user.target";
+  };
+
   # GPU-to-GPU PCIe P2P for multi-GPU inference (DS4 v8 / vLLM b12x allreduce).
   # RTX 6000 Pro (Blackwell) has no NVLink, so the allreduce path relies on
   # PCIe P2P. Disabling IOMMU is the clean direct-attach equivalent of the
