@@ -89,7 +89,7 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        AGENT_BACKEND = "claude";
+        AGENT_BACKEND = "pi";
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json (github-copilot), whose quota exhausting
         # made every reply fail with 429 and reclaw parrot prompts back.
