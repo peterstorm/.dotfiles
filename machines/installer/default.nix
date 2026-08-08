@@ -108,6 +108,13 @@ let
     name = "install-desktop";
     runtimeInputs = with pkgs; [ coreutils ];
     text = ''
+      # disko partitions and nixos-install writes a bootloader; both need root.
+      # Without this the run dies partway through with permission errors, which
+      # is a confusing way to learn you forgot `sudo` on a destructive command.
+      if [ "$(id -u)" -ne 0 ]; then
+        exec sudo -- "$0" "$@"
+      fi
+
       cat <<'EOF'
       This DESTROYS every partition on the disk named in machines/desktop/disks.nix
       (/dev/nvme0n1 unless it was changed) and installs the `desktop` system that
