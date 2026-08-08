@@ -1,20 +1,22 @@
 { pkgs, lib, config, inputs, ... }:
 let
-  # Persistent per-GPU power cap in watts, or null to leave the cards at their
-  # firmware default. Left null on purpose: the SKU in this box is unrecorded,
-  # and the right number differs by card — nvidia-smi exits non-zero if you ask
-  # for a limit outside the card's supported range. Read the range with
-  #   nvidia-smi -q -d POWER
-  # after first boot, then set a number here.
+  # Desired persistent per-GPU power cap in watts, or null to leave the cards at
+  # their firmware default.
   #
-  # Why it is worth setting: upstream's sweep (hardware/blackwell-power-limit-sweep.md)
-  # measures the 600 W Workstation card holding ~300-305 Gflop/s/W flat across the
-  # whole 200-350 W band and only reaching peak throughput at the full 600 W. Two
-  # of those is 1200 W of GPU alone in a consumer ATX case. Capping each around
-  # 400-450 W buys back most of the thermals and noise for a few percent of
-  # throughput — and on a shared-airflow two-up build, less throttling can leave
-  # sustained clocks *higher* than the uncapped pair.
-  gpuPowerLimitWatts = null;
+  # Why 450: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
+  # the 600 W Workstation card holding ~300-305 Gflop/s/W flat across the whole
+  # 200-350 W band, and only reaching peak throughput at the full 600 W. Two of
+  # those is 1200 W of GPU alone in a consumer ATX case with shared airflow.
+  # Capping each at 450 gives up a few percent of throughput and buys back most
+  # of the thermals and noise — and on a two-up build, less throttling can leave
+  # *sustained* clocks higher than the uncapped pair.
+  #
+  # This is a request, not an assertion: the service below clamps it into the
+  # range the installed cards actually report. The SKU here is still unverified,
+  # and a 600 W Workstation card and a 300 W Max-Q do not share a valid range —
+  # `nvidia-smi -pl` exits non-zero outside it, which would fail the unit on
+  # every boot. Clamping means the same config is correct for either card.
+  gpuPowerLimitWatts = 450;
 in
 {
   imports = [
@@ -97,6 +99,10 @@ in
   # is actually chosen — see gpuPowerLimitWatts at the top of this file.
   # nvidiaPersistenced keeps the driver initialized, so the cap is not lost when
   # the last client detaches.
+  #
+  # Per GPU rather than globally, and clamped to each card's reported
+  # [power.min_limit, power.max_limit], so an unsupported request is corrected
+  # and logged instead of failing the unit.
   systemd.services.nvidia-power-limit = lib.mkIf (gpuPowerLimitWatts != null) {
     description = "Persistent power limit for the RTX 6000 Pro cards";
     wantedBy = [ "multi-user.target" ];
@@ -104,7 +110,49 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${config.hardware.nvidia.package.bin}/bin/nvidia-smi -pl ${toString gpuPowerLimitWatts}";
+      ExecStart = lib.getExe (pkgs.writeShellApplication {
+        name = "nvidia-power-limit";
+        runtimeInputs = [
+          config.hardware.nvidia.package.bin
+          pkgs.coreutils
+        ];
+        text = ''
+          want=${toString gpuPowerLimitWatts}
+
+          # The driver can still be settling when multi-user.target is reached;
+          # persistenced ordering gets us close but is not a readiness contract.
+          for _ in $(seq 1 30); do
+            if nvidia-smi -L >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          if ! nvidia-smi -L >/dev/null 2>&1; then
+            echo "nvidia-smi never became ready; leaving power limits alone" >&2
+            exit 1
+          fi
+
+          for idx in $(nvidia-smi --query-gpu=index --format=csv,noheader); do
+            lo=$(nvidia-smi -i "$idx" --query-gpu=power.min_limit \
+                   --format=csv,noheader,nounits | tr -d ' ')
+            hi=$(nvidia-smi -i "$idx" --query-gpu=power.max_limit \
+                   --format=csv,noheader,nounits | tr -d ' ')
+            # Reported as e.g. "600.00"; -pl takes whole watts.
+            lo=''${lo%%.*}
+            hi=''${hi%%.*}
+
+            target=$want
+            if [ "$target" -gt "$hi" ]; then
+              echo "GPU $idx: requested ''${want}W above max ''${hi}W - clamping"
+              target=$hi
+            elif [ "$target" -lt "$lo" ]; then
+              echo "GPU $idx: requested ''${want}W below min ''${lo}W - clamping"
+              target=$lo
+            fi
+
+            echo "GPU $idx: setting power limit to ''${target}W (range ''${lo}-''${hi}W)"
+            nvidia-smi -i "$idx" -pl "$target"
+          done
+        '';
+      });
     };
   };
 

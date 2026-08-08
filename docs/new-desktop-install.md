@@ -23,7 +23,7 @@ on the ISO answers every row except the two that need a driver (VRAM, power limi
 | PCIe topology | board spec + build | **x8/x8 from the CPU available, and nothing is stealing lanes** | whether GPU↔GPU P2P works at all |
 | GPUs | prose only | 2× RTX PRO 6000 Blackwell, 96 GB each — **unverified** | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
 | GPU slots | **unverified** | assumed `PCIEX16(G5)_1` + `_2` | `survey-hardware` settles it — see below |
-| GPU variant | unrecorded | unknown: Workstation (600W) or Max-Q (300W) | PSU, thermals, `gpuPowerLimitWatts` |
+| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 450` |
 | NICs | `[ "wlp5s0" "enp6s0" ]` | **wrong — board has 10 Gb + 2.5 Gb + WiFi 7**, so three interfaces | non-blocking, NetworkManager copes |
 
 ### What 96 GB of RAM means here
