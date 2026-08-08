@@ -180,9 +180,23 @@ in
 
   # GPU-to-GPU PCIe P2P for multi-GPU inference (DS4 v8 / vLLM b12x allreduce).
   # RTX 6000 Pro (Blackwell) has no NVLink, so the allreduce path relies on
-  # PCIe P2P. Disabling IOMMU is the clean direct-attach equivalent of the
-  # ACS-override dance needed on PCIe-switch boards, and is required by the
-  # nvidia_uvm fix. Requires "Above 4G Decoding" + "Resizable BAR" ON in BIOS.
+  # PCIe P2P. Requires "Above 4G Decoding" + "Resizable BAR" ON in BIOS, and
+  # "ACS = Disabled" so there is no upstream translation to force P2P around.
+  #
+  # We use `iommu=pt` (passthrough), NOT `iommu=off`. Both give GPU↔GPU P2P the
+  # untranslated path it needs, but they differ for every OTHER device:
+  #
+  #   * `iommu=off` tears the IOMMU out entirely. That broke the on-board
+  #     MediaTek MT7927 WiFi: its firmware download is a DMA transfer, and with
+  #     the AMD IOMMU fully off the MCU's replies never landed — dmesg showed
+  #     `Message 00000010 timeout` → `Failed to get patch semaphore` →
+  #     `hardware init failed`, and the card never came up. The exact same card
+  #     worked on Ubuntu, whose only relevant difference was IOMMU left on.
+  #   * `iommu=pt` keeps the IOMMU enabled and puts every device in a 1:1
+  #     passthrough domain, so WiFi (and everything else) DMAs normally, while
+  #     the GPUs still get an untranslated P2P path. This is the alternative the
+  #     upstream direct-attach P2P notes record as working
+  #     (`amd_iommu=on iommu=pt` with ACS disabled in firmware).
   #
   # The third parameter is unrelated to P2P. zfs_arc_max caps the ARC at 16 GiB;
   # OpenZFS on Linux otherwise takes half of RAM, which is exactly the half this
@@ -191,7 +205,7 @@ in
   # checkpoint that is read once per start, sequentially, off a 1M-recordsize
   # dataset — so an unbounded ARC evicts pages that are reused to cache data
   # nobody reads twice. 16 GiB is ample for /nix and metadata.
-  boot.kernelParams = [ "iommu=off" "amd_iommu=off" "zfs.zfs_arc_max=17179869184" ];
+  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=17179869184" ];
   boot.extraModprobeConfig = ''
     options nvidia_uvm uvm_disable_hmm=1
     options nvidia NVreg_RegistryDwords="ForceP2P=0x11;RMForceP2PType=1;RMPcieP2PType=2;GrdmaPciTopoCheckOverride=1;EnableResizableBar=1"

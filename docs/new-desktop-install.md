@@ -558,12 +558,15 @@ below — same host prep, different container.
 
 ### Host prep (already baked into the flake)
 
-- `machines/desktop/default.nix` sets `boot.kernelParams = [ "iommu=off" "amd_iommu=off" ]`
+- `machines/desktop/default.nix` sets `boot.kernelParams = [ "iommu=pt" "amd_iommu=on" ]`
   and the nvidia / nvidia_uvm modprobe overrides (`ForceP2P`, `EnableResizableBar`,
   `uvm_disable_hmm`). RTX 6000 Pro has no NVLink, so the vLLM b12x PCIe allreduce and
   `NCCL_P2P_LEVEL=SYS` depend on GPU↔GPU PCIe P2P working. On a direct-attach desktop
-  board, `iommu=off` is the clean equivalent of the ACS-override `setpci` dance that
-  PCIe-switch server boards need — skip all of that.
+  board, `iommu=pt` gives the GPUs an untranslated P2P path (the equivalent of the
+  ACS-override `setpci` dance PCIe-switch server boards need) **while keeping the IOMMU
+  on for every other device** — which is required for the on-board MediaTek MT7927 WiFi
+  to DMA-load its firmware. `iommu=off` breaks that WiFi card (see the WiFi section);
+  `iommu=pt` does not, and still gives P2P. Needs `ACS = Disabled` in BIOS.
 - `roles/nvidia-graphics/default.nix` uses the `production` driver with `open = true`
   (required for Blackwell). `production` currently resolves to **driver 595.84 on kernel
   6.18.41** — confirmed new enough for the container's CUDA 13.2. Still worth a glance:
@@ -571,8 +574,11 @@ below — same host prep, different container.
 
 The `NVreg_RegistryDwords` string in `machines/desktop/default.nix` is copied verbatim
 from the upstream direct-attach P2P fix (`optimization/pcie-oneshot-allreduce.md`), and
-`uvm_disable_hmm=1` + `iommu=off amd_iommu=off` are both explicit upstream requirements
-(`optimization/nccl-tuning.md` — without them NCCL P2P locks up and NCCL hangs).
+`uvm_disable_hmm=1` is an explicit upstream requirement
+(`optimization/nccl-tuning.md` — without it NCCL P2P locks up and NCCL hangs). Upstream
+pairs it with `iommu=off amd_iommu=off`; we use `iommu=pt amd_iommu=on` instead (same
+untranslated P2P path, but the IOMMU stays on so the MT7927 WiFi card still works — the
+upstream notes record `amd_iommu=on iommu=pt` + ACS-disabled as an equivalent P2P config).
 
 **Does that survive `open = true`?** Upstream runs the proprietary driver; Blackwell on
 NixOS forces the open kernel module, so the keys were worth checking against
@@ -612,8 +618,9 @@ Enabled**, and ReBAR additionally requires CSM disabled. Disable CSM first, then
 two — otherwise you will look for a menu entry that is not being displayed and conclude the
 board lacks it.
 
-Leave IOMMU on `Auto`. `iommu=off amd_iommu=off` in `boot.kernelParams` settles it from
-the kernel side, and the firmware setting is not what the driver reads.
+Leave IOMMU on `Auto` and set **`ACS = Disabled`**. `iommu=pt amd_iommu=on` in
+`boot.kernelParams` settles the passthrough behaviour from the kernel side. Do **not** use
+`iommu=off` here: it kills the on-board MT7927 WiFi (firmware DMA never completes).
 
 Bifurcation needs no configuration for this build: two cards in the two Gen5 slots
 negotiate x8/x8 automatically. The bifurcation menu exists for splitting one slot across
@@ -704,11 +711,12 @@ only (and `pcie_acs_override` needs a patched kernel anyway). Direct-attach boar
 
 One caveat on that: the Level1Techs thread upstream cites for `iommu=off` is a
 direct-attach dual RTX PRO 6000 build, and its author reports "ACS is the only thing in
-the BIOS I flat out disabled". So a **firmware** ACS toggle may still matter here even
-though the runtime override does not. With `iommu=off` there is no translation for ACS to
-force upstream, so it should be moot — but if P2P misbehaves and the BIOS offers the
-switch, it costs nothing to try. That thread also records a working alternative to
-`iommu=off` entirely: `amd_iommu=on iommu=pt` with ACS disabled in firmware.
+the BIOS I flat out disabled". We take exactly that alternative — `amd_iommu=on iommu=pt`
+with **ACS disabled in firmware** — because the on-board MediaTek MT7927 WiFi needs the
+IOMMU left on to DMA-load its firmware, and `iommu=off` breaks it (`Message ... timeout`
+→ `Failed to get patch semaphore` → `hardware init failed`). `iommu=pt` keeps P2P working
+*and* WiFi working; ACS-disabled in the BIOS is what removes the upstream translation for
+P2P now that the IOMMU is no longer globally off.
 
 **`optimization/io-tuning.md`** — every number in it is about an **md RAID5 array**:
 `stripe_cache_size`, `group_thread_cnt`, write-intent bitmaps, read-ahead, and switching
@@ -736,7 +744,7 @@ Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4
 
 The official r31 release image on the r31 release profile, adapted for this box. Same
 CUDA 13.2 / B12X lineage as the DS4 v8 guide above, same host prep: ForceP2P modprobe
-config, `iommu=off amd_iommu=off`, ReBAR + Above 4G in BIOS. **Nothing about the host
+config, `iommu=pt amd_iommu=on` (ACS disabled in BIOS), ReBAR + Above 4G in BIOS. **Nothing about the host
 config changes from r16 through r31** — every change is inside the container.
 
 | Item | Value |
