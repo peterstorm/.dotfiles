@@ -261,8 +261,11 @@ sizes:
 
 | Package | Rough size | Use it when |
 |---|---|---|
-| `.#installer-iso` | ~1.5 GB | Normal case — the laptop builds the closure and pushes it over SSH |
-| `.#installer-iso-offline` | ~12 GB | No laptop, no network, or you would rather not push 10 GB over WiFi |
+| `.#installer-iso` | 1.5 GB | Normal case — the laptop builds the closure and pushes it over SSH |
+| `.#installer-iso-offline` | 4.4 GB | No laptop, no network, or you would rather not push the closure over WiFi |
+
+The offline image is a strict superset: it does everything the thin one does *and* can
+install locally, so if you are writing only one stick, write that one.
 
 ```bash
 cd ~/.dotfiles
@@ -287,8 +290,9 @@ What is baked in, and why each one removes a step:
 | `install-desktop` (offline image only) | The laptop, and the network |
 
 The offline image additionally carries the entire `desktop` system closure and its disko
-script in the ISO's own Nix store (`isoImage.storeContents`), which is why it is ~12 GB
-and why it can install with the network unplugged.
+script in the ISO's own Nix store (`isoImage.storeContents`), which is why it can install
+with the network unplugged. The closure squashes down well — 4.4 GB, not the ~12 GB the
+uncompressed closure would suggest.
 
 > Building the offline image builds the full desktop closure — NVIDIA driver, kernel, X,
 > the lot — and then squashfs-compresses it. Budget an hour the first time. The squashfs
