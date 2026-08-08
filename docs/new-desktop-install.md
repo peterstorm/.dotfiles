@@ -14,15 +14,16 @@ numbers below are wrong if these are wrong.
 on the ISO answers every row except the two that need a driver (VRAM, power limit). See
 [Step 2](#answer-the-hardware-questions-before-you-wipe-anything).
 
-| Item | Basis | Assumed | Where it matters |
+| Item | Basis | Value | Where it matters |
 |---|---|---|---|
-| CPU | `cpuCores = 16`, `kvm-amd` | Ryzen 16-core (9950X-class, AM5) | PCIe lanes — see below |
+| Board | **confirmed** | **ASUS ProArt X870E-CREATOR WIFI** (X870E, AM5) | Slot topology — see below |
+| CPU | `cpuCores = 16`, `kvm-amd` | Ryzen 16-core (9950X-class, AM5) assumed | PCIe lanes, build parallelism |
 | GPUs | prose only | 2× RTX PRO 6000 Blackwell, 96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
-| GPU variant | unrecorded | unknown: Workstation (600W) or Max-Q (300W) | PSU, thermals, sustained clocks |
-| RAM | unrecorded | **unknown** | `/dev/shm` = 50%, zram = 50%, KV-offload ceiling |
-| PCIe topology | unrecorded | **unknown** | whether GPU↔GPU P2P works at all |
-| NVMe | `/dev/nvme0n1` | first slot | disko wipes this device |
-| NICs | `[ "wlp5s0" "enp6s0" ]` | guessed | non-blocking, NetworkManager copes |
+| GPU variant | unrecorded | unknown: Workstation (600W) or Max-Q (300W) | PSU, thermals, `gpuPowerLimitWatts` |
+| RAM | unrecorded | **unknown** | `/dev/shm` = 50%, zram = 50%, ARC cap, KV-offload ceiling |
+| PCIe topology | board spec | **capable of x8/x8 from the CPU — but see the M.2_2 trap** | whether GPU↔GPU P2P works at all |
+| NVMe | `/dev/nvme0n1` | **must be in M.2_1, not M.2_2** | disko wipes this device; slot choice decides GPU 2's link width |
+| NICs | `[ "wlp5s0" "enp6s0" ]` | **wrong — board has 10 Gb + 2.5 Gb + WiFi 7**, so three interfaces | non-blocking, NetworkManager copes |
 
 ### The one that could invalidate the DS4 setup: PCIe topology
 
@@ -40,6 +41,39 @@ PCIe 5.0 lanes total. That gives two realistic dual-GPU layouts:
 - **x16 + x4 from the chipset** — the second GPU sits behind the Promontory link, on a
   different branch. P2P between GPUs on different root complexes is the documented
   failure case: it degrades or does not work, and no amount of `ForceP2P` fixes wiring.
+
+#### On this board, the good layout is available — and easy to lose
+
+Per [ASUS's spec for the ProArt X870E-CREATOR WIFI](https://www.asus.com/us/motherboards-components/motherboards/proart/proart-x870e-creator-wifi/techspec/),
+with a Ryzen 9000/7000 CPU:
+
+| Slot | Attached to | Width |
+|---|---|---|
+| `PCIEX16(G5)_1` | **CPU** | x16, or x8 when slot 2 is populated |
+| `PCIEX16(G5)_2` | **CPU** | x8 — **or x4, see below** |
+| `PCIEX16_3` | chipset | PCIe 4.0 x4 — **never put a GPU here** |
+| `M.2_1` | **CPU** | PCIe 5.0 x4 — no sharing |
+| `M.2_2` | **CPU** | PCIe 5.0 x4 — **shares bandwidth with `PCIEX16(G5)_2`** |
+| `M.2_3`, `M.2_4` | chipset | PCIe 4.0 x4 — no effect on the GPU slots |
+
+The two full-length Gen5 slots are both CPU-attached and support `x16 / x8+x8 /
+x8+x4+x4`. So the topology this whole document depends on is genuinely available — this
+board is one of the few consumer AM5 boards where it is.
+
+**The trap is `M.2_2`.** It is fed from the same CPU lanes as the second GPU slot.
+Populate it and the board drops into the `x8/x4/x4` split: GPU 1 at x8, **GPU 2 at x4**,
+M.2_2 at x4. That is precisely the "one GPU reports x4" hardware failure this section
+warns about — except self-inflicted, by putting the boot drive in the wrong hole.
+
+So the build must be:
+
+- Both GPUs in **`PCIEX16(G5)_1` and `PCIEX16(G5)_2`**
+- Boot NVMe in **`M.2_1`** — CPU-direct Gen5 x4, which is also the fastest slot for
+  streaming a 155 GiB checkpoint
+- **`M.2_2` left empty.** If you need more NVMe, use `M.2_3`/`M.2_4` (chipset) — they cost
+  nothing from the GPU slots
+
+Check the physical build before installing, and confirm with `survey-hardware` after.
 
 Check before trusting any benchmark:
 
@@ -519,6 +553,29 @@ below reads `/proc/driver/nvidia/params` instead of trusting the config.
 
 Above 4G Decoding **ON** and Resizable BAR **ON** (see Step 2). `EnableResizableBar=1`
 in modprobe is a no-op without ReBAR enabled in firmware.
+
+Exact paths on the ProArt X870E-CREATOR WIFI (press `F7` for Advanced Mode first):
+
+| Setting | Path | Value |
+|---|---|---|
+| CSM | `Boot` → `CSM (Compatibility Support Module)` → `Launch CSM` | **Disabled** |
+| Above 4G Decoding | `Advanced` → `PCI Subsystem Settings` | **Enabled** |
+| Re-Size BAR Support | `Advanced` → `PCI Subsystem Settings` | **Enabled** |
+| Secure Boot | `Boot` → `Secure Boot` → `OS Type` | **Other OS** |
+| Memory profile | `Ai Tweaker` → `Ai Overclock Tuner` | **EXPO** |
+
+Order matters twice: **`Re-Size BAR Support` only appears once `Above 4G Decoding` is
+Enabled**, and ReBAR additionally requires CSM disabled. Disable CSM first, then the other
+two — otherwise you will look for a menu entry that is not being displayed and conclude the
+board lacks it.
+
+Leave IOMMU on `Auto`. `iommu=off amd_iommu=off` in `boot.kernelParams` settles it from
+the kernel side, and the firmware setting is not what the driver reads.
+
+Bifurcation needs no configuration for this build: two cards in the two Gen5 slots
+negotiate x8/x8 automatically. The bifurcation menu exists for splitting one slot across
+a riser, which is not what we are doing. What *does* need attention is the physical build
+— see [the M.2_2 trap](#on-this-board-the-good-layout-is-available--and-easy-to-lose).
 
 ### Reaching the server from the LAN
 
