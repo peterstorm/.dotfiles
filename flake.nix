@@ -17,6 +17,13 @@
     loom-tui.url = "github:peterstorm/loom-tui";
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
+    # MediaTek MT7927 / MT6639 (Filogic 380) WiFi 7 + Bluetooth. The ProArt
+    # X870E-CREATOR ships either this or a Qualcomm QCNCM865; the MT7927 is not
+    # in mainline, so it needs out-of-tree mt76 modules plus firmware extracted
+    # from ASUS's Windows driver. This flake does both against whatever kernel
+    # the host runs. See machines/desktop/default.nix.
+    mt7927.url = "github:cmspam/mt7927-nixos";
+    mt7927.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ { self, nixpkgs, home-manager, flake-parts, ... }:

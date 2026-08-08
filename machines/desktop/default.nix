@@ -17,6 +17,68 @@ let
   # `nvidia-smi -pl` exits non-zero outside it, which would fail the unit on
   # every boot. Clamping means the same config is correct for either card.
   gpuPowerLimitWatts = 450;
+
+  # --- MediaTek MT7927 / MT6639 (Filogic 380) WiFi 7 + Bluetooth -------------
+  #
+  # The board's card is PCI 14c3:7927, which mainline does not claim: kernel
+  # 6.18.41 ships no such modalias, and linux-firmware has mediatek/mt7925 but
+  # nothing for MT6639. Both halves come from cmspam/mt7927-nixos, which builds
+  # patched out-of-tree mt76 + bluetooth modules and extracts the firmware from
+  # ASUS's Windows driver package.
+  #
+  # We take its packages but re-do their install layout, because the flake's
+  # default does not work on NixOS:
+  #
+  #   * Modules go in updates/, not extra/. depmod ranks updates/ above kernel/
+  #     but does NOT rank extra/ above it, so the flake's extra/ layout loses
+  #     every name collision to the in-tree mt76 modules. Verified on the built
+  #     tree: modules.dep resolved mt7925e to kernel/…/mt7925e.ko.xz and
+  #     modules.alias carried only the in-tree 0717/7925 aliases — no 7927 — so
+  #     the card would still not have been claimed.
+  #
+  #   * The BT RAM code is installed to mediatek/mt7927/ as well as
+  #     mediatek/mt6639/. The patched btmtk requests it from the former.
+  #
+  # Both corrections match what other NixOS users of this card converged on.
+  mt7927 = inputs.mt7927.packages.${pkgs.stdenv.hostPlatform.system};
+  kver = config.boot.kernelPackages.kernel.modDirVersion;
+
+  mt7927Wifi = mt7927.wifi.overrideAttrs (_: {
+    installPhase = ''
+      runHook preInstall
+      modDir="$out/lib/modules/${kver}/updates/mt76"
+      install -dm755 "$modDir/mt7921" "$modDir/mt7925"
+      install -m644 mt76.ko mt76-connac-lib.ko mt792x-lib.ko "$modDir/"
+      install -m644 mt7921/*.ko "$modDir/mt7921/"
+      install -m644 mt7925/*.ko "$modDir/mt7925/"
+      runHook postInstall
+    '';
+  });
+
+  mt7927Bluetooth = mt7927.bluetooth.overrideAttrs (_: {
+    installPhase = ''
+      runHook preInstall
+      modDir="$out/lib/modules/${kver}/updates/bluetooth"
+      install -dm755 "$modDir"
+      install -m644 btusb.ko btmtk.ko "$modDir/"
+      runHook postInstall
+    '';
+  });
+
+  mt7927Firmware = mt7927.firmware.overrideAttrs (_: {
+    installPhase = ''
+      runHook preInstall
+      install -Dm644 firmware/BT_RAM_CODE_MT6639_2_1_hdr.bin \
+        "$out/lib/firmware/mediatek/mt7927/BT_RAM_CODE_MT6639_2_1_hdr.bin"
+      install -Dm644 firmware/BT_RAM_CODE_MT6639_2_1_hdr.bin \
+        "$out/lib/firmware/mediatek/mt6639/BT_RAM_CODE_MT6639_2_1_hdr.bin"
+      install -Dm644 firmware/WIFI_MT6639_PATCH_MCU_2_1_hdr.bin \
+        "$out/lib/firmware/mediatek/mt7927/WIFI_MT6639_PATCH_MCU_2_1_hdr.bin"
+      install -Dm644 firmware/WIFI_RAM_CODE_MT6639_2_1.bin \
+        "$out/lib/firmware/mediatek/mt7927/WIFI_RAM_CODE_MT6639_2_1.bin"
+      runHook postInstall
+    '';
+  });
 in
 {
   imports = [
@@ -24,6 +86,28 @@ in
     inputs.home-manager.nixosModules.home-manager
     ./disks.nix
   ];
+
+  # MT7927 WiFi + Bluetooth. Deliberately not importing
+  # inputs.mt7927.nixosModules.default: it wires the same derivations in with the
+  # upstream extra/ layout, which depmod ranks below the in-tree mt76 modules.
+  # See the mt7927* definitions at the top of this file.
+  hardware.firmware = [ mt7927Firmware ];
+  boot.extraModulePackages = [
+    mt7927Wifi
+    mt7927Bluetooth
+  ];
+  boot.kernelModules = [
+    "mt7925e"
+    "btmtk"
+    "btusb"
+  ];
+
+  # ASPM on this card is the documented cause of stalled uploads and packet loss.
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="pci", \
+      ATTR{vendor}=="0x14c3", ATTR{device}=="0x7927", \
+      ATTR{link/l1_aspm}="0"
+  '';
 
   # Home-manager as part of the *system* closure, not a separate `hm-apply.sh`.
   #
@@ -142,6 +226,20 @@ in
   environment.systemPackages = with pkgs; [
     dmenu
     xterm
+
+    # Hardware diagnostics. These are on the installer ISO but were missing from
+    # the installed system, which is backwards: this box's whole reason for
+    # existing is two GPUs on a specific PCIe topology, and the P2P verification
+    # steps in docs/new-desktop-install.md are literally `lspci -PP` and
+    # `lspci -vv | grep LnkSta`. Not having pciutils here meant the one machine
+    # that needs to answer PCIe questions could not.
+    pciutils
+    usbutils
+    nvme-cli
+    dmidecode
+    lshw
+    smartmontools
+    ethtool
   ];
 
   # Always-on workstation with no battery to protect, and a CPU that has to keep
