@@ -1105,7 +1105,14 @@ lists specialisations as their own entries, so the boot menu offers:
 | Entry | Default unit | What you get |
 |---|---|---|
 | `NixOS` (default) | `graphical.target` | Workstation — SDDM, XMonad, both monitors |
-| `NixOS (headless)` | `multi-user.target` | Console login, GPUs untouched |
+| `NixOS (headless)` | `multi-user.target` | Text login **on the attached monitor**, GPUs untouched |
+
+> "Headless" is a misleading name for it. The specialisation stops X and SDDM from
+> starting; it does not turn off video output. `getty` still runs, so a monitor plugged
+> into either card shows a normal text login. It means *no X server holding the GPUs*,
+> not *no screen*. This is the entry to pick for any console work on the box — including
+> before home-manager has been applied, when the stock XMonad has none of your
+> keybindings.
 
 (The entry title comes from `systemd-boot-builder.py`, which formats specialisations as
 `"{distro} ({specialisation})"`.)
