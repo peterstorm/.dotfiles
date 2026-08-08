@@ -13,6 +13,10 @@
         hostname = "192.168.0.28";
         user = "peterstorm";
       };
+      desktop = {
+        hostname = "192.168.0.80";
+        user = "peterstorm";
+      };
     };
   };
 
