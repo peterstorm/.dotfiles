@@ -17,13 +17,28 @@ on the ISO answers every row except the two that need a driver (VRAM, power limi
 | Item | Basis | Value | Where it matters |
 |---|---|---|---|
 | Board | **confirmed** | **ASUS ProArt X870E-CREATOR WIFI** (X870E, AM5) | Slot topology — see below |
-| CPU | `cpuCores = 16`, `kvm-amd` | Ryzen 16-core (9950X-class, AM5) assumed | PCIe lanes, build parallelism |
-| GPUs | prose only | 2× RTX PRO 6000 Blackwell, 96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
+| CPU | **confirmed** | Ryzen 16-core, AM5 — `cpuCores = 16` is correct | PCIe lanes, build parallelism |
+| RAM | **confirmed** | **96 GB** | `/dev/shm` = 48 GB, zram = 48 GB, ARC capped at 16 GiB |
+| NVMe | **confirmed** | **Samsung 9100 PRO 2 TB in `M.2_1`** — `M.2_2` empty | Gen5 x4 CPU-direct; `M.2_2` empty is what keeps GPU 2 at x8 |
+| PCIe topology | board spec + build | **x8/x8 from the CPU available, and nothing is stealing lanes** | whether GPU↔GPU P2P works at all |
+| GPUs | prose only | 2× RTX PRO 6000 Blackwell, 96 GB each — **unverified** | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
+| GPU slots | **unverified** | assumed `PCIEX16(G5)_1` + `_2` | `survey-hardware` settles it — see below |
 | GPU variant | unrecorded | unknown: Workstation (600W) or Max-Q (300W) | PSU, thermals, `gpuPowerLimitWatts` |
-| RAM | unrecorded | **unknown** | `/dev/shm` = 50%, zram = 50%, ARC cap, KV-offload ceiling |
-| PCIe topology | board spec | **capable of x8/x8 from the CPU — but see the M.2_2 trap** | whether GPU↔GPU P2P works at all |
-| NVMe | `/dev/nvme0n1` | **must be in M.2_1, not M.2_2** | disko wipes this device; slot choice decides GPU 2's link width |
 | NICs | `[ "wlp5s0" "enp6s0" ]` | **wrong — board has 10 Gb + 2.5 Gb + WiFi 7**, so three interfaces | non-blocking, NetworkManager copes |
+
+### What 96 GB of RAM means here
+
+Worth stating plainly, because it is less than the 192 GB of VRAM across the two cards:
+
+- **`/dev/shm` is 48 GB** (`boot.devShmSize` defaults to 50%). Under `--ipc=host` that is
+  the hard ceiling on `KV_OFFLOADING_SIZE` — comfortably above r31's example of 16 and
+  r24's offload gate of 5.5, but not a place to be careless.
+- **The 155 GiB checkpoint cannot be cached in RAM.** It does not fit, and it is read once
+  per server start. That is precisely why the ARC is capped at 16 GiB rather than left at
+  the OpenZFS default of half of RAM — 48 GB of ARC here would be evicting live pages to
+  cache a file nobody reads twice.
+- **The 2 TB pool is comfortable**: ~155 GiB checkpoint + 512 GiB `native-l2` quota + `/nix`
+  and `/home` leaves well over half the drive free.
 
 ### The one that could invalidate the DS4 setup: PCIe topology
 
@@ -72,6 +87,30 @@ So the build must be:
   streaming a 155 GiB checkpoint
 - **`M.2_2` left empty.** If you need more NVMe, use `M.2_3`/`M.2_4` (chipset) — they cost
   nothing from the GPU slots
+
+#### You cannot tell which slot a card is in by looking at it
+
+Slot silkscreen is usually hidden under the cards on a two-GPU build, and the bottom
+full-length slot (`PCIEX16_3`, chipset x4) looks identical to the two good ones. Do not
+guess — `survey-hardware` answers it exactly, in one line per card:
+
+```
+00:01.0/01:00.0 VGA compatible controller: NVIDIA ...   <- port path
+00:03.0/02:00.0 VGA compatible controller: NVIDIA ...
+                LnkSta: Speed 32GT/s, Width x8          <- link width
+```
+
+Read it like this:
+
+| What you see | Verdict |
+|---|---|
+| Both paths start `00:01.0/` or `00:03.0/` (CPU root ports), both `Width x8` | **Correct.** x8/x8 from the CPU — proceed |
+| Both `Width x16` | Only one card is present, or one is not being detected |
+| One card `Width x4` | It is in `PCIEX16_3`, or something is populating `M.2_2` |
+| Paths run through *different* bridges, one via the chipset | The second card is chipset-attached — **stop**, move it |
+
+The width matters as much as the path: a card in the right slot still reports x4 if
+`M.2_2` is stealing its lanes.
 
 Check the physical build before installing, and confirm with `survey-hardware` after.
 
