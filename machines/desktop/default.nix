@@ -1,4 +1,4 @@
-{ pkgs, lib, config, inputs, ... }:
+{ pkgs, lib, config, inputs, util, ... }:
 let
   # Desired persistent per-GPU power cap in watts, or null to leave the cards at
   # their firmware default.
@@ -21,8 +21,46 @@ in
 {
   imports = [
     inputs.disko.nixosModules.disko
+    inputs.home-manager.nixosModules.home-manager
     ./disks.nix
   ];
+
+  # Home-manager as part of the *system* closure, not a separate `hm-apply.sh`.
+  #
+  # This machine is installed from an offline USB stick. Standalone home-manager
+  # needs to build its own closure, which needs a network the box does not have
+  # on first boot — so the old flow produced a fully working system with an
+  # unusable user: a stock XMonad with none of these keybindings, no launcher,
+  # and no way to fix it without the network you were trying to configure.
+  # Folding the user environment into the system closure means `install-desktop`
+  # lands a machine you can actually drive.
+  #
+  # Roles are a deliberate subset of the laptop's. The homelab ones
+  # (sops-homelab, obsidian-*, vdirsyncer, sonarr-missing-search) all want an age
+  # key that is deliberately not in the image, and would fail activation on a
+  # fresh boot.
+  #
+  # NOTE: do not run ./hm-apply.sh on this host. The standalone and
+  # NixOS-module home-managers would fight over the same dotfiles. Use
+  # ./system-apply.sh, which now applies both.
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = true;
+    # Activation refuses to clobber files it did not write; the installed system
+    # already has a home directory. Move them aside rather than fail the switch.
+    backupFileExtension = "hm-bak";
+    extraSpecialArgs = { inherit inputs util; };
+    users.peterstorm = {
+      imports = [
+        ../../roles/home-manager/core-apps
+        ../../roles/home-manager/window-manager/xmonad
+        ../../roles/home-manager/dunst
+      ];
+      home.username = "peterstorm";
+      home.homeDirectory = "/home/peterstorm";
+      home.stateVersion = "22.11";
+    };
+  };
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
@@ -42,6 +80,18 @@ in
   # `services.xserver.autorun = false` does nothing while SDDM is enabled.
   specialisation.headless.configuration = {
     systemd.defaultUnit = lib.mkForce "multi-user.target";
+
+    # Also hand the console back to the firmware framebuffer.
+    #
+    # With modesetting on, nvidia-drm takes over the console partway through
+    # boot and can move it to a different connector than the one firmware was
+    # using. On a two-GPU box with up to eight outputs that reliably looks like
+    # a hang: messages scroll normally, then the screen freezes on the last line
+    # while the machine is fine and the login prompt is on a port you are not
+    # plugged into. Headless mode exists precisely to do console work, so it
+    # should not be the mode where the console can vanish. X is not running
+    # here, so nothing needs KMS.
+    hardware.nvidia.modesetting.enable = lib.mkForce false;
   };
 
   # GPU-to-GPU PCIe P2P for multi-GPU inference (DS4 v8 / vLLM b12x allreduce).
@@ -79,6 +129,20 @@ in
   };
 
   hardware.cpu.amd.updateMicrocode = true;
+
+  # Escape hatches for a config-less XMonad.
+  #
+  # The system XMonad recompiles ~/.xmonad/xmonad.hs, which home-manager now
+  # installs — but if that recompile ever fails you fall back to stock XMonad,
+  # whose bindings are Alt-based rather than the Super-based ones in that file.
+  # Stock's two useful bindings are Alt+Shift+Enter (terminal) and Alt+p
+  # (launcher), and dmenu was missing, so Alt+p silently did nothing. On a box
+  # whose whole purpose is to be reachable, leaving the fallback path broken is
+  # not worth the two packages.
+  environment.systemPackages = with pkgs; [
+    dmenu
+    xterm
+  ];
 
   # Always-on workstation with no battery to protect, and a CPU that has to keep
   # up with host-side rejection sampling and input prep on the decode path —
