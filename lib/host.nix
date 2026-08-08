@@ -2,32 +2,20 @@
 with builtins;
 {
 
-  mkISO = { name, initrdMods, kernelMods, kernelParams, kernelPackage, roles }:
-    let
-      roles_mods = (map (r: mkRole r) roles );
-
-      mkRole = name: import (../roles/iso + "/${name}");
-
-    in lib.nixosSystem {
+  # Installer ISO for a target host. `target` is null for the thin image, or
+  # `{ toplevel; diskoScript; }` from a nixosConfiguration to bake that whole
+  # system into the stick for an offline install. See machines/installer.
+  mkInstaller = { name ? "installer", target ? null }:
+    lib.nixosSystem {
       inherit system;
 
-      specialArgs = {};
+      specialArgs = { inherit inputs target; };
 
       modules = [
+        ../machines/installer
         {
-          imports = [ ../modules ] ++ roles_mods;
-
           networking.hostName = "${name}";
-          networking.useDHCP = false;
-
-          boot.initrd.availableKernelModules = initrdMods;
-          boot.kernelModules = kernelMods;
-
-          boot.kernelParams = kernelParams;
-          boot.kernelPackages = kernelPackage;
-
           nixpkgs.pkgs = pkgs;
-
         }
       ];
     };

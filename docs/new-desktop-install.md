@@ -7,8 +7,12 @@ Host name: `desktop`. Everything is declarative — one command from the laptop 
 ## Hardware assumptions (verify on first boot)
 
 Nothing in this repo records the actual parts. What follows is what the config *implies*,
-what is merely assumed, and which assumptions other sections lean on. Fill these in once
-the box boots — several tuning numbers below are wrong if they are wrong.
+what is merely assumed, and which assumptions other sections lean on. Several tuning
+numbers below are wrong if these are wrong.
+
+**Fill this table in from the installer stick, before you install** — `survey-hardware`
+on the ISO answers every row except the two that need a driver (VRAM, power limit). See
+[Step 2](#answer-the-hardware-questions-before-you-wipe-anything).
 
 | Item | Basis | Assumed | Where it matters |
 |---|---|---|---|
@@ -56,19 +60,33 @@ and P2P misbehaves, it is worth trying despite that.
 
 ### Everything else worth capturing
 
+`survey-hardware` on the installer stick runs all of these except the `nvidia-smi` pair,
+which need the installed driver:
+
 ```bash
-free -g                                        # RAM — drives /dev/shm, zram, KV offload
-nvidia-smi -q -d POWER | grep -i "power limit" # 600W Workstation vs 300W Max-Q
-nvidia-smi --query-gpu=memory.total --format=csv
+free -g                                        # RAM — drives /dev/shm, zram, ARC, KV offload
 lscpu | grep -E "Model name|^CPU\(s\)"         # confirm cpuCores = 16
 ip -o link show                                # confirm the NIC names
 lsblk -d -o NAME,SIZE,MODEL                    # confirm /dev/nvme0n1
+
+# After install only:
+nvidia-smi -q -d POWER | grep -i "power limit" # 600W Workstation vs 300W Max-Q
+nvidia-smi --query-gpu=memory.total --format=csv
 ```
 
-RAM is the one to write down. With `--ipc=host`, the container's `/dev/shm` is the host's
-`boot.devShmSize` (default `"50%"`), so 64 GB of RAM means a 32 GB shm ceiling — enough
-for serving, but not for `KV_OFFLOADING_SIZE=48.5`. `zramSwap.memoryPercent = 50` is also
-sized off it.
+RAM is the one to write down. Three settings are sized off it and they compete:
+
+- `boot.devShmSize` (default `"50%"`) — under `--ipc=host` this *is* the container's
+  `/dev/shm`, which is where the L1 KV offload region lives. 64 GB of RAM means a 32 GB
+  shm ceiling: enough for serving, not for `KV_OFFLOADING_SIZE=48.5`.
+- `zramSwap.memoryPercent = 50` — a ceiling on compressed swap, only consumed if the box
+  actually swaps.
+- `zfs.zfs_arc_max` — capped at 16 GiB here rather than the OpenZFS default of half of
+  RAM. See [ZFS ARC](#zfs-arc-vs-the-kv-offload-region).
+
+Disk size matters too, and is equally unrecorded: the checkpoint is ~155 GiB, the JIT
+cache grows to several GiB, and `models/native-l2` is quota'd at 512 GiB. On a 1 TB drive
+that is most of the pool.
 
 Two 600W Workstation Edition cards draw 1200W of GPU alone, each on its own 16-pin
 connector, and are 12" dual-fan coolers that sit poorly adjacent in a consumer ATX case.
@@ -92,15 +110,29 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
     - `cpuCores = 16`
 - SSH: `roles/ssh` — publickey-only, hardened ciphers, no password auth. Post-install
   remote access requires your key in `authorized_keys.txt` (already wired for `desktop`).
+- `machines/installer/` — the custom installer ISO, exposed as `.#installer-iso` and
+  `.#installer-iso-offline`. See [Step 1](#step-1--build-the-installer-stick).
 - `machines/desktop/disks.nix` — declarative disko layout
   - 1 GiB EFI (vfat) at `/boot`
   - Rest as ZFS pool `rpool` (ashift=12, zstd, atime=off, xattr=sa, acltype=posixacl)
-  - Datasets: `root` → `/`, `nix` → `/nix`, `home` → `/home`, `docker` → `/var/lib/docker`, `models` → `/models` (recordsize=1M, compression=off for pre-compressed weights)
+  - Datasets: `root` → `/`, `nix` → `/nix`, `home` → `/home`, `docker` → `/var/lib/docker`
+  - `models` → `/models` (recordsize=1M, compression=off — pre-compressed weights)
+  - `models/vllm-cache` → `/models/vllm-cache` (recordsize=128K, **zstd**) — the JIT cache
+    is compilable text and objects, the opposite of what the parent is tuned for
+  - `models/native-l2` → `/models/native-l2` (recordsize=1M, compression=off,
+    **quota=512G**) — r31's filesystem L2 KV tier. The quota is the point: `NATIVE_L2_GB`
+    is a promise the runtime makes about a directory, with nothing else stopping it from
+    filling the pool underneath the checkpoint. Raise both together or neither.
 - `machines/desktop/default.nix`
   - Imports disko + `disks.nix`
   - `boot.supportedFilesystems = [ "zfs" ]`
   - `networking.hostId = "8a3f2c19"`
   - `zramSwap` enabled (50% RAM, zstd) — no on-disk swap
+  - `zfs.zfs_arc_max=16 GiB` — see [ZFS ARC](#zfs-arc-vs-the-kv-offload-region)
+  - `virtualisation.docker.storageDriver = "zfs"` — see
+    [Docker on ZFS](#docker-on-zfs-is-not-optional-here)
+  - `powerManagement.cpuFreqGovernor = "performance"`
+  - `gpuPowerLimitWatts` (currently `null`) — see [Power limits](#power-limits)
   - Auto-scrub + TRIM
   - AMD microcode
   - `specialisation.headless` — a second systemd-boot entry that boots to a console
@@ -136,46 +168,96 @@ Read these once before `nixos-anywhere` — they're the only places hardware ass
 | `machines/desktop/default.nix` | `networking.hostId` | `"8a3f2c19"` | Only if it collides with an existing host |
 | `flake.nix` (desktop) | `cpuCores` | `16` | Set to actual core count for build parallelism |
 | `roles/dual-desktop-plasma/default.nix` | xrandr `setupCommands` | `DP-2` primary, `DP-0` rotated | **Will differ on this box** — two GPUs spread connectors across `DP-0..DP-3`. Check `xrandr` after boot and update, or monitors won't be positioned (non-fatal — greeter xrandr just no-ops) |
-| `authorized_keys.txt` | your pubkey | 4 keys | Must contain the key you SSH from — the `ssh` role is publickey-only |
+| `authorized_keys.txt` | your pubkey | 4 keys | Must contain the key you SSH from. It is baked into **both** the installer ISO and the installed system, so a missing key locks you out of the install itself, not just the finished machine |
+| `machines/desktop/disks.nix` | `models/native-l2` `quota` | `512G` | Raise together with `NATIVE_L2_GB`, never separately. Also check it fits the actual disk |
+| `machines/desktop/default.nix` | `gpuPowerLimitWatts` | `null` | Set once `nvidia-smi -q -d POWER` tells you the card's range — see [Power limits](#power-limits) |
 
 ## Prerequisites (one-time, on your laptop)
 
 - Nix with flakes: `experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` (already set in dotfiles)
-- SSH key ready — you'll use it to reach the new box during bootstrap
+- Your public key in `authorized_keys.txt`, committed — the installer ISO is built from it
+- Enough disk for the ISO build: ~2 GB for `.#installer-iso`, ~25 GB of scratch for
+  `.#installer-iso-offline`
 
-## Step 1 — Write the NixOS live ISO to a USB
+## Step 1 — Build the installer stick
+
+The stock minimal ISO works, but it makes the one machine that has no monitor need a
+monitor: you have to read an IP off the screen and type `passwd` before anything remote
+can happen. This flake builds its own installer instead (`machines/installer`), in two
+sizes:
+
+| Package | Rough size | Use it when |
+|---|---|---|
+| `.#installer-iso` | ~1.5 GB | Normal case — the laptop builds the closure and pushes it over SSH |
+| `.#installer-iso-offline` | ~12 GB | No laptop, no network, or you would rather not push 10 GB over WiFi |
 
 ```bash
-# From your laptop, with USB inserted (verify with lsblk)
-curl -fLO https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-x86_64-linux.iso
-sudo dd if=latest-nixos-minimal-x86_64-linux.iso of=/dev/sdX bs=4M status=progress oflag=sync
+cd ~/.dotfiles
+nix build .#installer-iso            # or .#installer-iso-offline
+sudo dd if=result/iso/*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 sync
 ```
 
 Replace `/dev/sdX` with the actual USB device. Double-check with `lsblk` before running.
 
-## Step 2 — Boot the new desktop from USB (only time it needs a monitor)
+What is baked in, and why each one removes a step:
+
+| Baked in | Removes |
+|---|---|
+| Your keys from `authorized_keys.txt` in `root` **and** `nixos` | `passwd` at the console, and `--env-password` on the laptop |
+| mDNS (`avahi`) publishing `installer.local` | Reading an IP off a monitor |
+| ZFS in the running kernel | disko failing to create `rpool` — the userland `zfs` that nixos-anywhere uploads is useless without a matching kernel module |
+| `VARIANT_ID=installer` in `/etc/os-release` | The kexec phase entirely. nixos-anywhere [detects an installer and skips it](https://nix-community.github.io/nixos-anywhere/howtos/no-os.html), so it never downloads or boots its own image |
+| `nouveau` blacklisted | A black console on Blackwell, on the one boot that might want a screen |
+| `survey-hardware` | Guessing at the table in [Hardware assumptions](#hardware-assumptions-verify-on-first-boot) |
+| NetworkManager + `nmtui` | Being stuck if only WiFi is available |
+| `install-desktop` (offline image only) | The laptop, and the network |
+
+The offline image additionally carries the entire `desktop` system closure and its disko
+script in the ISO's own Nix store (`isoImage.storeContents`), which is why it is ~12 GB
+and why it can install with the network unplugged.
+
+> Building the offline image builds the full desktop closure — NVIDIA driver, kernel, X,
+> the lot — and then squashfs-compresses it. Budget an hour the first time. The squashfs
+> level is dropped from the nixpkgs default of `zstd -19` to `-6` precisely because of
+> this; at `-19` it is most of an afternoon for a stick you write once.
+
+## Step 2 — Boot the new desktop from the stick
 
 - BIOS: UEFI mode, Secure Boot **off**, boot from USB.
-- BIOS (for multi-GPU P2P — see DS4 v8 section below): **Above 4G Decoding = ON**, **Resizable BAR = ON**.
-- At the shell prompt (auto-login as `nixos`):
+- BIOS (for multi-GPU P2P — see the DS4 section below): **Above 4G Decoding = ON**,
+  **Resizable BAR = ON**.
+
+That is the whole console interaction. sshd is already up with your keys, so from the
+laptop:
 
 ```bash
-sudo systemctl start sshd
-sudo passwd nixos              # set a temp password so nixos-anywhere can SSH in
-ip addr                        # note the IP
-lsblk                          # confirm target disk (should be /dev/nvme0n1)
+ssh root@installer.local
 ```
 
-Optional — check the actual NIC names now so you can update `flake.nix` later:
+If mDNS does not resolve (some networks block it), find the IP from the router or plug in
+a monitor once — the login banner explains the rest.
+
+### Answer the hardware questions before you wipe anything
 
 ```bash
-ip -o link show
+ssh root@installer.local survey-hardware
 ```
 
-Unplug the monitor after this if you want. Everything else is remote.
+That prints the board, CPU, RAM, NVMe devices, NIC names, and — the one that matters —
+the PCIe port path and link width of each GPU. Fill the
+[Hardware assumptions](#hardware-assumptions-verify-on-first-boot) table in from its
+output now. If it shows the two cards on different bridges, or one at `x4`, stop and read
+[the PCIe topology section](#the-one-that-could-invalidate-the-ds4-setup-pcie-topology)
+before installing: that is a hardware conclusion about whether this box can run the DS4
+stack at all, and it is much cheaper to learn before disko wipes the disk than after.
 
-## Step 3 — Install remotely with nixos-anywhere (from your laptop)
+`nvidia-smi` is not on the installer (no driver), so VRAM and power-limit range still wait
+for [Step 5](#step-5--verify).
+
+## Step 3 — Install
+
+### From the laptop (`.#installer-iso`)
 
 ```bash
 cd ~/.dotfiles
@@ -186,18 +268,30 @@ nix eval .#nixosConfigurations.desktop.config.networking.hostName
 # The install — this wipes /dev/nvme0n1 on the target
 nix run github:nix-community/nixos-anywhere -- \
   --flake .#desktop \
-  --target-host nixos@<new-desktop-ip>
+  --target-host root@installer.local
 ```
 
 What happens:
-1. SSH into the ISO as `nixos`
-2. Kexec into a fresh NixOS installer image
-3. Partition + create ZFS pool per `machines/desktop/disks.nix`
-4. Build the closure on your laptop (fastest) and copy it over
+1. SSH into the installer as `root` (key already trusted, no password step)
+2. **No kexec** — it sees `VARIANT_ID=installer` and installs in place
+3. Partition + create the ZFS pool per `machines/desktop/disks.nix`
+4. Build the closure on your laptop and copy it over
 5. Install bootloader + system
 6. Reboot
 
-Expect 15–30 minutes on the first run — mostly NVIDIA driver + kernel build. Cached on repeat.
+Expect 15–30 minutes on the first run — mostly NVIDIA driver + kernel build. Cached on
+repeat.
+
+### From the stick alone (`.#installer-iso-offline`)
+
+```bash
+ssh root@installer.local     # or just use the console
+install-desktop
+```
+
+It prompts for confirmation, runs the same disko script, then `nixos-install --system`
+against the closure already in the ISO's store. Nothing is fetched or built. This is also
+the recovery path if the laptop is not around.
 
 ## Step 4 — Post-install setup
 
@@ -214,15 +308,29 @@ Copy your dotfiles and age key:
 
 ```bash
 # From your laptop
-scp -r ~/.dotfiles peterstorm@<new-desktop-ip>:~/
-scp ~/.config/sops/age/keys.txt peterstorm@<new-desktop-ip>:~/.config/sops/age/keys.txt
-ssh peterstorm@<new-desktop-ip> chmod 600 ~/.config/sops/age/keys.txt
+scp -r ~/.dotfiles peterstorm@desktop.local:~/
+scp ~/.config/sops/age/keys.txt peterstorm@desktop.local:~/.config/sops/age/keys.txt
+ssh peterstorm@desktop.local chmod 600 ~/.config/sops/age/keys.txt
+```
+
+Or fold both into the install itself — `nixos-anywhere --extra-files` copies a directory
+tree into the new root before first boot, so the machine comes up already holding the age
+key:
+
+```bash
+mkdir -p /tmp/seed/home/peterstorm/.config/sops/age
+cp ~/.config/sops/age/keys.txt /tmp/seed/home/peterstorm/.config/sops/age/
+nix run github:nix-community/nixos-anywhere -- \
+  --flake .#desktop \
+  --target-host root@installer.local \
+  --extra-files /tmp/seed \
+  --chown /home/peterstorm/.config 1000:100
 ```
 
 Apply home-manager:
 
 ```bash
-ssh peterstorm@<new-desktop-ip>
+ssh peterstorm@desktop.local
 cd ~/.dotfiles && ./hm-apply.sh
 ```
 
@@ -236,12 +344,20 @@ nvidia-smi                             # both RTX 6000 Pro cards listed, CUDA Ve
 nvtop                                  # live view
 cat /proc/driver/nvidia/params | grep RegistryDwords   # ForceP2P=0x11;... took effect
 zpool status                           # rpool ONLINE, all datasets mounted
-zfs list                               # confirm root/nix/home/docker/models
+zfs list                               # root/nix/home/docker/models + vllm-cache + native-l2
+
+docker info | grep -i "storage driver" # must say zfs, not vfs
+arc_summary | head -20                 # ARC target should cap at 16 GiB, not half of RAM
 
 # Container GPU passthrough — both forms should work (see the nvidia-graphics notes)
 docker run --rm --device=nvidia.com/gpu=all nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi
 docker run --rm --gpus all              nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi
 ```
+
+If `docker info` reports **`vfs`**, dockerd could not initialize the zfs driver and fell
+back to the slowest one there is — every layer becomes a full directory copy, which on a
+multi-gigabyte CUDA image is brutal. Check `journalctl -u docker` for a `zfs` lookup
+failure and see [Docker on ZFS](#docker-on-zfs-is-not-optional-here).
 
 If `--device=` works but `--gpus all` reports `could not select device driver ""
 with capabilities: [[gpu]]`, dockerd could not find `nvidia-cdi-hook` on its PATH —
@@ -271,6 +387,83 @@ cd ~/.dotfiles
 
 To wipe and reinstall from scratch (destructive!), boot the USB again and re-run `nixos-anywhere`.
 
+## Host tuning that is not about the GPUs
+
+The P2P plumbing gets all the attention because it is the exotic part. These three are
+duller and at least as load-bearing — the first is a latent failure, the second is
+competing for the same RAM the KV cache wants, and the third is 1200 W of GPU in a
+consumer case.
+
+### Docker on ZFS is not optional here
+
+`/var/lib/docker` is a ZFS dataset, and dockerd's storage-driver auto-detection cannot
+land on `overlay2` there — moby's overlay2 initializer refuses a ZFS backing filesystem
+outright, so it falls through to its own `zfs` graphdriver. That driver does not talk to
+ZFS through a library; it shells out to the `zfs` binary.
+
+And the NixOS docker module only puts `boot.zfs.package` on dockerd's PATH when
+`storageDriver` is **explicitly** `"zfs"`:
+
+```nix
+path = [ pkgs.kmod ]
+  ++ optional (cfg.storageDriver == "zfs") config.boot.zfs.package
+  ++ cfg.extraPackages;
+```
+
+Auto-detection picking `zfs` does not satisfy that condition — it is a runtime decision,
+the PATH is an eval-time one. So leaving the option unset means dockerd selects a driver
+it cannot execute, on the machine whose entire purpose is running a 155 GiB container.
+`machines/desktop/default.nix` sets it explicitly.
+
+This is the same shape of bug as the `nvidia-cdi-hook` PATH problem in
+`roles/nvidia-graphics`: NixOS gives dockerd a minimal unit PATH, and every helper binary
+it expects to find has to be put there deliberately.
+
+### ZFS ARC vs the KV offload region
+
+OpenZFS on Linux defaults `zfs_arc_max` to half of RAM. That default is wrong for this
+box in both directions:
+
+- The 155 GiB checkpoint is read **once per server start**, sequentially, off a dataset
+  with `recordsize=1M` and compression off. Caching it evicts pages that are actually
+  reused to hold data nobody reads twice.
+- The RAM the ARC takes is the RAM `/dev/shm` needs. Under `--ipc=host` the L1 KV offload
+  region is an mmap in the host's `/dev/shm`, sized by `boot.devShmSize` — and an ARC
+  sitting at half of RAM is competing directly with it.
+
+`boot.kernelParams` caps it at 16 GiB (`zfs.zfs_arc_max=17179869184`), which is ample for
+`/nix` and metadata. Verify with `arc_summary`. Raise it only if you find the ARC actually
+thrashing on something that is not the checkpoint.
+
+### Power limits
+
+Upstream's [power-limit sweep](https://github.com/local-inference-lab/rtx6kpro/blob/master/hardware/blackwell-power-limit-sweep.md)
+measured all three RTX PRO 6000 SKUs. The relevant findings for a two-up desktop:
+
+- The three SKUs are the same silicon with different memory clocks, power states, and
+  V/F curves in firmware — WS 13.4 GHz, Server 12.5 GHz, Max-Q 15.9 GHz memory.
+- The 600 W Workstation card holds ~300–305 Gflop/s/W essentially flat from 200 W to
+  350 W, and only reaches its peak 165k Gflop/s at the full 600 W.
+- The Server SKU is dramatically more efficient at moderate power — 414 Gflop/s/W at
+  300 W, a 38% advantage over WS, narrowing to 11% by 500 W.
+
+Two 600 W cards is 1200 W of GPU alone, in a case that was not designed for it. Capping
+each around 400–450 W gives up a few percent of throughput and buys back most of the
+thermals and noise — and on a shared-airflow build, less throttling can leave *sustained*
+clocks higher than the uncapped pair.
+
+`machines/desktop/default.nix` has a `gpuPowerLimitWatts` binding that generates a
+`nvidia-power-limit` oneshot unit when set. It is `null` until the SKU is known, because
+`nvidia-smi -pl` exits non-zero for a value outside the card's supported range and the
+600 W and 300 W cards do not share one:
+
+```bash
+nvidia-smi -q -d POWER | grep -iE "power limit"   # read the min/max/default
+```
+
+Then set the number and `./system-apply.sh`. `nvidiaPersistenced = true` is what keeps the
+cap from being lost when the last client detaches.
+
 ## Running DS4 v8 (DeepSeek-V4-Flash on vLLM)
 
 Guide: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v8.md>
@@ -283,9 +476,8 @@ only provides driver + P2P plumbing. The guide's own launch example is `GPUS=0,1
 exactly our 2-card single-node case, so TP2 is a first-class supported mode.
 
 For the image actually being run on this box, see
-[Running DeepSeek-V4-Flash (Gilded Gnosis r24, K5)](#running-deepseek-v4-flash-gilded-gnosis-r24-k5)
-below — same host prep,
-different container.
+[Running DeepSeek-V4-Flash (Gilded Gnosis r31, K5)](#running-deepseek-v4-flash-gilded-gnosis-r31-k5)
+below — same host prep, different container.
 
 ### Host prep (already baked into the flake)
 
@@ -336,13 +528,20 @@ at `http://desktop:8000/v1` from other LAN machines. Change the port there if yo
 the server on a different one.
 
 That firewall entry only matters under `--network host`, which both the DS4 v8 helper and
-the r24 profile use. If you swap in `-p 8000:8000`, Docker publishes through its own
+the r31 profile use. If you swap in `-p 8000:8000`, Docker publishes through its own
 iptables chain and the port is reachable whether or not it is in `allowedTCPPorts`.
 
 ### Model cache → /models
 
 The checkpoint is ~155 GiB. Keep it on the dedicated `/models` ZFS dataset
-(recordsize=1M, compression=off — tuned for pre-compressed weights).
+(recordsize=1M, compression=off — tuned for pre-compressed weights). The JIT cache and the
+native L2 tier get their own child datasets with their own tuning — see
+[What's already in the flake](#whats-already-in-the-flake); do not put the JIT cache
+directly on `/models`, where it inherits 1M records and no compression.
+
+The rest of this subsection is about the **DS4 v8 helper script**, which is not what the
+r31 command below uses — that one passes absolute `/models/...` paths and needs none of
+these symlinks. Keep it for running the v8 guide verbatim; skip it otherwise.
 
 `scripts/run-ds4-v8-server.sh` mounts two things, and neither path is what you'd guess:
 
@@ -411,25 +610,59 @@ force upstream, so it should be moot — but if P2P misbehaves and the BIOS offe
 switch, it costs nothing to try. That thread also records a working alternative to
 `iommu=off` entirely: `amd_iommu=on iommu=pt` with ACS disabled in firmware.
 
-## Running DeepSeek-V4-Flash (Gilded Gnosis r24, K5)
+**`optimization/io-tuning.md`** — every number in it is about an **md RAID5 array**:
+`stripe_cache_size`, `group_thread_cnt`, write-intent bitmaps, read-ahead, and switching
+NVMe to the BFQ scheduler for cgroup fairness. This box is a single NVMe with ZFS and no
+parity layer, so the bottleneck it diagnoses (one `md0_raid5` kernel thread at 95.8% of a
+core, 645 ms write latency) cannot occur. Do not copy its `read_ahead_kb` or scheduler
+settings across — the ARC cap in
+[ZFS ARC](#zfs-arc-vs-the-kv-offload-region) is the equivalent knob here.
 
-The official r24 release image on the r24 release profile, adapted for this box. Same
+### One upstream caveat that *does* apply
+
+`optimization/pcie-oneshot-allreduce.md` records that
+**`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` is incompatible with the PCIe oneshot
+allreduce** — expandable allocator segments break the IPC memory-handle exchange the
+kernel relies on. Do not set it in the container's environment.
+
+r31 hits the same constraint from the other direction: its native-L2 helper *itself*
+disables expandable segments, "because the shared host region requires stable
+registrations". So if you enable native KV offload and something else in your environment
+has turned expandable segments on, the two are fighting over the same allocator.
+
+## Running DeepSeek-V4-Flash (Gilded Gnosis r31, K5)
+
+Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v20-r31.md>
+
+The official r31 release image on the r31 release profile, adapted for this box. Same
 CUDA 13.2 / B12X lineage as the DS4 v8 guide above, same host prep: ForceP2P modprobe
-config, `iommu=off amd_iommu=off`, ReBAR + Above 4G in BIOS.
+config, `iommu=off amd_iommu=off`, ReBAR + Above 4G in BIOS. **Nothing about the host
+config changes from r16 through r31** — every change is inside the container.
+
+| Item | Value |
+|---|---|
+| Image | `voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12xacee6e5-fi1ac6942-cu132-20260807-r31` |
+| Digest | `sha256:3230c25ff95f8678a8eeb52a463f0d3b9f96f6ad550418cc51ea12177a55b41c` |
+| Model revision | `9e165c30e2704aec5d9d593cce3eebd58bbef1cb` |
+| Runtime | CUDA 13.2.1, PyTorch 2.12.0+cu132, B12X 1.1.0, FlashInfer 0.6.18+cu132, InstantTensor 0.1.9 |
+| Default profile | TP2/DCP1, B12X W4A8, fixed probabilistic K5, FP8 DS-MLA KV |
+
+TP2/DCP1 being the *default* profile is worth noticing: the release's own baseline is our
+exact two-card shape, not something we are adapting down to.
 
 ```bash
-docker run --rm --init \
-  --name ds4-0731-r24 \
+docker run --init \
+  --restart unless-stopped \
+  --name ds4-0731-r31 \
   --gpus all \
   --ipc=host \
-  --privileged \
   --network host \
   --ulimit memlock=-1 \
   --ulimit nofile=1048576 \
   --ulimit stack=67108864 \
   -v /models/DeepSeek-V4-Flash-0731:/models/deepseek-ai/DeepSeek-V4-Flash-0731:ro \
-  -v /models/vllm-cache/r24:/cache \
-  -v /models/vllm-cache/r24/tmp:/container-tmp \
+  -v /models/vllm-cache/r31:/cache \
+  -v /models/vllm-cache/r31/tmp:/container-tmp \
   -e CUDA_VISIBLE_DEVICES=0,1 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e VLLM_API_KEY='<API_KEY>' \
@@ -437,162 +670,325 @@ docker run --rm --init \
   -e MODEL_PATH=/models/deepseek-ai/DeepSeek-V4-Flash-0731 \
   -e PORT=8000 \
   -e MODE=dspark -e DSPARK_DEPTH_MODE=fixed -e DSPARK_TOKENS=5 \
-  -e DRAFT_SAMPLE_METHOD=greedy \
   -e BACKEND=b12x-a8 -e TP_SIZE=2 -e DCP_SIZE=1 \
+  -e ALLREDUCE_MODE=auto \
   -e MAX_NUM_SEQS=16 -e MAX_MODEL_LEN=131072 -e MAX_NUM_BATCHED_TOKENS=8192 \
+  -e GRAPH=auto \
   -e GPU_MEMORY_UTILIZATION=0.975 \
   -e LOAD_FORMAT=instanttensor -e INSTANTTENSOR_BACKEND=BUFFERED \
+  -e PYTHONHASHSEED=0 \
   -e KV_OFFLOADING_SIZE=0 \
-  voipmonitor/vllm:gilded-gnosis-v20-vllmf5981f1-si2b9bf2a-fi801d57a-cu132-20260803-r24@sha256:64b94299abdd3bcf5bb5050ca91b378f9ee4e0b0eff4748375b95352371d7cb2 \
+  voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12xacee6e5-fi1ac6942-cu132-20260807-r31@sha256:3230c25ff95f8678a8eeb52a463f0d3b9f96f6ad550418cc51ea12177a55b41c \
   /usr/local/bin/serve-ds4-flash.sh
 ```
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
-docker logs -f ds4-0731-r24
+docker logs -f ds4-0731-r31
 ```
 
-The env block is the r24 release profile verbatim. Leave `MAX_CUDAGRAPH_CAPTURE_SIZE`
-unset — the helper derives the graph cap from concurrency and verifier width, which for
-fixed K5 at 16 sequences is `16 * (5 + 1) = 96`.
+Or run upstream's immutable Compose directly and let the environment do the work — that
+is now the documented path, and it pins the digest for you:
+
+```bash
+curl -LO https://raw.githubusercontent.com/local-inference-lab/blackwell-llm-docker/d281c51cf494cfcac8eee5ce6c14c6b112b07771/examples/docker-compose-ds4-v20-r31.yml
+GPUS=0,1 TP_SIZE=2 DCP_SIZE=1 \
+MODEL_ROOT=/models JIT_CACHE=/models/vllm-cache/r31 \
+CONTAINER_TMP=/models/vllm-cache/r31/tmp \
+NATIVE_L2_HOST_PATH=/models/native-l2 \
+docker compose -f docker-compose-ds4-v20-r31.yml up -d
+```
+
+Note the Compose file's `environment:` block enumerates exactly which variables reach the
+container, and `VLLM_API_KEY`, `SERVED_MODEL_NAME`, and `MODEL_PATH` are **not** among
+them. If you go the Compose route on a `--network host` server, add them through an
+override file — otherwise the endpoint is on the LAN with no key.
 
 **Deviations from upstream's Compose file, and why:**
 
 | Change | Reason |
 |---|---|
-| `--gpus all` | Works here because of `systemd.services.docker.path` in `roles/nvidia-graphics`. `--device=nvidia.com/gpu=all` is the equivalent needing no host-side help. |
+| `--gpus all` | Matches the Compose file's own `gpus: all`. Works here because of `systemd.services.docker.path` in `roles/nvidia-graphics`; `--device=nvidia.com/gpu=all` is the equivalent needing no host-side help. |
 | Explicit model mount + `MODEL_PATH` | Compose defaults to scanning `${MODEL_ROOT:-/root/models}`. Pointing straight at the checkpoint skips the HF cache mount entirely. |
-| Caches under `/models/vllm-cache/r24` | The `/models` ZFS dataset, rather than a relative `./cache` next to a git checkout. |
+| Caches under `/models/vllm-cache/r31` | Its own ZFS dataset (zstd, 128K records), rather than a relative `./cache` next to a git checkout. |
 | `CUDA_DEVICE_ORDER=PCI_BUS_ID` | Makes `CUDA_VISIBLE_DEVICES=0,1` match `nvidia-smi` ordering instead of driver enumeration order. |
-| `--rm` instead of `restart: unless-stopped` | The two are mutually exclusive in `docker run`. Drop `--rm` and add `--restart unless-stopped` for a long-lived server. |
+| `--restart unless-stopped`, no `--rm` | Matches Compose. The two flags are mutually exclusive in `docker run`; use `--rm` and drop the restart policy for throwaway benchmarking. |
 
-Three judgement calls worth knowing about:
+**`--privileged` is gone, and that is an upstream change, not a local guess.** The r24
+notes on this page flagged it as "upstream's choice, not a verified requirement", carried
+since r16 with no stated rationale, and worth testing without. The r31 Compose file simply
+does not have it, and [issue #33](https://github.com/local-inference-lab/rtx6kpro/issues/33)
+records that even native L2 — the feature with the most plausible claim on it, since it
+pins and shares host memory — "was validated without privileged container access". Drop it.
 
-- **`--privileged` is upstream's choice, not a verified requirement.** The Compose file
-  has carried it since r16 with no stated rationale; the plausible reasons are the pinned
-  host memory registration and P2P BAR paths. It is a large grant — worth testing without
-  it once the stack is known-good, rather than adopting permanently on faith.
+Two things still worth knowing:
+
 - **`--ipc=host` with no `--shm-size`.** The Compose file sets both, but `shm_size` is
   inert under host IPC — measured: `--ipc=host --shm-size=1g` yields the host's 7.7G
   `/dev/shm`, while `--shm-size=1g` alone yields exactly 1.0G. Under host IPC the
-  governing number is the NixOS host's `boot.devShmSize` (default `"50%"` of RAM). If you
-  would rather have a private, RAM-independent arena, drop `--ipc=host` and use
-  `--shm-size=32g` instead — but see the KV-offload note below before choosing.
-- **`DRAFT_SAMPLE_METHOD=greedy` is not part of the r24 profile.** It is carried over
-  from the previous command and is not in the Compose file, so the helper's own default
-  would otherwise apply. Drop it if you want the release profile exactly.
+  governing number is the NixOS host's `boot.devShmSize` (default `"50%"` of RAM), which
+  is also what the ARC cap is protecting. If you would rather have a private,
+  RAM-independent arena, drop `--ipc=host` and use `--shm-size=32g` — but read
+  [native KV offload](#native-l1l2-kv-offload-r31) first.
+- **`DRAFT_SAMPLE_METHOD=greedy` is dropped.** It was never part of the release profile —
+  it was carried over from an older command on this page and is in no Compose file, so the
+  helper's own default applies. Removing it makes this the release profile exactly.
 
 `--network host` means the vLLM endpoint binds every interface, so the
 `allowedTCPPorts = [ 8000 ]` entry in `machines/desktop/default.nix` is what makes
 `http://desktop:8000/v1` reachable. `VLLM_API_KEY` is doing the access control — keep it
 set. For a contained alternative, swap `--network host` for `-p 8000:8000`.
 
-### Why r24 and not the SM120 fork
+### CUDA graph sizing is automatic now (`GRAPH=auto`)
+
+The r24 notes told you to leave `MAX_CUDAGRAPH_CAPTURE_SIZE` unset and worked the number
+out by hand. r31 makes the rule explicit and derives it. The physical verifier-row
+requirement is:
+
+```text
+max_num_seqs * (1 + draft_tokens)
+```
+
+For this box's `MAX_NUM_SEQS=16` at K5 that is `16 * (5 + 1) = 96` — the same 96 the r24
+section computed. `GRAPH=auto` derives the cap, so the arithmetic only matters when you
+are checking the logs. At MNS64, K5 needs 384 rows and K7 needs 512; r31's release gate
+captured the full 384-row envelope across the target, proposal, and context-KV graph
+families with no row-capacity eager fallback.
+
+What is captured, as of r31:
+
+| Stage | Execution |
+|---|---|
+| Target/verifier forward | FULL CUDA graph |
+| DSpark proposal | FULL CUDA graph |
+| DSpark context-KV compression/update | Dedicated FULL CUDA graph |
+| Prefill | PIECEWISE CUDA graph |
+| Host metadata/input preparation | Eager host path |
+| Rejection sampling/output bookkeeping | Eager path |
+
+The eager rows are the reason `powerManagement.cpuFreqGovernor = "performance"` is set on
+this host: the decode path still has a variable host-side chain, and upstream is explicit
+that capturing rejection sampling's small device kernel would not remove the host
+bookkeeping.
+
+### All-reduce backend selection is new (`ALLREDUCE_MODE`)
+
+r31 adds a reversible, logged policy. `auto` resolves by TP size:
+
+| TP | Automatic backend | Explicit override |
+|---|---|---|
+| **TP2 (us)** | FlashInfer PCIe IPC | `ALLREDUCE_MODE=b12x` |
+| TP4+ | B12X | `ALLREDUCE_MODE=flashinfer-ipc` |
+
+So on this box, `auto` no longer means B12X — it means FlashInfer PCIe IPC, which is new
+in r31 (built from qualified current source plus upstream PR #4393). **Benchmark both.**
+Upstream's own TP2 target-only numbers put them close at high concurrency but hand B12X
+the win at C1 and on prefill:
+
+| Profile | C1 tok/s | C32 tok/s | Prefill 8k | Prefill 64k |
+|---|---:|---:|---:|---:|
+| r31 TP2, FlashInfer PCIe IPC | 126.8 | 1,139.5 | 13,366 | 12,669 |
+| r31 TP2, B12X | 129.9 | 1,135.7 | 14,197 | 13,421 |
+
+A single-user coding workstation lives at C1 and prefill, which is exactly where B12X
+wins — so `ALLREDUCE_MODE=b12x` is the more likely setting here despite `auto`. Keep the
+rest of the recipe identical when comparing, and confirm from the log which backend was
+chosen.
+
+**These numbers are unusually relevant to us.** Upstream states every figure in the r31
+performance section comes from GPUs "attached through CPU root ports", and that no number
+from their 16-GPU PCIe-switch host was used as a baseline. That is our topology, assuming
+the [PCIe check](#the-one-that-could-invalidate-the-ds4-setup-pcie-topology) passes.
+
+### K7 is no longer discouraged — the r24 warning was wrong
+
+This page previously said `DSPARK_TOKENS=7` was "actively discouraged" and carried an open
+corruption defect. r31 revises that:
+
+| Mode | Environment | Status |
+|---|---|---|
+| Fixed K5 | `DSPARK_DEPTH_MODE=fixed DSPARK_TOKENS=5` | Default; best proven mixed-workload choice |
+| Fixed K7 | `DSPARK_DEPTH_MODE=fixed DSPARK_TOKENS=7` | Optional; can win in predictable code phases |
+| Dynamic depth | `DSPARK_DEPTH_MODE=dynamic DSPARK_TOKENS=7` | Diagnostic; correct, but not selected by the release sweep |
+| Target-only | `MODE=dspark-mtp0` | Performance/correctness baseline |
+
+K7 has reached ~499 tok/s using all seven draft positions in a low-entropy code phase. The
+r24-era "SGLang advantage" that made K7 look bad turned out to be a **prompt mismatch** —
+matching official-max prompt encoding put both runtimes in the same ~39.8% acceptance
+regime. K5 stays the default because it is the better *general* choice, not because K7 is
+broken.
+
+For a coding workstation that is worth an experiment: K7 is precisely the case upstream
+says can win, and this box's workload is low-entropy code far more often than upstream's
+mixed benchmark suite. Change one variable and measure.
+
+`MODE=dspark-mtp0` is the new way to get a target-only baseline without swapping
+checkpoints. **Do not use `mtp2` on the 0731 checkpoint** — that mode belongs to the older
+`DeepSeek-V4-Flash` checkpoint with its own MTP head; 0731 carries the native DSpark draft
+head instead.
+
+### Native L1/L2 KV offload (r31)
+
+`KV_OFFLOADING_SIZE=0` in the command above, so none of this is live yet — but r31 is the
+release that makes it worth turning on, and `machines/desktop/disks.nix` now provisions
+for it.
+
+Native offload is optional and independent from LMCache. `KV_OFFLOADING_SIZE` is total
+host **L1** capacity in GiB, and lives in `/dev/shm` — which under `--ipc=host` means the
+NixOS host's `boot.devShmSize`, competing with the ARC. r31's new part is **L2**:
+environment-only filesystem configuration, no privileged container:
+
+```bash
+docker run ... \
+  -e KV_OFFLOADING_SIZE=16 \
+  -e NATIVE_L2_PATH=/native-l2 \
+  -e NATIVE_L2_GB=512 \
+  -v /models/native-l2:/native-l2 \
+  ...
+```
+
+`NATIVE_L2_PATH` is the path *inside* the container and must be paired with
+`NATIVE_L2_GB`. On this box the host side is `/models/native-l2` — its own ZFS dataset,
+compression off (FP8 KV blocks do not compress), 1M records, and **quota'd at 512 GiB to
+match `NATIVE_L2_GB`**. That pairing is the safety property: without it, `NATIVE_L2_GB` is
+a number the runtime respects and the filesystem does not, on a pool that also holds a
+155 GiB checkpoint and `/nix`. Raise both together or neither.
+
+The helper builds the transfer JSON and disables expandable CUDA allocator segments,
+because the shared host region needs stable registrations — see
+[the expandable-segments caveat](#one-upstream-caveat-that-does-apply).
+
+Upstream's restart gate: with a decimal 4.5 GiB L1 and a bounded 4 GiB filesystem L2, a
+full engine restart discarded GPU and process-local L1 state, and replaying the same 32k
+prompt loaded 303,586,560 bytes from L2 and completed in **0.415 s**. That is the feature
+in one sentence — surviving a restart without re-prefilling.
+
+r24's TP2 offload gate, for the L1-only shape, still stands as a sizing reference:
+`MAX_MODEL_LEN=131072`, `GPU_MEMORY_UTILIZATION=0.97`, `KV_OFFLOADING_SIZE=5.5`, six
+concurrent ~120k-token prompts in 62.153 s, store intervals moving 2.5–2.66 GB in
+44–47 ms (~55–56 GB/s).
+
+### What changed between r24 and r31
+
+Four releases, all runtime, none touching host config.
+
+**r29** — FULL CUDA graph capture for the DSpark context-KV path. Worth +4.3% at CC1
+server decode (190.68 vs 182.82 tok/s); negligible at high concurrency where the GPU is
+already compute-saturated. Clean-image validation: 192/192 exact final answers at K5.
+
+**r30** — the correctness one. Declares scheduler-reachable compressed-MLA verifier
+capacity instead of assuming a fixed 256 rows, which was **causing correctness failures
+above C24**. Also builds native tiered-offload final stores before request-state
+finalization (fixing a `KeyError` in `prepare_store()` when deep request queues finalized
+state early), isolates semantic PCIe graph channels, and renames the package to the
+canonical `b12x` spelling — `SPARKINSET_*` variables survive as compatibility aliases.
+
+**r31** — per upstream's own list:
+
+- Builds FlashInfer from qualified current source plus upstream PR #4393, and exposes
+  PCIe IPC all-reduce through vLLM.
+- Guards persistent FlashInfer decode wrappers by their planned query length.
+- Emits packed UE8M0 scales correctly from compiled QuantFP8, and preserves activation
+  dtype for int32-packed MLA weights.
+- Uses vLLM's canonical speculative `attention_backend` field for the DSpark draft backend.
+- Registers supported GG backend controls instead of reporting them as unknown environment
+  variables.
+- Deduplicates lockstep native-offload cleanup, bounds filesystem storage, and treats
+  stale secondary-tier hits as misses that can be recomputed.
+- Prewarms target and native-MTP mixed-Trellis route packing before KV sizing.
+- Retains r30's final-store ordering fix and r29's compressed-MLA/FULL-graph row-capacity
+  work.
+
+The r31 regression comparison upstream considers valid is TP4 B12X against the previous
+TP4 B12X on the same host: 144.5 → 148.4 tok/s at C1, 1,499.2 → 1,511.0 at C32, 15,406 →
+16,360 on 8k prefill. Do not read the TP2-vs-TP4 rows as a backend A/B; they are different
+parallelism.
+
+The K5 TP4 release gate, for reference on what "healthy" looks like in the logs: 797,049
+tokens of GPU KV capacity, 2,540.5 tok/s sustained C64 aggregate decode, 31.36% strict
+draft acceptance in the C64 window, 64/64 long-context pass, zero output-cap hits and zero
+runtime errors. Acceptance is workload-dependent — that gate is a correctness and
+stability test, not an acceptance estimate for your prompts.
+
+### Context length: still uncertified past ~200k
+
+Unchanged from r24, and worth restating because it is the setting most likely to be
+raised on a whim. The 1M envelope lost its endorsement: r24 deleted the Context Length
+section that described community runs at `MAX_MODEL_LEN=1048576` with
+`MAX_NUM_BATCHED_TOKENS=2048`, and added that "tool/reasoning anomalies reported beyond
+roughly 200k context have not been conclusively attributed to one runtime component".
+r31 does not restore it.
+
+If you want the long context back, raise both together — `1048576` with `2048` was the
+community pairing — and treat anything past ~200k as unverified rather than supported.
+
+### Why r31 and not the SM120 fork
 
 The previous command on this page used
 `ghcr.io/ormandj/vllm-deepseek-v4-flash-sm120:v20`, a fork built on the r16 base
 (2026-07-31) that carries one patch: `vllm-b12x-compressed-mla-workspace.patch`, a rewrite
 of `_reserve_dummy_compressed_mla_scratch` in `vllm/models/deepseek_v4/nvidia/b12x.py`.
 
-r24 ships [vLLM #229](https://github.com/local-inference-lab/vllm/pull/229) — "sizes
+r24 shipped [vLLM #229](https://github.com/local-inference-lab/vllm/pull/229) — "sizes
 compressed MLA workspaces from the physical cache contract and prevents TP2/K5
-long-concurrency under-reservation" — the same code path, upstream. The fork has published
-nothing since 2026-08-01 and has no r24 rebuild. Note this correspondence is inferred from
-the patch target and the changelog description, not from diffing #229 itself: if the
-symptom the fork patched reappears under r24, that inference is where to look first.
+long-concurrency under-reservation" — the same code path, upstream, and r29–r31 built
+further on it. The fork has published nothing since 2026-08-01 and has no rebuild past
+r16. Note this correspondence is inferred from the patch target and the changelog
+description, not from diffing #229 itself: if the symptom the fork patched reappears,
+that inference is where to look first.
 
-### r24 (2026-08-03) — what else changed since r16
-
-Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v20.md>
-Compose: [`blackwell-llm-docker@build/gilded-gnosis-r21-ds4-runtime-20260802`](https://github.com/local-inference-lab/blackwell-llm-docker/tree/build/gilded-gnosis-r21-ds4-runtime-20260802)
-
-```text
-voipmonitor/vllm:gilded-gnosis-v20-vllmf5981f1-si2b9bf2a-fi801d57a-cu132-20260803-r24
-manifest sha256:64b94299abdd3bcf5bb5050ca91b378f9ee4e0b0eff4748375b95352371d7cb2
-```
-
-Nothing about the host config changes between r16 and r24 — same CUDA 13.2, same B12X
-path, same P2P requirements. What changed is the runtime, and the profile defaults now
-baked into the command above.
-
-**`DSPARK_TOKENS=7` is actively discouraged**, which is why the command uses K5. r24
-publishes matched TP2 numbers:
-
-| Draft depth | Sustained decode | Coding median |
-|---|---:|---:|
-| K5 | 217.8 tok/s | 289.4 tok/s |
-| K7 | 192.1 tok/s | 281.2 tok/s |
-
-K7 is both slower and carries an open defect — "K7 long-context output/tool/BOS
-corruption is not closed" in Known Open Items. The r16 runbook explains where a `7`
-comes from in the first place: the Compose profile "intentionally selects K5 even though
-the generic launcher retains K7 as its neutral default". It is a fallback, not a
-recommendation.
-
-**The 1M context envelope lost its endorsement**, which is why the command now uses
-`131072` / `8192`. The old `MAX_MODEL_LEN=1048576` with `MAX_NUM_BATCHED_TOKENS=2048`
-matched the r16 runbook's Context Length section exactly ("community runs reported ... up
-to 1M with a 2048 budget, but those envelopes are not certified"). **r24 deletes that
-section** and adds: "Tool/reasoning anomalies reported beyond roughly 200k context have
-not been conclusively attributed to one runtime component."
-
-If you want the long context back, raise both together — `MAX_MODEL_LEN=1048576` with
-`MAX_NUM_BATCHED_TOKENS=2048` was the community pairing — and treat anything past ~200k
-as unverified rather than supported.
-
-**InstantTensor gets a reliability fix that applies directly to this setup.**
+One earlier fix from r24 is worth keeping in view because it applies directly to this box:
 [InstantTensor #19](https://github.com/scitix/InstantTensor/pull/19) "retries large
 BUFFERED host registration as bounded segments instead of failing the whole model load."
 `INSTANTTENSOR_BACKEND=BUFFERED` against a 155 GiB checkpoint is exactly the case where
-r16 can abort the load outright.
+r16 could abort the load outright.
 
-Also in r24: PCIe graph channel separation (vLLM #216), CUDA IPC graph-state lifetime
-hardening (SparkInfer #113), compressed-MLA page-stride correctness (SparkInfer #106),
-and native-offload registration alignment (#217/#218). LMCache is updated but explicitly
-"remains experimental for DS4".
+### The reference Compose profile (r31)
 
-#### The reference Compose profile
-
-For comparison, the file the command above is derived from. Its scaffolding is unchanged
-since r16 — the `ulimits`, `privileged`, and host IPC/networking are not new in r24:
+The file the command above is derived from —
+[`docker-compose-ds4-v20-r31.yml`](https://raw.githubusercontent.com/local-inference-lab/blackwell-llm-docker/d281c51cf494cfcac8eee5ce6c14c6b112b07771/examples/docker-compose-ds4-v20-r31.yml),
+pinned at that commit:
 
 ```yaml
+entrypoint: ["/usr/local/bin/serve-ds4-flash.sh"]
 network_mode: host
 ipc: host
-shm_size: 32gb              # inert under ipc: host
-privileged: true
 init: true
+gpus: all                   # new in the r31 file
+restart: unless-stopped
+shm_size: ${SHM_SIZE:-32gb} # inert under ipc: host
+# NOTE: no `privileged: true` — it is gone as of r31
 ulimits:
   memlock:  { soft: -1, hard: -1 }
   nofile:   { soft: 1048576, hard: 1048576 }
   stack:    67108864
 volumes:
-  - ${JIT_CACHE:-./cache/ds4-v20-r24}:/cache
-  - ${CONTAINER_TMP:-./cache/ds4-v20-r24/tmp}:/container-tmp
+  - ${HF_CACHE:-/root/.cache/huggingface}:/root/.cache/huggingface
+  - ${MODEL_ROOT:-/root/models}:/root/models:ro
+  - ${JIT_CACHE:-./cache/ds4-v20-r31}:/cache
+  - ${CONTAINER_TMP:-./cache/ds4-v20-r31/tmp}:/container-tmp
+  - ${NATIVE_L2_HOST_PATH:-./cache/ds4-v20-r31/native-l2}:/native-l2
 ```
 
-Note that `/container-tmp` is a **persistent bind mount inside the JIT cache tree**, not a
-tmpfs. r24's First-Run Compile Cache section says to reuse the same `JIT_CACHE` across
-runs, and a tmpfs discards those artifacts every start — which is why the command above
-binds `/models/vllm-cache/r24/tmp` rather than mounting 16 GiB of RAM there. If a run is
-interrupted during extension compilation, PyTorch can leave an empty `lock` file in that
-tree; only delete one after confirming no compiler process holds it.
+Three things changed in the scaffolding since the r24 file, and all three matter:
+`privileged` was dropped, `gpus: all` was added (so the Compose path now needs the same
+`nvidia-cdi-hook` PATH fix our `docker run` does), and the `native-l2` volume appeared.
+`PYTHONHASHSEED=0` and InstantTensor `BUFFERED` are defaults in the environment block.
 
-#### If you enable native KV offload
+`/container-tmp` is still a **persistent bind mount inside the JIT cache tree**, not a
+tmpfs. Reuse the same `JIT_CACHE` across runs; a tmpfs discards the compiled artifacts
+every start — which is why the command above binds `/models/vllm-cache/r31/tmp` rather
+than mounting 16 GiB of RAM there. If a run is interrupted during extension compilation,
+PyTorch can leave an empty `lock` file in that tree; only delete one after confirming no
+compiler process holds it.
 
-`KV_OFFLOADING_SIZE` is `0` here, so this does not bite yet — but it changes the shm
-calculus completely when it does. The offload region is **one process-shared mmap in the
-host's `/dev/shm`**, and the Compose file says so directly: "Because this compose file
-uses host IPC, `/dev/shm` must have that capacity plus normal runtime headroom."
-
-So with `ipc: host`, sizing lives on the NixOS side — `boot.devShmSize` (default `"50%"`
-of RAM) must exceed the offload size plus headroom. With a private `--shm-size`, size it
-there instead. r24 also unlinks the backing pathname once all workers have mapped it,
-which fixes r16's orphaned `/dev/shm/vllm_offload_*.mmap` after a `SIGKILL`.
-
-r24's own TP2 offload gate: `MAX_MODEL_LEN=131072`, `GPU_MEMORY_UTILIZATION=0.97`,
-`KV_OFFLOADING_SIZE=5.5`, six concurrent ~120k-token prompts in 62.153 s, store intervals
-moving 2.5–2.66 GB in 44–47 ms (~55–56 GB/s).
+On L1 sizing under host IPC, the Compose file is explicit: "Because this compose file uses
+host IPC, `/dev/shm` must have that capacity plus normal runtime headroom." So sizing lives
+on the NixOS side — `boot.devShmSize` (default `"50%"` of RAM) must exceed
+`KV_OFFLOADING_SIZE` plus headroom, and it is sharing RAM with the ARC. With a private
+`--shm-size`, size it there instead. Since r24 the backing pathname is unlinked once all
+workers have mapped it, which fixed r16's orphaned `/dev/shm/vllm_offload_*.mmap` after a
+`SIGKILL`.
 
 ### Going headless to free GPU memory
 
@@ -715,10 +1111,16 @@ expect proportionally less KV cache.
   firewall entry becomes irrelevant.
 - **`--ulimit memlock=-1 / nofile=1048576 / stack=67108864`** — NixOS leaves dockerd at
   systemd's defaults and containers inherit them, so these have to be asked for
-  explicitly. See [the reference Compose profile](#the-reference-compose-profile).
-- **Storage** — 155 GiB checkpoint on `/models`, plus a `/cache` that grows to several
-  GiB of compiled kernels and CUDA graphs. Keep `/cache` persistent: a cold cache costs
-  roughly 20 minutes of kernel and CUDA-graph compilation at startup.
+  explicitly. See [the reference Compose profile](#the-reference-compose-profile-r31).
+- **No `--privileged`** — dropped upstream in r31, and native L2 was validated without it.
+  See the [r31 launch section](#running-deepseek-v4-flash-gilded-gnosis-r31-k5).
+- **Storage** — 155 GiB checkpoint on `/models`, a `/cache` on `models/vllm-cache` that
+  grows to several GiB of compiled kernels and CUDA graphs, and a quota'd
+  `models/native-l2` if you enable the L2 tier. Keep `/cache` persistent: a cold cache
+  costs roughly 20 minutes of kernel and CUDA-graph compilation at startup.
+- **`ALLREDUCE_MODE`** — `auto` gives TP2 the new FlashInfer PCIe IPC path. B12X wins at
+  C1 and prefill, which is where a single-user workstation lives. Benchmark before
+  settling. See [All-reduce backend selection](#all-reduce-backend-selection-is-new-allreduce_mode).
 - **Driver** — the image is `cu132`; `production` is 595.84, which is new enough.
   Confirm with `nvidia-smi` before blaming the container.
 
@@ -726,5 +1128,6 @@ expect proportionally less KV cache.
 
 - **ZFS + Blackwell + latest kernel** — `pkgs.linuxPackages` currently resolves to 6.18.41, which supports both. If ZFS falls behind mainline in future, pin to an LTS: `kernelPackage = pkgs.linuxPackages_6_12;`.
 - **CUDA on host** — deliberately not installed. Use `nvidia/cuda:*` containers for compilation and inference; keeps host lean.
-- **Model storage** — `/models` is a dedicated ZFS dataset with 1M recordsize and no compression, tuned for large safetensors/GGUF files. Put HuggingFace cache, Ollama models, etc. there.
-- **Fan control** — the old motherboard-specific `hardware.fancontrol` block is gone. If the new board needs custom curves, generate config with `pwmconfig` after boot and add it back to `machines/desktop/default.nix`.
+- **Model storage** — `/models` is a dedicated ZFS dataset with 1M recordsize and no compression, tuned for large safetensors/GGUF files. Put HuggingFace cache, Ollama models, etc. there. Its two children (`vllm-cache`, `native-l2`) are tuned differently on purpose; do not flatten them back into the parent.
+- **Fan control** — the old motherboard-specific `hardware.fancontrol` block is gone. If the new board needs custom curves, generate config with `pwmconfig` after boot and add it back to `machines/desktop/default.nix`. A `gpuPowerLimitWatts` cap is the cheaper first lever — see [Power limits](#power-limits).
+- **Rebuilding the installer** — the ISO is built from this flake, so it goes stale as the flake moves. Rebuild it (`nix build .#installer-iso`) rather than reusing an old stick if `authorized_keys.txt`, the kernel, or `disks.nix` has changed since.

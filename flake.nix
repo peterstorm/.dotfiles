@@ -167,6 +167,27 @@
 
         };
 
+        # Installer sticks for the `desktop` workstation. See machines/installer.
+        #
+        #   nix build .#installer-iso          # ~1 GB, needs the laptop to install
+        #   nix build .#installer-iso-offline  # carries the whole desktop closure
+        #
+        # Both boot with sshd up, your keys installed, ZFS in the kernel, and mDNS
+        # publishing `installer.local`, so the box never needs a monitor.
+        packages = lib.optionalAttrs (system == "x86_64-linux") {
+          installer-iso = (host.mkInstaller { }).config.system.build.isoImage;
+
+          installer-iso-offline =
+            (host.mkInstaller {
+              target = {
+                inherit (config.legacyPackages.nixosConfigurations.desktop.config.system.build)
+                  toplevel
+                  diskoScript
+                  ;
+              };
+            }).config.system.build.isoImage;
+        };
+
       };
 
       flake = {

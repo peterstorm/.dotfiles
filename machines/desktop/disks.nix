@@ -67,6 +67,8 @@ in
             recordsize = "128K";
           };
         };
+        # Model weights. Pre-compressed safetensors, read sequentially in ~1 MiB
+        # chunks at load, never rewritten — so large records and no compression.
         models = {
           type = "zfs_fs";
           mountpoint = "/models";
@@ -74,6 +76,38 @@ in
             mountpoint = "legacy";
             compression = "off";
             recordsize = "1M";
+          };
+        };
+
+        # vLLM JIT cache: compiled kernels, CUDA graphs, /container-tmp. Many
+        # small-to-medium text and object files that compress well, which is the
+        # opposite of what the parent dataset is tuned for — a cold cache costs
+        # ~20 minutes of compilation at startup, so it is worth keeping and worth
+        # storing properly.
+        "models/vllm-cache" = {
+          type = "zfs_fs";
+          mountpoint = "/models/vllm-cache";
+          options = {
+            mountpoint = "legacy";
+            compression = "zstd";
+            recordsize = "128K";
+          };
+        };
+
+        # r31's native filesystem L2 KV offload tier (NATIVE_L2_PATH /
+        # NATIVE_L2_GB). FP8 KV blocks: incompressible, written and read in large
+        # chunks. The quota is the point — NATIVE_L2_GB is a promise the runtime
+        # makes about a directory, with nothing stopping it from filling the pool
+        # underneath the 155 GiB checkpoint and /nix. Keep the two in step:
+        # raising NATIVE_L2_GB past 512 means raising this quota first.
+        "models/native-l2" = {
+          type = "zfs_fs";
+          mountpoint = "/models/native-l2";
+          options = {
+            mountpoint = "legacy";
+            compression = "off";
+            recordsize = "1M";
+            quota = "512G";
           };
         };
       };
