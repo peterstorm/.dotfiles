@@ -334,19 +334,17 @@ in
 
   # Reachable as `desktop.local` without hunting for an IP.
   #
-  # The `wifi` role already enables avahi, but only the daemon — `publish.*` and
-  # `nssmdns*` all default to false, so it neither announces itself nor resolves
-  # .local names. That is a sane default for a laptop joining strange networks;
-  # it is the wrong one for a fixed headless box on your own LAN that you only
-  # ever reach over SSH. Set here rather than in the role so the laptops keep the
-  # quiet behaviour. avahi.openFirewall defaults to true, so UDP 5353 is handled.
+  # The `wifi` role enables the avahi daemon and mDNS *resolution* for every
+  # host. Publishing (announcing this box as `desktop.local`) is opt-in and set
+  # here, because this is a fixed headless workstation you only ever reach over
+  # SSH — unlike a laptop joining strange networks, which should stay quiet.
+  # avahi.openFirewall defaults to true, so UDP 5353 is handled.
   services.avahi = {
     publish = {
       enable = true;
       addresses = true;
       workstation = true;
     };
-    nssmdns4 = true;
   };
 
   # Expose the vLLM / DS4 v8 OpenAI-compatible server (PORT=8000, --network host)
