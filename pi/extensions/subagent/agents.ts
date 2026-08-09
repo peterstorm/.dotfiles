@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, loadSkills, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import {
+	hasPreloadedSkill,
 	resolvePackageAgentDirs as resolvePackageAgentDirsFrom,
 	resolvePackageSkillDirs as resolvePackageSkillDirsFrom,
 } from "./package-resources.js";
@@ -90,14 +91,18 @@ function getSkillPathMap(cwd: string): Map<string, string> {
 
 /**
  * Read skill file contents and format them for injection into system prompt.
+ *
+ * `body` is the agent's own prompt: a skill it already preloads (Loom inlines
+ * them when it renders its Pi agents) is skipped rather than duplicated.
  */
-function resolveSkillContents(skillNames: string[], cwd: string): string {
+function resolveSkillContents(skillNames: string[], cwd: string, body: string): string {
 	if (skillNames.length === 0) return "";
 
 	const skillMap = getSkillPathMap(cwd);
 	const sections: string[] = [];
 
 	for (const name of skillNames) {
+		if (hasPreloadedSkill(body, name)) continue;
 		const filePath = skillMap.get(name);
 		if (!filePath) continue;
 
@@ -173,7 +178,7 @@ function loadAgentsFromDir(dir: string, source: AgentSource, cwd: string): Agent
 		const skillNames = parseSkillNames(frontmatter.skills);
 
 		// Resolve and inject skill contents into the system prompt
-		const skillContent = resolveSkillContents(skillNames, cwd);
+		const skillContent = resolveSkillContents(skillNames, cwd, body);
 		const fullPrompt = skillContent ? `${body}\n${skillContent}` : body;
 
 		agents.push({

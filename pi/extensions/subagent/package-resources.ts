@@ -68,13 +68,25 @@ function declaredSkillDirs(root: string): string[] {
  * Skill directories for each configured local package: whatever the manifest
  * declares in pi.skills, falling back to the conventional skills/ directory.
  *
- * The fallback is what makes `skills:` frontmatter work at all today — Loom
- * ships skills/ but declares only pi.extensions, so a manifest-only lookup
- * returns nothing and every agent silently loses its preloaded skill.
+ * Without the fallback the skill map is empty for a package that ships skills/
+ * but declares only pi.extensions — as Loom does — so `skills:` frontmatter on
+ * any agent Loom has not already rendered resolves to nothing.
  */
 export function resolvePackageSkillDirs(agentDir: string): string[] {
   return resolveLocalPackageRoots(agentDir).flatMap((root) => {
     const declared = declaredSkillDirs(root);
     return (declared.length > 0 ? declared : [path.join(root, "skills")]).filter(isDirectory);
   });
+}
+
+/**
+ * Whether an agent body already carries a preloaded copy of `skill`.
+ *
+ * Loom renders its own Pi agents with the skill inlined under
+ * "## Preloaded Loom Skill: <name>", so injecting the same skill again would
+ * put its entire body in the system prompt twice.
+ */
+export function hasPreloadedSkill(body: string, skill: string): boolean {
+  const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^##[ \\t]+Preloaded\\b[^\\n]*\\bSkill:[ \\t]*${escaped}[ \\t]*$`, "m").test(body);
 }

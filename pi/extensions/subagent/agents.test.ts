@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { resolveLocalPackageRoots, resolvePackageAgentDirs, resolvePackageSkillDirs } from "./package-resources";
+import {
+  hasPreloadedSkill,
+  resolveLocalPackageRoots,
+  resolvePackageAgentDirs,
+  resolvePackageSkillDirs,
+} from "./package-resources";
 
 const scratch: string[] = [];
 
@@ -89,6 +94,27 @@ describe("local Pi package skill discovery", () => {
     // second-package has no skills/ at all, so it contributes nothing.
     expect(resolvePackageSkillDirs(agentDir)).toEqual([join(first, "skills")]);
     expect(resolvePackageSkillDirs(agentDir)).not.toContain(join(second, "skills"));
+  });
+
+  // Loom renders its agents with the skill body already inlined; injecting the
+  // same skill again puts the whole thing in the system prompt twice.
+  it("detects a skill Loom has already inlined", () => {
+    const body = "# Designer\n\n## Preloaded Loom Skill: architecture-tech-lead\n\nbody...";
+
+    expect(hasPreloadedSkill(body, "architecture-tech-lead")).toBe(true);
+    expect(hasPreloadedSkill(body, "grill")).toBe(false);
+  });
+
+  it("detects the extension's own injected heading", () => {
+    expect(hasPreloadedSkill("## Preloaded Skill: grill\n", "grill")).toBe(true);
+  });
+
+  it("does not mistake a mention of the skill for a preload", () => {
+    const body = "Use the `architecture-tech-lead` skill.\n### Preloaded Loom Skill: architecture-tech-lead\n";
+
+    // A prose mention, and a heading at the wrong level, are not preloads.
+    expect(hasPreloadedSkill(body, "architecture-tech-lead")).toBe(false);
+    expect(hasPreloadedSkill("## Preloaded Skill: architecture", "architecture-tech-lead")).toBe(false);
   });
 
   it("ignores declared entries that are not directories and non-string entries", () => {

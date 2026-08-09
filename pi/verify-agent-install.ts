@@ -116,9 +116,23 @@ for (const name of requiredPanelAgents) {
   if (sourceExists && !discoveredByName.has(name)) fail(`panel agent ${name} exists in Loom but is unavailable`);
 }
 
+// A skill reaches an agent by one of two routes: Loom inlines it when it renders
+// the agent ("## Preloaded Loom Skill: <name>"), or the subagent extension
+// injects it from the skill map ("## Preloaded Skill: <name>"). Exactly one must
+// happen — none means the agent lost its skill, two means the whole skill body
+// sits in the system prompt twice.
 const designer = discoveredByName.get("arch-designer-agent");
-if (designer && !designer.systemPrompt.includes("## Preloaded Skill: architecture-tech-lead")) {
-  fail("arch-designer-agent is missing its architecture-tech-lead skill injection");
+if (designer) {
+  const preloads = [
+    ...designer.systemPrompt.matchAll(/^##[ \t]+Preloaded\b[^\n]*\bSkill:[ \t]*architecture-tech-lead[ \t]*$/gm),
+  ];
+  if (preloads.length === 0) fail("arch-designer-agent is missing its architecture-tech-lead skill");
+  if (preloads.length > 1) {
+    fail(
+      `arch-designer-agent preloads architecture-tech-lead ${preloads.length}×: ` +
+        `Loom already inlines it, so the extension must not inject it again`,
+    );
+  }
 }
 
 process.stdout.write(

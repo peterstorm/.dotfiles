@@ -130,10 +130,28 @@ The custom subagent extension adds `resolvePackageSkillPaths()` which:
 2. For each package, reads its `package.json` → `pi.skills` array
 3. Falls back to the conventional `skills/` directory when the manifest declares
    none — Loom ships `skills/` but declares only `pi.extensions`, so a
-   manifest-only lookup returns an empty map and **every** agent silently loses
-   its preloaded skill
+   manifest-only lookup returns an empty map
 4. Resolves those relative paths to absolute skill directories
 5. Passes them to `loadSkills({ skillPaths: [...] })`
+
+### Two routes, never both
+
+A skill reaches a Pi agent one of two ways:
+
+| Route | Heading in the prompt | Applies to |
+|---|---|---|
+| Loom inlines it at render time | `## Preloaded Loom Skill: <name>` | every agent in Loom's roster |
+| This extension injects it from the skill map | `## Preloaded Skill: <name>` | any other agent declaring `skills:` |
+
+Loom's renderer reads each declared skill and embeds its body in the generated
+definition, so **Loom's agents already carry their skills** regardless of what
+the skill map contains. `resolveSkillContents()` therefore skips any skill the
+agent body already preloads (`hasPreloadedSkill()`); without that check a Loom
+agent would carry the entire skill twice — for `arch-designer-agent` that is
+~6 KB of duplicated prompt.
+
+`verify-agent-install.ts` asserts exactly one preload, so both the missing and
+the duplicated case fail loudly.
 
 This gives us a complete skill name → file path map. When an agent declares:
 
