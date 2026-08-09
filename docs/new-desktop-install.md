@@ -953,6 +953,28 @@ curl -fsS http://127.0.0.1:8000/health
 docker logs -f ds4-0731-r33
 ```
 
+**Validated on this exact box (2026-08-09):**
+
+- The registry resolved the pinned image to
+  `voipmonitor/vllm@sha256:fdde59fed7f9fc12f9fd5ef1b3b3ea8d5097bf10ebad54b348497102c3a83f82`.
+- The pinned model revision occupied 162 GiB on disk. InstantTensor loaded the target and
+  draft weights in 25.78 s and 24.88 s; CUDA graph capture took 22 s. The complete cold
+  r33 startup, including first-time JIT work, reached `Application startup complete` in
+  about five minutes.
+- `ALLREDUCE_MODE=auto` correctly selected `flashinfer-ipc` for TP2, dispatched larger
+  shapes to PyNCCL, and retained B12X for sparse MLA, MoE, and linear kernels. Both
+  remote-push experiments remained disabled.
+- The server exposed 143,545 tokens of GPU KV capacity (8.07 GiB per worker) at
+  `MAX_MODEL_LEN=131072`, `MAX_NUM_SEQS=16`, and `GPU_MEMORY_UTILIZATION=0.975`.
+- `/health` returned HTTP 200; the container remained running with zero restarts. An
+  authenticated OpenAI-compatible chat request returned exactly `OK` with
+  `finish_reason=stop` (88 prompt tokens, 28 completion tokens). A 16-token completion
+  cap was too small because reasoning consumed it before visible content; use a realistic
+  output allowance when probing a reasoning-enabled profile.
+- During initialization both GPUs reached roughly 94.7 GiB used. Temperatures remained
+  below 50°C and the card fans held at 30%; the audible spin-up was expected weight/JIT/
+  graph activity, not a thermal fault.
+
 Or run upstream's commit-pinned Compose directly and let the environment do the work.
 The file is immutable at this URL, but its `image:` value is a tag rather than a digest;
 the local `docker run` helper above additionally pins the verified registry digest:
