@@ -63,12 +63,13 @@
             username = "peterstorm";
           };
 
-          # Desktop workstation: same user, but a subset of roles. The homelab
-          # ones (sops-homelab, obsidian-*, vdirsyncer, sonarr-missing-search)
-          # need an age key that is not on that box, so they are omitted.
-          # Apply with `./hm-apply.sh desktop`.
+          # Desktop workstation: same user, but a subset of roles. The obsidian/
+          # vdirsyncer/sonarr homelab roles are omitted (they want services this
+          # box doesn't run), but sops-homelab IS included so cortex gets its
+          # GEMINI_API_KEY for embeddings — that needs the age key seeded at
+          # ~/.config/sops/age/keys.txt. Apply with `./hm-apply.sh desktop`.
           desktop = user.mkHMUser {
-            roles = [ "core-apps" "window-manager/xmonad" "dunst" ];
+            roles = [ "core-apps" "window-manager/xmonad" "dunst" "sops-homelab" ];
             username = "peterstorm";
           };
 
