@@ -69,7 +69,7 @@
           # GEMINI_API_KEY for embeddings — that needs the age key seeded at
           # ~/.config/sops/age/keys.txt. Apply with `./hm-apply.sh desktop`.
           desktop = user.mkHMUser {
-            roles = [ "core-apps" "window-manager/xmonad" "dunst" "sops-homelab" ];
+            roles = [ "core-apps" "window-manager/xmonad" "dunst" "sops-homelab" "desktop-audio" ];
             username = "peterstorm";
           };
 
