@@ -38,8 +38,8 @@
     displayManager = {
       setupCommands = ''
           ${pkgs.xrandr}/bin/xrandr \
-          --output DP-2 --primary --pos 1440x750 \
-          --output DP-0 --pos 0x0 --rotate right;
+          --output DP-6 --primary --mode 3840x1600 --pos 0x0 \
+          --output DP-4 --mode 2560x1440 --pos 3840x0
       '';
     };
     windowManager.xmonad = {
