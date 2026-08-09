@@ -187,6 +187,13 @@ in
   boot.zfs.forceImportRoot = false;
   networking.hostId = "8a3f2c19";
 
+  # Disable WiFi power-save. This is a fixed, mains-powered workstation, and the
+  # MediaTek MT7927 drops the link under sustained load (e.g. a 155 GiB model
+  # pull) when NetworkManager's default power management is on. Laptops keep the
+  # default (battery); this is desktop-only. Wired is still preferable for the
+  # big downloads — the onboard 2.5G/10G NICs need no config.
+  networking.networkmanager.wifi.powersave = false;
+
   services.zfs = {
     autoScrub.enable = true;
     trim.enable = true;
