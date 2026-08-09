@@ -45,7 +45,7 @@ in
   #    directly off disk. Idempotent — only clones a repo that isn't present.
   home.activation.claudePluginsWorkspace =
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      export PATH="${lib.makeBinPath [ pkgs.git pkgs.coreutils ]}:$PATH"
+      export PATH="${lib.makeBinPath [ pkgs.git pkgs.coreutils pkgs.bun ]}:$PATH"
       d="${pluginsDir}"
       mkdir -p "$d"
       ${lib.concatMapStringsSep "\n      " (r: ''
@@ -53,6 +53,14 @@ in
           echo "claude: cloning ${r} -> $d/${r}"
           git clone "https://github.com/peterstorm/${r}.git" "$d/${r}" \
             || echo "claude: clone of ${r} failed (continuing)"
+        fi
+        # pi/opencode run these repos straight off disk. pi only runs an install
+        # for packages IT installs; we clone manually, so provision JS deps here.
+        # Fresh-clone only (guarded on node_modules) to keep activation fast.
+        if [ -f "$d/${r}/package.json" ] && [ ! -d "$d/${r}/node_modules" ]; then
+          echo "claude: bun install in ${r}"
+          ( cd "$d/${r}" && bun install --no-progress ) \
+            || echo "claude: bun install for ${r} failed (continuing)"
         fi
       '') workspaceRepos}
     '';
