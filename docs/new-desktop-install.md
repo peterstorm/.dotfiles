@@ -34,7 +34,7 @@ driver (VRAM, power limit). See
 Worth stating plainly, because it is less than the 192 GB of VRAM across the two cards:
 
 - **`/dev/shm` is 48 GB** (`boot.devShmSize` defaults to 50%). Under `--ipc=host` that is
-  the hard ceiling on `KV_OFFLOADING_SIZE` — comfortably above r31's example of 16 and
+  the hard ceiling on `KV_OFFLOADING_SIZE` — comfortably above the 16 GiB example retained by r33 and
   r24's offload gate of 5.5, but not a place to be careless.
 - **The 155 GiB checkpoint cannot be cached in RAM.** It does not fit, and it is read once
   per server start. That is precisely why the ARC is capped at 16 GiB rather than left at
@@ -201,7 +201,8 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
   - `models/vllm-cache` → `/models/vllm-cache` (recordsize=128K, **zstd**) — the JIT cache
     is compilable text and objects, the opposite of what the parent is tuned for
   - `models/native-l2` → `/models/native-l2` (recordsize=1M, compression=off,
-    **quota=512G**) — r31's filesystem L2 KV tier. The quota is the point: `NATIVE_L2_GB`
+    **quota=512G**) — the filesystem L2 KV tier introduced in r31 and retained by r33. The
+    quota is the point: `NATIVE_L2_GB`
     is a promise the runtime makes about a directory, with nothing else stopping it from
     filling the pool underneath the checkpoint. Raise both together or neither.
 - `machines/desktop/default.nix`
@@ -653,7 +654,7 @@ only provides driver + P2P plumbing. The guide's own launch example is `GPUS=0,1
 exactly our 2-card single-node case, so TP2 is a first-class supported mode.
 
 For the image actually being run on this box, see
-[Running DeepSeek-V4-Flash (Gilded Gnosis r31, K5)](#running-deepseek-v4-flash-gilded-gnosis-r31-k5)
+[Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)](#running-deepseek-v4-flash-gilded-gnosis-r33-k5)
 below — same host prep, different container.
 
 ### Host prep (already baked into the flake)
@@ -743,7 +744,7 @@ some WiFi APs (see [WiFi](#wifi-mt7927)); only hosts with an explicit alias/host
 resolve the name. Change the port there if you launch the server on a different one.
 
 That firewall entry only matters under `--network host`, which both the DS4 v8 helper and
-the r31 profile use. If you swap in `-p 8000:8000`, Docker publishes through its own
+the r33 profile use. If you swap in `-p 8000:8000`, Docker publishes through its own
 iptables chain and the port is reachable whether or not it is in `allowedTCPPorts`.
 
 ### Model cache → /models
@@ -755,7 +756,7 @@ native L2 tier get their own child datasets with their own tuning — see
 directly on `/models`, where it inherits 1M records and no compression.
 
 The rest of this subsection is about the **DS4 v8 helper script**, which is not what the
-r31 command below uses — that one passes absolute `/models/...` paths and needs none of
+r33 command below uses — that one passes absolute `/models/...` paths and needs none of
 these symlinks. Keep it for running the v8 guide verbatim; skip it otherwise.
 
 `scripts/run-ds4-v8-server.sh` mounts two things, and neither path is what you'd guess:
@@ -872,35 +873,45 @@ settings across — the ARC cap in
 allreduce** — expandable allocator segments break the IPC memory-handle exchange the
 kernel relies on. Do not set it in the container's environment.
 
-r31 hits the same constraint from the other direction: its native-L2 helper *itself*
-disables expandable segments, "because the shared host region requires stable
-registrations". So if you enable native KV offload and something else in your environment
+r33 retains the native-L2 behavior introduced in r31: its helper *itself* disables
+expandable segments, "because the shared host region requires stable registrations".
+So if you enable native KV offload and something else in your environment
 has turned expandable segments on, the two are fighting over the same allocator.
 
-## Running DeepSeek-V4-Flash (Gilded Gnosis r31, K5)
+## Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)
 
-Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v20-r31.md>
+Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v20-r33.md>
 
-The official r31 release image on the r31 release profile, adapted for this box. Same
-CUDA 13.2 / B12X lineage as the DS4 v8 guide above, same host prep: ForceP2P modprobe
-config, `iommu=pt amd_iommu=on` (ACS disabled in BIOS), ReBAR + Above 4G in BIOS. **Nothing about the host
-config changes from r16 through r31** — every change is inside the container.
+The official validated r33 release image, adapted for this box. It retains r31's vLLM,
+FlashInfer, LMCache, compressed-MLA, graph, native-offload, and reasoning/tool contracts,
+while updating B12X. Host preparation is unchanged: ForceP2P modprobe config,
+`iommu=pt amd_iommu=on`, ReBAR, and Above 4G Decoding. The model revision is unchanged,
+so an existing pinned 0731 download does not need to be replaced.
 
 | Item | Value |
 |---|---|
-| Image | `voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12xacee6e5-fi1ac6942-cu132-20260807-r31` |
-| Digest | `sha256:3230c25ff95f8678a8eeb52a463f0d3b9f96f6ad550418cc51ea12177a55b41c` |
+| Image | `voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-20260809-r33` |
+| Registry digest | `sha256:fdde59fed7f9fc12f9fd5ef1b3b3ea8d5097bf10ebad54b348497102c3a83f82` |
 | Model revision | `9e165c30e2704aec5d9d593cce3eebd58bbef1cb` |
-| Runtime | CUDA 13.2.1, PyTorch 2.12.0+cu132, B12X 1.1.0, FlashInfer 0.6.18+cu132, InstantTensor 0.1.9 |
+| Runtime | CUDA 13.2.1, PyTorch 2.12.0+cu132, CUTLASS DSL 4.6.0, XGrammar 0.2.5 |
 | Default profile | TP2/DCP1, B12X W4A8, fixed probabilistic K5, FP8 DS-MLA KV |
+| Validation | [PR #20](https://github.com/local-inference-lab/blackwell-llm-docker/pull/20), [remote GPU receipt](https://github.com/local-inference-lab/blackwell-llm-docker/blob/main/validation/gilded-gnosis-v20-r33-remote-gpu.json) |
 
 TP2/DCP1 being the *default* profile is worth noticing: the release's own baseline is our
-exact two-card shape, not something we are adapting down to.
+exact two-card shape, not something we are adapting down to. The repository helper is the
+preferred launch path; it creates a persistent machine-local API key and pins the image
+digest:
+
+```bash
+bash scripts/run-ds4-v20-r33.sh
+```
+
+Its equivalent `docker run` contract is:
 
 ```bash
 docker run --init \
   --restart unless-stopped \
-  --name ds4-0731-r31 \
+  --name ds4-0731-r33 \
   --gpus all \
   --ipc=host \
   --network host \
@@ -908,8 +919,8 @@ docker run --init \
   --ulimit nofile=1048576 \
   --ulimit stack=67108864 \
   -v /models/DeepSeek-V4-Flash-0731:/models/deepseek-ai/DeepSeek-V4-Flash-0731:ro \
-  -v /models/vllm-cache/r31:/cache \
-  -v /models/vllm-cache/r31/tmp:/container-tmp \
+  -v /models/vllm-cache/r33:/cache \
+  -v /models/vllm-cache/r33/tmp:/container-tmp \
   -e CUDA_VISIBLE_DEVICES=0,1 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e VLLM_API_KEY='<API_KEY>' \
@@ -919,31 +930,35 @@ docker run --init \
   -e MODE=dspark -e DSPARK_DEPTH_MODE=fixed -e DSPARK_TOKENS=5 \
   -e BACKEND=b12x-a8 -e TP_SIZE=2 -e DCP_SIZE=1 \
   -e ALLREDUCE_MODE=auto \
+  -e B12X_PCIE_TP2_REMOTE_PUSH=0 \
+  -e B12X_PCIE_TP4_REMOTE_PUSH=0 \
+  -e B12X_PCIE_TP8_OWNER_REDUCE=1 \
   -e MAX_NUM_SEQS=16 -e MAX_MODEL_LEN=131072 -e MAX_NUM_BATCHED_TOKENS=8192 \
   -e GRAPH=auto \
   -e GPU_MEMORY_UTILIZATION=0.975 \
   -e LOAD_FORMAT=instanttensor -e INSTANTTENSOR_BACKEND=BUFFERED \
   -e PYTHONHASHSEED=0 \
   -e KV_OFFLOADING_SIZE=0 \
-  voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12xacee6e5-fi1ac6942-cu132-20260807-r31@sha256:3230c25ff95f8678a8eeb52a463f0d3b9f96f6ad550418cc51ea12177a55b41c \
+  voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-20260809-r33@sha256:fdde59fed7f9fc12f9fd5ef1b3b3ea8d5097bf10ebad54b348497102c3a83f82 \
   /usr/local/bin/serve-ds4-flash.sh
 ```
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
-docker logs -f ds4-0731-r31
+docker logs -f ds4-0731-r33
 ```
 
-Or run upstream's immutable Compose directly and let the environment do the work — that
-is now the documented path, and it pins the digest for you:
+Or run upstream's commit-pinned Compose directly and let the environment do the work.
+The file is immutable at this URL, but its `image:` value is a tag rather than a digest;
+the local `docker run` helper above additionally pins the verified registry digest:
 
 ```bash
-curl -LO https://raw.githubusercontent.com/local-inference-lab/blackwell-llm-docker/d281c51cf494cfcac8eee5ce6c14c6b112b07771/examples/docker-compose-ds4-v20-r31.yml
+curl -LO https://raw.githubusercontent.com/local-inference-lab/blackwell-llm-docker/426da51285d0666508003b03a75a442139fb7979/examples/docker-compose-ds4-v20-r33.yml
 GPUS=0,1 TP_SIZE=2 DCP_SIZE=1 \
-MODEL_ROOT=/models JIT_CACHE=/models/vllm-cache/r31 \
-CONTAINER_TMP=/models/vllm-cache/r31/tmp \
+MODEL_ROOT=/models JIT_CACHE=/models/vllm-cache/r33 \
+CONTAINER_TMP=/models/vllm-cache/r33/tmp \
 NATIVE_L2_HOST_PATH=/models/native-l2 \
-docker compose -f docker-compose-ds4-v20-r31.yml up -d
+docker compose -f docker-compose-ds4-v20-r33.yml up -d
 ```
 
 Note the Compose file's `environment:` block enumerates exactly which variables reach the
@@ -957,16 +972,17 @@ override file — otherwise the endpoint is on the LAN with no key.
 |---|---|
 | `--gpus all` | Matches the Compose file's own `gpus: all`. Works here because of `systemd.services.docker.path` in `roles/nvidia-graphics`; `--device=nvidia.com/gpu=all` is the equivalent needing no host-side help. |
 | Explicit model mount + `MODEL_PATH` | Compose defaults to scanning `${MODEL_ROOT:-/root/models}`. Pointing straight at the checkpoint skips the HF cache mount entirely. |
-| Caches under `/models/vllm-cache/r31` | Its own ZFS dataset (zstd, 128K records), rather than a relative `./cache` next to a git checkout. |
+| Caches under `/models/vllm-cache/r33` | Its own ZFS dataset (zstd, 128K records), rather than a relative `./cache` next to a git checkout. |
 | `CUDA_DEVICE_ORDER=PCI_BUS_ID` | Makes `CUDA_VISIBLE_DEVICES=0,1` match `nvidia-smi` ordering instead of driver enumeration order. |
 | `--restart unless-stopped`, no `--rm` | Matches Compose. The two flags are mutually exclusive in `docker run`; use `--rm` and drop the restart policy for throwaway benchmarking. |
 
 **`--privileged` is gone, and that is an upstream change, not a local guess.** The r24
 notes on this page flagged it as "upstream's choice, not a verified requirement", carried
-since r16 with no stated rationale, and worth testing without. The r31 Compose file simply
-does not have it, and [issue #33](https://github.com/local-inference-lab/rtx6kpro/issues/33)
-records that even native L2 — the feature with the most plausible claim on it, since it
-pins and shares host memory — "was validated without privileged container access". Drop it.
+since r16 with no stated rationale, and worth testing without. The r33 Compose file,
+like r31 before it, does not have it, and
+[issue #33](https://github.com/local-inference-lab/rtx6kpro/issues/33) records that even
+native L2 — the feature with the most plausible claim on it, since it pins and shares
+host memory — "was validated without privileged container access". Drop it.
 
 Two things still worth knowing:
 
@@ -976,7 +992,7 @@ Two things still worth knowing:
   governing number is the NixOS host's `boot.devShmSize` (default `"50%"` of RAM), which
   is also what the ARC cap is protecting. If you would rather have a private,
   RAM-independent arena, drop `--ipc=host` and use `--shm-size=32g` — but read
-  [native KV offload](#native-l1l2-kv-offload-r31) first.
+  [native KV offload](#native-l1l2-kv-offload-r33-retained) first.
 - **`DRAFT_SAMPLE_METHOD=greedy` is dropped.** It was never part of the release profile —
   it was carried over from an older command on this page and is in no Compose file, so the
   helper's own default applies. Removing it makes this the release profile exactly.
@@ -986,23 +1002,20 @@ Two things still worth knowing:
 `http://desktop:8000/v1` reachable. `VLLM_API_KEY` is doing the access control — keep it
 set. For a contained alternative, swap `--network host` for `-p 8000:8000`.
 
-### CUDA graph sizing is automatic now (`GRAPH=auto`)
+### CUDA graph sizing is automatic (`GRAPH=auto`)
 
-The r24 notes told you to leave `MAX_CUDAGRAPH_CAPTURE_SIZE` unset and worked the number
-out by hand. r31 makes the rule explicit and derives it. The physical verifier-row
-requirement is:
+The physical verifier-row requirement remains:
 
 ```text
-max_num_seqs * (1 + draft_tokens)
+MAX_NUM_SEQS * (1 + DSPARK_TOKENS)
 ```
 
-For this box's `MAX_NUM_SEQS=16` at K5 that is `16 * (5 + 1) = 96` — the same 96 the r24
-section computed. `GRAPH=auto` derives the cap, so the arithmetic only matters when you
-are checking the logs. At MNS64, K5 needs 384 rows and K7 needs 512; r31's release gate
-captured the full 384-row envelope across the target, proposal, and context-KV graph
-families with no row-capacity eager fallback.
+For this box's `MAX_NUM_SEQS=16` at K5 that is `16 * (5 + 1) = 96`.
+`GRAPH=auto` derives the cap, so the arithmetic only matters when checking logs. The r33
+TP2/K5 validation captured through 96 rows and TP4/K5 through 192 rows; no device-heavy
+decode stage relied on eager fallback.
 
-What is captured, as of r31:
+What is captured as of r33:
 
 | Stage | Execution |
 |---|---|
@@ -1018,45 +1031,38 @@ this host: the decode path still has a variable host-side chain, and upstream is
 that capturing rejection sampling's small device kernel would not remove the host
 bookkeeping.
 
-### All-reduce backend selection is new (`ALLREDUCE_MODE`)
+### All-reduce backend selection (`ALLREDUCE_MODE`)
 
-r31 adds a reversible, logged policy. `auto` resolves by TP size:
+The reversible, logged policy introduced in r31 remains in r33:
 
-| TP | Automatic backend | Explicit override |
+| TP | Automatic backend | Diagnostic override |
 |---|---|---|
 | **TP2 (us)** | FlashInfer PCIe IPC | `ALLREDUCE_MODE=b12x` |
-| TP4+ | B12X | `ALLREDUCE_MODE=flashinfer-ipc` |
+| TP4 | B12X | `ALLREDUCE_MODE=flashinfer-ipc` |
+| TP8 | B12X owner reduction | `ALLREDUCE_MODE=flashinfer-ipc` |
 
-So on this box, `auto` no longer means B12X — it means FlashInfer PCIe IPC, which is new
-in r31 (built from qualified current source plus upstream PR #4393). **Benchmark both.**
-Upstream's own TP2 target-only numbers put them close at high concurrency but hand B12X
-the win at C1 and on prefill:
+B12X #133 adds opt-in TP2/TP4 remote-push paths. r33 deliberately leaves them disabled:
+matched runs showed workload-dependent gains and losses rather than a consistent
+end-to-end improvement. Test only one variable at a time with
+`B12X_PCIE_TP2_REMOTE_PUSH=1`; the helper sets it to `0` by default.
 
-| Profile | C1 tok/s | C32 tok/s | Prefill 8k | Prefill 64k |
-|---|---:|---:|---:|---:|
-| r31 TP2, FlashInfer PCIe IPC | 126.8 | 1,139.5 | 13,366 | 12,669 |
-| r31 TP2, B12X | 129.9 | 1,135.7 | 14,197 | 13,421 |
-
-A single-user coding workstation lives at C1 and prefill, which is exactly where B12X
-wins — so `ALLREDUCE_MODE=b12x` is the more likely setting here despite `auto`. Keep the
-rest of the recipe identical when comparing, and confirm from the log which backend was
-chosen.
-
-**These numbers are unusually relevant to us.** Upstream states every figure in the r31
-performance section comes from GPUs "attached through CPU root ports", and that no number
-from their 16-GPU PCIe-switch host was used as a baseline. That is our topology, assuming
-the [PCIe check](#the-one-that-could-invalidate-the-ds4-setup-pcie-topology) passes.
+The r33 fixed-K5 TP2 validation reported 180.6 tok/s at C1, 397.1 at C4, and 580.7 at C8,
+with strict acceptance of 29.4% / 34.5% / 33.3%. Uncached 8k prefill reached 12,849 tok/s.
+Those figures came from GPUs attached through CPU root ports, making the topology relevant
+to this box, but acceptance is prompt-dependent and they are not a pure backend A/B.
+Keep `auto` for the first validated run, then benchmark `b12x` separately for this
+single-user coding workload.
 
 ### K7 is no longer discouraged — the r24 warning was wrong
 
 This page previously said `DSPARK_TOKENS=7` was "actively discouraged" and carried an open
-corruption defect. r31 revises that:
+corruption defect. r31 corrected that status, and r33 retains it:
 
 | Mode | Environment | Status |
 |---|---|---|
 | Fixed K5 | `DSPARK_DEPTH_MODE=fixed DSPARK_TOKENS=5` | Default; best proven mixed-workload choice |
 | Fixed K7 | `DSPARK_DEPTH_MODE=fixed DSPARK_TOKENS=7` | Optional; can win in predictable code phases |
-| Dynamic depth | `DSPARK_DEPTH_MODE=dynamic DSPARK_TOKENS=7` | Diagnostic; correct, but not selected by the release sweep |
+| Dynamic depth | `DSPARK_DEPTH_MODE=dynamic DSPARK_TOKENS=7` | Optional load-aware policy |
 | Target-only | `MODE=dspark-mtp0` | Performance/correctness baseline |
 
 K7 has reached ~499 tok/s using all seven draft positions in a low-entropy code phase. The
@@ -1074,15 +1080,16 @@ checkpoints. **Do not use `mtp2` on the 0731 checkpoint** — that mode belongs 
 `DeepSeek-V4-Flash` checkpoint with its own MTP head; 0731 carries the native DSpark draft
 head instead.
 
-### Native L1/L2 KV offload (r31)
+### Native L1/L2 KV offload (r33 retained)
 
-`KV_OFFLOADING_SIZE=0` in the command above, so none of this is live yet — but r31 is the
-release that makes it worth turning on, and `machines/desktop/disks.nix` now provisions
-for it.
+`KV_OFFLOADING_SIZE=0` in the command above, so none of this is live yet. r33 retains the
+native tiered-offload contract introduced and restart-qualified in r31, and
+`machines/desktop/disks.nix` provisions for it.
 
 Native offload is optional and independent from LMCache. `KV_OFFLOADING_SIZE` is total
 host **L1** capacity in GiB, and lives in `/dev/shm` — which under `--ipc=host` means the
-NixOS host's `boot.devShmSize`, competing with the ARC. r31's new part is **L2**:
+NixOS host's `boot.devShmSize`, competing with the ARC. The r31 feature retained by r33
+is **L2**:
 environment-only filesystem configuration, no privileged container:
 
 ```bash
@@ -1115,9 +1122,9 @@ r24's TP2 offload gate, for the L1-only shape, still stands as a sizing referenc
 concurrent ~120k-token prompts in 62.153 s, store intervals moving 2.5–2.66 GB in
 44–47 ms (~55–56 GB/s).
 
-### What changed between r24 and r31
+### What changed between r24 and r33
 
-Four releases, all runtime, none touching host config.
+The changes remain container/runtime-only; none require new host configuration.
 
 **r29** — FULL CUDA graph capture for the DSpark context-KV path. Worth +4.3% at CC1
 server decode (190.68 vs 182.82 tok/s); negligible at high concurrency where the GPU is
@@ -1151,11 +1158,24 @@ TP4 B12X on the same host: 144.5 → 148.4 tok/s at C1, 1,499.2 → 1,511.0 at C
 16,360 on 8k prefill. Do not read the TP2-vs-TP4 rows as a backend A/B; they are different
 parallelism.
 
-The K5 TP4 release gate, for reference on what "healthy" looks like in the logs: 797,049
-tokens of GPU KV capacity, 2,540.5 tok/s sustained C64 aggregate decode, 31.36% strict
-draft acceptance in the C64 window, 64/64 long-context pass, zero output-cap hits and zero
-runtime errors. Acceptance is workload-dependent — that gate is a correctness and
-stability test, not an acceptance estimate for your prompts.
+The K5 TP4 r31 release gate, for historical reference on what "healthy" looks like in
+the logs: 797,049 tokens of GPU KV capacity, 2,540.5 tok/s sustained C64 aggregate decode,
+31.36% strict draft acceptance in the C64 window, 64/64 long-context pass, zero
+output-cap hits, and zero runtime errors. Acceptance is workload-dependent — that gate is
+a correctness and stability test, not an acceptance estimate for your prompts.
+
+**r33** retains those r31 contracts while updating B12X:
+
+- #133 adds topology-scoped fused all-reduce paths, opt-in TP2/TP4 remote push, and the
+  qualified automatic TP8 owner-reduction path.
+- #135 preserves dense GEMM API contracts for block-FP8 callers.
+- #136 restores capture-safe K6 small-M dispatch, gated to exact SM120 capability.
+- #137 aligns mixed-Trellis execution with the QSRT ABI.
+- The vLLM and FlashInfer integration trees and the 0731 model revision are unchanged.
+
+The r33 release passed its helper, manifest, source-label, launcher-hash, and remote GPU
+receipt gates. The focused #136 suite passed nine SM120 tests, including numerical
+comparison and CUDA graph replay.
 
 ### Context length: still uncertified past ~200k
 
@@ -1164,12 +1184,12 @@ raised on a whim. The 1M envelope lost its endorsement: r24 deleted the Context 
 section that described community runs at `MAX_MODEL_LEN=1048576` with
 `MAX_NUM_BATCHED_TOKENS=2048`, and added that "tool/reasoning anomalies reported beyond
 roughly 200k context have not been conclusively attributed to one runtime component".
-r31 does not restore it.
+r33 does not restore it.
 
 If you want the long context back, raise both together — `1048576` with `2048` was the
 community pairing — and treat anything past ~200k as unverified rather than supported.
 
-### Why r31 and not the SM120 fork
+### Why r33 and not the SM120 fork
 
 The previous command on this page used
 `ghcr.io/ormandj/vllm-deepseek-v4-flash-sm120:v20`, a fork built on the r16 base
@@ -1178,7 +1198,7 @@ of `_reserve_dummy_compressed_mla_scratch` in `vllm/models/deepseek_v4/nvidia/b1
 
 r24 shipped [vLLM #229](https://github.com/local-inference-lab/vllm/pull/229) — "sizes
 compressed MLA workspaces from the physical cache contract and prevents TP2/K5
-long-concurrency under-reservation" — the same code path, upstream, and r29–r31 built
+long-concurrency under-reservation" — the same code path, upstream, and r29–r33 built
 further on it. The fork has published nothing since 2026-08-01 and has no rebuild past
 r16. Note this correspondence is inferred from the patch target and the changelog
 description, not from diffing #229 itself: if the symptom the fork patched reappears,
@@ -1190,10 +1210,10 @@ BUFFERED host registration as bounded segments instead of failing the whole mode
 `INSTANTTENSOR_BACKEND=BUFFERED` against a 155 GiB checkpoint is exactly the case where
 r16 could abort the load outright.
 
-### The reference Compose profile (r31)
+### The reference Compose profile (r33)
 
 The file the command above is derived from —
-[`docker-compose-ds4-v20-r31.yml`](https://raw.githubusercontent.com/local-inference-lab/blackwell-llm-docker/d281c51cf494cfcac8eee5ce6c14c6b112b07771/examples/docker-compose-ds4-v20-r31.yml),
+[`docker-compose-ds4-v20-r33.yml`](https://raw.githubusercontent.com/local-inference-lab/blackwell-llm-docker/426da51285d0666508003b03a75a442139fb7979/examples/docker-compose-ds4-v20-r33.yml),
 pinned at that commit:
 
 ```yaml
@@ -1212,9 +1232,9 @@ ulimits:
 volumes:
   - ${HF_CACHE:-/root/.cache/huggingface}:/root/.cache/huggingface
   - ${MODEL_ROOT:-/root/models}:/root/models:ro
-  - ${JIT_CACHE:-./cache/ds4-v20-r31}:/cache
-  - ${CONTAINER_TMP:-./cache/ds4-v20-r31/tmp}:/container-tmp
-  - ${NATIVE_L2_HOST_PATH:-./cache/ds4-v20-r31/native-l2}:/native-l2
+  - ${JIT_CACHE:-./cache/ds4-v20-r33}:/cache
+  - ${CONTAINER_TMP:-./cache/ds4-v20-r33/tmp}:/container-tmp
+  - ${NATIVE_L2_HOST_PATH:-./cache/ds4-v20-r33/native-l2}:/native-l2
 ```
 
 Three things changed in the scaffolding since the r24 file, and all three matter:
@@ -1224,7 +1244,7 @@ Three things changed in the scaffolding since the r24 file, and all three matter
 
 `/container-tmp` is still a **persistent bind mount inside the JIT cache tree**, not a
 tmpfs. Reuse the same `JIT_CACHE` across runs; a tmpfs discards the compiled artifacts
-every start — which is why the command above binds `/models/vllm-cache/r31/tmp` rather
+every start — which is why the command above binds `/models/vllm-cache/r33/tmp` rather
 than mounting 16 GiB of RAM there. If a run is interrupted during extension compilation,
 PyTorch can leave an empty `lock` file in that tree; only delete one after confirming no
 compiler process holds it.
@@ -1365,9 +1385,9 @@ expect proportionally less KV cache.
   firewall entry becomes irrelevant.
 - **`--ulimit memlock=-1 / nofile=1048576 / stack=67108864`** — NixOS leaves dockerd at
   systemd's defaults and containers inherit them, so these have to be asked for
-  explicitly. See [the reference Compose profile](#the-reference-compose-profile-r31).
+  explicitly. See [the reference Compose profile](#the-reference-compose-profile-r33).
 - **No `--privileged`** — dropped upstream in r31, and native L2 was validated without it.
-  See the [r31 launch section](#running-deepseek-v4-flash-gilded-gnosis-r31-k5).
+  See the [r33 launch section](#running-deepseek-v4-flash-gilded-gnosis-r33-k5).
 - **Storage** — 155 GiB checkpoint on `/models`, a `/cache` on `models/vllm-cache` that
   grows to several GiB of compiled kernels and CUDA graphs, and a quota'd
   `models/native-l2` if you enable the L2 tier. Keep `/cache` persistent: a cold cache

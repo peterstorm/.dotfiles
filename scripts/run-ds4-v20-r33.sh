@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch the DeepSeek-V4-Flash server (Gilded Gnosis r31, K5) on `desktop`.
+# Launch the DeepSeek-V4-Flash server (Gilded Gnosis r33, K5) on `desktop`.
 #
 # TP2/DCP1, B12X W4A8, fixed probabilistic K5, FP8 DS-MLA KV — the release's own
 # default profile, which is exactly this box's two-card shape. OpenAI-compatible
@@ -8,12 +8,12 @@
 #
 # The checkpoint must already be on disk — run scripts/download-ds4-flash.sh first.
 # Full rationale: docs/new-desktop-install.md — "Running DeepSeek-V4-Flash
-# (Gilded Gnosis r31, K5)".
+# (Gilded Gnosis r33, K5)".
 set -euo pipefail
 
-IMG="voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12xacee6e5-fi1ac6942-cu132-20260807-r31@sha256:3230c25ff95f8678a8eeb52a463f0d3b9f96f6ad550418cc51ea12177a55b41c"
+IMG="voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-20260809-r33@sha256:fdde59fed7f9fc12f9fd5ef1b3b3ea8d5097bf10ebad54b348497102c3a83f82"
 MODEL_HOST="/models/DeepSeek-V4-Flash-0731"
-NAME="ds4-0731-r31"
+NAME="ds4-0731-r33"
 
 if [ ! -e "$MODEL_HOST/config.json" ]; then
   echo "error: checkpoint not found at $MODEL_HOST — run scripts/download-ds4-flash.sh first" >&2
@@ -31,8 +31,11 @@ if [ -z "${VLLM_API_KEY:-}" ]; then
   VLLM_API_KEY="$(cat "$KEYFILE")"
 fi
 
-sudo mkdir -p /models/vllm-cache/r31/tmp
+sudo mkdir -p /models/vllm-cache/r33/tmp
 
+# Remove the previous release container as part of an in-place upgrade; otherwise its
+# host-network listener can keep port 8000 occupied.
+docker rm -f ds4-0731-r31 2>/dev/null || true
 docker rm -f "$NAME" 2>/dev/null || true
 docker run -d --init \
   --restart unless-stopped \
@@ -44,8 +47,8 @@ docker run -d --init \
   --ulimit nofile=1048576 \
   --ulimit stack=67108864 \
   -v "$MODEL_HOST":/models/deepseek-ai/DeepSeek-V4-Flash-0731:ro \
-  -v /models/vllm-cache/r31:/cache \
-  -v /models/vllm-cache/r31/tmp:/container-tmp \
+  -v /models/vllm-cache/r33:/cache \
+  -v /models/vllm-cache/r33/tmp:/container-tmp \
   -e CUDA_VISIBLE_DEVICES=0,1 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e VLLM_API_KEY="$VLLM_API_KEY" \
@@ -55,6 +58,9 @@ docker run -d --init \
   -e MODE=dspark -e DSPARK_DEPTH_MODE=fixed -e DSPARK_TOKENS=5 \
   -e BACKEND=b12x-a8 -e TP_SIZE=2 -e DCP_SIZE=1 \
   -e ALLREDUCE_MODE=auto \
+  -e B12X_PCIE_TP2_REMOTE_PUSH=0 \
+  -e B12X_PCIE_TP4_REMOTE_PUSH=0 \
+  -e B12X_PCIE_TP8_OWNER_REDUCE=1 \
   -e MAX_NUM_SEQS=16 -e MAX_MODEL_LEN=131072 -e MAX_NUM_BATCHED_TOKENS=8192 \
   -e GRAPH=auto \
   -e GPU_MEMORY_UTILIZATION=0.975 \
