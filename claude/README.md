@@ -118,10 +118,17 @@ managed by home-manager — a fresh machine just needs `hm-apply`.
    (`loom@loom`, `cortex@cortex`, `feynman@feynman`) and `extraKnownMarketplaces`
    (each → its GitHub repo) into the live file, preserving runtime-written keys.
 
-`roles/home-manager/core-apps/git/default.nix` rewrites
-`git@github.com:peterstorm/*` → HTTPS, so the **public** plugin repos clone
+`roles/home-manager/core-apps/git/default.nix` rewrites the SSH URL of each
+**public** plugin repo (`loom`, `cortex`, `feynman`) → HTTPS, so they clone
 without an SSH key (GitHub SSH always needs a key, even for public repos; HTTPS
 does not).
+
+The rewrite is listed per repo rather than as a `git@github.com:peterstorm/*`
+namespace glob on purpose. A namespace-wide rule also captures the **private**
+repos there — the Obsidian vault, this dotfiles repo — pointing their working
+SSH remotes at an HTTPS endpoint with no credential helper. Interactive git then
+asks for a username; the `obsidian-git-sync` systemd timer, having no tty, just
+fails with `could not read Username for 'https://github.com'`.
 
 After `hm-apply`, restart Claude Code: the declared marketplaces register and the
 enabled plugins install automatically.
