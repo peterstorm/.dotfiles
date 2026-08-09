@@ -28,6 +28,11 @@ bash -n "$DOWNLOAD"
 
 contains "$RUN" "$IMAGE@$DIGEST"
 contains "$RUN" 'NAME="ds4-0731-r33"'
+contains "$RUN" '--env-file "$ENVFILE"'
+contains "$RUN" "printf 'VLLM_API_KEY=%s\\n'"
+if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
+  fail "$RUN exposes VLLM_API_KEY in process arguments"
+fi
 contains "$RUN" 'B12X_PCIE_TP2_REMOTE_PUSH=0'
 contains "$RUN" 'B12X_PCIE_TP4_REMOTE_PUSH=0'
 contains "$RUN" 'B12X_PCIE_TP8_OWNER_REDUCE=1'

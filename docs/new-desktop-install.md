@@ -906,9 +906,14 @@ digest:
 bash scripts/run-ds4-v20-r33.sh
 ```
 
-Its equivalent `docker run` contract is:
+Its equivalent `docker run` contract is below. Put the key in a private env file rather
+than a `-e VLLM_API_KEY=value` argument: command arguments are visible through `/proc`.
 
 ```bash
+install -m 700 -d ~/.config/ds4-flash
+printf 'VLLM_API_KEY=%s\n' '<API_KEY>' > ~/.config/ds4-flash/container.env
+chmod 600 ~/.config/ds4-flash/container.env
+
 docker run --init \
   --restart unless-stopped \
   --name ds4-0731-r33 \
@@ -918,12 +923,12 @@ docker run --init \
   --ulimit memlock=-1 \
   --ulimit nofile=1048576 \
   --ulimit stack=67108864 \
+  --env-file ~/.config/ds4-flash/container.env \
   -v /models/DeepSeek-V4-Flash-0731:/models/deepseek-ai/DeepSeek-V4-Flash-0731:ro \
   -v /models/vllm-cache/r33:/cache \
   -v /models/vllm-cache/r33/tmp:/container-tmp \
   -e CUDA_VISIBLE_DEVICES=0,1 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
-  -e VLLM_API_KEY='<API_KEY>' \
   -e SERVED_MODEL_NAME=deepseek-v4-flash \
   -e MODEL_PATH=/models/deepseek-ai/DeepSeek-V4-Flash-0731 \
   -e PORT=8000 \
@@ -973,6 +978,7 @@ override file — otherwise the endpoint is on the LAN with no key.
 | `--gpus all` | Matches the Compose file's own `gpus: all`. Works here because of `systemd.services.docker.path` in `roles/nvidia-graphics`; `--device=nvidia.com/gpu=all` is the equivalent needing no host-side help. |
 | Explicit model mount + `MODEL_PATH` | Compose defaults to scanning `${MODEL_ROOT:-/root/models}`. Pointing straight at the checkpoint skips the HF cache mount entirely. |
 | Caches under `/models/vllm-cache/r33` | Its own ZFS dataset (zstd, 128K records), rather than a relative `./cache` next to a git checkout. |
+| Private `--env-file` for `VLLM_API_KEY` | Keeps the API key out of Docker's process arguments and `/proc`; the helper rewrites it mode 0600 on every launch. |
 | `CUDA_DEVICE_ORDER=PCI_BUS_ID` | Makes `CUDA_VISIBLE_DEVICES=0,1` match `nvidia-smi` ordering instead of driver enumeration order. |
 | `--restart unless-stopped`, no `--rm` | Matches Compose. The two flags are mutually exclusive in `docker run`; use `--rm` and drop the restart policy for throwaway benchmarking. |
 

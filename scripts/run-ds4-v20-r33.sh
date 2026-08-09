@@ -22,6 +22,7 @@ fi
 
 # API key: prefer $VLLM_API_KEY, else a persistent per-machine key (not committed).
 KEYFILE="$HOME/.config/ds4-flash/api-key"
+ENVFILE="$HOME/.config/ds4-flash/container.env"
 if [ -z "${VLLM_API_KEY:-}" ]; then
   if [ ! -f "$KEYFILE" ]; then
     mkdir -p "$(dirname "$KEYFILE")"
@@ -30,6 +31,11 @@ if [ -z "${VLLM_API_KEY:-}" ]; then
   fi
   VLLM_API_KEY="$(cat "$KEYFILE")"
 fi
+
+# Docker CLI arguments are visible through /proc. Keep the secret out of `ps` by
+# passing it through a private env file instead of `-e VLLM_API_KEY=value`.
+printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY" > "$ENVFILE"
+chmod 600 "$ENVFILE"
 
 sudo mkdir -p /models/vllm-cache/r33/tmp
 
@@ -46,12 +52,12 @@ docker run -d --init \
   --ulimit memlock=-1 \
   --ulimit nofile=1048576 \
   --ulimit stack=67108864 \
+  --env-file "$ENVFILE" \
   -v "$MODEL_HOST":/models/deepseek-ai/DeepSeek-V4-Flash-0731:ro \
   -v /models/vllm-cache/r33:/cache \
   -v /models/vllm-cache/r33/tmp:/container-tmp \
   -e CUDA_VISIBLE_DEVICES=0,1 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
-  -e VLLM_API_KEY="$VLLM_API_KEY" \
   -e SERVED_MODEL_NAME=deepseek-v4-flash \
   -e MODEL_PATH=/models/deepseek-ai/DeepSeek-V4-Flash-0731 \
   -e PORT=8000 \
