@@ -1,1 +1,0 @@
-../../../dev/claude-plugins/loom/agents/decompose-agent.md

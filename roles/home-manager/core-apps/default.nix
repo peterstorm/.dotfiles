@@ -42,6 +42,10 @@
       warpd = "warp-cli disconnect";
       system-apply = "cd /home/peterstorm/.dotfiles && ./system-apply.sh";
       hm-apply = "cd /home/peterstorm/.dotfiles && ./hm-apply.sh";
+      # Re-render Loom's Pi agents after pulling Loom. hm-apply does this too,
+      # but Loom moves faster than the rebuild cycle.
+      loom-sync = "~/dev/claude-plugins/loom/scripts/sync-pi-agents.sh";
+      pi-verify = "~/.dotfiles/pi/verify.sh";
     };
   };
 

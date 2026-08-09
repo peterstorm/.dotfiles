@@ -1,1 +1,0 @@
-../../../dev/claude-plugins/loom/agents/deepen-agent.md

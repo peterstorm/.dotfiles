@@ -1,1 +1,0 @@
-../../../dev/claude-plugins/loom/agents/clarify-agent.md

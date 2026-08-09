@@ -1,5 +1,5 @@
-import { existsSync, lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { discoverAgents, resolvePackageAgentDirs } from "./extensions/subagent/agents";
 
@@ -10,19 +10,40 @@ const requiredPanelAgents = [
   "review-verifier-agent",
 ] as const;
 
+const loomMarker = "<!-- LOOM_PI_AGENT_ID:";
+
 function fail(message: string): never {
   process.stderr.write(`pi agent verification failed: ${message}\n`);
   process.exit(1);
 }
 
 const agentDir = getAgentDir();
-const userAgentsLink = join(agentDir, "agents");
-if (!existsSync(userAgentsLink)) fail(`${userAgentsLink} is missing`);
-if (!lstatSync(userAgentsLink).isSymbolicLink()) fail(`${userAgentsLink} is not Home Manager's directory symlink`);
+const userAgentsDir = join(agentDir, "agents");
 
-const expectedUserDir = resolve(process.env.HOME ?? "", ".dotfiles/pi/agents");
-if (realpathSync(userAgentsLink) !== realpathSync(expectedUserDir)) {
-  fail(`${userAgentsLink} points to ${readlinkSync(userAgentsLink)}, expected ${expectedUserDir}`);
+// Loom renders its roster into this directory, so it must be real storage under
+// ~/.pi — a symlink into the dotfiles repo would commit generated, machine-bound
+// definitions to version control.
+if (!existsSync(userAgentsDir)) fail(`${userAgentsDir} is missing`);
+if (lstatSync(userAgentsDir).isSymbolicLink()) {
+  fail(
+    `${userAgentsDir} is a symlink to ${readlinkSync(userAgentsDir)}; ` +
+      `Loom renders into it, so generated agents would land in the dotfiles repo`,
+  );
+}
+if (!lstatSync(userAgentsDir).isDirectory()) fail(`${userAgentsDir} is not a directory`);
+
+// The generic agents this repo owns are installed as per-file symlinks, so edits
+// in the repo stay live.
+const ownedAgentsDir = resolve(process.env.HOME ?? "", ".dotfiles/pi/agents");
+for (const entry of readdirSync(ownedAgentsDir)) {
+  if (!entry.endsWith(".md")) continue;
+  const source = join(ownedAgentsDir, entry);
+  const link = join(userAgentsDir, entry);
+  if (!existsSync(link)) fail(`agent ${entry} owned by the dotfiles is not installed at ${link}`);
+  if (!lstatSync(link).isSymbolicLink()) fail(`${link} should be a symlink to ${source}`);
+  if (resolve(dirname(link), readlinkSync(link)) !== source) {
+    fail(`${link} points to ${readlinkSync(link)}, expected ${source}`);
+  }
 }
 
 const packageAgentDirs = resolvePackageAgentDirs(agentDir);
@@ -46,6 +67,50 @@ for (const packageDir of packageAgentDirs) {
   }
 }
 
+// Discovery only makes an agent visible. Loom's pre-tool-use guard additionally
+// requires a generated definition that is byte-for-byte the current render, and
+// blocks the spawn otherwise — so prove both here, using Loom's own validator.
+const renderedAgents = new Set<string>();
+for (const packageDir of packageAgentDirs) {
+  const packageRoot = dirname(packageDir);
+  const rendererPath = join(packageRoot, "engine/src/utils/render-pi-agent.ts");
+  if (!existsSync(rendererPath)) continue;
+  const { validatePiAgentDefinitionFile } = (await import(rendererPath)) as {
+    validatePiAgentDefinitionFile: (
+      path: string,
+      agent: string,
+      packageRoot: string,
+    ) => { ok: true } | { ok: false; error: string };
+  };
+
+  for (const entry of readdirSync(packageDir)) {
+    if (!entry.endsWith(".md") || entry === "README.md") continue;
+    const agent = basename(entry, ".md");
+    const generated = join(userAgentsDir, entry);
+    renderedAgents.add(entry);
+
+    if (!existsSync(generated)) fail(`${agent} has no generated definition at ${generated} — run loom-sync`);
+    if (lstatSync(generated).isSymbolicLink()) {
+      fail(`${generated} is a symlink; the raw package agent cannot satisfy Loom's model policy — run loom-sync`);
+    }
+    if (!readFileSync(generated, "utf8").includes(`${loomMarker}${agent} -->`)) {
+      fail(`${generated} is missing its ${loomMarker}${agent} --> marker — run loom-sync`);
+    }
+    const validation = validatePiAgentDefinitionFile(generated, agent, packageRoot);
+    if (!validation.ok) fail(`${agent} render is stale: ${validation.error} — run loom-sync`);
+  }
+}
+
+// A render left behind after its source agent was deleted would keep resolving
+// for spawns; activation prunes these, so none should survive.
+for (const entry of readdirSync(userAgentsDir)) {
+  if (!entry.endsWith(".md")) continue;
+  const path = join(userAgentsDir, entry);
+  if (lstatSync(path).isSymbolicLink()) continue;
+  if (!readFileSync(path, "utf8").includes(loomMarker)) continue;
+  if (!renderedAgents.has(entry)) fail(`${path} is a render of an agent no longer shipped by any package`);
+}
+
 for (const name of requiredPanelAgents) {
   const sourceExists = packageAgentDirs.some((dir) => existsSync(join(dir, `${name}.md`)));
   if (sourceExists && !discoveredByName.has(name)) fail(`panel agent ${name} exists in Loom but is unavailable`);
@@ -57,5 +122,6 @@ if (designer && !designer.systemPrompt.includes("## Preloaded Skill: architectur
 }
 
 process.stdout.write(
-  `Pi agent install verified: ${discovered.length} agents, ${packageAgentDirs.length} package agent dir(s), panel roster available.\n`,
+  `Pi agent install verified: ${discovered.length} agents, ${packageAgentDirs.length} package agent dir(s), ` +
+    `${renderedAgents.size} current Loom render(s), panel roster available.\n`,
 );

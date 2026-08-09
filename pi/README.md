@@ -6,7 +6,7 @@ This directory contains the pi coding agent configuration managed by home-manage
 
 ```
 pi/
-├── agents/           # Agent markdown files (→ ~/.pi/agent/agents/)
+├── agents/           # Generic agents this repo owns (→ linked per file)
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   └── global-instructions.ts  # Standalone extension
@@ -19,13 +19,14 @@ pi/
 
 The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
 
-1. **Agents/Extensions/Prompts**: Creates directory-level symlinks:
+1. **Extensions/Prompts**: directory-level symlinks:
    ```
-   ~/.pi/agent/agents     → ~/.dotfiles/pi/agents
    ~/.pi/agent/extensions → ~/.dotfiles/pi/extensions
    ~/.pi/agent/prompts    → ~/.dotfiles/pi/prompts
    ```
-2. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`)
+2. **Agents**: `~/.pi/agent/agents` is a **real directory**, populated at
+   activation from two sources — see "Agents" below.
+3. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`)
 
 ### Why Directory Symlinks?
 
@@ -34,6 +35,9 @@ Using a single symlink per directory (instead of per-file) means:
 - **Edits are live immediately** — no `home-manager switch` needed
 - **Removing files just works** — delete from repo, done
 - **`home-manager switch` only needed** when the nix module itself changes
+
+`agents/` is the exception, because it is not purely source — Loom generates
+into it.
 
 ## Packages (Plugins)
 
@@ -50,13 +54,62 @@ Pi loads packages from `settings.json`:
 
 Paths are relative to `~/.pi/agent/` (the agentDir). Each package has a `package.json` with a `pi` manifest declaring its extensions, skills, and prompts. Loom's native `pi/extension.ts` owns Loom guards and subagent-result state transitions; do not add a separate Loom bridge extension because it would process the same completion events twice.
 
-## Package Agents
+## Agents
+
+`~/.pi/agent/agents` is a real directory holding two kinds of file:
+
+| Kind | Source | Tracked in git? |
+|---|---|---|
+| symlink | `~/.dotfiles/pi/agents/*.md` — the generic agents this repo owns (`planner`, `scout`, `reviewer`, `worker`) | yes |
+| real file | Loom's roster, rendered per machine by `loom/scripts/sync-pi-agents.sh` | **no** |
+
+### Why agents/ is not a directory symlink
+
+Loom's sync script writes into `${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/agents`.
+While that path was a symlink into this repo, Loom's build output landed inside
+version control. Those renders must not be committed:
+
+- they bake in an **absolute** package root (`loom-package-root`, base64) plus
+  the inlined bodies of every preloaded skill, so they are machine-bound;
+- they carry a `loom-agent-digest` of the source agent, so they go stale on
+  every Loom commit.
+
+### Why symlinking Loom's raw agents does not work either
+
+Loom's Pi extension registers a pre-tool-use guard
+(`engine/src/handlers/pre-tool-use/validate-agent-model.ts`) that resolves
+`$PI_CODING_AGENT_DIR/agents/<name>.md` and **fails closed** twice:
+
+- absent file → `BLOCKED: Pi agent '<name>' has no generated definition`
+- not byte-for-byte the current render → `BLOCKED: Pi agent policy failed`
+
+A symlink to `loom/agents/<name>.md` fails the second check: the source declares
+`model: sonnet` with `${CLAUDE_PLUGIN_ROOT}` placeholders, while the guard
+demands the rendered form with an explicit provider/model/thinking binding.
+
+So the render is mandatory, and `home.activation.piAgents` runs it on every
+`hm-apply` (after `claudePluginsWorkspace` has provisioned the Loom checkout and
+its `node_modules`). It also prunes renders whose source agent Loom has dropped,
+which the sync script itself does not do.
+
+Between rebuilds — Loom moves faster than the rebuild cycle — re-render with:
+
+```bash
+loom-sync     # = ~/dev/claude-plugins/loom/scripts/sync-pi-agents.sh
+```
+
+Then `/reload` in Pi.
+
+### Package discovery
 
 Pi packages do not natively expose an `agents` resource. The custom subagent extension therefore discovers a conventional `agents/` directory from every configured **local** package in `settings.json`. Package agents load before user agents, and project agents load last, giving this override order:
 
 `package < user < project`
 
-This makes Loom's full roster available automatically when the Loom checkout adds an agent. The tracked per-agent symlinks remain for compatibility and immediate use in already-running Pi sessions, but correctness no longer depends on manually updating that list. In particular, both panel workflows are covered:
+This makes Loom's full roster **visible** as soon as the Loom checkout adds an
+agent, with no dotfiles change. Note that visibility alone is not enough:
+spawning still needs the generated definition above, so an unsynced agent shows
+up in the roster and then blocks. Both panel workflows are covered:
 
 - Architecture panel: `arch-interviewer-agent`, `arch-designer-agent`, `arch-judge-agent`
 - Review refutation panel: `review-verifier-agent`
@@ -75,8 +128,12 @@ The custom subagent extension adds `resolvePackageSkillPaths()` which:
 
 1. Reads `~/.pi/agent/settings.json` to find declared packages
 2. For each package, reads its `package.json` → `pi.skills` array
-3. Resolves those relative paths to absolute skill directories
-4. Passes them to `loadSkills({ skillPaths: [...] })`
+3. Falls back to the conventional `skills/` directory when the manifest declares
+   none — Loom ships `skills/` but declares only `pi.extensions`, so a
+   manifest-only lookup returns an empty map and **every** agent silently loses
+   its preloaded skill
+4. Resolves those relative paths to absolute skill directories
+5. Passes them to `loadSkills({ skillPaths: [...] })`
 
 This gives us a complete skill name → file path map. When an agent declares:
 
@@ -122,13 +179,24 @@ Run the complete install verification after changing Pi package or agent wiring:
 ```bash
 cd ~/.dotfiles
 bun test pi/extensions/subagent/agents.test.ts
-bun pi/verify-agent-install.ts
+pi-verify                       # = ./pi/verify.sh
 nix flake check --no-build
 ```
+
+`verify-agent-install.ts` needs `@earendil-works/pi-coding-agent`, which ships
+inside pi's own Nix store closure and nowhere in this repo — `pi/verify.sh`
+derives that path from the `pi` on `$PATH` and sets `NODE_PATH`. Invoking the
+`.ts` directly fails to resolve the module.
+
+It asserts the whole contract: `agents/` is a real directory, every owned agent
+is linked, every Loom agent has a render that Loom's *own* validator accepts
+byte-for-byte, no orphan renders survive, and the panel roster plus skill
+injection are live.
 
 Expected skill-injection output includes:
 ```
 architecture-agent → [architecture-tech-lead]
+arch-designer-agent → [architecture-tech-lead]
 grill-agent → [grill]
 java-test-agent → [java-test-engineer]
 code-implementer-agent → [code-implementer]
@@ -139,6 +207,12 @@ security-agent → [security-expert]
 ```
 
 ## Adding a New Agent
+
+For a **Loom** agent, add it to `~/dev/claude-plugins/loom/agents/` and run
+`loom-sync`. Never hand-write one into `pi/agents/` — Loom's guard only accepts
+its own render.
+
+For a generic agent this repo owns:
 
 1. Create `pi/agents/my-agent.md`:
    ```yaml
@@ -155,7 +229,8 @@ security-agent → [security-expert]
 
 2. The agent body (below `---`) becomes the system prompt
 3. Skills listed in frontmatter are resolved and appended automatically
-4. Run `home-manager switch` (or the file is already live if `.pi/agent/` points here)
+4. Run `hm-apply` to link it into `~/.pi/agent/agents/`. Editing an
+   already-linked agent is live — only adding or removing one needs the rebuild.
 
 ## Adding a New Extension
 

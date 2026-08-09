@@ -1,1 +1,0 @@
-../../../dev/claude-plugins/loom/agents/review-verifier-agent.md
