@@ -1,30 +1,33 @@
 # New Desktop (AI Workstation) — NixOS Install Guide
 
-Target machine: AMD Ryzen + 2× NVIDIA RTX 6000 Pro (Blackwell), WiFi + Ethernet, single NVMe, ZFS root, X11 + SDDM + XMonad dual-monitor.
+Target machine: AMD Ryzen 9 9950X + 2× NVIDIA RTX PRO 6000 Blackwell Workstation Edition, MediaTek MT7927 WiFi 7 + 2×Ethernet, single NVMe, ZFS root, X11 + SDDM + XMonad dual-monitor.
 
 Host name: `desktop`. Everything is declarative — one command from the laptop wipes and installs.
 
+**Status: installed and verified.** The hardware table below is now confirmed from the
+running box (2026-08), not assumed. WiFi, GPU P2P, and the container GPU path are all
+working; see the per-section notes.
+
 ## Hardware assumptions (verify on first boot)
 
-Nothing in this repo records the actual parts. What follows is what the config *implies*,
-what is merely assumed, and which assumptions other sections lean on. Several tuning
-numbers below are wrong if these are wrong.
-
-**Fill this table in from the installer stick, before you install** — `survey-hardware`
-on the ISO answers every row except the two that need a driver (VRAM, power limit). See
+The machine is installed; the values below are **confirmed from the running box**. Several
+tuning numbers depend on them, so they are still worth re-checking after any hardware
+change. `survey-hardware` on the ISO reproduces every row except the two that need a
+driver (VRAM, power limit). See
 [Step 2](#answer-the-hardware-questions-before-you-wipe-anything).
 
 | Item | Basis | Value | Where it matters |
 |---|---|---|---|
-| Board | **confirmed** | **ASUS ProArt X870E-CREATOR WIFI** (X870E, AM5) | Slot topology — see below |
-| CPU | **confirmed** | Ryzen 16-core, AM5 — `cpuCores = 16` is correct | PCIe lanes, build parallelism |
+| Board | **confirmed** | **ASUS ProArt X870E-CREATOR WIFI** (X870E, AM5), BIOS **1203** | Slot topology — see below |
+| CPU | **confirmed** | **Ryzen 9 9950X**, 16C/32T, AM5 — `cpuCores = 16` is correct | PCIe lanes, build parallelism |
 | RAM | **confirmed** | **96 GB** | `/dev/shm` = 48 GB, zram = 48 GB, ARC capped at 16 GiB |
-| NVMe | **confirmed** | **Samsung 9100 PRO 2 TB in `M.2_1`** — `M.2_2` empty | Gen5 x4 CPU-direct; `M.2_2` empty is what keeps GPU 2 at x8 |
-| PCIe topology | board spec + build | **x8/x8 from the CPU available, and nothing is stealing lanes** | whether GPU↔GPU P2P works at all |
-| GPUs | prose only | 2× RTX PRO 6000 Blackwell, 96 GB each — **unverified** | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
-| GPU slots | **unverified** | assumed `PCIEX16(G5)_1` + `_2` | `survey-hardware` settles it — see below |
+| NVMe | **confirmed** | **Samsung 9100 PRO 2 TB in `M.2_1`** (`/dev/nvme0n1`) — `M.2_2` empty | Gen5 x4 CPU-direct; `M.2_2` empty is what keeps GPU 2 at x8 |
+| PCIe topology | **confirmed** | **x8/x8, both from the CPU root complex** — P2P measured at **28.6 GB/s** (Gen5 x8 line rate) | whether GPU↔GPU P2P works at all |
+| GPUs | **confirmed** | 2× RTX PRO 6000 Blackwell **Workstation Edition** `[10de:2bb1]`, ~96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
+| GPU slots | **confirmed** | `PCIEX16(G5)_1` + `_2` → buses `01:00.0` / `03:00.0`, CPU root ports `00:01.1` / `00:01.3` | direct-attach P2P path |
 | GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 450` |
-| NICs | `[ "wlp5s0" "enp6s0" ]` | **wrong — board has 10 Gb + 2.5 Gb + WiFi 7**, so three interfaces | non-blocking, NetworkManager copes |
+| WiFi | **confirmed** | **MediaTek MT7927** (Filogic 380) `[14c3:7927]`, driver `mt7925e` — out-of-tree, needs `iommu=pt` | see [WiFi (MT7927)](#wifi-mt7927) |
+| NICs | **confirmed** | `wlp10s0` (WiFi), `enp11s0` + `enp12s0` (2.5 Gb + 10 Gb) — flake `NICs` value is cosmetic (NetworkManager owns them) | non-blocking |
 
 ### What 96 GB of RAM means here
 
@@ -95,16 +98,21 @@ full-length slot (`PCIEX16_3`, chipset x4) looks identical to the two good ones.
 guess — `survey-hardware` answers it exactly, in one line per card:
 
 ```
-00:01.0/01:00.0 VGA compatible controller: NVIDIA ...   <- port path
-00:03.0/02:00.0 VGA compatible controller: NVIDIA ...
-                LnkSta: Speed 32GT/s, Width x8          <- link width
+00:01.1/01:00.0 VGA compatible controller: NVIDIA ...   <- port path
+00:01.3/03:00.0 VGA compatible controller: NVIDIA ...
+                LnkSta: Speed 32GT/s, Width x8          <- link width (under load)
 ```
+
+> On this box the confirmed paths are `00:01.1/01:00.0` and `00:01.3/03:00.0` — both
+> CPU root ports, both x8. Note the link idles at `Speed 2.5GT/s (downgraded)`: that is
+> NVIDIA's idle downclock, and it ramps to Gen5 (32GT/s) under load. The 28.6 GB/s P2P
+> measurement is the proof it reaches full speed — don't read the idle `LnkSta` as a fault.
 
 Read it like this:
 
 | What you see | Verdict |
 |---|---|
-| Both paths start `00:01.0/` or `00:03.0/` (CPU root ports), both `Width x8` | **Correct.** x8/x8 from the CPU — proceed |
+| Both paths start `00:01.1/` or `00:01.3/` (CPU root ports), both `Width x8` | **Correct.** x8/x8 from the CPU — proceed |
 | Both `Width x16` | Only one card is present, or one is not being detected |
 | One card `Width x4` | It is in `PCIEX16_3`, or something is populating `M.2_2` |
 | Paths run through *different* bridges, one via the chipset | The second card is chipset-attached — **stop**, move it |
@@ -200,6 +208,12 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
   - Imports disko + `disks.nix`
   - `boot.supportedFilesystems = [ "zfs" ]`
   - `networking.hostId = "8a3f2c19"`
+  - **MediaTek MT7927 WiFi 7 + Bluetooth** — out-of-tree `mt76`/bluetooth modules and
+    ASUS-extracted firmware from `cmspam/mt7927-nixos`, wired in with a corrected module
+    layout (`updates/` not `extra/`). Requires `iommu=pt` (not `iommu=off`). See
+    [WiFi (MT7927)](#wifi-mt7927).
+  - `boot.kernelParams = [ "iommu=pt" "amd_iommu=on" ... ]` — P2P for the GPUs **and**
+    working WiFi. See [Host prep](#host-prep-already-baked-into-the-flake).
   - `zramSwap` enabled (50% RAM, zstd) — no on-disk swap
   - `zfs.zfs_arc_max=16 GiB` — see [ZFS ARC](#zfs-arc-vs-the-kv-offload-region)
   - `virtualisation.docker.storageDriver = "zfs"` — see
@@ -210,7 +224,14 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
   - AMD microcode
   - `specialisation.headless` — a second systemd-boot entry that boots to a console
     instead of SDDM/XMonad, so the GPUs start empty for inference. See
-    [Going headless](#going-headless-to-free-gpu-memory)
+    [Going headless](#going-headless-to-free-gpu-memory). You can also flip live with
+    `sudo systemctl isolate multi-user.target` / `graphical.target` — no reboot needed.
+- **Home-manager is applied standalone**, like the laptops — it is *not* folded into the
+  system closure. `homeManagerConfigurations.desktop` (in `flake.nix`) is the `peterstorm`
+  user with a subset of roles (`core-apps window-manager/xmonad dunst`; the homelab/sops/
+  obsidian roles are omitted because they need an age key). Apply with
+  `./hm-apply.sh desktop`. (It used to be a NixOS module here purely so the offline USB
+  install produced a driveable user with no network on first boot.)
 - `roles/nvidia-graphics/default.nix` — rewritten for Blackwell
   - `hardware.nvidia.open = true` (required — Blackwell only supports the open kernel module)
   - `production` driver channel
@@ -237,7 +258,7 @@ Read these once before `nixos-anywhere` — they're the only places hardware ass
 | File | Setting | Current | When to change |
 |---|---|---|---|
 | `machines/desktop/disks.nix` | `diskDevice` | `/dev/nvme0n1` | If target NVMe isn't the first slot, or prefer `/dev/disk/by-id/nvme-...` |
-| `flake.nix` (desktop) | `NICs` | `[ "wlp5s0" "enp6s0" ]` | Update once you know real interface names (`ip -o link show`). Non-blocking — NetworkManager handles the rest |
+| `flake.nix` (desktop) | `NICs` | `[ "wlp5s0" "enp6s0" ]` | Cosmetic — real interfaces are `wlp10s0`/`enp11s0`/`enp12s0`, but NetworkManager owns them, so this value is not load-bearing. Leave it or set `[ ]`; do **not** point it at the WiFi interface or networkd will fight NM for the DHCP lease |
 | `machines/desktop/default.nix` | `networking.hostId` | `"8a3f2c19"` | Only if it collides with an existing host |
 | `flake.nix` (desktop) | `cpuCores` | `16` | Set to actual core count for build parallelism |
 | `roles/dual-desktop-plasma/default.nix` | xrandr `setupCommands` | `DP-2` primary, `DP-0` rotated | **Will differ on this box** — two GPUs spread connectors across `DP-0..DP-3`. Check `xrandr` after boot and update, or monitors won't be positioned (non-fatal — greeter xrandr just no-ops) |
@@ -381,18 +402,23 @@ Once the machine reboots into the installed system, the `ssh` role's sshd is run
 > add a `hashedPasswordFile` (sops) to the user rather than running `passwd`. For
 > headless use you can ignore it and stay on key-based SSH.
 
-Copy your dotfiles and age key:
+Copy your dotfiles and age key. **`scp` does not work** — the `ssh` role sets
+`allowSFTP = false`, so use `git clone` for the repo and a piped `cat`/`--extra-files`
+for the key. Also note **`desktop.local` mDNS does not resolve over some WiFi APs**
+(IPv4 mDNS multicast is dropped between wireless clients); use the IP, or the `ssh desktop`
+alias baked into the laptop's home-manager (`roles/home-manager/core-apps`).
 
 ```bash
-# From your laptop
-scp -r ~/.dotfiles peterstorm@desktop.local:~/
-scp ~/.config/sops/age/keys.txt peterstorm@desktop.local:~/.config/sops/age/keys.txt
-ssh peterstorm@desktop.local chmod 600 ~/.config/sops/age/keys.txt
+# On the desktop: clone the repo (scp/sftp is disabled on this host)
+ssh peterstorm@<desktop-ip>        # or: ssh desktop  (laptop HM alias -> 192.168.0.80)
+git clone https://github.com/peterstorm/.dotfiles ~/.dotfiles
+
+# Seed the sops age key without sftp (pipe it in over ssh)
+ssh peterstorm@<desktop-ip> 'mkdir -p ~/.config/sops/age && cat > ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.txt' < ~/.config/sops/age/keys.txt
 ```
 
-Or fold both into the install itself — `nixos-anywhere --extra-files` copies a directory
-tree into the new root before first boot, so the machine comes up already holding the age
-key:
+Or fold the key into the install itself — `nixos-anywhere --extra-files` copies a directory
+tree into the new root before first boot, so the machine comes up already holding it:
 
 ```bash
 mkdir -p /tmp/seed/home/peterstorm/.config/sops/age
@@ -404,11 +430,11 @@ nix run github:nix-community/nixos-anywhere -- \
   --chown /home/peterstorm/.config 1000:100
 ```
 
-Apply home-manager:
+Apply home-manager (standalone — note the `desktop` config name, a subset of the laptop's):
 
 ```bash
-ssh peterstorm@desktop.local
-cd ~/.dotfiles && ./hm-apply.sh
+ssh desktop                        # or peterstorm@<desktop-ip>
+cd ~/.dotfiles && ./hm-apply.sh desktop
 ```
 
 ## Step 5 — Verify
@@ -420,11 +446,14 @@ this is the moment the PCIe topology and RAM questions get answered. Then:
 nvidia-smi                             # both RTX 6000 Pro cards listed, CUDA Version >= 13.2
 nvtop                                  # live view
 cat /proc/driver/nvidia/params | grep RegistryDwords   # ForceP2P=0x11;... took effect
+cat /proc/cmdline | tr ' ' '\n' | grep iommu           # iommu=pt amd_iommu=on (NOT iommu=off)
+ip -o link show | grep -i wl           # wlp10s0 present + UP (MT7927 WiFi working)
 zpool status                           # rpool ONLINE, all datasets mounted
 zfs list                               # root/nix/home/docker/models + vllm-cache + native-l2
 
 docker info | grep -i "storage driver" # must say zfs, not vfs
 arc_summary | head -20                 # ARC target should cap at 16 GiB, not half of RAM
+nvidia-smi topo -p2p rw                # GPU0<->GPU1 should read OK (P2P enabled)
 
 # Container GPU passthrough — both forms should work (see the nvidia-graphics notes)
 docker run --rm --device=nvidia.com/gpu=all nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi
@@ -457,9 +486,10 @@ disk through disko. It is the install command, not the update command. To iterat
 config after install, use the normal flow:
 
 ```bash
-ssh peterstorm@desktop
+ssh desktop                # laptop HM alias -> 192.168.0.80 (or peterstorm@<ip>)
 cd ~/.dotfiles
-./system-apply.sh          # the script already hardcodes `switch`; a second one errors
+./system-apply.sh          # system: the script already hardcodes `switch`; a second one errors
+./hm-apply.sh desktop      # home-manager, standalone (separate step now)
 ```
 
 To wipe and reinstall from scratch (destructive!), boot the USB again and re-run `nixos-anywhere`.
@@ -541,6 +571,76 @@ nvidia-smi -q -d POWER | grep -iE "power limit"   # read the min/max/default
 Then set the number and `./system-apply.sh`. `nvidiaPersistenced = true` is what keeps the
 cap from being lost when the last client detaches.
 
+## WiFi (MT7927)
+
+The board's wireless is a **MediaTek MT7927 / MT6639 (Filogic 380)**, PCI `14c3:7927`
+(Foxconn subsystem `105b:e124`). Kernel 6.18.41 does **not** claim it — mainline ships no
+such modalias, and `linux-firmware` has `mediatek/mt7925` but nothing for MT6639. Both the
+driver and the firmware therefore come out-of-tree from
+[`cmspam/mt7927-nixos`](https://github.com/cmspam/mt7927-nixos) (which builds patched
+`mt76` + bluetooth modules and extracts firmware from ASUS's Windows driver, tracking
+[`jetm/mediatek-mt7927-dkms`](https://github.com/jetm/mediatek-mt7927-dkms)).
+
+### How it's wired (`machines/desktop/default.nix`)
+
+We take the flake's *packages* but re-do its install layout, because the upstream default
+does not work on NixOS:
+
+- **Modules go in `updates/`, not `extra/`.** `depmod` ranks `updates/` above `kernel/`
+  but does **not** rank `extra/` above it, so the flake's `extra/` layout loses every name
+  collision to the in-tree `mt76` modules — `modules.alias` ends up with only the in-tree
+  `0717/7925` aliases (no `7927`) and the card is never claimed. After the fix,
+  `mt7925e` carries the `14c3:7927` alias and resolves to `updates/`.
+- **BT RAM code is installed to `mediatek/mt7927/` as well as `mediatek/mt6639/`** — the
+  patched `btmtk` requests it from the former.
+- An **ASPM udev rule** (`ATTR{link/l1_aspm}="0"` for `14c3:7927`) is kept from upstream.
+
+The `nixosModule` from the flake is deliberately **not** imported (it uses the broken
+`extra/` layout); the derivations are re-wired by hand at the top of the machine file.
+
+### The one thing that actually breaks it: `iommu=off`
+
+This is the trap that cost the most time. The GPU P2P work originally set
+`boot.kernelParams = [ "iommu=off" "amd_iommu=off" ]`. With the AMD IOMMU **fully off**,
+the MT7927's firmware download (a DMA transfer) never completes — the MCU's replies don't
+land, and dmesg shows:
+
+```
+mt7925e ...: Message 00000010 (seq N) timeout
+mt7925e ...: Failed to get patch semaphore
+mt7925e ...: hardware init failed
+```
+
+The card enumerates and the driver binds, but WiFi never comes up. The tell was that the
+**same card worked under Ubuntu**, whose only relevant difference was leaving the IOMMU
+on. The fix is `iommu=pt amd_iommu=on` (passthrough): the GPUs still get their untranslated
+P2P path, but the IOMMU stays enabled so the WiFi card can DMA its firmware. Do **not**
+revert to `iommu=off` for any P2P reason — use ACS-disabled in BIOS instead (and on this
+board even that turned out unnecessary; see [Verify P2P](#verify-p2p-before-benchmarking)).
+
+### Verify
+
+```bash
+lspci -nnk -d 14c3:7927                # 'Kernel driver in use: mt7925e'
+modinfo mt7925e | grep filename        # path must contain 'updates/', not 'kernel/'
+sudo dmesg | grep -iE 'mt7925|mt6639'  # no 'Failed to get patch semaphore' / 'firmware ... failed'
+ip -o link show | grep -i wl           # wlp10s0 present
+nmtui                                  # connect
+```
+
+If `dmesg` shows the patch-semaphore failure, check `cat /proc/cmdline` for a stray
+`iommu=off` first — that is the cause 99% of the time here. A full **cold** power-cycle
+(PSU off, not a warm reboot) also clears a wedged MCU state.
+
+### Reaching the box by name
+
+mDNS (`desktop.local`) is published by avahi (physical NICs only — `allowInterfaces` keeps
+docker bridges out of it), and every host with the `wifi` role now resolves `.local`
+(`nssmdns4`+`nssmdns6`). **Caveat:** some consumer APs drop IPv4 mDNS multicast between
+wireless clients, so `desktop.local` may only resolve over IPv6 link-local or not at all
+from another WiFi box. The reliable path is the **`ssh desktop` alias** in the laptop's
+home-manager (`roles/home-manager/core-apps`, a static-IP entry like `homelab`).
+
 ## Running DS4 v8 (DeepSeek-V4-Flash on vLLM)
 
 Guide: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v8.md>
@@ -618,9 +718,15 @@ Enabled**, and ReBAR additionally requires CSM disabled. Disable CSM first, then
 two — otherwise you will look for a menu entry that is not being displayed and conclude the
 board lacks it.
 
-Leave IOMMU on `Auto` and set **`ACS = Disabled`**. `iommu=pt amd_iommu=on` in
-`boot.kernelParams` settles the passthrough behaviour from the kernel side. Do **not** use
-`iommu=off` here: it kills the on-board MT7927 WiFi (firmware DMA never completes).
+Leave IOMMU on `Auto`; `iommu=pt amd_iommu=on` in `boot.kernelParams` settles the
+passthrough behaviour from the kernel side. Do **not** use `iommu=off` here: it kills the
+on-board MT7927 WiFi (firmware DMA never completes — see [WiFi (MT7927)](#wifi-mt7927)).
+
+**On ACS:** this board does **not** appear to expose an ACS toggle in BIOS (there is a
+`PCIe ARI Support` entry — that is *not* ACS; leave it at its default). It turned out not
+to matter: with `iommu=pt` alone, P2P measured at full Gen5 x8 bandwidth (28.6 GB/s). If a
+future board *does* expose ACS and P2P underperforms, disabling it is the knob to try — but
+do not go hunting for a setting that isn't there.
 
 Bifurcation needs no configuration for this build: two cards in the two Gen5 slots
 negotiate x8/x8 automatically. The bifurcation menu exists for splitting one slot across
@@ -630,9 +736,11 @@ a riser, which is not what we are doing. What *does* need attention is the physi
 ### Reaching the server from the LAN
 
 `machines/desktop/default.nix` opens TCP **8000** in the firewall, so the vLLM
-OpenAI-compatible endpoint (`PORT=8000`, container runs `--network host`) is reachable
-at `http://desktop:8000/v1` from other LAN machines. Change the port there if you launch
-the server on a different one.
+OpenAI-compatible endpoint (`PORT=8000`, container runs `--network host`) is reachable at
+`http://<desktop-ip>:8000/v1` from other LAN machines (e.g. `http://192.168.0.80:8000/v1`).
+Use the IP, not `desktop:8000`, from arbitrary devices — `.local` mDNS is unreliable over
+some WiFi APs (see [WiFi](#wifi-mt7927)); only hosts with an explicit alias/hosts entry
+resolve the name. Change the port there if you launch the server on a different one.
 
 That firewall entry only matters under `--network host`, which both the DS4 v8 helper and
 the r31 profile use. If you swap in `-p 8000:8000`, Docker publishes through its own
@@ -691,6 +799,36 @@ cat /proc/driver/nvidia/params | grep RegistryDwords
 #   simpleP2P / p2pBandwidthLatencyTest
 ```
 
+**Confirmed on this box (2026-08):** `nvidia-smi topo -p2p rw` reports `OK` for GPU0↔GPU1
+read *and* write under `iommu=pt`, `cudaDeviceCanAccessPeer` is 1 both directions, and a
+unidirectional `cudaMemcpyPeer` benchmark measured **28.6 GB/s** — line rate for **Gen5
+x8** (Gen4 x8 would be ~16, host-staged fallback ~10–12). So P2P is genuinely enabled at
+full bandwidth, and **ACS did not need disabling** on this board (see BIOS note below).
+
+The `nvcr.io/nvidia/cuda-samples` image needs an NGC login; a self-contained alternative
+that needs no auth is to compile a tiny `cudaMemcpyPeer` timer in the public
+`nvidia/cuda:*-devel` image:
+
+```bash
+docker run --rm --gpus all --ipc=host -v /tmp:/tmp nvidia/cuda:12.4.1-devel-ubuntu22.04 \
+  bash -lc 'cat > /tmp/p2p.cu <<EOF
+#include <cstdio>
+#include <cuda_runtime.h>
+int main(){int n;cudaGetDeviceCount(&n);int c;cudaDeviceCanAccessPeer(&c,0,1);
+printf("canAccessPeer=%d\n",c);size_t b=256UL<<20;void*a,*d;
+cudaSetDevice(0);cudaMalloc(&a,b);cudaSetDevice(1);cudaMalloc(&d,b);
+cudaSetDevice(0);cudaDeviceEnablePeerAccess(1,0);cudaSetDevice(1);cudaDeviceEnablePeerAccess(0,0);
+cudaSetDevice(0);cudaEvent_t s,e;cudaEventCreate(&s);cudaEventCreate(&e);
+for(int i=0;i<10;i++)cudaMemcpyPeer(d,1,a,0,b);cudaDeviceSynchronize();
+cudaEventRecord(s);for(int i=0;i<100;i++)cudaMemcpyPeer(d,1,a,0,b);cudaEventRecord(e);cudaEventSynchronize(e);
+float ms;cudaEventElapsedTime(&ms,s,e);printf("P2P 0->1: %.1f GB/s\n",(double)b*100/1e9/(ms/1000));}
+EOF
+nvcc -O3 -o /tmp/p2p /tmp/p2p.cu && /tmp/p2p'
+```
+
+> Note the GPU `LnkSta` idles at `2.5GT/s (downgraded)` — NVIDIA's idle downclock, not a
+> fault. The 28.6 GB/s result is the proof the link ramps to Gen5 under load.
+
 If `RegistryDwords` is empty, the modprobe config didn't take: reboot, or stop everything
 holding the GPUs (`nvidia-persistenced`, containers, the display manager — see
 [Going headless](#going-headless-to-free-gpu-memory)) and reload `nvidia_uvm` /
@@ -711,12 +849,13 @@ only (and `pcie_acs_override` needs a patched kernel anyway). Direct-attach boar
 
 One caveat on that: the Level1Techs thread upstream cites for `iommu=off` is a
 direct-attach dual RTX PRO 6000 build, and its author reports "ACS is the only thing in
-the BIOS I flat out disabled". We take exactly that alternative — `amd_iommu=on iommu=pt`
-with **ACS disabled in firmware** — because the on-board MediaTek MT7927 WiFi needs the
-IOMMU left on to DMA-load its firmware, and `iommu=off` breaks it (`Message ... timeout`
-→ `Failed to get patch semaphore` → `hardware init failed`). `iommu=pt` keeps P2P working
-*and* WiFi working; ACS-disabled in the BIOS is what removes the upstream translation for
-P2P now that the IOMMU is no longer globally off.
+the BIOS I flat out disabled". We reach the same place a different way — `amd_iommu=on
+iommu=pt` — because the on-board MediaTek MT7927 WiFi needs the IOMMU left on to DMA-load
+its firmware, and `iommu=off` breaks it (`Message ... timeout` → `Failed to get patch
+semaphore` → `hardware init failed`). In practice `iommu=pt` alone was enough: P2P measured
+at full Gen5 x8 bandwidth (28.6 GB/s) **without** any ACS toggle — and this board doesn't
+expose one anyway (`PCIe ARI Support` is a different feature). So `iommu=pt` keeps P2P
+*and* WiFi working, and ACS-disabled is a fallback only if a future board needs it.
 
 **`optimization/io-tuning.md`** — every number in it is about an **md RAID5 array**:
 `stripe_cache_size`, `group_thread_cnt`, write-intent bitmaps, read-ahead, and switching
