@@ -5,7 +5,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, loadSkills, parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { resolveLocalPackageRoots, resolvePackageAgentDirs as resolvePackageAgentDirsFrom } from "./package-resources.js";
+import {
+	resolvePackageAgentDirs as resolvePackageAgentDirsFrom,
+	resolvePackageSkillDirs as resolvePackageSkillDirsFrom,
+} from "./package-resources.js";
 
 export type AgentScope = "user" | "project" | "both";
 
@@ -62,18 +65,7 @@ export function resolvePackageAgentDirs(agentDir: string = getAgentDir()): strin
  * loadSkills doesn't resolve packages itself — we must expand them.
  */
 function resolvePackageSkillPaths(): string[] {
-	return resolveLocalPackageRoots(getAgentDir()).flatMap((root) => {
-		try {
-			const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
-			const piSkills: unknown = manifest.pi?.skills;
-			if (!Array.isArray(piSkills)) return [];
-			return piSkills
-				.filter((skill): skill is string => typeof skill === "string")
-				.map((skill) => path.resolve(root, skill));
-		} catch {
-			return [];
-		}
-	});
+	return resolvePackageSkillDirsFrom(getAgentDir());
 }
 
 /**

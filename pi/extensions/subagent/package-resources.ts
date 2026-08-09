@@ -48,3 +48,33 @@ export function resolvePackageAgentDirs(agentDir: string): string[] {
     .map((root) => path.join(root, "agents"))
     .filter(isDirectory);
 }
+
+function declaredSkillDirs(root: string): string[] {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8")) as {
+      pi?: { skills?: unknown };
+    };
+    const declared = manifest.pi?.skills;
+    if (!Array.isArray(declared)) return [];
+    return declared
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => path.resolve(root, entry));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Skill directories for each configured local package: whatever the manifest
+ * declares in pi.skills, falling back to the conventional skills/ directory.
+ *
+ * The fallback is what makes `skills:` frontmatter work at all today — Loom
+ * ships skills/ but declares only pi.extensions, so a manifest-only lookup
+ * returns nothing and every agent silently loses its preloaded skill.
+ */
+export function resolvePackageSkillDirs(agentDir: string): string[] {
+  return resolveLocalPackageRoots(agentDir).flatMap((root) => {
+    const declared = declaredSkillDirs(root);
+    return (declared.length > 0 ? declared : [path.join(root, "skills")]).filter(isDirectory);
+  });
+}

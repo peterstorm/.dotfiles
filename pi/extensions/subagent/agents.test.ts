@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { resolveLocalPackageRoots, resolvePackageAgentDirs } from "./package-resources";
+import { resolveLocalPackageRoots, resolvePackageAgentDirs, resolvePackageSkillDirs } from "./package-resources";
 
 const scratch: string[] = [];
 
@@ -59,5 +59,46 @@ describe("local Pi package agent discovery", () => {
 
     expect(resolveLocalPackageRoots(agentDir)).toEqual([]);
     expect(resolvePackageAgentDirs(agentDir)).toEqual([]);
+  });
+});
+
+describe("local Pi package skill discovery", () => {
+  it("prefers the declared pi.skills entries over the convention", () => {
+    const { agentDir, first } = fixture();
+    mkdirSync(join(first, "declared-skills"), { recursive: true });
+    mkdirSync(join(first, "skills"), { recursive: true });
+    writeFileSync(
+      join(first, "package.json"),
+      JSON.stringify({ name: "first", pi: { skills: ["./declared-skills"] } }),
+    );
+    writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: ["../first-package"] }));
+
+    expect(resolvePackageSkillDirs(agentDir)).toEqual([join(first, "declared-skills")]);
+  });
+
+  // Loom ships skills/ but declares only pi.extensions; without this fallback
+  // every `skills:` frontmatter entry resolves to nothing.
+  it("falls back to the conventional skills directory when the manifest declares none", () => {
+    const { agentDir, first, second } = fixture();
+    mkdirSync(join(first, "skills"), { recursive: true });
+    writeFileSync(join(first, "package.json"), JSON.stringify({ name: "first", pi: { extensions: ["./pi/extension.ts"] } }));
+    writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
+      packages: ["../first-package", "../second-package"],
+    }));
+
+    // second-package has no skills/ at all, so it contributes nothing.
+    expect(resolvePackageSkillDirs(agentDir)).toEqual([join(first, "skills")]);
+    expect(resolvePackageSkillDirs(agentDir)).not.toContain(join(second, "skills"));
+  });
+
+  it("ignores declared entries that are not directories and non-string entries", () => {
+    const { agentDir, first } = fixture();
+    writeFileSync(
+      join(first, "package.json"),
+      JSON.stringify({ name: "first", pi: { skills: ["./nowhere", 42] } }),
+    );
+    writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: ["../first-package"] }));
+
+    expect(resolvePackageSkillDirs(agentDir)).toEqual([]);
   });
 });
