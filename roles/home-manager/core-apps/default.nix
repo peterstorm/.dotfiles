@@ -48,6 +48,7 @@
   home.packages = with pkgs;[
     jq
     gh
+    pavucontrol
     vscode
     cloudflare-warp
     cachix
