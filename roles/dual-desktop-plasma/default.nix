@@ -29,7 +29,9 @@
   services.xserver = {
     enable = true;
     xkb = {
-        options = "caps:hyper";
+        # Caps Lock acts as Ctrl (matches the laptops' desktop-plasma role).
+        # XMonad uses mod4 (Super) as its modkey, so Caps is free to be Ctrl.
+        options = "ctrl:swapcaps";
         layout = "us";
 
     };

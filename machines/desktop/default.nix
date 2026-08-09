@@ -83,7 +83,6 @@ in
 {
   imports = [
     inputs.disko.nixosModules.disko
-    inputs.home-manager.nixosModules.home-manager
     ./disks.nix
   ];
 
@@ -109,42 +108,15 @@ in
       ATTR{link/l1_aspm}="0"
   '';
 
-  # Home-manager as part of the *system* closure, not a separate `hm-apply.sh`.
+  # Home-manager is NOT folded into this system closure. It is applied
+  # standalone with `./hm-apply.sh desktop`, exactly like the laptops.
   #
-  # This machine is installed from an offline USB stick. Standalone home-manager
-  # needs to build its own closure, which needs a network the box does not have
-  # on first boot — so the old flow produced a fully working system with an
-  # unusable user: a stock XMonad with none of these keybindings, no launcher,
-  # and no way to fix it without the network you were trying to configure.
-  # Folding the user environment into the system closure means `install-desktop`
-  # lands a machine you can actually drive.
-  #
-  # Roles are a deliberate subset of the laptop's. The homelab ones
-  # (sops-homelab, obsidian-*, vdirsyncer, sonarr-missing-search) all want an age
-  # key that is deliberately not in the image, and would fail activation on a
-  # fresh boot.
-  #
-  # NOTE: do not run ./hm-apply.sh on this host. The standalone and
-  # NixOS-module home-managers would fight over the same dotfiles. Use
-  # ./system-apply.sh, which now applies both.
-  home-manager = {
-    useGlobalPkgs = true;
-    useUserPackages = true;
-    # Activation refuses to clobber files it did not write; the installed system
-    # already has a home directory. Move them aside rather than fail the switch.
-    backupFileExtension = "hm-bak";
-    extraSpecialArgs = { inherit inputs util; };
-    users.peterstorm = {
-      imports = [
-        ../../roles/home-manager/core-apps
-        ../../roles/home-manager/window-manager/xmonad
-        ../../roles/home-manager/dunst
-      ];
-      home.username = "peterstorm";
-      home.homeDirectory = "/home/peterstorm";
-      home.stateVersion = "22.11";
-    };
-  };
+  # (It used to be a NixOS module here so the offline USB install landed a
+  # driveable user with no network on first boot. The box now has WiFi and the
+  # dotfiles checked out, so that coupling is gone — the desktop's standalone HM
+  # config lives in flake.nix as `homeManagerConfigurations.desktop`, a subset
+  # of the laptop roles without the homelab/sops/obsidian ones that need an age
+  # key.)
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;

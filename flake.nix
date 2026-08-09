@@ -63,6 +63,15 @@
             username = "peterstorm";
           };
 
+          # Desktop workstation: same user, but a subset of roles. The homelab
+          # ones (sops-homelab, obsidian-*, vdirsyncer, sonarr-missing-search)
+          # need an age key that is not on that box, so they are omitted.
+          # Apply with `./hm-apply.sh desktop`.
+          desktop = user.mkHMUser {
+            roles = [ "core-apps" "window-manager/xmonad" "dunst" ];
+            username = "peterstorm";
+          };
+
           hansen142 = user.mkHMUser {
             roles = [
               "core-apps/neovim"
