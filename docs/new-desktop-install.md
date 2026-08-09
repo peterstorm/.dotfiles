@@ -1056,6 +1056,7 @@ override file — otherwise the endpoint is on the LAN with no key.
 | `--gpus all` | Matches the Compose file's own `gpus: all`. Works here because of `systemd.services.docker.path` in `roles/nvidia-graphics`; `--device=nvidia.com/gpu=all` is the equivalent needing no host-side help. |
 | Explicit model mount + `MODEL_PATH` | Compose defaults to scanning `${MODEL_ROOT:-/root/models}`. Pointing straight at the checkpoint skips the HF cache mount entirely. |
 | Caches under `/models/vllm-cache/r33` | Its own ZFS dataset (zstd, 128K records), rather than a relative `./cache` next to a git checkout. |
+| `MAX_MODEL_LEN=1048576`, `MAX_NUM_SEQS=8`, `MAX_NUM_BATCHED_TOKENS=4096` | Replaces upstream's conservative 131k/16/8192 scheduler profile with the checkpoint-native 1M envelope and the eight-agent profile validated above. All three remain launch-time overrideable. |
 | Private `--env-file` for `VLLM_API_KEY` | Keeps the API key out of Docker's process arguments and `/proc`; the helper rewrites it mode 0600 on every launch. |
 | `CUDA_DEVICE_ORDER=PCI_BUS_ID` | Makes `CUDA_VISIBLE_DEVICES=0,1` match `nvidia-smi` ordering instead of driver enumeration order. |
 | `--restart unless-stopped`, no `--rm` | Matches Compose. The two flags are mutually exclusive in `docker run`; use `--rm` and drop the restart policy for throwaway benchmarking. |
