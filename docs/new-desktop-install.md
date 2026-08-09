@@ -938,7 +938,7 @@ docker run --init \
   -e B12X_PCIE_TP2_REMOTE_PUSH=0 \
   -e B12X_PCIE_TP4_REMOTE_PUSH=0 \
   -e B12X_PCIE_TP8_OWNER_REDUCE=1 \
-  -e MAX_NUM_SEQS=16 -e MAX_MODEL_LEN=131072 -e MAX_NUM_BATCHED_TOKENS=8192 \
+  -e MAX_NUM_SEQS=8 -e MAX_MODEL_LEN=1048576 -e MAX_NUM_BATCHED_TOKENS=4096 \
   -e GRAPH=auto \
   -e GPU_MEMORY_UTILIZATION=0.975 \
   -e LOAD_FORMAT=instanttensor -e INSTANTTENSOR_BACKEND=BUFFERED \
@@ -964,8 +964,10 @@ docker logs -f ds4-0731-r33
 - `ALLREDUCE_MODE=auto` correctly selected `flashinfer-ipc` for TP2, dispatched larger
   shapes to PyNCCL, and retained B12X for sparse MLA, MoE, and linear kernels. Both
   remote-push experiments remained disabled.
-- The server exposed 143,545 tokens of GPU KV capacity (8.07 GiB per worker) at
-  `MAX_MODEL_LEN=131072`, `MAX_NUM_SEQS=16`, and `GPU_MEMORY_UTILIZATION=0.975`.
+- The initial conservative profile exposed 143,545 effective sequence-token capacity
+  (8.07 GiB raw KV memory per worker) at `MAX_MODEL_LEN=131072`, `MAX_NUM_SEQS=16`, and
+  `MAX_NUM_BATCHED_TOKENS=8192`. This was a configuration-dependent hybrid-cache metric,
+  not a fixed bytes-per-token limit; the tuned profile below supersedes it.
 - `/health` returned HTTP 200; the container remained running with zero restarts. An
   authenticated OpenAI-compatible chat request returned exactly `OK` with
   `finish_reason=stop` (88 prompt tokens, 28 completion tokens). A 16-token completion
@@ -974,6 +976,60 @@ docker logs -f ds4-0731-r33
 - During initialization both GPUs reached roughly 94.7 GiB used. Temperatures remained
   below 50°C and the card fans held at 30%; the audible spin-up was expected weight/JIT/
   graph activity, not a thermal fault.
+
+### Eight-agent KV-capacity profile
+
+The checkpoint declares `max_position_embeddings=1048576` (YaRN factor 16 over its
+original 65,536-token envelope). This box therefore uses:
+
+```text
+MAX_MODEL_LEN=1048576
+MAX_NUM_SEQS=8
+MAX_NUM_BATCHED_TOKENS=4096
+GPU_MEMORY_UTILIZATION=0.975
+KV_OFFLOADING_SIZE=0
+```
+
+`MAX_MODEL_LEN` is the per-request prompt-plus-output ceiling; paged KV blocks are still
+allocated dynamically, so eight agents do **not** reserve 1M tokens each. Lowering MNS
+from 16 to 8 admits the desired eight active agents while reducing graph and activation
+headroom; lowering MNBT from 8192 to 4096 chunks large prefills more finely and leaves
+more VRAM for KV.
+
+DeepSeek-V4 uses hybrid cache groups and a 128-token sliding window. In r33,
+`get_kv_cache_capacity()` reports `max_concurrency * MAX_MODEL_LEN`, where concurrency is
+computed from the maximum memory usage of those groups. Consequently the displayed token
+capacity legitimately depends on `MAX_MODEL_LEN`; it is an effective logical sequence
+capacity, not `raw bytes / constant bytes per token` as for a uniform full-attention
+model.
+
+With the profile above, startup measured:
+
+| Metric | Result |
+|---|---:|
+| Raw KV memory per worker | 8.71 GiB |
+| Effective KV capacity | 1,196,363 tokens |
+| Full-1M-request concurrency | 1.14094x |
+| GPU blocks | 8,678 |
+| CUDA graph envelope | 48 rows |
+| Native/CPU KV offload | Disabled |
+
+An overlap pressure test submitted eight unique-prefix requests concurrently, each with
+about 130,118 prompt tokens and a forced 16,000-token generation. All eight became active
+at once; waiting fell to zero, peak KV usage reached 84.6%, preemptions remained zero,
+and all eight requests returned HTTP 200. The run processed about 1.041M prompt tokens
+plus 128k generated tokens. This validates eight ~130k coding-agent contexts sharing the
+pool; it does not certify answer quality beyond the upstream ~200k caveat below.
+
+The launch-time defaults remain overrideable, for example:
+
+```bash
+MAX_NUM_SEQS=4 MAX_MODEL_LEN=1048576 MAX_NUM_BATCHED_TOKENS=4096 \
+  bash scripts/run-ds4-v20-r33.sh
+```
+
+Four agents get a larger dynamic share of the same pool; no separate cache partition is
+created per agent.
 
 Or run upstream's commit-pinned Compose directly and let the environment do the work.
 The file is immutable at this URL, but its `image:` value is a tag rather than a digest;
@@ -1038,10 +1094,11 @@ The physical verifier-row requirement remains:
 MAX_NUM_SEQS * (1 + DSPARK_TOKENS)
 ```
 
-For this box's `MAX_NUM_SEQS=16` at K5 that is `16 * (5 + 1) = 96`.
-`GRAPH=auto` derives the cap, so the arithmetic only matters when checking logs. The r33
-TP2/K5 validation captured through 96 rows and TP4/K5 through 192 rows; no device-heavy
-decode stage relied on eager fallback.
+For this box's `MAX_NUM_SEQS=8` at K5 that is `8 * (5 + 1) = 48`.
+`GRAPH=auto` derives the cap, so the arithmetic only matters when checking logs. The
+upstream r33 TP2/K5 validation captured through 96 rows at MNS16; our MNS8 profile
+captured the required 48-row envelope. No device-heavy decode stage relied on eager
+fallback.
 
 What is captured as of r33:
 

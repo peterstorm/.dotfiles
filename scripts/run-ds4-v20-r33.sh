@@ -15,11 +15,11 @@ IMG="voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-
 MODEL_HOST="/models/DeepSeek-V4-Flash-0731"
 NAME="ds4-0731-r33"
 
-# Capacity/concurrency knobs. Defaults remain the validated upstream profile; override
-# them per launch without editing this file, e.g. MAX_NUM_SEQS=8 MAX_MODEL_LEN=auto.
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"
-MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-8192}"
+# Capacity/concurrency knobs. The defaults are this box's validated eight-agent profile;
+# override them per launch without editing this file.
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.975}"
 KV_OFFLOADING_SIZE="${KV_OFFLOADING_SIZE:-0}"
 
