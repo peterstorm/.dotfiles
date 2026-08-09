@@ -36,6 +36,10 @@ fi
 contains "$RUN" 'B12X_PCIE_TP2_REMOTE_PUSH=0'
 contains "$RUN" 'B12X_PCIE_TP4_REMOTE_PUSH=0'
 contains "$RUN" 'B12X_PCIE_TP8_OWNER_REDUCE=1'
+contains "$RUN" 'MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"'
+contains "$RUN" 'MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"'
+contains "$RUN" 'MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-8192}"'
+contains "$RUN" '-e MAX_MODEL_LEN="$MAX_MODEL_LEN"'
 contains "$DOWNLOAD" "REV=\"$MODEL_REV\""
 contains "$DOC" 'models/ds4dspark-v20-r33.md'
 contains "$DOC" "$IMAGE"

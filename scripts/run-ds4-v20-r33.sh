@@ -15,6 +15,14 @@ IMG="voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-
 MODEL_HOST="/models/DeepSeek-V4-Flash-0731"
 NAME="ds4-0731-r33"
 
+# Capacity/concurrency knobs. Defaults remain the validated upstream profile; override
+# them per launch without editing this file, e.g. MAX_NUM_SEQS=8 MAX_MODEL_LEN=auto.
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-8192}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.975}"
+KV_OFFLOADING_SIZE="${KV_OFFLOADING_SIZE:-0}"
+
 if [ ! -e "$MODEL_HOST/config.json" ]; then
   echo "error: checkpoint not found at $MODEL_HOST — run scripts/download-ds4-flash.sh first" >&2
   exit 1
@@ -37,7 +45,9 @@ fi
 printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY" > "$ENVFILE"
 chmod 600 "$ENVFILE"
 
-sudo mkdir -p /models/vllm-cache/r33/tmp
+if [ ! -d /models/vllm-cache/r33/tmp ]; then
+  sudo mkdir -p /models/vllm-cache/r33/tmp
+fi
 
 # Remove the previous release container as part of an in-place upgrade; otherwise its
 # host-network listener can keep port 8000 occupied.
@@ -67,12 +77,14 @@ docker run -d --init \
   -e B12X_PCIE_TP2_REMOTE_PUSH=0 \
   -e B12X_PCIE_TP4_REMOTE_PUSH=0 \
   -e B12X_PCIE_TP8_OWNER_REDUCE=1 \
-  -e MAX_NUM_SEQS=16 -e MAX_MODEL_LEN=131072 -e MAX_NUM_BATCHED_TOKENS=8192 \
+  -e MAX_NUM_SEQS="$MAX_NUM_SEQS" \
+  -e MAX_MODEL_LEN="$MAX_MODEL_LEN" \
+  -e MAX_NUM_BATCHED_TOKENS="$MAX_NUM_BATCHED_TOKENS" \
   -e GRAPH=auto \
-  -e GPU_MEMORY_UTILIZATION=0.975 \
+  -e GPU_MEMORY_UTILIZATION="$GPU_MEMORY_UTILIZATION" \
   -e LOAD_FORMAT=instanttensor -e INSTANTTENSOR_BACKEND=BUFFERED \
   -e PYTHONHASHSEED=0 \
-  -e KV_OFFLOADING_SIZE=0 \
+  -e KV_OFFLOADING_SIZE="$KV_OFFLOADING_SIZE" \
   "$IMG" \
   /usr/local/bin/serve-ds4-flash.sh
 
