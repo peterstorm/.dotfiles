@@ -125,10 +125,13 @@ does not).
 
 The rewrite is listed per repo rather than as a `git@github.com:peterstorm/*`
 namespace glob on purpose. A namespace-wide rule also captures the **private**
-repos there — the Obsidian vault, this dotfiles repo — pointing their working
-SSH remotes at an HTTPS endpoint with no credential helper. Interactive git then
-asks for a username; the `obsidian-git-sync` systemd timer, having no tty, just
-fails with `could not read Username for 'https://github.com'`.
+repos there — notably the Obsidian vault at `~/dev/notes` — pointing their
+working SSH remotes at an HTTPS endpoint with no credential helper. Interactive
+git then asks for a username; the `obsidian-git-sync` systemd timer, having no
+tty, just fails with `could not read Username for 'https://github.com'`.
+
+Only SSH remotes get hijacked. This dotfiles repo is unaffected — its remote is
+HTTPS with a repo-local `!gh auth git-credential` helper.
 
 After `hm-apply`, restart Claude Code: the declared marketplaces register and the
 enabled plugins install automatically.

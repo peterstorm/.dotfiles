@@ -6,11 +6,14 @@ let
   # all.
   #
   # Scoped per repo, deliberately. A namespace-wide `git@github.com:peterstorm/`
-  # rewrite also captures the *private* repos in that namespace (the Obsidian
-  # vault, this dotfiles repo), redirecting their authenticated SSH remotes to
-  # an HTTPS endpoint where no credential helper is configured. Interactive git
-  # then prompts for a username; non-interactive git (systemd timers) just dies
-  # with "could not read Username for 'https://github.com'".
+  # rewrite also captures the *private* repos in that namespace — notably the
+  # Obsidian vault at ~/dev/notes — redirecting their authenticated SSH remotes
+  # to an HTTPS endpoint where no credential helper is configured. Interactive
+  # git then prompts for a username; non-interactive git (systemd timers) just
+  # dies with "could not read Username for 'https://github.com'".
+  #
+  # (This repo is unaffected: its remote is HTTPS already, with a repo-local
+  # `!gh auth git-credential` helper. Only SSH remotes get hijacked.)
   #
   # Matching is by URL prefix, so each entry also covers `<repo>.git` and any
   # repo whose name extends it (e.g. loom -> loom-tui) — all public, all fine.
