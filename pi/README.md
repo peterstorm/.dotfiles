@@ -11,6 +11,7 @@ pi/
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   └── global-instructions.ts  # Standalone extension
 ├── prompts/          # Prompt templates (→ ~/.pi/agent/prompts/)
+├── models.json       # Custom providers/models (→ ~/.pi/agent/models.json)
 ├── settings.json     # Pi settings (copied, not symlinked — mutable at runtime)
 └── README.md         # This file
 ```
@@ -26,7 +27,8 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    ```
 2. **Agents**: `~/.pi/agent/agents` is a **real directory**, populated at
    activation from two sources — see "Agents" below.
-3. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`)
+3. **Models**: Symlinks `~/.pi/agent/models.json` to the tracked custom-model catalog.
+4. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
 
 ### Why Directory Symlinks?
 
@@ -38,6 +40,37 @@ Using a single symlink per directory (instead of per-file) means:
 
 `agents/` is the exception, because it is not purely source — Loom generates
 into it.
+
+## Local DeepSeek Workstation
+
+`models.json` registers the OpenAI-compatible vLLM endpoint on the `desktop`
+workstation as `desktop-vllm/deepseek-v4-flash`. The API key is never committed:
+Pi reads it locally when running on `desktop`, or retrieves it through the hardened
+`ssh desktop` alias when running elsewhere.
+
+The r33 runtime supports exactly three reasoning-effort contracts. They are one model
+with a per-request Pi setting, not separate models:
+
+| Pi level | DeepSeek behavior |
+|---|---|
+| `low` | Normal 0731 reasoning prompt |
+| `high` | Thorough “absolute maximum” reasoning prefix |
+| `max` | Exhaustive “beyond maximum” reasoning prefix |
+
+Pi hides unsupported `minimal`, `medium`, and `xhigh` levels for this model. Select the
+model with `/model` or `Ctrl+L`, then use `Shift+Tab` to cycle `off → low → high → max`.
+The command-line equivalent is:
+
+```bash
+pi --model desktop-vllm/deepseek-v4-flash:high
+```
+
+The server may be offline while editing or selecting the catalog, but it must be running
+before sending a prompt. Verify discovery without contacting the server:
+
+```bash
+pi --list-models deepseek-v4-flash
+```
 
 ## Packages (Plugins)
 

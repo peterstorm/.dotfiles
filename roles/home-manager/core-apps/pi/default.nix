@@ -14,16 +14,17 @@ in
   home.packages = [ pkgs.pi-coding-agent ];
 
   # extensions/ and prompts/ are hand-written source, so they stay whole-directory
-  # symlinks: adding, editing or removing a file needs no rebuild. agents/ cannot
-  # work this way — see piAgents below.
+  # symlinks: adding, editing or removing a file needs no rebuild. models.json is
+  # also live and reloads whenever Pi's model selector opens. agents/ cannot work
+  # this way — see piAgents below.
   home.activation.piSymlinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
     piAgentDir="${piAgentDir}"
     mkdir -p "$piAgentDir"
 
-    # Create directory-level symlinks (idempotent)
-    for dir in extensions prompts; do
-      target="${piSrcDir}/$dir"
-      link="$piAgentDir/$dir"
+    # Create managed resource symlinks (idempotent)
+    for resource in extensions prompts models.json; do
+      target="${piSrcDir}/$resource"
+      link="$piAgentDir/$resource"
 
       if [ -L "$link" ]; then
         # Already a symlink — update if target changed
@@ -31,16 +32,16 @@ in
         if [ "$current" != "$target" ]; then
           rm "$link"
           ln -s "$target" "$link"
-          echo "pi: updated $dir symlink"
+          echo "pi: updated $resource symlink"
         fi
       elif [ -e "$link" ]; then
         # Something else exists (file/dir) — back up and replace
         mv "$link" "$link.bak.$(date +%s)"
         ln -s "$target" "$link"
-        echo "pi: replaced $dir with symlink (old backed up)"
+        echo "pi: replaced $resource with symlink (old backed up)"
       else
         ln -s "$target" "$link"
-        echo "pi: created $dir symlink"
+        echo "pi: created $resource symlink"
       fi
     done
   '';

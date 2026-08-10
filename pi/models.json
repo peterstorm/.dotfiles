@@ -1,0 +1,40 @@
+{
+  "providers": {
+    "desktop-vllm": {
+      "baseUrl": "http://192.168.0.80:8000/v1",
+      "api": "openai-completions",
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'cat ~/.config/ds4-flash/api-key'; fi",
+      "compat": {
+        "supportsDeveloperRole": true,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "thinkingFormat": "deepseek"
+      },
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash (local RTX workstation)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": ["text"],
+          "contextWindow": 1048576,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ]
+    }
+  }
+}

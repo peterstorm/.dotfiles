@@ -46,6 +46,38 @@ for (const entry of readdirSync(ownedAgentsDir)) {
   }
 }
 
+const modelsLink = join(agentDir, "models.json");
+const expectedModelsFile = resolve(process.env.HOME ?? "", ".dotfiles/pi/models.json");
+if (!existsSync(modelsLink)) fail(`${modelsLink} is missing`);
+if (!lstatSync(modelsLink).isSymbolicLink()) fail(`${modelsLink} is not Home Manager's model-catalog symlink`);
+if (resolve(dirname(modelsLink), readlinkSync(modelsLink)) !== expectedModelsFile) {
+  fail(`${modelsLink} points to ${readlinkSync(modelsLink)}, expected ${expectedModelsFile}`);
+}
+
+const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
+  providers?: Record<
+    string,
+    {
+      baseUrl?: string;
+      models?: Array<{
+        id?: string;
+        thinkingLevelMap?: Record<string, string | null>;
+      }>;
+    }
+  >;
+};
+const desktopProvider = modelsConfig.providers?.["desktop-vllm"];
+const deepSeek = desktopProvider?.models?.find((model) => model.id === "deepseek-v4-flash");
+if (desktopProvider?.baseUrl !== "http://192.168.0.80:8000/v1") {
+  fail("desktop-vllm does not target the workstation's OpenAI-compatible endpoint");
+}
+if (!deepSeek) fail("desktop-vllm is missing deepseek-v4-flash");
+for (const level of ["low", "high", "max"] as const) {
+  if (deepSeek.thinkingLevelMap?.[level] !== level) {
+    fail(`deepseek-v4-flash does not expose the ${level} reasoning contract`);
+  }
+}
+
 const packageAgentDirs = resolvePackageAgentDirs(agentDir);
 if (packageAgentDirs.length === 0) fail("no configured local Pi package exposes an agents directory");
 
@@ -136,6 +168,7 @@ if (designer) {
 }
 
 process.stdout.write(
-  `Pi agent install verified: ${discovered.length} agents, ${packageAgentDirs.length} package agent dir(s), ` +
-    `${renderedAgents.size} current Loom render(s), panel roster available.\n`,
+  `Pi install verified: DeepSeek model catalog, ${discovered.length} agents, ` +
+    `${packageAgentDirs.length} package agent dir(s), ${renderedAgents.size} current Loom render(s), ` +
+    `panel roster available.\n`,
 );

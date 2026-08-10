@@ -977,6 +977,30 @@ docker logs -f ds4-0731-r33
   below 50°C and the card fans held at 30%; the audible spin-up was expected weight/JIT/
   graph activity, not a thermal fault.
 
+### Using the server from Pi
+
+The home-manager Pi role symlinks the tracked `pi/models.json` catalog to
+`~/.pi/agent/models.json`. It registers this endpoint as
+`desktop-vllm/deepseek-v4-flash` and resolves the API key without committing it: locally
+from `~/.config/ds4-flash/api-key` on this workstation, or over the `ssh desktop` alias
+from another configured machine.
+
+The model appears in `/model` even while the server is stopped. The server and LAN route
+only need to be available when a request is sent:
+
+```bash
+pi --list-models deepseek-v4-flash
+pi --model desktop-vllm/deepseek-v4-flash:high
+```
+
+DeepSeek 0731's `low`, `high`, and `max` reasoning contracts are request settings on the
+same loaded model, not separate checkpoints or containers. In Pi, select the model with
+`/model` or `Ctrl+L`, then press `Shift+Tab` to cycle `off → low → high → max`.
+`models.json` maps those levels to the runtime's top-level `reasoning_effort`; unsupported
+Pi levels (`minimal`, `medium`, and `xhigh`) are hidden. This reasoning effort is also
+independent of `DSPARK_TOKENS`: effort changes the reasoning prompt, while K5/K7 changes
+the speculative decoder depth used to generate the same model's tokens.
+
 ### Eight-agent KV-capacity profile
 
 The checkpoint declares `max_position_embeddings=1048576` (YaRN factor 16 over its
