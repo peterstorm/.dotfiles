@@ -1,0 +1,14 @@
+# Loom renders per-machine agent definitions into ~/.pi/agent/agents. Until the
+# home-manager migration turns that path into a real directory, those renders
+# land here. They are machine-bound (absolute package roots, inlined skill
+# bodies) and go stale on every Loom commit — home-manager regenerates them via
+# scripts/sync-pi-agents.sh, and Loom's pre-tool-use guard rejects any file that
+# is not the current render. They must never be committed.
+#
+# Only this repo's own generic agents are tracked; everything else is ignored.
+*
+!.gitignore
+!planner.md
+!reviewer.md
+!scout.md
+!worker.md
