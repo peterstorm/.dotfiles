@@ -72,6 +72,27 @@ resource "cloudflare_dns_record" "lan" {
   ttl     = 1
 }
 
+# vllm-stats heatmap: desktop serves /var/lib/vllm-stats/heatmap on :8090.
+# External path via tunnel; LAN path direct to the box (it isn't in the
+# cluster, so the Cilium LB can't front it).
+resource "cloudflare_dns_record" "vllm_stats" {
+  zone_id = var.cloudflare_zone_id
+  name    = "vllm-stats"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_dns_record" "vllm_stats_lan" {
+  zone_id = var.cloudflare_zone_id
+  name    = "vllm-stats"
+  content = "192.168.0.80"
+  type    = "A"
+  proxied = false
+  ttl     = 1
+}
+
 # Plex on dedicated LB IP (not proxied)
 resource "cloudflare_dns_record" "plex" {
   zone_id = var.cloudflare_zone_id

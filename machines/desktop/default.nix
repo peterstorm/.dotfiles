@@ -311,6 +311,57 @@ in
     };
   };
 
+  # --- vLLM token ledger + heatmap ------------------------------------------
+  #
+  # The homelab's Prometheus only keeps 30d of history and dies on cluster
+  # wipes (k3s uninstall/reinstall), and vLLM's own /metrics counters reset
+  # with every container restart. To keep a true lifetime stat, record
+  # per-interval token deltas into an append-only CSV on this box's disk
+  # (/var/lib/vllm-stats/stats.csv) every 15 minutes, and render a
+  # GitHub-style heatmap from it. The CSV survives everything except the disk.
+  systemd.services.vllm-stats-record = {
+    description = "Append vLLM token usage deltas to the durable ledger";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = [
+        "${pkgs.python3}/bin/python3 ${../../scripts/vllm-stats-record.py}"
+        "${pkgs.python3}/bin/python3 ${../../scripts/vllm-stats-heatmap.py} --write"
+      ];
+    };
+  };
+
+  systemd.timers.vllm-stats-record = {
+    description = "Run the vLLM stats recorder every 15 minutes";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/15";
+      Persistent = true;    # catch up after downtime instead of skipping
+      RandomizedDelaySec = 45;
+    };
+  };
+
+  # Serve the token heatmap (and raw stats.csv) over HTTP:8090 — the homelab's
+  # cloudflared tunnel routes vllm-stats.peterstorm.io here, and LAN clients
+  # can hit http://192.168.0.80:8090 directly. Read-only static files.
+  systemd.services.vllm-stats-http = {
+    description = "Serve the vLLM stats heatmap over HTTP";
+    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "vllm-stats-record.service" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.python3}/bin/python3 -m http.server 8090 --bind 0.0.0.0 --directory /var/lib/vllm-stats/heatmap";
+      Restart = "on-failure";
+      RestartSec = 5;
+      # read-only view of the heatmap dir; everything else is locked down
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ReadOnlyPaths = [ "/var/lib/vllm-stats/heatmap" ];
+      NoNewPrivileges = true;
+      DynamicUser = true;
+    };
+    wantedBy = [ "multi-user.target" ];
+  };
+
   # Reachable as `desktop.local` without hunting for an IP.
   #
   # The `wifi` role enables the avahi daemon and mDNS *resolution* for every
@@ -333,6 +384,7 @@ in
   };
 
   # Expose the vLLM / DS4 v8 OpenAI-compatible server (PORT=8000, --network host)
-  # to the LAN. sshd opens 22 itself; the wifi role opens 8081. Merges with those.
-  networking.firewall.allowedTCPPorts = [ 8000 ];
+  # to the LAN, plus the stats heatmap server (8090). sshd opens 22 itself; the
+  # wifi role opens 8081. Merges with those.
+  networking.firewall.allowedTCPPorts = [ 8000 8090 ];
 }

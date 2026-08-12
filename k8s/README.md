@@ -102,6 +102,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 | Prowlarr | https://prowlarr.peterstorm.io |
 | Overseerr | https://overseerr.peterstorm.io |
 | Transmission | https://transmission.peterstorm.io |
+| vLLM stats heatmap | https://vllm-stats.peterstorm.io |
 
 ### LAN (via Cilium Ingress on 192.168.0.240)
 
@@ -111,6 +112,7 @@ Requires DNS or `/etc/hosts` pointing `*.peterstorm.io` to `192.168.0.240`.
 | Service | URL |
 |---------|-----|
 | Plex | http://192.168.0.241:32400 |
+| vLLM stats heatmap (direct) | http://192.168.0.80:8090 |
 
 ## Post-wipe bootstrap gotchas
 
@@ -152,6 +154,28 @@ When deploying on a node that previously ran flannel/kube-proxy (or any prior CN
 
 6. **Kubeconfig** — terraform providers must use `/etc/rancher/k3s/k3s.yaml` directly,
    not a stale copy at `~/.kube/config`. k3s rotates certs on restart.
+
+## vLLM monitoring (desktop)
+
+The `monitoring/` app scrapes the vLLM instance on `desktop` (`192.168.0.80:8000/metrics`, see `monitoring/values.yaml` → `prometheusSpec.additionalScrapeConfigs`). The dashboard `monitoring/dashboard-vllm.json` is auto-provisioned into Grafana via the sidecar ConfigMap (`monitoring/templates/dashboard-vllm.yaml`, label `grafana_dashboard=1`).
+
+- Verify scraping: Grafana → Explore → `up{job="vllm-desktop"}` should be 1
+- vLLM counters reset on container restart; Prometheus `rate()`/`increase()` handle that transparently, so graphs stay continuous
+- Storage: PVC on `local-path` (thin-provisioned, claim 10Gi) + `retentionSize: 9Gi` — Prometheus auto-deletes oldest blocks past 9Gi, so it can never fill the node disk; `retention: 30d`
+- Check homelab disk has room to grow (run from a machine that has SSH keys for it, e.g. laptop):
+  ```bash
+  ssh homelab 'df -h / && du -sh /var/lib/rancher/k3s/storage/* 2>/dev/null | sort -h'
+  ```
+  If free space is < ~15Gi, drop `storage: 10Gi` → `5Gi` and/or `retentionSize: 9Gi` → `4Gi` in `monitoring/values.yaml`.
+
+### Lifetime token ledger (survives everything)
+
+Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only ledger: `systemd.timers.vllm-stats-record` (`machines/desktop/default.nix`) runs every 15 min, scrapes `127.0.0.1:8000/metrics`, appends deltas (handling counter resets) to `/var/lib/vllm-stats/stats.csv`, and re-renders a GitHub-style heatmap to `/var/lib/vllm-stats/heatmap/index.html`. Scripts: `scripts/vllm-stats-record.py`, `scripts/vllm-stats-heatmap.py`.
+
+- Activate on desktop: commit the new `scripts/` files (flake requires tracked files), then `nixos-rebuild switch --flake .#desktop` + `sudo systemctl start vllm-stats-record.timer` (first run only seeds the baseline)
+- Serving: `systemd.services.vllm-stats-http` serves the heatmap dir on :8090 (firewall-opened). Cluster tunnel: `vllm-stats.peterstorm.io` → `192.168.0.80:8090` (`cloudflared/configmap.yaml`) + DNS CNAME/A records (`terraform-homelab/cloudflare/main.tf`). LAN: http://192.168.0.80:8090 direct.
+- View the heatmap: `scp desktop:/var/lib/vllm-stats/heatmap/index.html .` and open it, or serve the dir
+- Quick re-run: `sudo systemctl start vllm-stats-record.service` (logs to journald)
 
 ## Troubleshooting
 

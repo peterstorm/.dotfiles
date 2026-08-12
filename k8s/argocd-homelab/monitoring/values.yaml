@@ -3,6 +3,11 @@ kube-prometheus-stack:
     enabled: false
   grafana:
     enabled: true
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
     ingress:
       enabled: true
       ingressClassName: cilium
@@ -18,10 +23,40 @@ kube-prometheus-stack:
     enabled: true
   prometheus:
     prometheusSpec:
-      retention: 7d
+      # Durable history: a real PVC on the k3s local-path provisioner (same
+      # class dotslash-dev uses), instead of emptyDir which wiped everything on
+      # every Prometheus pod restart. local-path is thin-provisioned — the claim
+      # reserves nothing until data is written. retentionSize is the real budget:
+      # Prometheus self-deletes the oldest blocks once usage crosses 9Gi, so it
+      # can never fill the node disk. Typical small-cluster ingest is
+      # ~100-400MB/day → 9Gi ≈ 30-90 days of history. See also the append-only
+      # token ledger in machines/desktop/default.nix, which outlives even this.
+      retention: 30d
+      retentionSize: 9Gi
       storageSpec:
-        emptyDir:
-          medium: ""
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 10Gi
       replicas: 1
+      # vLLM runs on `desktop` (192.168.0.80:8000), outside the k8s cluster —
+      # scrape its /metrics directly. Needed so token/latency counters survive
+      # vLLM container restarts (in-process counters reset).
+      additionalScrapeConfigs:
+        - job_name: vllm-desktop
+          scrape_interval: 15s
+          metrics_path: /metrics
+          static_configs:
+            - targets:
+                - "192.168.0.80:8000"
+          relabel_configs:
+            # Give the target a stable label for dashboards, since we can't
+            # rely on __address__ staying pretty.
+            - source_labels: [__address__]
+              target_label: instance
+              replacement: desktop:8000
   prometheusOperator:
     replicas: 1
