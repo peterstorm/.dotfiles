@@ -228,8 +228,8 @@ def main():
 
     days = load(os.path.join(DIR, "stats.csv"))
     if not days:
-        print("no ledger data yet — is vllm-stats-record running?")
-        return 1
+        print("no ledger data yet — first run only seeds the baseline")
+        return 0
 
     out_path = DEFAULT_OUT if args.write else None
     s = render(days, out_path)
