@@ -227,12 +227,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "max(vllm:gpu_cache_usage_perc{model_name=~\"$model\"}) * 100",
+          "expr": "max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100",
           "legendFormat": "__auto",
           "refId": "A"
         }
       ],
-      "title": "GPU KV cache used",
+      "title": "KV cache used",
       "type": "stat"
     },
     {
@@ -603,18 +603,18 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "max(vllm:gpu_cache_usage_perc{model_name=~\"$model\"}) * 100",
-          "legendFormat": "gpu",
+          "expr": "max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100",
+          "legendFormat": "kv cache",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "max(vllm:cpu_cache_usage_perc{model_name=~\"$model\"}) * 100",
-          "legendFormat": "cpu",
+          "expr": "100 * rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) / clamp_min(rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]), 1e-9)",
+          "legendFormat": "prefix cache hit rate",
           "refId": "B"
         }
       ],
-      "title": "KV cache usage",
+      "title": "KV / prefix cache usage",
       "type": "timeseries"
     }
   ],
