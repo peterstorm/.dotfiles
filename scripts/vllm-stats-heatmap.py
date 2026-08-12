@@ -134,6 +134,9 @@ def render(days, out_path):
                 f'width="11" height="11" rx="2"><title>{title}</title></rect>'
             )
 
+    svg_w = len(weeks) * 13 + 40
+    svg_width = f'width="{svg_w}" height="110" '
+
     labels = "".join(
         f'<text class="m" x="{wi * 13 + 2}" y="0">{month_labels[wi]}</text>'
         for wi in sorted(month_labels)
@@ -166,8 +169,13 @@ def render(days, out_path):
   .stat .v {{ font-size: 22px; font-weight: 600; }}
   .stat .k {{ color: #8b949e; font-size: 11px; text-transform: uppercase;
               letter-spacing: .05em; margin-top: 2px; }}
-  svg {{ max-width: 100%; }}
-  .d {{ shape-rendering: geometricPrecision; }}
+  svg {{ max-width: 100%; height: auto; }}
+  .d {{ shape-rendering: geometricPrecision; stroke: none; }}
+  .d[data-level="0"] {{ fill: #161b22; }}
+  .d[data-level="1"] {{ fill: #0e4429; }}
+  .d[data-level="2"] {{ fill: #006d32; }}
+  .d[data-level="3"] {{ fill: #26a641; }}
+  .d[data-level="4"] {{ fill: #39d353; }}
   .m {{ fill: #8b949e; font-size: 10px; }}
   .w {{ fill: #8b949e; font-size: 10px; }}
   .keys {{ display: flex; align-items: center; gap: 6px; margin-top: 8px;
@@ -189,7 +197,7 @@ def render(days, out_path):
     <div class="stat"><div class="v">{longest}</div><div class="k">best streak</div></div>
   </div>
 
-  <svg viewBox="0 0 {len(weeks) * 13 + 40} 110" xmlns="http://www.w3.org/2000/svg">
+  <svg {svg_width}viewBox="0 0 {svg_w} 110" xmlns="http://www.w3.org/2000/svg">
     {labels}
     {wk_labels}
     {''.join(cells)}
