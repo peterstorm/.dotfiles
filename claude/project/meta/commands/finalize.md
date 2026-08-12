@@ -24,7 +24,7 @@ Run `git status` to check for uncommitted changes.
   - Run `git diff --stat` and `git diff --cached --stat` to summarize
   - Draft a commit message based on the changes
   - Show the proposed commit message to user and ask for confirmation
-  - If confirmed, stage all changes and commit (follow the git commit rules from CLAUDE.md)
+  - If confirmed, stage all changes and commit (conventional-commit style subject, e.g. `feat(scope): …`, matching the repo's recent `git log` style)
 - If no changes: continue to next step
 
 ## Step 3: Push and PR Check
@@ -34,7 +34,7 @@ Run `gh pr list --head $(git branch --show-current)` to check for existing PR.
 
 - If there are unpushed commits and no PR exists:
   - Push the branch: `git push -u origin $(git branch --show-current)`
-  - Create PR using `gh pr create` following the PR creation rules from CLAUDE.md
+  - Create PR using `gh pr create` (summary + change list in the body; link the related issue with "closes #N" when one exists)
   - Show the PR URL to user
 - If PR already exists:
   - If there are new commits, push them
@@ -109,6 +109,6 @@ Step 4: Issue #66
 
 - Be conversational and ask for confirmation before destructive/public actions (commits, pushes, PR creation)
 - If any step fails, stop and report the error clearly
-- Use the user's git and PR conventions from CLAUDE.md
+- Match the repo's existing commit and PR conventions (check `git log` / recent PRs)
 - **Reconciliation is critical**: Always verify PR description matches ALL commits, and issue checkboxes match completed work
 - Don't just append to PR descriptions - rebuild them to ensure completeness and accuracy

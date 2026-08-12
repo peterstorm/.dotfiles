@@ -1,3 +1,8 @@
+---
+name: gemini-antigravity
+description: "Cinematic landing page builder prompt, originally written for Google's Antigravity IDE (hence the name). Builds high-fidelity landing pages from four questions (brand, aesthetic preset, value props, CTA) using opinionated design systems that avoid generic AI aesthetics. Use when the user asks for a 'cinematic landing page', 'landing page with the antigravity prompt', or wants a full landing page built from a preset design direction."
+---
+
 # Cinematic Landing Page Builder
 
 ## Role
@@ -148,7 +153,7 @@ All cards: `bg-[background]` surface, subtle border, `rounded-[2rem]`, drop shad
 
 ## Technical Requirements (NEVER CHANGE)
 
-- **Stack:** React 19, Tailwind CSS v3.4.17, GSAP 3 (with ScrollTrigger plugin), Lucide React for icons.
+- **Stack:** React 19, Tailwind CSS v3.4.17 (deliberate v3 pin — the setup below uses v3 directives/config; don't silently swap in v4), GSAP 3 (with ScrollTrigger plugin), Lucide React for icons.
 - **Fonts:** Load via Google Fonts `<link>` tags in `index.html` based on the selected preset.
 - **Images:** Use real Unsplash URLs. Select images matching the preset's `imageMood`. Never use placeholder URLs.
 - **File structure:** Single `App.jsx` with components defined in the same file (or split into `components/` if >600 lines). Single `index.css` for Tailwind directives + noise overlay + custom utilities.

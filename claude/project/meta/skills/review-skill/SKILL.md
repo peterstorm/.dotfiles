@@ -1,7 +1,7 @@
 ---
 name: review-skill
 version: "1.0.0"
-description: "This skill should be used when the user asks to 'review skill', 'audit skill', 'check skill quality', 'review hooks', 'review plugin', or wants a comprehensive multi-agent review of a skill and its hooks/agents/helpers. Spawns skill-reviewer, skill-content-reviewer, and claude-code-guide in parallel."
+description: "This skill should be used when the user asks to 'review skill', 'audit skill', 'check skill quality', 'review hooks', 'review plugin', or wants a comprehensive multi-agent review of a skill and its hooks/agents/helpers. Spawns a structural reviewer, skill-content-reviewer, and claude-code-guide in parallel."
 ---
 
 # Review Skill - Multi-Agent Skill Auditor
@@ -27,29 +27,24 @@ Parse the argument to get the skill name. If no argument provided, ask the user 
 
 ### 2. Discover All Related Files
 
-Search these locations for files belonging to the skill:
+Search these locations for the skill, in order (first match wins for the primary SKILL.md; still sweep the rest for related files):
 
 ```
-~/.claude/skills/{skill-name}/               → SKILL.md, templates.md, etc.
-~/.claude/agents/                            → agents referenced by skill
-~/.claude/hooks/PreToolUse/                  → PreToolUse hooks
-~/.claude/hooks/PostToolUse/                 → PostToolUse hooks
-~/.claude/hooks/SubagentStart/               → SubagentStart hooks
-~/.claude/hooks/SubagentStop/                → SubagentStop hooks
-~/.claude/hooks/Stop/                        → Stop hooks
-~/.claude/hooks/loom/                        → TS hook handlers
-~/.claude/tests/                             → test files
-~/.claude/settings.json                      → hook registrations
+{exact path if provided}
+.claude/skills/{skill-name}/                                → current project's skills
+~/.dotfiles/claude/project/*/skills/{skill-name}/           → dotfiles domain skills (meta, typescript, java, marketing)
+~/.dotfiles/claude/global/skills/{skill-name}/              → global skills
+~/dev/claude-plugins/{plugin}/                              → plugin source repos (loom, cortex, feynman, reclaw)
+~/.claude/plugins/cache/*/*/*/                              → installed plugin snapshots (skills/, commands/, agents/, hooks/)
 ```
 
 **Discovery strategy:**
 
-1. Read `~/.claude/skills/{skill-name}/SKILL.md` — this is the primary file
-2. Glob `~/.claude/skills/{skill-name}/**/*` — all skill files (recursive)
-3. Read `~/.claude/settings.json` — find all registered hooks
-4. Grep hook scripts for references to the skill name or its state files
-5. Grep agent files for references to the skill name
-6. Check `~/.claude/tests/` for test files mentioning the skill
+1. Read the skill's `SKILL.md` — this is the primary file
+2. Glob `{skill-dir}/**/*` — all skill files (recursive: references/, assets/, scripts/, evals/)
+3. If the skill belongs to a plugin, read the plugin's `.claude-plugin/plugin.json` and its `hooks/` directory — plugin hooks live inside the plugin, not in `~/.claude/hooks/`
+4. Read `~/.claude/settings.json` — check for any directly registered hooks and enabled plugins
+5. Grep the plugin's hook scripts and agents for references to the skill name or its state files
 
 Build a **file inventory** — a categorized list of all discovered files with full paths.
 
@@ -57,15 +52,17 @@ Build a **file inventory** — a categorized list of all discovered files with f
 
 Launch **all three agents in a single message** (parallel execution):
 
-#### Agent A: Structural Review (`plugin-dev:skill-reviewer`)
+#### Agent A: Structural Review (`general-purpose`)
 
 ```
 Review the {skill-name} skill plugin and ALL its associated hooks, agents, and helpers for structural quality and best practices.
 
+First read the structural checklist at ~/.dotfiles/claude/project/meta/skills/skill-content-reviewer/references/structural-checks.md and run every check.
+
 Files to review:
 {file inventory}
 
-Review for:
+Additionally review for:
 1. Plugin structure and conventions
 2. Hook registration correctness
 3. Agent definition quality

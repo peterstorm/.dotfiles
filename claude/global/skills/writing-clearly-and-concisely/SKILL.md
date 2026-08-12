@@ -29,7 +29,7 @@ When context is tight:
 2. Dispatch a subagent with your draft and the relevant section file
 3. Have the subagent copyedit and return the revision
 
-Loading a single section (~1,000-4,500 tokens) instead of everything saves significant context.
+Loading a single section (~1,200-8,400 tokens) instead of everything saves significant context.
 
 ## Elements of Style
 
@@ -67,10 +67,10 @@ The rules above are summarized from Strunk's original text. For complete explana
 
 | Section | File | ~Tokens |
 |---------|------|---------|
-| Grammar, punctuation, comma rules | `02-elementary-rules-of-usage.md` | 2,500 |
-| Paragraph structure, active voice, concision | `03-elementary-principles-of-composition.md` | 4,500 |
-| Headings, quotations, formatting | `04-a-few-matters-of-form.md` | 1,000 |
-| Word choice, common errors | `05-words-and-expressions-commonly-misused.md` | 4,000 |
+| Grammar, punctuation, comma rules | `elements-of-style/02-elementary-rules-of-usage.md` | 3,000 |
+| Paragraph structure, active voice, concision | `elements-of-style/03-elementary-principles-of-composition.md` | 8,400 |
+| Headings, quotations, formatting | `elements-of-style/04-a-few-matters-of-form.md` | 1,200 |
+| Word choice, common errors | `elements-of-style/05-words-and-expressions-commonly-misused.md` | 5,600 |
 
 **Most tasks need only `03-elementary-principles-of-composition.md`** — it covers active voice, positive form, concrete language, and omitting needless words.
 

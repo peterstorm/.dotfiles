@@ -156,14 +156,15 @@ When invoked with `--refresh-context`:
 
 1. Read vault business strategy files:
    - `business/MOC.md`
-   - `business/smart_website_agency/dotslash.dev - Unified Business Identity.md`
-   - `business/smart_website_agency/plans/dotslash.dev - Master Business Plan 2026.md`
-   - `business/smart_website_agency/pricing/Copenhagen Pricing Strategy - Three-Tier Business Model.md`
-   - `business/smart_website_agency/chatbot/Custom Chatbot Architecture.md`
-   - `business/smart_website_agency/chatbot/Client Acquisition Playbook Denmark.md`
-   - Also Glob for any new files: `business/smart_website_agency/**/*.md`
+   - `business/dotslash.dev/dotslash.dev - Unified Business Identity.md`
+   - `business/dotslash.dev/smb/strategy/dotslash.dev - Master Business Plan 2026.md`
+   - `business/dotslash.dev/smb/strategy/Pricing Deep Dive & Market Analysis.md`
+   - `business/dotslash.dev/smb/strategy/Chatbot Pricing and Free Website Commercial Model.md`
+   - `business/dotslash.dev/smb/go-to-market/Client Acquisition Playbook Denmark.md`
+   - `business/dotslash.dev/consulting/strategy/Consulting Strategy & Opportunity Analysis.md`
+   - Also Glob for any new files: `business/dotslash.dev/**/*.md` (skip `smb/archive/` — superseded notes)
 2. Read dotslash.dev website content for consulting positioning:
-   - Scan page content files in `~/dev/web/dotslash-dev/src/` for services, philosophy, positioning
+   - Scan page content files in `~/dev/web/dotslash.dev/src/` for services, philosophy, positioning
 3. Synthesize into a balanced business context covering BOTH segments equally
 4. Write to this skill's `references/business-context.md`
 5. Confirm completion and summarize any changes detected

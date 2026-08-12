@@ -12,7 +12,7 @@ version: 0.2.0
 
 # MCP Server Design & Review
 
-Guide the user through designing new MCP servers or reviewing existing ones against established best practices. All guidance is language-agnostic but applies principles from the official MCP specification (through 2025-06-18), Block Engineering's production playbook (60+ servers), FastMCP creator insights, and community learnings from the broader ecosystem.
+Guide the user through designing new MCP servers or reviewing existing ones against established best practices. All guidance is language-agnostic but applies principles from the official MCP specification (through 2025-11-25 — tasks, auth updates; verify against the current revision at modelcontextprotocol.io before citing spec details), Block Engineering's production playbook (60+ servers), FastMCP creator insights, and community learnings from the broader ecosystem.
 
 ## Core Philosophy
 
@@ -25,7 +25,7 @@ Agents are not humans. Three critical differences drive every design decision:
 |-----------|--------|-----------|
 | **Discovery** | Cheap (read docs once) | Expensive (enumerates ALL tools, consumes tokens) |
 | **Iteration** | Fast (write script, run repeatedly) | Slow (each call sends entire history) |
-| **Context** | Rich (memories, experiences) | Limited (~200K tokens is the entire "brain") |
+| **Context** | Rich (memories, experiences) | Limited (the context window — 200K–1M tokens — is the entire "brain") |
 
 **The key verb: CURATE.** Every design decision filters through token budget consciousness.
 
@@ -124,7 +124,7 @@ Apply **Instructions Are Context** principle.
 
 Apply **Respect Token Budget** principle. Consult `references/llm-alignment.md` for detailed math.
 
-- Estimate total token cost: `200K context / tool_count = tokens per tool`
+- Estimate total token cost: `context window / tool_count = tokens per tool` (use the target model's window; the principle holds at any size)
 - Check output sizes -- return summaries + IDs, not raw dumps
 - Plan truncation/pagination for large responses
 - Consider prompt caching implications (avoid dynamic data in instructions)

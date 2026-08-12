@@ -19,7 +19,7 @@ Example:
 
 **Remember:** This is per agent, not per server. If an agent connects to three 20-tool servers, that's 60 tools competing for context.
 
-**Note:** 200K tokens is used as a reference baseline (Claude's context window). Other models differ (Gemini: 1M+, GPT-4: 128K). Adjust the math per model. Regardless of window size, performance degrades with large contexts -- more tools always means more noise for the agent to filter through.
+**Note:** 200K tokens is used as a reference baseline (Claude's standard context window; 1M-token variants exist). Other models differ. Adjust the math per model. Regardless of window size, performance degrades with large contexts -- more tools always means more noise for the agent to filter through.
 
 ### What Consumes Tokens
 

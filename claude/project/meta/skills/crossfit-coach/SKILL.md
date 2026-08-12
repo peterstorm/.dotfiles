@@ -128,15 +128,27 @@ Full movement → Garmin mapping table, confirmed mappings, and correction histo
 
 ## Workout JSON Structure
 
-The Garmin workout JSON schema is **shared with the running coach** — read the canonical
-reference and follow its **Sport deltas → Strength / CrossFit** section (this replaces the copy
-that used to live inline here and had drifted from the running copy):
+The Garmin workout JSON schema is **shared with the running coach** — the canonical
+reference lives in the vault:
 
 ```bash
-cat /home/peterstorm/dev/claude-plugins/reclaw/workspace/skills/shared/garmin-workout-schema.md
+cat ~/dev/notes/remotevault/reclaw/skills/workout-json-reference.md
 ```
 
-It covers: the top-level shape (CrossFit uses `sportType` HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }`), the ExecutableStepDTO / RepeatGroupDTO templates, the step-type and end-condition tables, the shared gotchas (stepOrder, childStepId, rest steps, lap.button, `endConditionCompare` empty-string), and the strength delta (`category`, `exerciseName`, `weightValue` in kg, always with `weightUnit`). Build the workout JSON inline following those templates, then schedule it with the command in the shared file's **Creating & scheduling** section (`garmin-schedule-workout.ts <date>`, default today `$(date +%F)`). On failure: auth error → report and stop; API error → report the error and show the JSON so the user can debug.
+It covers: step ordering (globally sequential `stepOrder`), the step-type and end-condition tables, RepeatGroupDTO rules (shared `childStepId`, iterations vs time-based AMRAP mode), exercise metadata (`category`, `exerciseName`, `weightValue` in kg with `weightUnit`), and per-sport deltas. CrossFit uses `sportType` HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }`. API gotchas (sport-type IDs, past-date scheduling trap, connectapi vs connect host) are in `~/dev/notes/remotevault/reclaw/garmin-api-gotchas.md`. Build the workout JSON inline following those templates, then schedule it (next section).
+
+## Scheduling
+
+The schedule script is part of the reclaw deployment. **Check it exists first:**
+
+```bash
+test -f ~/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts && echo present || echo MISSING
+```
+
+- **Present:** pipe the workout JSON to `bun ~/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts YYYY-MM-DD` (date resolved fresh via `date +%F` — never a date carried from context; a past date is a bug, Garmin silently accepts it and buries the workout).
+- **Missing (this machine's reclaw checkout has no `scripts/`):** don't fail silently — output the complete workout JSON in a fenced block, state that the schedule script only exists in the reclaw deployment that holds the Garmin credentials, and tell the user to schedule it from there.
+
+On failure: auth error → report and stop; API error → report the error and show the JSON so the user can debug.
 
 ## Editing Existing Workouts
 

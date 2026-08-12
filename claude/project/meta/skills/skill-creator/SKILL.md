@@ -67,7 +67,7 @@ Generate YAML frontmatter following these rules:
 **Optional fields:**
 - `version`: semver string
 - `license`: MIT, Apache-2.0, etc.
-- `allowed-tools`: space-separated tool list (e.g., `"Bash(python:*) WebFetch Read"`)
+- `allowed-tools`: comma-separated tool list (e.g., `"Bash(python:*), WebFetch, Read"`)
 - `metadata`: author, version, mcp-server, tags, etc.
 - `compatibility`: environment requirements (1-500 chars)
 
@@ -189,6 +189,10 @@ Determine where the skill should live:
 
 Prefer `.github/skills/` for open-source or cross-platform projects (works with Copilot, Codex, etc.). Use `.claude/skills/` for Claude-specific skills.
 
+### Step 8: Post-Creation Validation
+
+After placing the skill, suggest running `/skill-content-reviewer` on it to validate structure, content quality, and triggering behavior.
+
 ---
 
 ## Patterns Reference
@@ -248,12 +252,6 @@ See `references/patterns.md` for detailed examples.
 - MUST include trigger phrases in description
 - MUST place critical instructions at top of SKILL.md
 - If skill has hooks/agents, note integration points but don't generate those here — use separate tools
-
----
-
-## Step 8: Post-Creation Validation
-
-After placing the skill, suggest running `/skill-content-reviewer` on it to validate structure, content quality, and triggering behavior.
 
 ---
 

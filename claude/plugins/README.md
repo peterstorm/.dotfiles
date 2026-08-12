@@ -3,6 +3,8 @@
 Plugins are **individual git repos** (`peterstorm/{loom,cortex,feynman}`), each
 its own one-plugin marketplace (`.claude-plugin/marketplace.json` with
 `"source": "."`), installed from GitHub — not from a local directory.
+The exception is **obsidian**, which installs from the local directory
+marketplace at `~/dev/claude-plugins` (`obsidian@plugins`).
 
 The wiring is managed declaratively by home-manager:
 

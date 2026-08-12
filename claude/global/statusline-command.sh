@@ -1,5 +1,7 @@
 #!/bin/bash
-# Single line: Model | tokens | %used | %remain | think | 5h bar @reset | 7d bar @reset | extra
+# Statusline: Model | dir@branch (+a -d) | tokens (pct) | effort | 5h pct @reset | 7d pct @reset
+# All data comes from the statusline stdin JSON (schema: https://code.claude.com/docs/en/statusline).
+# Rate limits (Pro/Max) arrive in .rate_limits — no API calls needed.
 
 set -f  # disable globbing
 
@@ -33,13 +35,7 @@ format_tokens() {
     fi
 }
 
-# Format number with commas (e.g., 134,938)
-format_commas() {
-    printf "%'d" "$1"
-}
-
 # Return color escape based on usage percentage
-# Usage: usage_color <pct>
 usage_color() {
     local pct=$1
     if [ "$pct" -ge 90 ]; then echo "$red"
@@ -49,47 +45,52 @@ usage_color() {
     fi
 }
 
+# Format an epoch-seconds timestamp as compact local time.
+# Usage: format_reset_time <epoch> <style: time|datetime>
+format_reset_time() {
+    local epoch="$1" style="$2"
+    case "$epoch" in ''|null|*[!0-9]*) return ;; esac
+    if [ "$style" = "time" ]; then
+        date -d "@$epoch" +"%l:%M%P" 2>/dev/null | sed 's/^ //'
+    else
+        date -d "@$epoch" +"%b %-d, %l:%M%P" 2>/dev/null | sed 's/  / /g; s/^ //'
+    fi
+}
+
 # ===== Extract data from JSON =====
 model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"')
 
 # Context window
 size=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
-[ "$size" -eq 0 ] 2>/dev/null && size=200000
+case "$size" in ''|null|0|*[!0-9]*) size=200000 ;; esac
 
-# Token usage
 input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // 0')
 cache_create=$(echo "$input" | jq -r '.context_window.current_usage.cache_creation_input_tokens // 0')
 cache_read=$(echo "$input" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
 current=$(( input_tokens + cache_create + cache_read ))
 
-used_tokens=$(format_tokens $current)
-total_tokens=$(format_tokens $size)
+used_tokens=$(format_tokens "$current")
+total_tokens=$(format_tokens "$size")
 
-if [ "$size" -gt 0 ]; then
-    pct_used=$(( current * 100 / size ))
-else
-    pct_used=0
+# Prefer the precomputed percentage; fall back to computing it
+pct_used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+case "$pct_used" in
+    ''|null) pct_used=$(( current * 100 / size )) ;;
+    *) pct_used=$(printf '%.0f' "$pct_used" 2>/dev/null || echo 0) ;;
+esac
+
+# Reasoning effort
+effort_level="${CLAUDE_CODE_EFFORT_LEVEL:-}"
+if [ -z "$effort_level" ] && [ -f "$HOME/.claude/settings.json" ]; then
+    effort_level=$(jq -r '.effortLevel // "high"' "$HOME/.claude/settings.json" 2>/dev/null)
 fi
-pct_remain=$(( 100 - pct_used ))
-
-used_comma=$(format_commas $current)
-remain_comma=$(format_commas $(( size - current )))
-
-# Check reasoning effort
-settings_path="$HOME/.claude/settings.json"
-effort_level="high"
-if [ -n "$CLAUDE_CODE_EFFORT_LEVEL" ]; then
-    effort_level="$CLAUDE_CODE_EFFORT_LEVEL"
-elif [ -f "$settings_path" ]; then
-    effort_val=$(jq -r '.effortLevel // empty' "$settings_path" 2>/dev/null)
-    [ -n "$effort_val" ] && effort_level="$effort_val"
-fi
+effort_level="${effort_level:-high}"
 
 # ===== Build single-line output =====
 out=""
 out+="${blue}${model_name}${reset}"
 
-# Current working directory
+# Current working directory + git branch + churn (staged + unstaged)
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 if [ -n "$cwd" ]; then
     display_dir="${cwd##*/}"
@@ -98,7 +99,8 @@ if [ -n "$cwd" ]; then
     out+="${cyan}${display_dir}${reset}"
     if [ -n "$git_branch" ]; then
         out+="${dim}@${reset}${green}${git_branch}${reset}"
-        git_stat=$(git -C "${cwd}" diff --numstat 2>/dev/null | awk '{a+=$1; d+=$2} END {if (a+d>0) printf "+%d -%d", a, d}')
+        git_stat=$( { git -C "${cwd}" diff --numstat; git -C "${cwd}" diff --cached --numstat; } 2>/dev/null \
+            | awk '{a+=$1; d+=$2} END {if (a+d>0) printf "+%d -%d", a, d}')
         [ -n "$git_stat" ] && out+=" ${dim}(${reset}${green}${git_stat%% *}${reset} ${red}${git_stat##* }${reset}${dim})${reset}"
     fi
 fi
@@ -113,196 +115,25 @@ case "$effort_level" in
     *)      out+="${green}high${reset}" ;;
 esac
 
-# ===== Cross-platform OAuth token resolution (from statusline.sh) =====
-# Tries credential sources in order: env var → macOS Keychain → Linux creds file → GNOME Keyring
-get_oauth_token() {
-    local token=""
-
-    # 1. Explicit env var override
-    if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-        echo "$CLAUDE_CODE_OAUTH_TOKEN"
-        return 0
-    fi
-
-    # 2. macOS Keychain
-    if command -v security >/dev/null 2>&1; then
-        local blob
-        blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
-        if [ -n "$blob" ]; then
-            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
-            if [ -n "$token" ] && [ "$token" != "null" ]; then
-                echo "$token"
-                return 0
-            fi
-        fi
-    fi
-
-    # 3. Linux credentials file
-    local creds_file="${HOME}/.claude/.credentials.json"
-    if [ -f "$creds_file" ]; then
-        token=$(jq -r '.claudeAiOauth.accessToken // empty' "$creds_file" 2>/dev/null)
-        if [ -n "$token" ] && [ "$token" != "null" ]; then
-            echo "$token"
-            return 0
-        fi
-    fi
-
-    # 4. GNOME Keyring via secret-tool
-    if command -v secret-tool >/dev/null 2>&1; then
-        local blob
-        blob=$(timeout 2 secret-tool lookup service "Claude Code-credentials" 2>/dev/null)
-        if [ -n "$blob" ]; then
-            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
-            if [ -n "$token" ] && [ "$token" != "null" ]; then
-                echo "$token"
-                return 0
-            fi
-        fi
-    fi
-
-    echo ""
-}
-
-# ===== LINE 2 & 3: Usage limits with progress bars (cached) =====
-cache_file="/tmp/claude/statusline-usage-cache.json"
-cache_max_age=60  # seconds between API calls
-mkdir -p /tmp/claude
-
-needs_refresh=true
-usage_data=""
-
-# Check cache
-if [ -f "$cache_file" ]; then
-    cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
-    now=$(date +%s)
-    cache_age=$(( now - cache_mtime ))
-    if [ "$cache_age" -lt "$cache_max_age" ]; then
-        needs_refresh=false
-        usage_data=$(cat "$cache_file" 2>/dev/null)
-    fi
-fi
-
-# Fetch fresh data if cache is stale
-if $needs_refresh; then
-    token=$(get_oauth_token)
-    if [ -n "$token" ] && [ "$token" != "null" ]; then
-        response=$(curl -s --max-time 10 \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $token" \
-            -H "anthropic-beta: oauth-2025-04-20" \
-            -H "User-Agent: claude-code/2.1.34" \
-            "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-        if [ -n "$response" ] && echo "$response" | jq . >/dev/null 2>&1; then
-            usage_data="$response"
-            echo "$response" > "$cache_file"
-        fi
-    fi
-    # Fall back to stale cache
-    if [ -z "$usage_data" ] && [ -f "$cache_file" ]; then
-        usage_data=$(cat "$cache_file" 2>/dev/null)
-    fi
-fi
-
-# Cross-platform ISO to epoch conversion
-# Converts ISO 8601 timestamp (e.g. "2025-06-15T12:30:00Z" or "2025-06-15T12:30:00.123+00:00") to epoch seconds.
-# Properly handles UTC timestamps and converts to local time.
-iso_to_epoch() {
-    local iso_str="$1"
-
-    # Try GNU date first (Linux) — handles ISO 8601 format automatically
-    local epoch
-    epoch=$(date -d "${iso_str}" +%s 2>/dev/null)
-    if [ -n "$epoch" ]; then
-        echo "$epoch"
-        return 0
-    fi
-
-    # BSD date (macOS) - handle various ISO 8601 formats
-    local stripped="${iso_str%%.*}"          # Remove fractional seconds (.123456)
-    stripped="${stripped%%Z}"                 # Remove trailing Z
-    stripped="${stripped%%+*}"               # Remove timezone offset (+00:00)
-    stripped="${stripped%%-[0-9][0-9]:[0-9][0-9]}"  # Remove negative timezone offset
-
-    # Check if timestamp is UTC (has Z or +00:00 or -00:00)
-    if [[ "$iso_str" == *"Z"* ]] || [[ "$iso_str" == *"+00:00"* ]] || [[ "$iso_str" == *"-00:00"* ]]; then
-        # For UTC timestamps, parse with timezone set to UTC
-        epoch=$(env TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
-    else
-        epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
-    fi
-
-    if [ -n "$epoch" ]; then
-        echo "$epoch"
-        return 0
-    fi
-
-    return 1
-}
-
-# Format ISO reset time to compact local time
-# Usage: format_reset_time <iso_string> <style: time|datetime|date>
-format_reset_time() {
-    local iso_str="$1"
-    local style="$2"
-    [ -z "$iso_str" ] || [ "$iso_str" = "null" ] && return
-
-    # Parse ISO datetime and convert to local time (cross-platform)
-    local epoch
-    epoch=$(iso_to_epoch "$iso_str")
-    [ -z "$epoch" ] && return
-
-    # Format based on style (try BSD date first, then GNU date)
-    # BSD date uses %p (uppercase AM/PM), so convert to lowercase
-    case "$style" in
-        time)
-            date -j -r "$epoch" +"%l:%M%p" 2>/dev/null | sed 's/^ //' | tr '[:upper:]' '[:lower:]' || \
-            date -d "@$epoch" +"%l:%M%P" 2>/dev/null | sed 's/^ //'
-            ;;
-        datetime)
-            date -j -r "$epoch" +"%b %-d, %l:%M%p" 2>/dev/null | sed 's/  / /g; s/^ //' | tr '[:upper:]' '[:lower:]' || \
-            date -d "@$epoch" +"%b %-d, %l:%M%P" 2>/dev/null | sed 's/  / /g; s/^ //'
-            ;;
-        *)
-            date -j -r "$epoch" +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]' || \
-            date -d "@$epoch" +"%b %-d" 2>/dev/null
-            ;;
-    esac
-}
-
+# ===== Rate limits (from stdin; present for Pro/Max after first API response) =====
 sep=" ${dim}|${reset} "
 
-if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
-    # ---- 5-hour (current) ----
-    five_hour_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
-    five_hour_reset_iso=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
-    five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "time")
+five_hour_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
+if [ -n "$five_hour_pct" ] && [ "$five_hour_pct" != "null" ]; then
+    five_hour_pct=$(printf '%.0f' "$five_hour_pct" 2>/dev/null || echo 0)
+    five_hour_reset=$(format_reset_time "$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')" "time")
     five_hour_color=$(usage_color "$five_hour_pct")
-
     out+="${sep}${white}5h${reset} ${five_hour_color}${five_hour_pct}%${reset}"
     [ -n "$five_hour_reset" ] && out+=" ${dim}@${five_hour_reset}${reset}"
+fi
 
-    # ---- 7-day (weekly) ----
-    seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
-    seven_day_reset_iso=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
-    seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "datetime")
+seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
+if [ -n "$seven_day_pct" ] && [ "$seven_day_pct" != "null" ]; then
+    seven_day_pct=$(printf '%.0f' "$seven_day_pct" 2>/dev/null || echo 0)
+    seven_day_reset=$(format_reset_time "$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')" "datetime")
     seven_day_color=$(usage_color "$seven_day_pct")
-
     out+="${sep}${white}7d${reset} ${seven_day_color}${seven_day_pct}%${reset}"
     [ -n "$seven_day_reset" ] && out+=" ${dim}@${seven_day_reset}${reset}"
-
-    # ---- Extra usage ----
-    extra_enabled=$(echo "$usage_data" | jq -r '.extra_usage.is_enabled // false')
-    if [ "$extra_enabled" = "true" ]; then
-        extra_pct=$(echo "$usage_data" | jq -r '.extra_usage.utilization // 0' | awk '{printf "%.0f", $1}')
-        extra_used=$(echo "$usage_data" | jq -r '.extra_usage.used_credits // 0' | awk '{printf "%.2f", $1/100}')
-        extra_limit=$(echo "$usage_data" | jq -r '.extra_usage.monthly_limit // 0' | awk '{printf "%.2f", $1/100}')
-        extra_used="${extra_used:-0.00}"
-        extra_limit="${extra_limit:-0.00}"
-        extra_color=$(usage_color "$extra_pct")
-
-        out+="${sep}${white}extra${reset} ${extra_color}\$${extra_used}/\$${extra_limit}${reset}"
-    fi
 fi
 
 # Output single line

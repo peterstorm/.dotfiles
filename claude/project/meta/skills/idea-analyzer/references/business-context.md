@@ -1,7 +1,7 @@
 # dotslash.dev — Business Context
 
 > Auto-generated from vault notes + website content. Refresh with `/idea-analyzer --refresh-context`
-> Full details: See `business/smart_website_agency/dotslash.dev - Unified Business Identity.md` in the Obsidian vault
+> Full details: See `business/dotslash.dev/dotslash.dev - Unified Business Identity.md` in the Obsidian vault
 > Last updated: 2026-02-05
 
 ## Identity

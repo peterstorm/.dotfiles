@@ -36,7 +36,7 @@ Parse `$ARGUMENTS` or conversational context for:
 
 ## Date Resolution
 
-Use the current date (`{{date}}` or system date) as reference. Always resolve forward:
+Use the current date (run `date +%F`) as reference. Always resolve forward:
 - "Tuesday" when today is Sunday = this coming Tuesday (2 days)
 - "Tuesday" when today is Wednesday = next Tuesday (6 days)
 - "next Tuesday" always = Tuesday of next week

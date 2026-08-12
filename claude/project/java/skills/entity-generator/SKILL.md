@@ -1,7 +1,6 @@
 ---
 name: entity-generator
 description: "Generate JPA entity classes from Oracle CREATE TABLE DDL statements. Use when the user provides a CREATE TABLE definition and wants a Hibernate entity. Handles Oracle types (VARCHAR2, NUMBER, CLOB, CHAR, DATE, TIMESTAMP, BLOB), schema-qualified tables, and follows the hibertable11 repo conventions."
-user_invocable: true
 ---
 
 # Entity Generator Skill
@@ -90,7 +89,7 @@ public class ClassName {
 | `BLOB` | `byte[]` | Add `@Lob` + `@Basic(fetch = FetchType.LAZY)` |
 | `DATE` | `LocalDateTime` | — |
 | `TIMESTAMP` | `LocalDateTime` | — |
-| `TIMESTAMP WITH TIME ZONE` | `LocalDateTime` | — |
+| `TIMESTAMP WITH TIME ZONE` | `LocalDateTime` | Deliberate repo convention — hibertable11 discards the offset; the standard JPA mapping would be `OffsetDateTime` |
 | `RAW(16)` | `String` | `length = 32` (hex representation) |
 
 ### 5. Field Name Derivation

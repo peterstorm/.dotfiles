@@ -1,47 +1,25 @@
 # Meta Agents
 
-Agents for code review, architecture, and quality analysis.
+Project-scoped agents for the dotfiles repo. Symlink into a project's
+`.claude/agents/` to use them.
 
-## Shared agents (duplicated in loom plugin)
+## Contents
 
-These agents exist in both this directory and the loom plugin
-(`~/dev/claude-plugins/loom/agents/`) because symlinks are not supported
-by the plugin cache. Changes must be synced manually.
+| Agent | Purpose |
+|-------|---------|
+| `dotfiles-agent.md` | NixOS/home-manager specialist for this repo (flake-parts, roles, SOPS) |
 
-**From this directory:**
+## Where the other agents went
 
-| Agent | Loom copy |
-|-------|-----------|
-| `architecture-tech-lead.md` | `loom/agents/architecture-tech-lead.md` |
-| `code-reviewer.md` | `loom/agents/code-reviewer.md` |
-| `code-simplifier.md` | `loom/agents/code-simplifier.md` |
-| `comment-analyzer.md` | `loom/agents/comment-analyzer.md` |
-| `dotfiles-agent.md` | `loom/agents/dotfiles-agent.md` |
-| `pr-test-analyzer.md` | `loom/agents/pr-test-analyzer.md` |
-| `security-agent.md` | `loom/agents/security-agent.md` |
-| `silent-failure-hunter.md` | `loom/agents/silent-failure-hunter.md` |
-| `skill-content-reviewer.md` | `loom/agents/skill-content-reviewer.md` |
-| `type-design-analyzer.md` | `loom/agents/type-design-analyzer.md` |
+The review/architecture/testing agents that used to be manually mirrored here
+(code-reviewer, silent-failure-hunter, architecture-tech-lead, etc.) now live
+**only in the loom plugin** (`~/dev/claude-plugins/loom/agents/`, installed from
+`peterstorm/loom`). They surface as `loom:<name>` agents in every session — no
+local copies, no manual sync.
 
-**From `../typescript/agents/`:**
+For the Pi harness, Loom agents are **rendered per machine** rather than
+tracked in git (see `pi/` and commit `36f2c99`); the renders are gitignored.
 
-| Agent | Loom copy |
-|-------|-----------|
-| `frontend-agent.md` | `loom/agents/frontend-agent.md` |
-| `test-engineer.md` | `loom/agents/test-engineer.md` |
-| `ts-test-agent.md` | `loom/agents/ts-test-agent.md` |
-
-When editing a shared agent, update both copies and verify with:
-
-```bash
-diff ~/.dotfiles/claude/project/meta/agents/<name>.md ~/dev/claude-plugins/loom/agents/<name>.md
-```
-
-## Why agents are in both places
-
-- **Dotfiles**: canonical source, versioned in dotfiles repo, used when agents
-  are spawned directly from the main conversation (e.g., `/review-pr` in the
-  main conversation).
-- **Loom plugin**: copy required so subagents (e.g., `review-invoker`) can
-  spawn them as `loom:code-reviewer`, `loom:silent-failure-hunter`, etc.
-  The plugin cache doesn't follow symlinks.
+Editing a loom agent = edit in the loom repo, commit, push, then reinstall the
+plugin (`claude plugin install loom@loom` or restart Claude Code after the
+marketplace refreshes).

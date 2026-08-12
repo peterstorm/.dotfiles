@@ -2,8 +2,8 @@
 
 ## Branded Types
 
-- Use branded types for domain identifiers: `type SkillId = string & { readonly __brand: 'SkillId' }`.
-- Always provide a smart constructor (`makeSkillId`) that validates and returns `Result<SkillId, string>`.
+- Use branded types for domain identifiers: `type UserId = string & { readonly __brand: 'UserId' }`.
+- Always provide a smart constructor (`makeUserId`) that validates and returns `Either<string, UserId>`.
 - Never cast raw strings to branded types outside the constructor.
 
 ## Discriminated Unions + ts-pattern
@@ -12,17 +12,17 @@
 - Use `ts-pattern`'s `match()` for exhaustive, type-safe branching.
 - Prefer `.exhaustive()` over `.otherwise()` to catch missing cases at compile time.
 
-## Result Pattern
+## Either Pattern
 
 ```typescript
-type Result<T, E = string> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: E };
+type Either<E, A> =
+  | { readonly _tag: 'Left'; readonly left: E }   // failure
+  | { readonly _tag: 'Right'; readonly right: A } // success
 ```
 
-- Use for all operations that can fail expectedly.
+- Use for all operations that can fail expectedly (use a library implementation — e.g. `effect` / `fp-ts` — when one is already in the project; hand-roll only in dependency-free code).
 - Compose with `map`, `flatMap` helpers when chaining.
-- At the boundary (imperative shell), unwrap and handle — never propagate `Result` into the UI layer.
+- At the boundary (imperative shell), unwrap and handle — never propagate `Either` into the UI layer.
 
 ## Readonly by Default
 
