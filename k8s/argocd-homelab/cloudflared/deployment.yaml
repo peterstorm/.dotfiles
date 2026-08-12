@@ -16,6 +16,22 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+        - name: wait-for-dns
+          image: alpine:3.21
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              for i in $(seq 1 60); do
+                if nslookup kubernetes.default.svc.cluster.local 10.43.0.10 >/dev/null 2>&1 \
+                  && nslookup region1.v2.argotunnel.com 10.43.0.10 >/dev/null 2>&1; then
+                  exit 0
+                fi
+                echo "waiting for cluster DNS ($i/60)" >&2
+                sleep 5
+              done
+              echo "cluster DNS did not become ready in time" >&2
+              exit 1
       containers:
         - name: cloudflared
           image: cloudflare/cloudflared:2026.3.0

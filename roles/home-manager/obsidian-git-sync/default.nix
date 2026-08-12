@@ -12,9 +12,6 @@
       WorkingDirectory = "${config.home.homeDirectory}/dev/notes";
       Environment = [
         "SSH_AUTH_SOCK=%t/ssh-agent"
-        # BatchMode: never block on a passphrase/host-key prompt — there is no
-        # tty here, so a prompt would hang the unit until the timer's next run.
-        "GIT_SSH_COMMAND=${pkgs.openssh}/bin/ssh -o BatchMode=yes"
         # Fail loudly if the remote ever resolves to HTTPS (no credential helper
         # is configured), instead of the opaque ENXIO from git opening /dev/tty.
         "GIT_TERMINAL_PROMPT=0"
@@ -22,6 +19,10 @@
 
       ExecStart = pkgs.writeShellScript "obsidian-git-sync" ''
         set -euo pipefail
+
+        # Keep the command with spaces in the shell, not systemd Environment=,
+        # otherwise systemd parses the `-o` argument as a bogus assignment.
+        export GIT_SSH_COMMAND="${pkgs.openssh}/bin/ssh -o BatchMode=yes"
 
         # Commit local changes BEFORE pulling so that untracked files
         # (created by reclaw skills, etc.) don't block the merge when

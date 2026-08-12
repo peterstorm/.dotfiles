@@ -22,7 +22,17 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk add --no-cache sqlite > /dev/null 2>&1
+              for i in $(seq 1 30); do
+                if apk add --no-cache sqlite > /dev/null 2>&1; then
+                  break
+                fi
+                echo "sqlite install unavailable; retrying ($i/30)" >&2
+                sleep 5
+              done
+              if ! command -v sqlite3 >/dev/null 2>&1; then
+                echo "sqlite3 unavailable after retries; skipping non-critical path migration" >&2
+                exit 0
+              fi
               DB=/config/sonarr.db
               [ ! -f "$DB" ] && exit 0
               sqlite3 "$DB" "UPDATE RootFolders SET Path = REPLACE(Path, '/media/', '/data/media/') WHERE Path LIKE '/media/%';"
@@ -35,7 +45,17 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk add --no-cache sqlite > /dev/null 2>&1
+              for i in $(seq 1 30); do
+                if apk add --no-cache sqlite > /dev/null 2>&1; then
+                  break
+                fi
+                echo "sqlite install unavailable; retrying ($i/30)" >&2
+                sleep 5
+              done
+              if ! command -v sqlite3 >/dev/null 2>&1; then
+                echo "sqlite3 unavailable after retries; skipping non-critical naming migration" >&2
+                exit 0
+              fi
               DB=/config/sonarr.db
               [ ! -f "$DB" ] && exit 0
               sqlite3 "$DB" "UPDATE NamingConfig SET RenameEpisodes = 1 WHERE Id = 1;"
