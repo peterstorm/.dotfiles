@@ -12,6 +12,11 @@ final: prev:
 
     npmDepsHash = "sha256-S2mAnU0pf3U3gSgNYEkudNIvxpSI4nior2m0R27O+3E=";
 
+    # Upstream 0.83.0 only has a global thinking default. Add a model-local
+    # default that initializes/switches session state without mutating the global
+    # setting; explicit --thinking and scoped model levels still take precedence.
+    patches = [ ./patches/pi-model-default-thinking.patch ];
+
     postPatch = ''
       substituteInPlace npm-shrinkwrap.json \
         --replace-fail '"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.83.0.tgz",' '"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.83.0.tgz",
@@ -40,6 +45,14 @@ final: prev:
     '';
 
     npmDepsFetcherVersion = 2;
+
+    # The Model interface belongs to pi-ai, whose dependency is materialized
+    # only after patchPhase. Patch its declaration after npm dependencies exist.
+    postConfigure = ''
+      substituteInPlace node_modules/@earendil-works/pi-ai/dist/types.d.ts \
+        --replace-fail '    reasoning: boolean;' '    reasoning: boolean;
+    defaultThinkingLevel?: ModelThinkingLevel;'
+    '';
 
     dontNpmBuild = true;
 

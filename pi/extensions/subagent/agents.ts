@@ -15,18 +15,27 @@ export type AgentScope = "user" | "project" | "both";
 
 export type AgentSource = "package" | "user" | "project";
 
-export interface AgentConfig {
+export type AgentConfig = Readonly<{
 	name: string;
 	description: string;
-	tools?: string[];
+	tools?: readonly string[];
 	model?: string;
+	modelProfile?: string;
+	declaredSkills: readonly string[];
 	systemPrompt: string;
 	source: AgentSource;
 	filePath: string;
-}
+}>;
 
 /** Cached skill name → file path map, lazily populated. */
 let skillPathCache: Map<string, string> | null = null;
+
+export class AgentDiscoveryError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "AgentDiscoveryError";
+	}
+}
 
 /**
  * Parse the `skills` frontmatter field.
@@ -43,7 +52,7 @@ function parseSkillNames(raw: unknown): string[] {
  * Parse the `tools` frontmatter field.
  * Accepts either a comma-separated string or a YAML array.
  */
-function parseToolNames(raw: unknown): string[] | undefined {
+function parseToolNames(raw: unknown): readonly string[] | undefined {
 	if (!raw) return undefined;
 	let tools: string[];
 	if (Array.isArray(raw)) {
@@ -53,7 +62,7 @@ function parseToolNames(raw: unknown): string[] | undefined {
 	} else {
 		return undefined;
 	}
-	return tools.length > 0 ? tools : undefined;
+	return tools.length > 0 ? Object.freeze(tools) : undefined;
 }
 
 /** Resolve local package agent directories from the active Pi settings. */
@@ -77,14 +86,23 @@ function getSkillPathMap(cwd: string): Map<string, string> {
 	if (skillPathCache) return skillPathCache;
 	try {
 		const packageSkillPaths = resolvePackageSkillPaths();
-		const { skills } = loadSkills({
+		const { skills, diagnostics } = loadSkills({
 			cwd,
+			agentDir: getAgentDir(),
 			skillPaths: packageSkillPaths,
 			includeDefaults: true,
 		});
+		const failures = diagnostics.filter((diagnostic) => diagnostic.type === "error" || diagnostic.type === "warning");
+		if (failures.length > 0) {
+			const summary = failures
+				.map(({ message, path: diagnosticPath }) => `${diagnosticPath ? `${diagnosticPath}: ` : ""}${message}`)
+				.join("; ");
+			throw new AgentDiscoveryError(`Failed to discover Pi skills for ${cwd}: ${summary}`);
+		}
 		skillPathCache = new Map(skills.map((s) => [s.name, s.filePath]));
-	} catch {
-		skillPathCache = new Map();
+	} catch (error) {
+		if (error instanceof AgentDiscoveryError) throw error;
+		throw new AgentDiscoveryError(`Failed to discover Pi skills for ${cwd}`, { cause: error });
 	}
 	return skillPathCache;
 }
@@ -98,13 +116,19 @@ function getSkillPathMap(cwd: string): Map<string, string> {
 function resolveSkillContents(skillNames: string[], cwd: string, body: string): string {
 	if (skillNames.length === 0) return "";
 
-	const skillMap = getSkillPathMap(cwd);
+	let skillMap: Map<string, string> | undefined;
 	const sections: string[] = [];
 
 	for (const name of skillNames) {
-		if (hasPreloadedSkill(body, name)) continue;
+		// Loom's generated body can include CRLF or other harmless formatting
+		// differences; checking the explicit preload heading before discovery
+		// keeps already-inlined skills independent of package skill discovery.
+		if (body.includes(`## Preloaded Loom Skill: ${name}`) || hasPreloadedSkill(body, name)) continue;
+		skillMap ??= getSkillPathMap(cwd);
 		const filePath = skillMap.get(name);
-		if (!filePath) continue;
+		if (!filePath) {
+			throw new AgentDiscoveryError(`Declared skill ${name} could not be resolved for ${cwd}`);
+		}
 
 		try {
 			const raw = fs.readFileSync(filePath, "utf-8");
@@ -119,19 +143,20 @@ function resolveSkillContents(skillNames: string[], cwd: string, body: string): 
 					body.trim(),
 				);
 			}
-		} catch {
-			// Skill file unreadable, skip silently
+		} catch (error) {
+			if (error instanceof AgentDiscoveryError) throw error;
+			throw new AgentDiscoveryError(`Failed to load declared skill ${name} from ${filePath}`, { cause: error });
 		}
 	}
 
 	return sections.join("\n");
 }
 
-export interface AgentDiscoveryResult {
-	agents: AgentConfig[];
-	packageAgentsDirs: string[];
+export type AgentDiscoveryResult = Readonly<{
+	agents: readonly AgentConfig[];
+	packageAgentsDirs: readonly string[];
 	projectAgentsDir: string | null;
-}
+}>;
 
 function loadAgentsFromDir(dir: string, source: AgentSource, cwd: string): AgentConfig[] {
 	const agents: AgentConfig[] = [];
@@ -143,8 +168,8 @@ function loadAgentsFromDir(dir: string, source: AgentSource, cwd: string): Agent
 	let entries: fs.Dirent[];
 	try {
 		entries = fs.readdirSync(dir, { withFileTypes: true });
-	} catch {
-		return agents;
+	} catch (error) {
+		throw new AgentDiscoveryError(`Failed to read agent directory ${dir}`, { cause: error });
 	}
 
 	for (const entry of entries) {
@@ -155,8 +180,8 @@ function loadAgentsFromDir(dir: string, source: AgentSource, cwd: string): Agent
 		let content: string;
 		try {
 			content = fs.readFileSync(filePath, "utf-8");
-		} catch {
-			continue;
+		} catch (error) {
+			throw new AgentDiscoveryError(`Failed to read agent definition ${filePath}`, { cause: error });
 		}
 
 		let frontmatter: Record<string, string>;
@@ -165,31 +190,31 @@ function loadAgentsFromDir(dir: string, source: AgentSource, cwd: string): Agent
 			const parsed = parseFrontmatter<Record<string, string>>(content);
 			frontmatter = parsed.frontmatter;
 			body = parsed.body;
-		} catch {
-			// Skip files with malformed YAML frontmatter
-			continue;
+		} catch (error) {
+			throw new AgentDiscoveryError(`Failed to parse agent definition ${filePath}`, { cause: error });
 		}
 
+		const declaresAgent = frontmatter.name !== undefined || frontmatter.description !== undefined ||
+			frontmatter.model !== undefined || frontmatter["model-profile"] !== undefined || frontmatter.skills !== undefined;
+		if (!declaresAgent) continue;
 		if (!frontmatter.name || !frontmatter.description) {
-			continue;
+			throw new AgentDiscoveryError(`Agent definition ${filePath} requires name and description`);
 		}
 
 		const tools = parseToolNames(frontmatter.tools);
 		const skillNames = parseSkillNames(frontmatter.skills);
 
-		// Resolve and inject skill contents into the system prompt
-		const skillContent = resolveSkillContents(skillNames, cwd, body);
-		const fullPrompt = skillContent ? `${body}\n${skillContent}` : body;
-
-		agents.push({
+		agents.push(Object.freeze({
 			name: frontmatter.name,
 			description: frontmatter.description,
 			tools,
 			model: frontmatter.model,
-			systemPrompt: fullPrompt,
+			modelProfile: frontmatter["model-profile"],
+			declaredSkills: Object.freeze(skillNames),
+			systemPrompt: body,
 			source,
 			filePath,
-		});
+		}));
 	}
 
 	return agents;
@@ -238,10 +263,17 @@ export function discoverAgents(cwd: string, scope: AgentScope): AgentDiscoveryRe
 	for (const agent of userAgents) agentMap.set(agent.name, agent);
 	for (const agent of projectAgents) agentMap.set(agent.name, agent);
 
-	return { agents: Array.from(agentMap.values()), packageAgentsDirs, projectAgentsDir };
+	const agents = Object.freeze(Array.from(agentMap.values()).map((agent) => {
+		const skillContent = resolveSkillContents([...agent.declaredSkills], cwd, agent.systemPrompt);
+		return skillContent
+			? Object.freeze({ ...agent, systemPrompt: `${agent.systemPrompt}\n${skillContent}` })
+			: agent;
+	}));
+
+	return Object.freeze({ agents, packageAgentsDirs: Object.freeze(packageAgentsDirs), projectAgentsDir });
 }
 
-export function formatAgentList(agents: AgentConfig[], maxItems: number): { text: string; remaining: number } {
+export function formatAgentList(agents: readonly AgentConfig[], maxItems: number): { text: string; remaining: number } {
 	if (agents.length === 0) return { text: "none", remaining: 0 };
 	const listed = agents.slice(0, maxItems);
 	const remaining = agents.length - listed.length;

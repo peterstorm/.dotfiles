@@ -19,10 +19,22 @@ import * as path from "node:path";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Message } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
-import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
+import {
+	type ExtensionAPI,
+	getMarkdownTheme,
+	type ThemeColor,
+	withFileMutationQueue,
+} from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
+import { loadModelRoutingPolicy } from "../model-routing/config.js";
+import {
+	parentBinding,
+	resolveSubagentRoute,
+	type RoutingAudit,
+	type SubagentRoutingSnapshot,
+} from "./model-routing.js";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
@@ -64,7 +76,7 @@ function formatUsageStats(
 function formatToolCall(
 	toolName: string,
 	args: Record<string, unknown>,
-	themeFg: (color: any, text: string) => string,
+	themeFg: (color: ThemeColor, text: string) => string,
 ): string {
 	const shortenPath = (p: string) => {
 		const home = os.homedir();
@@ -139,7 +151,7 @@ interface UsageStats {
 	turns: number;
 }
 
-interface SingleResult {
+export interface SingleResult {
 	agent: string;
 	agentSource: "package" | "user" | "project" | "unknown";
 	task: string;
@@ -148,16 +160,28 @@ interface SingleResult {
 	stderr: string;
 	usage: UsageStats;
 	model?: string;
+	routing?: RoutingAudit;
 	stopReason?: string;
 	errorMessage?: string;
+	protocolErrors?: string[];
 	step?: number;
 }
 
-interface SubagentDetails {
+export interface SubagentDetails {
 	mode: "single" | "parallel" | "chain";
 	agentScope: AgentScope;
 	projectAgentsDir: string | null;
+	routingPolicyDigest?: string;
 	results: SingleResult[];
+}
+
+function resultFailed(result: SingleResult): boolean {
+	return result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
+}
+
+function appendDiagnostic(result: SingleResult, diagnostic: string): void {
+	result.stderr += `${result.stderr ? "\n" : ""}${diagnostic}`;
+	result.errorMessage ??= diagnostic;
 }
 
 function getFinalOutput(messages: Message[]): string {
@@ -172,7 +196,7 @@ function getFinalOutput(messages: Message[]): string {
 	return "";
 }
 
-type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, any> };
+type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, unknown> };
 
 function getDisplayItems(messages: Message[]): DisplayItem[] {
 	const items: DisplayItem[] = [];
@@ -235,9 +259,9 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
 
-async function runSingleAgent(
+export async function runSingleAgent(
 	defaultCwd: string,
-	agents: AgentConfig[],
+	agents: readonly AgentConfig[],
 	agentName: string,
 	task: string,
 	cwd: string | undefined,
@@ -245,6 +269,7 @@ async function runSingleAgent(
 	signal: AbortSignal | undefined,
 	onUpdate: OnUpdateCallback | undefined,
 	makeDetails: (results: SingleResult[]) => SubagentDetails,
+	routingSnapshot: SubagentRoutingSnapshot,
 ): Promise<SingleResult> {
 	const agent = agents.find((a) => a.name === agentName);
 
@@ -262,11 +287,28 @@ async function runSingleAgent(
 		};
 	}
 
+	const route = resolveSubagentRoute(routingSnapshot, agent);
+	if (!route.ok) {
+		return {
+			agent: agentName,
+			agentSource: agent.source,
+			task,
+			exitCode: 1,
+			messages: [],
+			stderr: `Model routing failed: ${route.error}`,
+			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+			model: agent.model,
+			step,
+		};
+	}
+
 	// A delegated agent must execute its task directly. Inheriting this extension's
 	// subagent tool allows accidental self-delegation loops that spawn nested pi
 	// processes until the user aborts. Chaining remains available to the parent.
-	const args: string[] = ["--mode", "json", "-p", "--no-session", "--exclude-tools", "subagent"];
-	if (agent.model) args.push("--model", agent.model);
+	const args: string[] = [
+		"--mode", "json", "-p", "--no-session", "--exclude-tools", "subagent",
+		...route.value.args,
+	];
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
 
 	let tmpPromptDir: string | null = null;
@@ -280,7 +322,8 @@ async function runSingleAgent(
 		messages: [],
 		stderr: "",
 		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-		model: agent.model,
+		model: route.value.audit.effective,
+		routing: route.value.audit,
 		step,
 	};
 
@@ -313,12 +356,23 @@ async function runSingleAgent(
 			});
 			let buffer = "";
 
+			const recordProtocolError = (line: string) => {
+				currentResult.protocolErrors ??= [];
+				if (currentResult.protocolErrors.length < 3) currentResult.protocolErrors.push(line.slice(0, 500));
+			};
+
 			const processLine = (line: string) => {
 				if (!line.trim()) return;
-				let event: any;
+				let event: Record<string, unknown>;
 				try {
-					event = JSON.parse(line);
+					const parsed: unknown = JSON.parse(line);
+					if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+						recordProtocolError(line);
+						return;
+					}
+					event = parsed as Record<string, unknown>;
 				} catch {
+					recordProtocolError(line);
 					return;
 				}
 
@@ -361,12 +415,18 @@ async function runSingleAgent(
 				currentResult.stderr += data.toString();
 			});
 
-			proc.on("close", (code) => {
+			proc.on("close", (code, childSignal) => {
 				if (buffer.trim()) processLine(buffer);
-				resolve(code ?? 0);
+				if (childSignal) {
+					appendDiagnostic(currentResult, `Subagent process terminated by signal ${childSignal}`);
+					resolve(1);
+					return;
+				}
+				resolve(code ?? 1);
 			});
 
-			proc.on("error", () => {
+			proc.on("error", (error) => {
+				appendDiagnostic(currentResult, `Failed to spawn subagent process: ${error.message}`);
 				resolve(1);
 			});
 
@@ -385,19 +445,26 @@ async function runSingleAgent(
 
 		currentResult.exitCode = exitCode;
 		if (wasAborted) throw new Error("Subagent was aborted");
+		if ((currentResult.protocolErrors?.length ?? 0) > 0) {
+			currentResult.exitCode = 1;
+			appendDiagnostic(
+				currentResult,
+				`Subagent emitted malformed JSON protocol output: ${currentResult.protocolErrors![0]}`,
+			);
+		}
 		return currentResult;
 	} finally {
 		if (tmpPromptPath)
 			try {
 				fs.unlinkSync(tmpPromptPath);
-			} catch {
-				/* ignore */
+			} catch (error) {
+				appendDiagnostic(currentResult, `Failed to remove temporary prompt ${tmpPromptPath}: ${(error as Error).message}`);
 			}
 		if (tmpPromptDir)
 			try {
 				fs.rmdirSync(tmpPromptDir);
-			} catch {
-				/* ignore */
+			} catch (error) {
+				appendDiagnostic(currentResult, `Failed to remove temporary prompt directory ${tmpPromptDir}: ${(error as Error).message}`);
 			}
 	}
 }
@@ -453,6 +520,7 @@ export default function (pi: ExtensionAPI) {
 			const hasTasks = (params.tasks?.length ?? 0) > 0;
 			const hasSingle = Boolean(params.agent && params.task);
 			const modeCount = Number(hasChain) + Number(hasTasks) + Number(hasSingle);
+			let routingPolicyDigest: string | undefined;
 
 			const makeDetails =
 				(mode: "single" | "parallel" | "chain") =>
@@ -460,6 +528,7 @@ export default function (pi: ExtensionAPI) {
 					mode,
 					agentScope,
 					projectAgentsDir: discovery.projectAgentsDir,
+					routingPolicyDigest,
 					results,
 				});
 
@@ -475,6 +544,19 @@ export default function (pi: ExtensionAPI) {
 					details: makeDetails("single")([]),
 				};
 			}
+
+			const loadedRouting = loadModelRoutingPolicy();
+			if (!loadedRouting.ok) {
+				throw new Error(
+					`Cannot route subagent models from ${loadedRouting.error.path}:\n${loadedRouting.error.message}`,
+				);
+			}
+			routingPolicyDigest = loadedRouting.value.digest;
+			const routingSnapshot: SubagentRoutingSnapshot = Object.freeze({
+				policy: loadedRouting.value.policy,
+				policyDigest: loadedRouting.value.digest,
+				parent: parentBinding(ctx.model, ctx.thinkingLevel),
+			});
 
 			if ((agentScope === "project" || agentScope === "both") && confirmProjectAgents && ctx.hasUI) {
 				const requestedAgentNames = new Set<string>();
@@ -534,11 +616,11 @@ export default function (pi: ExtensionAPI) {
 						signal,
 						chainUpdate,
 						makeDetails("chain"),
+						routingSnapshot,
 					);
 					results.push(result);
 
-					const isError =
-						result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
+					const isError = resultFailed(result);
 					if (isError) {
 						const errorMsg =
 							result.errorMessage || result.stderr || getFinalOutput(result.messages) || "(no output)";
@@ -614,16 +696,18 @@ export default function (pi: ExtensionAPI) {
 							}
 						},
 						makeDetails("parallel"),
+						routingSnapshot,
 					);
 					allResults[index] = result;
 					emitParallelUpdate();
 					return result;
 				});
 
-				const successCount = results.filter((r) => r.exitCode === 0).length;
+				const failed = results.filter(resultFailed);
+				const successCount = results.length - failed.length;
 				const sections = results.map((r) => {
 					const output = getFinalOutput(r.messages);
-					const status = r.exitCode === 0 ? "completed" : "failed";
+					const status = resultFailed(r) ? "failed" : "completed";
 					return `## [${r.agent}] ${status}\n\n${output || "(no output)"}`;
 				});
 				return {
@@ -634,6 +718,7 @@ export default function (pi: ExtensionAPI) {
 						},
 					],
 					details: makeDetails("parallel")(results),
+					isError: failed.length > 0,
 				};
 			}
 
@@ -648,8 +733,9 @@ export default function (pi: ExtensionAPI) {
 					signal,
 					onUpdate,
 					makeDetails("single"),
+					routingSnapshot,
 				);
-				const isError = result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
+				const isError = resultFailed(result);
 				if (isError) {
 					const errorMsg =
 						result.errorMessage || result.stderr || getFinalOutput(result.messages) || "(no output)";

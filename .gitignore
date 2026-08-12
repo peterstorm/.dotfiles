@@ -3,9 +3,10 @@ result
 result-*
 .DS_Store
 
-# Claude state files (runtime, not persisted)
+# Claude state and review evidence (runtime, not persisted)
 .claude/state/*
 !.claude/state/.gitkeep
+.claude/reviews/
 
 # Node modules (all subdirectories)
 **/node_modules/

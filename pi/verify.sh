@@ -15,5 +15,29 @@ pi_root="$(dirname "$(dirname "$(readlink -f "$pi_bin")")")"
 sdk="$pi_root/lib/node_modules"
 [ -d "$sdk/@earendil-works" ] || { echo "no Pi SDK under $sdk" >&2; exit 1; }
 
-export NODE_PATH="$sdk"
+export NODE_PATH="$sdk:$sdk/@earendil-works/pi-coding-agent/node_modules"
+
+if [ "${1:-}" = "--tests" ]; then
+  shift
+  links="$here/../node_modules"
+  mkdir -p "$links/@earendil-works"
+  ln -sfn "$sdk/@earendil-works/pi-coding-agent" "$links/@earendil-works/pi-coding-agent"
+  ln -sfn "$sdk/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai" "$links/@earendil-works/pi-ai"
+  ln -sfn "$sdk/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core" "$links/@earendil-works/pi-agent-core"
+  ln -sfn "$sdk/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui" "$links/@earendil-works/pi-tui"
+  ln -sfn "$sdk/@earendil-works/pi-coding-agent/node_modules/typebox" "$links/typebox"
+  cleanup() {
+    rm -f \
+      "$links/@earendil-works/pi-coding-agent" \
+      "$links/@earendil-works/pi-ai" \
+      "$links/@earendil-works/pi-agent-core" \
+      "$links/@earendil-works/pi-tui" \
+      "$links/typebox"
+    rmdir "$links/@earendil-works" 2>/dev/null || true
+  }
+  trap cleanup EXIT
+  bun test "$here/extensions/model-routing" "$here/extensions/subagent" "$@"
+  exit $?
+fi
+
 exec bun "$here/verify-agent-install.ts" "$@"

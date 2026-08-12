@@ -14,15 +14,15 @@ in
   home.packages = [ pkgs.pi-coding-agent ];
 
   # extensions/ and prompts/ are hand-written source, so they stay whole-directory
-  # symlinks: adding, editing or removing a file needs no rebuild. models.json is
-  # also live and reloads whenever Pi's model selector opens. agents/ cannot work
-  # this way — see piAgents below.
+  # symlinks: adding, editing or removing a file needs no rebuild. models.json and
+  # model-routing.json are also live configuration. agents/ cannot work this way —
+  # see piAgents below.
   home.activation.piSymlinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
     piAgentDir="${piAgentDir}"
     mkdir -p "$piAgentDir"
 
     # Create managed resource symlinks (idempotent)
-    for resource in extensions prompts models.json; do
+    for resource in extensions prompts models.json model-routing.json; do
       target="${piSrcDir}/$resource"
       link="$piAgentDir/$resource"
 

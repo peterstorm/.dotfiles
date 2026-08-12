@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "defaultClass": "cloud",
+  "modelClasses": {
+    "local": [
+      "desktop-vllm/*"
+    ]
+  },
+  "targets": {},
+  "rules": [
+    {
+      "id": "local-workloads-use-parent",
+      "when": {
+        "parentClass": "local"
+      },
+      "use": {
+        "kind": "parent"
+      }
+    }
+  ]
+}
