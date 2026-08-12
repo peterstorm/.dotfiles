@@ -255,7 +255,7 @@ def render(days, out_path):
   <div class="explain">
     <h2>Reading the numbers</h2>
     <p><b>What this page is:</b> once a day's square is dark, some output tokens were generated that day. The calendar shows at most the last 12 months; all-time totals are in the cards (hover them for definitions). It's the same data Grafana shows, but with a different baseline:</p>
-    <p><b>Why the totals differ from Grafana:</b> Grafana reads vLLM's own /metrics counters, which <i>reset to zero every time the vLLM container restarts</i> and which already contained ~660M prompt / 5.2M gen tokens before monitoring started. This ledger instead records every 15-minute delta to disk — it never resets, but it only goes back to when it started ({started_s} · first full day: {started_s[:11]}). So for recent activity the two agree; lifetime numbers never will.</p>
+    <p><b>Why the totals differ from Grafana:</b> Grafana reads vLLM's own /metrics counters, which <i>reset to zero every time the vLLM container restarts</i>. This ledger records every 15-minute delta to disk and never resets; when it started (12 Aug 2026, ~20:45) it <b>backfilled the container's existing counter totals as a single row</b>, so lifetime numbers line up with vLLM's own counters. After a container restart, Grafana's totals start over while the ledger keeps counting — that's its job.</p>
     <p><b>Streak:</b> a day counts when at least one generation token was produced. Current streak ends today; if today is still empty it may not have started yet.</p>
     <p class="sub">Raw data: /var/lib/vllm-stats/stats.csv on desktop — one row per 15 minutes: <code>timestamp, local time, prompt tokens, generation tokens, requests</code>.</p>
   </div>

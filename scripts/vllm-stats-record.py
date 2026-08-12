@@ -69,7 +69,9 @@ def save_state(cur):
     tmp = STATE + ".tmp"
     with open(tmp, "w") as f:
         for key in COUNTERS:
-            f.write(f"{key} {cur[key]:.6e}\n")
+            # Full precision (.12g): %.6e rounding across restarts made small
+            # deltas look like counter resets (e.g. 708247157 -> 7.082472e+08).
+            f.write(f"{key} {cur[key]:.12g}\n")
     os.replace(tmp, STATE)
 
 
@@ -108,7 +110,20 @@ def main():
     save_state(cur)
 
     if first_run:
-        print("first run: seeded baseline, no row appended")
+        # The ledger is born mid-stream: vLLM's counters already contain the
+        # whole history of the current container process. Record it as one
+        # backfilled row so the ledger's lifetime totals line up with vLLM's
+        # own counters (Grafana) from day one.
+        if not os.path.exists(CSVFILE):
+            with open(CSVFILE, "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["ts", "when", "prompt_tokens", "generation_tokens", "requests"])
+                writer.writerow([now, when + " (pre-ledger history)",
+                                 f"{cur['prompt']:.0f}", f"{cur['gen']:.0f}", f"{cur['req']:.0f}"])
+            print(f"first run: seeded baseline + backfilled pre-ledger history "
+                  f"(gen={cur['gen']:.0f} prompt={cur['prompt']:.0f} req={cur['req']:.0f})")
+        else:
+            print("first run: seeded baseline, existing ledger left untouched")
         return 0
 
     header = not os.path.exists(CSVFILE)
