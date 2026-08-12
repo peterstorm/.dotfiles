@@ -1,11 +1,12 @@
 {
-  "lastChangelogVersion": "0.75.4",
-  "defaultProvider": "github-copilot",
-  "defaultModel": "claude-opus-4.6",
+  "lastChangelogVersion": "0.83.0",
+  "defaultProvider": "desktop-vllm",
+  "defaultModel": "deepseek-v4-flash",
   "packages": [
     "../../dev/claude-plugins/loom",
     "../../dev/claude-plugins/cortex"
   ],
   "defaultThinkingLevel": "high",
-  "hideThinkingBlock": true
+  "theme": "dark",
+  "hideThinkingBlock": false
 }

@@ -8,10 +8,14 @@ This directory contains the pi coding agent configuration managed by home-manage
 pi/
 ├── agents/           # Generic agents this repo owns (→ linked per file)
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
+│   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   └── global-instructions.ts  # Standalone extension
 ├── prompts/          # Prompt templates (→ ~/.pi/agent/prompts/)
+├── skills/           # Skills this repo owns (→ linked per skill dir)
+│   └── impeccable/   # Impeccable design skill, pi-flavored v4.0.4 release
 ├── models.json       # Custom providers/models (→ ~/.pi/agent/models.json)
+├── model-routing.json # Local/cloud child routing policy (symlinked)
 ├── settings.json     # Pi settings (copied, not symlinked — mutable at runtime)
 └── README.md         # This file
 ```
@@ -28,7 +32,29 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
 2. **Agents**: `~/.pi/agent/agents` is a **real directory**, populated at
    activation from two sources — see "Agents" below.
 3. **Models**: Symlinks `~/.pi/agent/models.json` to the tracked custom-model catalog.
-4. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
+4. **Model routing**: Symlinks `~/.pi/agent/model-routing.json` to the tracked
+   model classification/default policy.
+5. **Skills**: `~/.pi/agent/skills` is a **real directory** (like `agents` — pi
+   discovers skills there recursively, and other tools may add their own). Each
+   skill under `pi/skills/` is linked per-directory:
+   ```
+   ~/.pi/agent/skills/impeccable → ~/.dotfiles/pi/skills/impeccable
+   ```
+   Drop a new skill directory (with a `SKILL.md`) into `pi/skills/` and it
+   appears on the next activation — no rebuild. Stale links to removed skills
+   are pruned.
+6. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
+
+### Skills (pi/skills)
+
+`impeccable/` is the pi-compiled flavor of the [Impeccable design skill](https://github.com/pbakaus/impeccable)
+(skill v4.0.4, Apache-2.0), vendored from the official release bundle served by
+`npx impeccable install` — byte-identical to the upstream `skill-v4.0.4` tag's
+`.pi/skills/impeccable`. To update: re-run the official installer in a sandboxed
+HOME (`HOME=$(mktemp -d) npx -y impeccable@latest install --providers=pi --scope=global -y`)
+and copy the resulting `~/.pi/agent/skills/impeccable` over `pi/skills/impeccable`,
+keeping the vendored tree at the released tag rather than repo-main WIP.
+Use it from pi as `/skill:impeccable` or just ask for a design pass.
 
 ### Why Directory Symlinks?
 
@@ -57,12 +83,15 @@ with a per-request Pi setting, not separate models:
 | `high` | Thorough “absolute maximum” reasoning prefix |
 | `max` | Exhaustive “beyond maximum” reasoning prefix |
 
-Pi hides unsupported `minimal`, `medium`, and `xhigh` levels for this model. Select the
-model with `/model` or `Ctrl+L`, then use `Shift+Tab` to cycle `off → low → high → max`.
-The command-line equivalent is:
+Pi hides unsupported `minimal`, `medium`, and `xhigh` levels for this model. The tracked
+model catalog assigns DeepSeek Flash a model-specific default of `max`. The pinned Pi
+package carries a small upstream patch that applies this default to new sessions and model
+switches without modifying Pi's global cloud-model default. Explicit `--thinking` and
+scoped `model:level` values win, and resumed sessions preserve their recorded level. Use
+`Shift+Tab` to cycle `off → low → high → max`. The command-line equivalent is:
 
 ```bash
-pi --model desktop-vllm/deepseek-v4-flash:high
+pi --model desktop-vllm/deepseek-v4-flash:max
 ```
 
 The server may be offline while editing or selecting the catalog, but it must be running
@@ -71,6 +100,76 @@ before sending a prompt. Verify discovery without contacting the server:
 ```bash
 pi --list-models deepseek-v4-flash
 ```
+
+## Child Model Routing
+
+`model-routing.json` is the explicit policy boundary between parent-session models and
+nested Pi workloads. Provider names, endpoint URLs, and model prices are never used to
+guess whether a model is local.
+
+The initial policy classifies only `desktop-vllm/*` as local and applies this invariant:
+
+| Active parent | Subagent launch binding |
+|---|---|
+| Explicitly classified local model | Exact parent model and thinking level |
+| Cloud model | Agent's declared `model:` binding |
+| Unknown/unclassified model | Agent's declared `model:` binding |
+
+An agent without `model:` retains Pi's configured child default under cloud/unknown
+parents, but follows the parent under a local parent. This means Loom remains the owner
+of its calibrated declarations such as `openai-codex/gpt-5.6-sol:high`; the dotfiles
+subagent launcher changes only the effective child invocation when local policy says to.
+No Loom source or generated agent file needs routing-specific changes.
+
+Every child receives one routing decision snapshotted at the beginning of its parent tool
+call. Parallel tasks and chains therefore cannot drift if `/model` changes concurrently.
+Local overrides launch with one exact `--model` plus `--thinking` pair and no cloud
+fallback list. Routing policy parse failures stop before spawn, while declared model
+expressions remain opaque so Pi can resolve aliases and colon-bearing model IDs. Tool-result
+details retain the declared binding, effective binding, rule ID, parent
+class, and SHA-256 policy digest for auditability.
+
+Rules can select by `parentClass`, `parentModel`, `workload`, Loom `model-profile`, and
+agent name. Every additional selector increases specificity; the most-specific matching
+rule wins. Equal-specificity rules that could match the same request are rejected. Named
+exact targets support future exceptions without embedding model IDs in extension code:
+
+```json
+{
+  "targets": {
+    "fast-local": {
+      "model": "desktop-vllm/future-fast-model",
+      "thinkingLevel": "high"
+    }
+  },
+  "rules": [
+    {
+      "id": "local-reviewers-use-fast-model",
+      "when": {
+        "parentClass": "local",
+        "workload": "subagent",
+        "profile": "general-review"
+      },
+      "use": {
+        "kind": "named",
+        "target": "fast-local"
+      }
+    }
+  ]
+}
+```
+
+This fragment illustrates the extension points; merge targets and rules into the complete
+tracked policy rather than replacing its required fields. A `declared` target preserves an
+agent declaration, `parent` uses the snapshotted parent binding, and `named` chooses a
+configured exact target.
+
+Cortex already preserves its declared cheap cloud extraction target for known cloud
+providers and reuses unknown/custom active models, including `desktop-vllm`; DeepSeek's
+catalog default makes local extraction children use `max` unless an explicit level is passed.
+Centralized Cortex-specific
+rule selectors would require Cortex to consume this policy API, but are not needed for the
+initial local-parent behavior.
 
 ## Packages (Plugins)
 
@@ -229,7 +328,7 @@ Run the complete install verification after changing Pi package or agent wiring:
 
 ```bash
 cd ~/.dotfiles
-bun test pi/extensions/subagent/agents.test.ts
+./pi/verify.sh --tests          # routing + subagent tests with Pi SDK resolution
 pi-verify                       # = ./pi/verify.sh
 nix flake check --no-build
 ```

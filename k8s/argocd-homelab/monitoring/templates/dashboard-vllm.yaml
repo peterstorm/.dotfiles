@@ -1,0 +1,13 @@
+# Grafana dashboard for the vLLM instance on `desktop` (192.168.0.80:8000).
+# The kube-prometheus-stack Grafana sidecar (grafana_dashboard label) picks it
+# up automatically and provisions it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  vllm-dashboard.json: |
+{{ .Files.Get "dashboard-vllm.json" | indent 4 }}

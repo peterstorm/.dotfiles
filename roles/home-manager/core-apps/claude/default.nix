@@ -56,10 +56,17 @@ in
         fi
         # pi/opencode run these repos straight off disk. pi only runs an install
         # for packages IT installs; we clone manually, so provision JS deps here.
-        # Fresh-clone only (guarded on node_modules) to keep activation fast.
-        if [ -f "$d/${r}/package.json" ] && [ ! -d "$d/${r}/node_modules" ]; then
-          echo "claude: bun install in ${r}"
-          ( cd "$d/${r}" && bun install --no-progress ) \
+        # Reinstall when the manifest or lockfile is newer than node_modules: a
+        # pull that adds a dependency must not leave a stale tree, or pi fails at
+        # extension load with "Cannot find module". Skip when up to date to keep
+        # activation fast.
+        if [ -f "$d/${r}/package.json" ] && { [ ! -d "$d/${r}/node_modules" ] \
+             || [ "$d/${r}/package.json" -nt "$d/${r}/node_modules" ] \
+             || [ "$d/${r}/bun.lock" -nt "$d/${r}/node_modules" ]; }; then
+          echo "claude: bun install in ${r} (deps out of date)"
+          # touch node_modules afterwards so bun.lock (possibly rewritten after
+          # the node tree) can never look newer on the next activation.
+          ( cd "$d/${r}" && bun install --no-progress && touch node_modules ) \
             || echo "claude: bun install for ${r} failed (continuing)"
         fi
       '') workspaceRepos}
