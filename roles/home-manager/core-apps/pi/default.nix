@@ -107,6 +107,53 @@ in
     fi
   '';
 
+  # skills/ is a REAL directory (like agents/): pi discovers skills recursively
+  # under ~/.pi/agent/skills/, and other tools (npx skills add, Anthropic's
+  # installer, loom) may write additional skills into it. Linking the whole
+  # directory would drag those external installs into version control, so each
+  # skill this repo owns is linked per-directory instead. Adding a skill = drop
+  # it into pi/skills/ and it appears on the next activation, no rebuild.
+  home.activation.piSkills = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep ]}:$PATH"
+    skillsDir="${piAgentDir}/skills"
+    srcSkillsDir="${piSrcDir}/skills"
+
+    mkdir -p "$skillsDir"
+
+    # 1. Link each skill this repo owns (idempotent, updates on target change).
+    for src in "$srcSkillsDir"/*/; do
+      [ -d "$src" ] || continue
+      [ -f "$src/SKILL.md" ] || continue
+      name="$(basename "$src")"
+      link="$skillsDir/$name"
+      if [ -L "$link" ]; then
+        if [ "$(readlink "$link")" != "$src" ]; then
+          rm "$link"
+          ln -s "$src" "$link"
+          echo "pi: updated skill $name"
+        fi
+      elif [ -e "$link" ]; then
+        mv "$link" "$link.bak.$(date +%s)"
+        ln -s "$src" "$link"
+        echo "pi: replaced skill $name with symlink (old backed up)"
+      else
+        ln -s "$src" "$link"
+        echo "pi: linked skill $name"
+      fi
+    done
+
+    # 2. Prune symlinks to skills this repo no longer ships.
+    for link in "$skillsDir"/*; do
+      [ -L "$link" ] || continue
+      target="$(readlink "$link")"
+      case "$target" in
+        "$srcSkillsDir"/*)
+          [ -e "$target" ] || { rm "$link"; echo "pi: pruned stale skill $(basename "$link")"; }
+          ;;
+      esac
+    done
+  '';
+
   # settings.json needs to be mutable (pi writes to it at runtime)
   home.activation.piSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
     piSettingsDir="${piAgentDir}"

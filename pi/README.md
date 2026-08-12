@@ -12,6 +12,8 @@ pi/
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   └── global-instructions.ts  # Standalone extension
 ├── prompts/          # Prompt templates (→ ~/.pi/agent/prompts/)
+├── skills/           # Skills this repo owns (→ linked per skill dir)
+│   └── impeccable/   # Impeccable design skill, pi-flavored v4.0.4 release
 ├── models.json       # Custom providers/models (→ ~/.pi/agent/models.json)
 ├── model-routing.json # Local/cloud child routing policy (symlinked)
 ├── settings.json     # Pi settings (copied, not symlinked — mutable at runtime)
@@ -32,7 +34,27 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
 3. **Models**: Symlinks `~/.pi/agent/models.json` to the tracked custom-model catalog.
 4. **Model routing**: Symlinks `~/.pi/agent/model-routing.json` to the tracked
    model classification/default policy.
-5. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
+5. **Skills**: `~/.pi/agent/skills` is a **real directory** (like `agents` — pi
+   discovers skills there recursively, and other tools may add their own). Each
+   skill under `pi/skills/` is linked per-directory:
+   ```
+   ~/.pi/agent/skills/impeccable → ~/.dotfiles/pi/skills/impeccable
+   ```
+   Drop a new skill directory (with a `SKILL.md`) into `pi/skills/` and it
+   appears on the next activation — no rebuild. Stale links to removed skills
+   are pruned.
+6. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
+
+### Skills (pi/skills)
+
+`impeccable/` is the pi-compiled flavor of the [Impeccable design skill](https://github.com/pbakaus/impeccable)
+(skill v4.0.4, Apache-2.0), vendored from the official release bundle served by
+`npx impeccable install` — byte-identical to the upstream `skill-v4.0.4` tag's
+`.pi/skills/impeccable`. To update: re-run the official installer in a sandboxed
+HOME (`HOME=$(mktemp -d) npx -y impeccable@latest install --providers=pi --scope=global -y`)
+and copy the resulting `~/.pi/agent/skills/impeccable` over `pi/skills/impeccable`,
+keeping the vendored tree at the released tag rather than repo-main WIP.
+Use it from pi as `/skill:impeccable` or just ask for a design pass.
 
 ### Why Directory Symlinks?
 
