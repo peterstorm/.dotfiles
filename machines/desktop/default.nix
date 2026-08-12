@@ -99,6 +99,10 @@ in
     "mt7925e"
     "btmtk"
     "btusb"
+    # Nuvoton NCT6799D super-I/O (fan tachs + PWM). Without this, Linux sees no
+    # fan/PWM interfaces at all — only the asus-ec-sensors CPU_Opt tach — and
+    # the fan curves are completely invisible. See asus-fan-control below.
+    "nct6775"
   ];
 
   # ASPM on this card is the documented cause of stalled uploads and packet loss.
@@ -310,6 +314,98 @@ in
       });
     };
   };
+
+  # --- Fan control for the NCT6799D (ProArt X870E-CREATOR) ------------------
+  #
+  # The board's fan logic lives in a Nuvoton NCT6799D super-I/O chip exposed by
+  # the nct6775 driver (binds as `nct6799`). Two hard-won facts shaped this:
+  #
+  #   * The stock BIOS SmartFan IV profile has a trap: the CPU_FAN curve
+  #     references SYSTIN (motherboard temp, ~40 °C) instead of the CPU, so the
+  #     CPU cooler idles at ~34 % duty while the package sits at Tjmax.
+  #   * SmartFan IV mode (enable=5) is not trustworthy for our curves here:
+  #     after a while the chip/EC re-asserts its own duty (~65 %) regardless of
+  #     the register values we wrote, and write-back readouts drift. Manual mode
+  #     (enable=1) is rock-solid — duty holds exactly until changed.
+  #
+  # So instead of fighting the chip's engine, this drives both fans in MANUAL
+  # mode from userspace: a oneshot at boot plus a 60 s timer re-read the CPU's
+  # PECI temp (temp8), interpolate the curve, and write the duty. Deterministic,
+  # immune to the EC re-asserting registers, and self-healing: any tick that
+  # finds enable flipped back repairs it within a minute.
+  #
+  # Curves (PECI temp → duty 0-255):
+  #   * CPU fan (pwm1/fan1): 90 (35 %) @ 40 °C … 255 (100 %) @ 70 °C
+  #   * Case fan (pwm6/fan6): 80 (31 %) @ 30 °C … 255 (100 %) @ 70 °C
+  #
+  # fan2 (CPU_OPT) keeps its BIOS curve — it was already PECI-driven and runs
+  # at ~100 % under load. PWM channels 3/4/5/7 read 0 RPM even at full duty:
+  # no tach signal, so no fans (or tach-less fans) on those headers — the three
+  # physical case fans (2 front + 1 rear) share CHA_FAN1's tach or are wired
+  # without tach feedback.
+  systemd.services.asus-fan-control = {
+    description = "PECI-driven fan duty controller for the NCT6799D (ProArt X870E-CREATOR)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "systemd-modules-load.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = lib.getExe (pkgs.writeShellApplication {
+        name = "asus-fan-control";
+        runtimeInputs = [ pkgs.coreutils ];
+        text = ''
+          # The /sys/class/hwmon index is probe-order dependent; find the
+          # nct6799 chip by driver name instead.
+          h=""
+          for _ in $(seq 1 30); do
+            for d in /sys/class/hwmon/hwmon*; do
+              if [ -r "$d/name" ] && [ "$(cat "$d/name" 2>/dev/null)" = "nct6799" ]; then
+                h=$d; break 2
+              fi
+            done
+            sleep 1
+          done
+          if [ -z "$h" ]; then
+            echo "nct6799 hwmon dir not found; is nct6775 loaded?" >&2
+            exit 1
+          fi
+
+          set -e
+          ed() { printf '%s\n' "$2" > "$h/$1"; }
+
+          # Linear interpolation between (t0,p0) and (t1,p1); temps in millidegrees.
+          interp() {
+            t=$1; t0=$2; p0=$3; t1=$4; p1=$5
+            if [ "$t" -le "$t0" ]; then echo "$p0"; return; fi
+            if [ "$t" -ge "$t1" ]; then echo "$p1"; return; fi
+            echo $(( p0 + (p1 - p0) * (t - t0) / (t1 - t0) ))
+          }
+
+          peci=$(cat "$h/temp8_input")
+
+          # CPU fan (fan1): 90 @ 40 °C … 255 @ 70 °C
+          d1=$(interp "$peci" 40000 90 70000 255)
+          # Case fan (fan6): 80 @ 30 °C … 255 @ 70 °C
+          d6=$(interp "$peci" 30000 80 70000 255)
+
+          ed pwm1_enable 1
+          ed pwm1 "$d1"
+          ed pwm6_enable 1
+          ed pwm6 "$d6"
+        '';
+      });
+    };
+  };
+
+  systemd.timers.asus-fan-control = {
+    description = "Re-apply NCT6799D fan duties every minute";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "30";
+      OnUnitActiveSec = "60";
+    };
+  };
+
 
   # --- vLLM token ledger + heatmap ------------------------------------------
   #
