@@ -3,7 +3,8 @@
 
 Reads the ledger written by vllm-stats-record.py (per-interval token deltas)
 and renders a self-contained static HTML page: generation tokens per day as a
-GitHub-style contribution calendar, with headline lifetime stats.
+GitHub-style contribution calendar, a last-14-days bar list, lifetime stats,
+and explainers so the numbers can't be mistaken.
 
 Output (--write):  <VLLM_STATS_DIR>/heatmap/index.html
 Summary:           printed to stdout either way.
@@ -11,15 +12,12 @@ Summary:           printed to stdout either way.
 import argparse
 import csv
 import datetime as dt
-import html
 import os
 import sys
 
 DIR = os.environ.get("VLLM_STATS_DIR", "/var/lib/vllm-stats")
 DEFAULT_OUT = os.path.join(DIR, "heatmap", "index.html")
 
-# GitHub's palette
-LEVELS = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"]
 WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -78,14 +76,12 @@ def streaks(days):
     active = {d for d, v in days.items() if v > 0}
     if not active:
         return 0, 0
-    # longest run
     longest = cur = 1
     prev = sorted(active)[0]
     for d in sorted(active)[1:]:
         cur = cur + 1 if (d - prev).days == 1 else 1
         longest = max(longest, cur)
         prev = d
-    # current run ending at the most recent active day
     cur = 0
     d = max(active)
     while d in active:
@@ -94,12 +90,38 @@ def streaks(days):
     return longest, cur
 
 
+def legend(cell, step):
+    squares = "".join(
+        f'<rect class="d" data-level="{i}" x="{i * step}" y="0" '
+        f'width="{cell}" height="{cell}" rx="2"></rect>'
+        for i in range(5)
+    )
+    return (f'<span>less</span><svg width="{5 * step}" height="{cell}" '
+            f'xmlns="http://www.w3.org/2000/svg">{squares}</svg><span>more</span>')
+
+
+def bar_rows(days):
+    recent = sorted(days.items(), key=lambda kv: kv[0], reverse=True)[:14]
+    recent.reverse()
+    if not recent:
+        return ""
+    maxv = max(v for _, v in recent) or 1.0
+    rows = []
+    for d, v in recent:
+        pct = max(2.0, v / maxv * 100)
+        rows.append(
+            f'<div class="bar-row"><span class="bar-date">{d.strftime("%a %d %b")}</span>'
+            f'<div class="bar-track"><div class="bar-fill" style="width:{pct:.0f}%"></div></div>'
+            f'<span class="bar-val">{fmt(v)}</span></div>'
+        )
+    return "".join(rows)
+
+
 def render(days, out_path):
     today = dt.date.today()
     oldest = min(days) if days else today
-    start = max(oldest, today - dt.timedelta(days=364))  # a year of history
-    # Align the grid: first column starts on a Sunday
-    start -= dt.timedelta(days=start.weekday() + 1)  # back up to Sunday
+    start = max(oldest, today - dt.timedelta(days=364))
+    start -= dt.timedelta(days=start.weekday() + 1)  # back to Sunday
     weeks = []
     d = start
     while d <= today:
@@ -109,6 +131,13 @@ def render(days, out_path):
     nonzero = [v for v in days.values() if v > 0]
     b = buckets(nonzero)
 
+    # Adaptive cell size: with very little history a GitHub calendar is
+    # meaningless, so use bigger cells — and always pair it with the bar list.
+    cell = 11 if len(weeks) >= 26 else 16
+    gap = 2 if cell == 11 else 4
+    step = cell + gap
+    svg_w = len(weeks) * step + 40
+
     total_gen = int(sum(days.values()))
     total_prompt = int(sum(float(r[2] or 0) for r in csv_rows()))
     total_req = int(sum(float(r[4] or 0) for r in csv_rows()))
@@ -116,7 +145,6 @@ def render(days, out_path):
     last30 = int(sum(days.get(today - dt.timedelta(days=i), 0) for i in range(30)))
     longest, current = streaks(days)
 
-    # month labels above the column that contains the 1st of a month
     month_labels = {}
     for wi, week in enumerate(weeks):
         for day in week:
@@ -128,28 +156,41 @@ def render(days, out_path):
         for di, day in enumerate(week):
             v = days.get(day, 0)
             lvl = level_for(v, b)
-            title = f"{day.isoformat()}: {fmt(v)} gen tokens"
             cells.append(
-                f'<rect class="d" data-level="{lvl}" x="{wi * 13}" y="{di * 13}" '
-                f'width="11" height="11" rx="2"><title>{title}</title></rect>'
+                f'<rect class="d" data-level="{lvl}" x="{wi * step}" y="{di * step}" '
+                f'width="{cell}" height="{cell}" rx="2">'
+                f'<title>{day.isoformat()}: {fmt(v)} gen tokens</title></rect>'
             )
 
-    svg_w = len(weeks) * 13 + 40
-    svg_width = f'width="{svg_w}" height="110" '
-
     labels = "".join(
-        f'<text class="m" x="{wi * 13 + 2}" y="0">{month_labels[wi]}</text>'
+        f'<text class="m" x="{wi * step + 2}" y="{cell - 2}">{month_labels[wi]}</text>'
         for wi in sorted(month_labels)
     )
     wk_labels = "".join(
-        f'<text class="w" x="0" y="{di * 13 + 10}">{WEEKDAYS[di]}</text>'
+        f'<text class="w" x="0" y="{di * step + cell}">{WEEKDAYS[di]}</text>'
         for di in range(7)
     )
+    svg_h = 7 * step + 4
 
-    legend = "".join(
-        f'<rect class="d" data-level="{i}" x="{i * 13}" y="0" width="11" height="11" rx="2"></rect>'
-        for i in range(5)
-    )
+    today_s = today.strftime("%d %b %Y")
+    started_s = oldest.strftime("%d %b %Y, %H:%M") if days else "—"
+    stats_html = f"""
+  <div class="stats">
+    <div class="stat" title="Output tokens produced by the model since the ledger started recording">
+      <div class="v">{fmt(total_gen)}</div><div class="k">gen tokens · lifetime</div></div>
+    <div class="stat" title="Input tokens sent to the model (prompts + cached prefixes) since the ledger started">
+      <div class="v">{fmt(total_prompt)}</div><div class="k">prompt tokens · lifetime</div></div>
+    <div class="stat" title="Completed API requests since the ledger started">
+      <div class="v">{fmt(total_req)}</div><div class="k">requests · lifetime</div></div>
+    <div class="stat" title="Generated tokens in the last 7 days">
+      <div class="v">{fmt(last7)}</div><div class="k">gen tokens / 7d</div></div>
+    <div class="stat" title="Generated tokens in the last 30 days">
+      <div class="v">{fmt(last30)}</div><div class="k">gen tokens / 30d</div></div>
+    <div class="stat" title="Consecutive days (ending today) with at least one generated token">
+      <div class="v">{current}</div><div class="k">day streak</div></div>
+    <div class="stat" title="Longest run of consecutive days with at least one generated token">
+      <div class="v">{longest}</div><div class="k">best streak</div></div>
+  </div>"""
 
     page = f"""<!doctype html>
 <html lang="en">
@@ -162,10 +203,10 @@ def render(days, out_path):
          background: #0d1117; color: #e6edf3; margin: 0; padding: 40px 24px; }}
   main {{ max-width: 940px; margin: 0 auto; }}
   h1 {{ font-size: 20px; margin: 0 0 4px; }}
-  .sub {{ color: #8b949e; font-size: 13px; margin-bottom: 28px; }}
-  .stats {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }}
+  .sub {{ color: #8b949e; font-size: 13px; margin-bottom: 8px; }}
+  .stats {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 30px; }}
   .stat {{ background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-           padding: 12px 18px; min-width: 120px; }}
+           padding: 12px 18px; min-width: 120px; cursor: help; }}
   .stat .v {{ font-size: 22px; font-weight: 600; }}
   .stat .k {{ color: #8b949e; font-size: 11px; text-transform: uppercase;
               letter-spacing: .05em; margin-top: 2px; }}
@@ -178,32 +219,45 @@ def render(days, out_path):
   .d[data-level="4"] {{ fill: #39d353; }}
   .m {{ fill: #8b949e; font-size: 10px; }}
   .w {{ fill: #8b949e; font-size: 10px; }}
-  .keys {{ display: flex; align-items: center; gap: 6px; margin-top: 8px;
+  .keys {{ display: flex; align-items: center; gap: 8px; margin-top: 8px;
            color: #8b949e; font-size: 11px; }}
+  .bars {{ margin-top: 34px; }}
+  .bars h2 {{ font-size: 14px; margin: 0 0 14px; }}
+  .bar-row {{ display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }}
+  .bar-date {{ width: 110px; color: #8b949e; font-size: 12px; text-align: right; }}
+  .bar-track {{ flex: 1; max-width: 420px; background: #21262d; border-radius: 4px;
+                height: 14px; overflow: hidden; }}
+  .bar-fill {{ height: 100%; background: #26a641; border-radius: 4px; }}
+  .bar-val {{ width: 64px; font-size: 12px; text-align: right; }}
+  .explain {{ margin-top: 34px; background: #161b22; border: 1px solid #30363d;
+              border-radius: 8px; padding: 16px 20px; font-size: 13px;
+              line-height: 1.55; color: #c9d1d9; }}
+  .explain h2 {{ font-size: 14px; margin: 0 0 8px; }}
+  .explain p {{ margin: 8px 0; }}
+  .explain code {{ background: #21262d; padding: 1px 5px; border-radius: 4px; }}
 </style>
 </head>
 <body>
 <main>
   <h1>vLLM token usage <span style="color:#8b949e;font-weight:400">— desktop (deepseek-v4-flash)</span></h1>
-  <div class="sub">Append-only ledger since {oldest.isoformat()} · {len(cells)} days tracked · generated {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+  <div class="sub">Durable ledger, written to /var/lib/vllm-stats/stats.csv every 15 min · generated {dt.datetime.now().strftime('%d %b %Y %H:%M')}</div>
+  <div class="sub">Calendar: generated tokens per day (darker = more). Hover any square for the exact count.</div>
 
-  <div class="stats">
-    <div class="stat"><div class="v">{fmt(total_gen)}</div><div class="k">gen tokens (lifetime)</div></div>
-    <div class="stat"><div class="v">{fmt(total_prompt)}</div><div class="k">prompt tokens (lifetime)</div></div>
-    <div class="stat"><div class="v">{fmt(total_req)}</div><div class="k">requests (lifetime)</div></div>
-    <div class="stat"><div class="v">{fmt(last7)}</div><div class="k">gen tokens / 7d</div></div>
-    <div class="stat"><div class="v">{fmt(last30)}</div><div class="k">gen tokens / 30d</div></div>
-    <div class="stat"><div class="v">{current}</div><div class="k">day streak</div></div>
-    <div class="stat"><div class="v">{longest}</div><div class="k">best streak</div></div>
+  {stats_html}
+
+  <div class="keys">Around key: {legend(cell, step)}</div>
+
+  <div class="bars">
+    <h2>Last 14 days — generated tokens</h2>
+    {bar_rows(days)}
   </div>
 
-  <svg {svg_width}viewBox="0 0 {svg_w} 110" xmlns="http://www.w3.org/2000/svg">
-    {labels}
-    {wk_labels}
-    {''.join(cells)}
-  </svg>
-  <div class="keys">
-    <span>Less</span>{legend}<span>More</span>
+  <div class="explain">
+    <h2>Reading the numbers</h2>
+    <p><b>What this page is:</b> once a day's square is dark, some output tokens were generated that day. The calendar shows at most the last 12 months; all-time totals are in the cards (hover them for definitions). It's the same data Grafana shows, but with a different baseline:</p>
+    <p><b>Why the totals differ from Grafana:</b> Grafana reads vLLM's own /metrics counters, which <i>reset to zero every time the vLLM container restarts</i> and which already contained ~660M prompt / 5.2M gen tokens before monitoring started. This ledger instead records every 15-minute delta to disk — it never resets, but it only goes back to when it started ({started_s} · first full day: {started_s[:11]}). So for recent activity the two agree; lifetime numbers never will.</p>
+    <p><b>Streak:</b> a day counts when at least one generation token was produced. Current streak ends today; if today is still empty it may not have started yet.</p>
+    <p class="sub">Raw data: /var/lib/vllm-stats/stats.csv on desktop — one row per 15 minutes: <code>timestamp, local time, prompt tokens, generation tokens, requests</code>.</p>
   </div>
 </main>
 </body>
