@@ -32,7 +32,8 @@ kube-prometheus-stack:
       # ~100-400MB/day → 9Gi ≈ 30-90 days of history. See also the append-only
       # token ledger in machines/desktop/default.nix, which outlives even this.
       retention: 30d
-      retentionSize: 9Gi
+      # B suffix required (CRD regex): 9Gi is invalid, 9GiB is not.
+      retentionSize: 9GiB
       storageSpec:
         volumeClaimTemplate:
           spec:

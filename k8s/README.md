@@ -161,12 +161,12 @@ The `monitoring/` app scrapes the vLLM instance on `desktop` (`192.168.0.80:8000
 
 - Verify scraping: Grafana → Explore → `up{job="vllm-desktop"}` should be 1
 - vLLM counters reset on container restart; Prometheus `rate()`/`increase()` handle that transparently, so graphs stay continuous
-- Storage: PVC on `local-path` (thin-provisioned, claim 10Gi) + `retentionSize: 9Gi` — Prometheus auto-deletes oldest blocks past 9Gi, so it can never fill the node disk; `retention: 30d`
+- Storage: PVC on `local-path` (thin-provisioned, claim 10Gi) + `retentionSize: 9GiB (B suffix required by CRD regex)` — Prometheus auto-deletes oldest blocks past 9Gi, so it can never fill the node disk; `retention: 30d`
 - Check homelab disk has room to grow (run from a machine that has SSH keys for it, e.g. laptop):
   ```bash
   ssh homelab 'df -h / && du -sh /var/lib/rancher/k3s/storage/* 2>/dev/null | sort -h'
   ```
-  If free space is < ~15Gi, drop `storage: 10Gi` → `5Gi` and/or `retentionSize: 9Gi` → `4Gi` in `monitoring/values.yaml`.
+  If free space is < ~15Gi, drop `storage: 10Gi` → `5Gi` and/or `retentionSize: 9GiB (B suffix required by CRD regex)` → `4Gi` in `monitoring/values.yaml`.
 
 ### Lifetime token ledger (survives everything)
 
