@@ -173,7 +173,7 @@ The `monitoring/` app scrapes the vLLM instance on `desktop` (`192.168.0.80:8000
 Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only ledger: `systemd.timers.vllm-stats-record` (`machines/desktop/default.nix`) runs every 15 min, scrapes `127.0.0.1:8000/metrics`, appends deltas (handling counter resets) to `/var/lib/vllm-stats/stats.csv`, and re-renders a GitHub-style heatmap to `/var/lib/vllm-stats/heatmap/index.html`. Scripts: `scripts/vllm-stats-record.py`, `scripts/vllm-stats-heatmap.py`.
 
 - Activate on desktop: commit the new `scripts/` files (flake requires tracked files), then `nixos-rebuild switch --flake .#desktop` + `sudo systemctl start vllm-stats-record.timer` (first run only seeds the baseline)
-- Serving: `systemd.services.vllm-stats-http` serves the heatmap dir on :8090 (firewall-opened). Cluster tunnel: `vllm-stats.peterstorm.io` → `192.168.0.80:8090` (`cloudflared/configmap.yaml`) + DNS CNAME/A records (`terraform-homelab/cloudflare/main.tf`). LAN: http://192.168.0.80:8090 direct.
+- Serving: `systemd.services.vllm-stats-http` serves the heatmap dir on :8090 (firewall-opened). Tunnel: `vllm-stats.peterstorm.io` → `192.168.0.80:8090` (`cloudflared/configmap.yaml` + proxied CNAME in `terraform-homelab/cloudflare/main.tf`; Cloudflare forbids a LAN A record alongside the tunnel CNAME). LAN: http://192.168.0.80:8090 direct.
 - View the heatmap: `scp desktop:/var/lib/vllm-stats/heatmap/index.html .` and open it, or serve the dir
 - Quick re-run: `sudo systemctl start vllm-stats-record.service` (logs to journald)
 
