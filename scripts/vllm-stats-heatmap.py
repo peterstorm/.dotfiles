@@ -239,7 +239,7 @@ def render(days, out_path):
 </head>
 <body>
 <main>
-  <h1>vLLM token usage <span style="color:#8b949e;font-weight:400">— desktop (deepseek-v4-flash)</span></h1>
+  <h1>vLLM token usage <span style="color:#8b949e;font-weight:400">— desktop (all vLLM models)</span></h1>
   <div class="sub">Durable ledger, written to /var/lib/vllm-stats/stats.csv every 15 min · generated {dt.datetime.now().strftime('%d %b %Y %H:%M')}</div>
   <div class="sub">Calendar: generated tokens per day (darker = more). Hover any square for the exact count.</div>
 

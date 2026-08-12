@@ -177,6 +177,17 @@ Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only
 - View the heatmap: `scp desktop:/var/lib/vllm-stats/heatmap/index.html .` and open it, or serve the dir
 - Quick re-run: `sudo systemctl start vllm-stats-record.service` (logs to journald)
 
+### Adding another model (e.g. Qwen 27B)
+
+Everything keys off the `model_name` label in vLLM's metrics. A new model in the **same container** needs nothing. A **separate container on a new port** needs:
+
+1. A launch script (mirror `scripts/run-ds4-v20-r33.sh`, different `PORT` + `SERVED_MODEL_NAME`)
+2. Firewall: add the port to `networking.firewall.allowedTCPPorts` in `machines/desktop/default.nix`
+3. Ledger: add the URL to `VLLM_METRICS_URLS` (whitespace-separated) in `systemd.services.vllm-stats-record` — per-endpoint baselines means a restart of one container never disturbs the other's accounting; the new endpoint seeds its baseline on the next run
+4. Prometheus: add a `- targets: ["192.168.0.80:8001"]` static target in `monitoring/values.yaml` → `additionalScrapeConfigs`
+5. Grafana: nothing — the `$model` dashboard variable auto-populates from `label_values(...)`
+6. pi: add a provider/model entry in `pi/models.json`
+
 ## Troubleshooting
 
 ```bash
