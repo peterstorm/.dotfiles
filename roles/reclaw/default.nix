@@ -106,6 +106,9 @@
         LOCATION_NAME = "Copenhagen";
         PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+        # Native Node addons loaded via dlopen (sharp/onnxruntime via Cortex local embeddings)
+        # do not consult NIX_LD_LIBRARY_PATH; they need LD_LIBRARY_PATH present at process start.
+        LD_LIBRARY_PATH = "/run/current-system/sw/share/nix-ld/lib";
       };
     };
   }
