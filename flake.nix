@@ -58,8 +58,11 @@
 
         legacyPackages.homeManagerConfigurations = {
 
+          # Homelab server: headless (no X11/seat ever — dunst's 201 boot failures
+          # over 2 weeks are the proof), so xmonad/dunst are vestigial here. The
+          # desktop profile below keeps them for the real display machine.
           peterstorm = user.mkHMUser {
-            roles = [ "core-apps" "window-manager/xmonad" "dunst" "sops-homelab" "obsidian-git-sync" "obsidian-headless-sync" "vdirsyncer" "sonarr-missing-search" ];
+            roles = [ "core-apps" "sops-homelab" "obsidian-git-sync" "obsidian-headless-sync" "vdirsyncer" "sonarr-missing-search" ];
             username = "peterstorm";
           };
 
