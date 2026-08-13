@@ -116,9 +116,12 @@ The initial policy classifies only `desktop-vllm/*` as local and applies this in
 | Unknown/unclassified model | Agent's declared `model:` binding |
 
 An agent without `model:` retains Pi's configured child default under cloud/unknown
-parents, but follows the parent under a local parent. This means Loom remains the owner
-of its calibrated declarations such as `openai-codex/gpt-5.6-sol:high`; the dotfiles
-subagent launcher changes only the effective child invocation when local policy says to.
+parents, but follows the parent under a local parent. The one deliberate override:
+under a local parent, **every** child — including Loom's calibrated declarations
+such as `openai-codex/gpt-5.6-sol:high` — inherits the parent's exact model and
+thinking level. Loom's own model guard is reconciled to this: it proves the
+synced render and spawn scope, and defers the effective Pi binding to this
+launcher policy (Claude Code spawns still require the declared binding exactly).
 No Loom source or generated agent file needs routing-specific changes.
 
 Every child receives one routing decision snapshotted at the beginning of its parent tool
