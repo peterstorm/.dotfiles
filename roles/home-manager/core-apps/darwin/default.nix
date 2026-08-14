@@ -15,6 +15,7 @@
     (util.sops.userSecret "gemini-api-key" "gemini.yaml" "api_key")
     (util.sops.userSecret "cf-access-vllm-id" "cloudflare-access.yaml" "vllm_client_id")
     (util.sops.userSecret "cf-access-vllm-secret" "cloudflare-access.yaml" "vllm_client_secret")
+    (util.sops.userSecret "vllm-api-key" "cloudflare-access.yaml" "vllm_api_key")
   ]
   
   # Define templates
@@ -39,6 +40,12 @@
       CF_ACCESS_CLIENT_ID = "cf-access-vllm-id";
       CF_ACCESS_CLIENT_SECRET = "cf-access-vllm-secret";
     })
+    # OpenAI-compatible client env: with `vllm-forward` running, any client
+    # (claude, opencode, curl, ...) works with zero flags.
+    (util.sops.configTemplate "vllm-env" ''
+      export OPENAI_API_KEY='${config.sops.placeholder."vllm-api-key"}'
+      export OPENAI_BASE_URL='http://localhost:8000/v1'
+    '')
   ]
   
   # Configuration
@@ -99,6 +106,7 @@
 
     programs.bash.initExtra = ''
       source ${config.sops.templates."gemini-env".path}
+      source ${config.sops.templates."vllm-env".path}
     '';
 
     programs.zsh = {
@@ -113,6 +121,7 @@
         # Source database environment variables
         source ${config.sops.templates."db-env".path}
         source ${config.sops.templates."gemini-env".path}
+        source ${config.sops.templates."vllm-env".path}
 
         # GitHub token for Maven/GitHub Packages authentication
         export GITHUB_TOKEN=$(gh auth token 2>/dev/null)
