@@ -129,29 +129,169 @@ because there is no public path to protect. They work from two places —
 | vLLM inference | http://vllm.peterstorm.io:8000 | `desktop` `192.168.0.80` |
 | vLLM stats heatmap | http://vllm-stats.peterstorm.io:8090 | `desktop` `192.168.0.80` |
 
-### Reaching the private group from a machine with another VPN
+### Access-gated — proxied CNAME behind a Cloudflare Access policy
 
-A host running a full-tunnel corporate VPN (Cisco Secure Client and friends
-typically claim `192.168.0.0/24` outright) cannot reach these even on the home
-network, and adding a second layer-3 tunnel just loses the same routing-table
-fight. Use WARP in **proxy mode**, which installs no routes and no interface:
+Reachable from anywhere, but only with credentials. Cloudflare's edge rejects
+unauthenticated requests before they touch the tunnel.
+
+| Service | Hostname | Origin | Policy |
+|---------|----------|--------|--------|
+| vLLM inference (TCP) | `vllm-tcp.peterstorm.io` | `tcp://192.168.0.80:8000` | `non_identity` service token |
+
+## Reaching the LAN from a machine that cannot route it
+
+### Why layer 3 does not work here
+
+A host running a full-tunnel corporate VPN cannot reach the private group even on
+the home network. Cisco Secure Client installs its own `192.168.0.0/24` route on
+its `utun` interface — same prefix length as the directly-connected LAN route, so
+specificity does not save you and the tunnel wins. `route -n get 192.168.0.28`
+returning a `utun` interface is the confirmation.
+
+Adding a second layer-3 tunnel (WARP, Tailscale) does not fix this. It enters the
+same routing-table contest, and on a corporate laptop it usually cannot be
+installed at all: those clients ship a launch daemon and a system extension, both
+of which need admin rights. Check with `id -Gn | grep -q admin`.
+
+The way out is to stop using the routing table. Both options below are userspace
+processes — no route, no interface, no privilege — and both work identically
+whether you are at home or on the other side of the world.
+
+### Option A — WARP proxy mode (needs admin, gives raw IP)
+
+Best when you have admin and want arbitrary `IP:port`, not one service at a time.
 
 ```sh
-warp-cli mode proxy      # SOCKS5 on 127.0.0.1:40000
+warp-cli registration new homelab-k8s
+warp-cli mode proxy      # SOCKS5 on 127.0.0.1:40000, installs no routes
 warp-cli connect
 curl --socks5-hostname 127.0.0.1:40000 http://vllm.peterstorm.io:8000/v1/models
 export ALL_PROXY=socks5h://127.0.0.1:40000   # OpenAI SDK / httpx honour this
 ```
 
-The `h` in `socks5h` matters: DNS resolves at the proxy inside Cloudflare, so the
-corporate resolver never sees the query. Proxy mode is TCP-only — `ping` will not
-work and that is not a fault.
+The `h` in `socks5h` matters: DNS resolves at the proxy inside Cloudflare, so a
+corporate resolver never sees the query and cannot interfere. Proxy mode is
+TCP-only — `ping` failing is expected, not a fault.
 
-Two settings are easy to miss and will silently break this:
+Two settings are easy to miss and both fail *silently*, as a hang rather than an
+error:
 
 - WARP's default Split Tunnel is **Exclude** mode and the stock exclude list
-  contains all of RFC1918, `192.168.0.0/16` included. Remove that entry.
+  contains all of RFC1918, `192.168.0.0/16` included. Switch to Include mode with
+  only `192.168.0.0/24`, which also keeps WARP from claiming that range on
+  foreign networks that happen to use it.
 - The device needs an enrollment policy covering it.
+
+Install the **standalone** WARP client, not the App Store "Cloudflare One Agent"
+— the latter ships no `warp-cli`.
+
+### Option B — `cloudflared access tcp` (no admin, per service)
+
+The only option on a locked-down machine, and the one the work Mac uses.
+`cloudflared` is a plain binary that opens an outbound HTTPS connection and
+listens on loopback. Nothing it does requires privilege.
+
+```sh
+vllm-forward            # or `vllm-forward 9000` for a different local port
+```
+
+Then, in another shell, any OpenAI-compatible client works with no flags —
+`OPENAI_API_KEY` and `OPENAI_BASE_URL` are exported from sops by the darwin role:
+
+```sh
+curl -H "Authorization: Bearer $OPENAI_API_KEY" http://localhost:8000/v1/models
+```
+
+`vllm-forward` is defined in `roles/home-manager/core-apps/darwin/default.nix`.
+It reads the Access service token from a sops template rather than the
+environment, so the credential never reaches shell history or scrollback.
+
+Note that `OPENAI_BASE_URL` is exported in *every* shell, not only while the
+forward is running. Any OpenAI SDK will honour it, so a tool expecting real
+OpenAI will get connection-refused when `vllm-forward` is down.
+
+### Two layers of auth, and why both
+
+| Layer | Answers | Protects against |
+|-------|---------|------------------|
+| Cloudflare Access service token | may you open a TCP connection | the public internet |
+| vLLM `--api-key` | may you use the model | leaked service token, anything already on the LAN |
+
+The unroutable-address trick that protects `vllm.peterstorm.io` buys nothing
+against a host already inside the LAN. vLLM's own key is what covers that; it
+lives at `~/.config/ds4-flash/api-key` on `desktop`, generated by
+`scripts/run-ds4-v20-r33.sh`.
+
+### Setting this up on a new client
+
+1. **Terraform** creates the CNAME, service token, Access application and policy
+   (`terraform-homelab/cloudflare/main.tf`). Read the credentials once:
+   ```sh
+   terraform output -raw vllm_access_client_id
+   terraform output -raw vllm_access_client_secret
+   ```
+2. **sops** — put them plus the vLLM key in the user's secret file:
+   ```sh
+   sops secrets/users/<user>/cloudflare-access.yaml
+   # vllm_client_id / vllm_client_secret / vllm_api_key
+   ```
+3. **Commit the secret file.** Flakes only see git-tracked files, and sops-nix
+   resolves `sopsFile` into the store at *evaluation* time — so an untracked
+   secret fails the build with `path ... does not exist` even though it is
+   sitting right there on disk.
+4. `./hm-apply.sh`, then open a new shell so the exports load.
+
+Rotate the token by tainting `cloudflare_zero_trust_access_service_token.vllm_tcp`
+and repeating steps 1–4.
+
+### Diagnosing a failed forward
+
+`cloudflared access tcp` collapses every failure into `websocket: bad handshake`,
+because the upgrade either returns 101 or it does not. Probe the same hostname
+with plain `curl` to turn that one symptom into a readable status code:
+
+```sh
+curl -s -o /dev/null -w "%{http_code}\n" https://vllm-tcp.peterstorm.io/
+
+# and with credentials
+. ~/.config/sops-nix/secrets/rendered/cf-access-env
+curl -s -I -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+        -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+        https://vllm-tcp.peterstorm.io/
+```
+
+| Unauthenticated | With token | Meaning |
+|-----------------|------------|---------|
+| 403 | 101 / upgrade | working as intended |
+| 403 | 403 | token not in the policy, or wrong/stale credentials |
+| 403 | **404** | Access fine, but the tunnel has no ingress rule — it fell to the `http_status:404` catch-all. Almost always the ConfigMap reload below |
+| 200 | — | **the Access application is not attached; the origin is public** |
+| 530 | — | tunnel down; check the cloudflared pod |
+
+A 502 once the rule is live means cloudflared has the route but cannot reach
+`192.168.0.80:8000` — `desktop` is off, or vLLM is not listening.
+
+`{"error":"Unauthorized"}` on `localhost:8000` is **vLLM**, not Cloudflare. The
+whole path is working and you are missing the `Authorization: Bearer` header.
+
+### ConfigMap changes do not reload cloudflared
+
+Editing the ingress list in `argocd-homelab/cloudflared/configmap.yaml` is not
+enough. ArgoCD's contract ends at "the object in etcd matches git" — nothing in
+it restarts the process. The kubelet refreshes the projected volume eventually,
+but the atomic symlink swap it uses does not reliably fire the inotify event
+`cloudflared` watches for.
+
+ArgoCD will show the app **Synced and Healthy** throughout, because the drift is
+between the mounted file and the running process — below what ArgoCD observes.
+
+```sh
+kubectl get cm cloudflared-config -n cloudflared -o yaml | grep <hostname>
+kubectl rollout restart deployment/cloudflared -n cloudflared
+```
+
+Anything in this repo pairing a `configmap.yaml` with a long-lived process has
+the same failure mode.
 
 ## Post-wipe bootstrap gotchas
 
@@ -238,6 +378,13 @@ kubectl -n argocd logs -l app.kubernetes.io/name=argocd-repo-server | grep -i so
 
 # Cloudflared not connecting
 kubectl -n cloudflared logs -l app=cloudflared
+
+# Ingress rule edited in git but a hostname still 404s: the pod is running the
+# old config. ArgoCD syncs the ConfigMap without restarting the process, and
+# shows Synced/Healthy the whole time. See "ConfigMap changes do not reload
+# cloudflared" above.
+kubectl get cm cloudflared-config -n cloudflared -o yaml | grep <hostname>
+kubectl rollout restart deployment/cloudflared -n cloudflared
 
 # Pod stuck
 kubectl -n <namespace> describe pod -l app=<app>
