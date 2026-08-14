@@ -89,17 +89,22 @@
       # http://localhost:8000/v1 — no proxy awareness needed on the client side.
       #
       # The service token comes from sops rather than the shell environment so
-      # it is never in scrollback or shell history.
+      # it is never in scrollback or shell history, and is handed to cloudflared
+      # through TUNNEL_SERVICE_TOKEN_* rather than --service-token-* so it does
+      # not sit in the process table for the life of the forward. Command-line
+      # arguments are world-readable via ps; on an EDR-monitored machine they are
+      # also collected telemetry. Same reasoning as the private env file in
+      # scripts/run-ds4-v20-r33.sh.
       (writeShellScriptBin "vllm-forward" ''
         set -euo pipefail
         port="''${1:-8000}"
         source ${config.sops.templates."cf-access-env".path}
+        export TUNNEL_SERVICE_TOKEN_ID="$CF_ACCESS_CLIENT_ID"
+        export TUNNEL_SERVICE_TOKEN_SECRET="$CF_ACCESS_CLIENT_SECRET"
         echo "vLLM -> http://localhost:$port/v1   (ctrl-c to stop)" >&2
         exec ${cloudflared}/bin/cloudflared access tcp \
           --hostname vllm-tcp.peterstorm.io \
-          --url "localhost:$port" \
-          --service-token-id "$CF_ACCESS_CLIENT_ID" \
-          --service-token-secret "$CF_ACCESS_CLIENT_SECRET"
+          --url "localhost:$port"
       '')
 
     ];
