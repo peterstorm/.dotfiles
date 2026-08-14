@@ -182,12 +182,15 @@ Pi loads packages from `settings.json`:
 {
   "packages": [
     "../../dev/claude-plugins/loom",
-    "../../dev/claude-plugins/cortex"
+    "../../dev/claude-plugins/cortex",
+    "../../dev/claude-plugins/obsidian"
   ]
 }
 ```
 
-Paths are relative to `~/.pi/agent/` (the agentDir). Each package has a `package.json` with a `pi` manifest declaring its extensions, skills, and prompts. Loom's native `pi/extension.ts` owns Loom guards and subagent-result state transitions; do not add a separate Loom bridge extension because it would process the same completion events twice.
+Paths are relative to `~/.pi/agent/` (the agentDir). Packages may declare resources in a `package.json` Pi manifest or expose Pi's conventional resource directories. Loom and Cortex use manifests; Obsidian's conventional `skills/` directory exposes `obsidian-vault` from the same canonical source used by its Claude plugin. The Home Manager Claude workspace activation provisions all three checkouts, so Pi configuration does not vendor another copy of the Obsidian workflow. Use it from Pi as `/skill:obsidian-vault` or ask naturally about the vault.
+
+Loom's native `pi/extension.ts` owns Loom guards and subagent-result state transitions; do not add a separate Loom bridge extension because it would process the same completion events twice.
 
 ## Agents
 

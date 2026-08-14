@@ -426,6 +426,54 @@ try {
   rmSync(resumeDir, { recursive: true, force: true });
 }
 
+// The Obsidian Claude plugin is also a Pi package via its conventional
+// skills/ directory. Query Pi itself so this verifies the installed settings,
+// package resolution, skill parsing, and command registration together.
+const commandsResult = spawnSync(
+  "pi",
+  ["--mode", "rpc", "--no-session", "--no-tools"],
+  {
+    input: '{"type":"get_commands"}\n',
+    encoding: "utf8",
+    timeout: 10_000,
+    env: { ...process.env, CORTEX_EXTRACTING: "1", PI_CODING_AGENT_DIR: agentDir },
+  },
+);
+if (commandsResult.error || commandsResult.status !== 0) {
+  fail(`cannot inspect Pi commands: ${commandsResult.error?.message ?? commandsResult.stderr}`);
+}
+const obsidianCommand = commandsResult.stdout.split("\n").flatMap((line) => {
+  try {
+    const response = JSON.parse(line) as {
+      type?: string;
+      command?: string;
+      data?: {
+        commands?: Array<{
+          name?: string;
+          sourceInfo?: { path?: string };
+          path?: string;
+        }>;
+      };
+    };
+    if (response.type !== "response" || response.command !== "get_commands") return [];
+    return response.data?.commands?.filter((command) => command.name === "skill:obsidian-vault") ?? [];
+  } catch {
+    return [];
+  }
+})[0];
+if (!obsidianCommand) fail("the obsidian-vault skill is not registered as /skill:obsidian-vault");
+const expectedObsidianSkill = resolve(
+  process.env.HOME ?? "",
+  "dev/claude-plugins/obsidian/skills/obsidian-vault/SKILL.md",
+);
+const installedObsidianSkill = obsidianCommand.sourceInfo?.path ?? obsidianCommand.path;
+if (!installedObsidianSkill || resolve(installedObsidianSkill) !== expectedObsidianSkill) {
+  fail(
+    `obsidian-vault resolves to ${installedObsidianSkill ?? "an unknown path"}, ` +
+      `expected canonical source ${expectedObsidianSkill}`,
+  );
+}
+
 const packageAgentDirs = resolvePackageAgentDirs(agentDir);
 if (packageAgentDirs.length === 0) fail("no configured local Pi package exposes an agents directory");
 
@@ -521,7 +569,7 @@ if (designer) {
 }
 
 process.stdout.write(
-  `Pi install verified: DeepSeek model catalog and local-aware routing, ${discovered.length} agents, ` +
+  `Pi install verified: DeepSeek model catalog and local-aware routing, Obsidian skill, ${discovered.length} agents, ` +
     `${packageAgentDirs.length} package agent dir(s), ${renderedAgents.size} current Loom render(s), ` +
     `panel roster available.\n`,
 );

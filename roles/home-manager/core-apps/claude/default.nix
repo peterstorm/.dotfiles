@@ -8,7 +8,7 @@ let
   # marketplace (registered below via extraKnownMarketplaces). Other tools
   # (pi, opencode, reclaw) read these repos directly off disk, so we also clone
   # them into ~/dev/claude-plugins on every machine.
-  workspaceRepos = [ "loom" "cortex" "feynman" "reclaw" ];
+  workspaceRepos = [ "loom" "cortex" "feynman" "obsidian" "reclaw" ];
 
   # Canonical ~/.claude/settings.json content. Deep-merged into the live file so
   # Claude Code's runtime-written keys (onboarding flags, project-scoped

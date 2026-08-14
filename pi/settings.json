@@ -4,7 +4,8 @@
   "defaultModel": "deepseek-v4-flash",
   "packages": [
     "../../dev/claude-plugins/loom",
-    "../../dev/claude-plugins/cortex"
+    "../../dev/claude-plugins/cortex",
+    "../../dev/claude-plugins/obsidian"
   ],
   "defaultThinkingLevel": "high",
   "theme": "dark",
