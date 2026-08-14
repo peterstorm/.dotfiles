@@ -9,6 +9,20 @@ let
   piAgentDir = "${config.home.homeDirectory}/.pi/agent";
   loomDir = "${config.home.homeDirectory}/dev/claude-plugins/loom";
 
+  # models.json holds exactly one machine-dependent value: the desktop-vllm
+  # baseUrl. Hosts that can route 192.168.0.0/24 — LAN clients, and WARP-enrolled
+  # devices via the tunnel's private network route — reach the workstation at its
+  # own address. The work Mac can do neither: a full-tunnel corporate VPN claims
+  # that prefix outright, and the account has no admin rights to install anything
+  # that would route around it. There the endpoint arrives on loopback, via the
+  # `vllm-forward` Access-authenticated tunnel from the darwin role.
+  #
+  # The apiKey command in models.json needs no such split — it probes for a local
+  # key file, then the sops secret, then falls back to `ssh desktop`, so one
+  # string covers every host.
+  isLoopbackVllm = pkgs.stdenv.hostPlatform.isDarwin;
+  vllmBaseUrl = "http://localhost:8000/v1";
+
 in
 {
   home.packages = [ pkgs.pi-coding-agent ];
@@ -17,12 +31,16 @@ in
   # symlinks: adding, editing or removing a file needs no rebuild. models.json and
   # model-routing.json are also live configuration. agents/ cannot work this way —
   # see piAgents below.
+  #
+  # On a loopback-vLLM host models.json is generated rather than symlinked, so
+  # editing it there does need a rebuild. That is the price of the one rewritten
+  # field; every other host keeps the live symlink.
   home.activation.piSymlinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
     piAgentDir="${piAgentDir}"
     mkdir -p "$piAgentDir"
 
     # Create managed resource symlinks (idempotent)
-    for resource in extensions prompts models.json model-routing.json; do
+    for resource in extensions prompts ${lib.optionalString (!isLoopbackVllm) "models.json"} model-routing.json; do
       target="${piSrcDir}/$resource"
       link="$piAgentDir/$resource"
 
@@ -44,6 +62,17 @@ in
         echo "pi: created $resource symlink"
       fi
     done
+    ${lib.optionalString isLoopbackVllm ''
+
+      # models.json with desktop-vllm rewritten to loopback (see comment above).
+      # Replaces any inherited symlink from before this host became loopback.
+      link="$piAgentDir/models.json"
+      [ -L "$link" ] && rm "$link"
+      ${pkgs.jq}/bin/jq --arg url "${vllmBaseUrl}" \
+        '.providers."desktop-vllm".baseUrl = $url' \
+        "${piSrcDir}/models.json" > "$link.tmp" && mv "$link.tmp" "$link"
+      echo "pi: models.json generated with baseUrl ${vllmBaseUrl}"
+    ''}
   '';
 
   # agents/ is a REAL directory holding two kinds of file:

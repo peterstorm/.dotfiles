@@ -3,7 +3,7 @@
     "desktop-vllm": {
       "baseUrl": "http://192.168.0.80:8000/v1",
       "api": "openai-completions",
-      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'cat ~/.config/ds4-flash/api-key'; fi",
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'cat ~/.config/ds4-flash/api-key'; fi",
       "compat": {
         "supportsDeveloperRole": true,
         "supportsReasoningEffort": true,
