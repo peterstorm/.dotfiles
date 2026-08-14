@@ -33,4 +33,11 @@ data:
         service: http://transmission.transmission:80
       - hostname: dotslash.dev
         service: http://dotslash-dev.dotslash-dev:3000
+      # Raw TCP to the inference API, for clients that cannot route the LAN
+      # (full-tunnel corporate VPN, or no admin rights to install WARP).
+      # Gated by a Cloudflare Access service-token policy — see the
+      # cloudflare_zero_trust_access_application in terraform. Without that
+      # policy this line publishes the model to the internet.
+      - hostname: vllm-tcp.peterstorm.io
+        service: tcp://192.168.0.80:8000
       - service: http_status:404

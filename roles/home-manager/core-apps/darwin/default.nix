@@ -13,6 +13,8 @@
     (util.sops.userSecret "keycloak-admin-password-onr" "keycloak.yaml" "keycloak_admin_password_onr")
     (util.sops.userSecret "keycloak-admin-password-opr" "keycloak.yaml" "keycloak_admin_password_opr")
     (util.sops.userSecret "gemini-api-key" "gemini.yaml" "api_key")
+    (util.sops.userSecret "cf-access-vllm-id" "cloudflare-access.yaml" "vllm_client_id")
+    (util.sops.userSecret "cf-access-vllm-secret" "cloudflare-access.yaml" "vllm_client_secret")
   ]
   
   # Define templates
@@ -32,6 +34,10 @@
     })
     (util.sops.envTemplate "gemini-env" {
       GEMINI_API_KEY = "gemini-api-key";
+    })
+    (util.sops.envTemplate "cf-access-env" {
+      CF_ACCESS_CLIENT_ID = "cf-access-vllm-id";
+      CF_ACCESS_CLIENT_SECRET = "cf-access-vllm-secret";
     })
   ]
   
@@ -64,11 +70,30 @@
       # Reaching the homelab from this machine. The corporate Cisco Secure
       # Client runs tunnel-all and claims 192.168.0.0/24 outright, so the LAN is
       # unreachable here even when sitting on the home network — a second
-      # layer-3 tunnel would just lose the same routing-table fight. cloudflared
-      # sidesteps it entirely: a userspace process speaking HTTPS out through
-      # whatever tunnel is up, no route and no interface of its own.
-      #   cloudflared access tcp --hostname <host> --url localhost:<port>
+      # layer-3 tunnel would just lose the same routing-table fight, and this
+      # account has no admin rights to install one anyway. cloudflared sidesteps
+      # both: a userspace process speaking HTTPS out through whatever tunnel is
+      # up, with no route, no interface and no privilege of its own.
       cloudflared
+
+      # Access-authenticated port forward to the vLLM inference API on
+      # `desktop`. Usage: `vllm-forward` (or `vllm-forward 9000` for a different
+      # local port), then point any OpenAI-compatible client at
+      # http://localhost:8000/v1 — no proxy awareness needed on the client side.
+      #
+      # The service token comes from sops rather than the shell environment so
+      # it is never in scrollback or shell history.
+      (writeShellScriptBin "vllm-forward" ''
+        set -euo pipefail
+        port="''${1:-8000}"
+        source ${config.sops.templates."cf-access-env".path}
+        echo "vLLM -> http://localhost:$port/v1   (ctrl-c to stop)" >&2
+        exec ${cloudflared}/bin/cloudflared access tcp \
+          --hostname vllm-tcp.peterstorm.io \
+          --url "localhost:$port" \
+          --service-token-id "$CF_ACCESS_CLIENT_ID" \
+          --service-token-secret "$CF_ACCESS_CLIENT_SECRET"
+      '')
 
     ];
 

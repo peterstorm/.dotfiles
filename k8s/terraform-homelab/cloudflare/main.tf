@@ -122,6 +122,78 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_route" "homelab_lan" {
   comment    = "Homelab LAN — WARP private network access"
 }
 
+# ---------------------------------------------------------------------------
+# vllm-tcp: Access-gated TCP path to the inference API.
+#
+# The vllm/vllm-stats A records above only work for clients that can route
+# 192.168.0.0/24 — LAN hosts, and WARP-enrolled devices via the private network
+# route. That excludes any machine running a full-tunnel corporate VPN that
+# claims the same prefix, and any machine where the user lacks the admin rights
+# the WARP client needs to install. This hostname is the way in for those: a
+# proxied tunnel CNAME carrying raw TCP, reached with `cloudflared access tcp`,
+# which is a plain userspace process needing no privilege at all.
+#
+# The Access application is what makes it safe, and is not optional. A tcp://
+# ingress on a proxied hostname with no Access policy is an unauthenticated
+# inference endpoint published to the internet — the tunnel is transport, not
+# authorization. The policy is non_identity/service-token so a headless port
+# forward can authenticate without a browser SSO round trip.
+# ---------------------------------------------------------------------------
+resource "cloudflare_dns_record" "vllm_tcp" {
+  zone_id = var.cloudflare_zone_id
+  name    = "vllm-tcp"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_zero_trust_access_service_token" "vllm_tcp" {
+  account_id = var.cloudflare_account_id
+  name       = "vllm-tcp-client"
+  duration   = "8760h" # 1 year; rotate by tainting this resource
+}
+
+resource "cloudflare_zero_trust_access_policy" "vllm_tcp" {
+  account_id = var.cloudflare_account_id
+  name       = "vllm-tcp service token"
+
+  # non_identity: authenticate with a service token alone, no IdP round trip.
+  decision = "non_identity"
+
+  include = [{
+    service_token = {
+      token_id = cloudflare_zero_trust_access_service_token.vllm_tcp.id
+    }
+  }]
+}
+
+resource "cloudflare_zero_trust_access_application" "vllm_tcp" {
+  account_id       = var.cloudflare_account_id
+  name             = "vLLM inference (TCP)"
+  domain           = "vllm-tcp.peterstorm.io"
+  type             = "self_hosted"
+  session_duration = "24h"
+
+  policies = [{
+    id         = cloudflare_zero_trust_access_policy.vllm_tcp.id
+    precedence = 1
+  }]
+}
+
+# Read once with `terraform output -raw vllm_access_client_id` (and _secret),
+# then put both into secrets/users/hansen142/cloudflare-access.yaml via sops.
+# They live in terraform state, so treat that state file as sensitive.
+output "vllm_access_client_id" {
+  value     = cloudflare_zero_trust_access_service_token.vllm_tcp.client_id
+  sensitive = true
+}
+
+output "vllm_access_client_secret" {
+  value     = cloudflare_zero_trust_access_service_token.vllm_tcp.client_secret
+  sensitive = true
+}
+
 # Plex on dedicated LB IP (not proxied)
 resource "cloudflare_dns_record" "plex" {
   zone_id = var.cloudflare_zone_id

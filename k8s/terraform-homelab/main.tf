@@ -89,3 +89,16 @@ module "applicationset" {
 
   depends_on = [module.argocd]
 }
+
+# Service-token credentials for the vllm-tcp Access application. Read once with
+# `terraform output -raw vllm_access_client_id` / `..._secret`, then store both
+# in secrets/users/hansen142/cloudflare-access.yaml via sops.
+output "vllm_access_client_id" {
+  value     = module.cloudflare.vllm_access_client_id
+  sensitive = true
+}
+
+output "vllm_access_client_secret" {
+  value     = module.cloudflare.vllm_access_client_secret
+  sensitive = true
+}
