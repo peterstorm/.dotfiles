@@ -436,9 +436,11 @@ in
     };
   };
 
-  # Serve the token heatmap (and raw stats.csv) over HTTP:8090 — the homelab's
-  # cloudflared tunnel routes vllm-stats.peterstorm.io here, and LAN clients
-  # can hit http://192.168.0.80:8090 directly. Read-only static files.
+  # Serve the token heatmap (and raw stats.csv) over HTTP:8090. Reached as
+  # vllm-stats.peterstorm.io, an unproxied A record pointing straight here — so
+  # LAN clients and WARP-enrolled devices resolve it, but the internet cannot
+  # route to it. Read-only static files, and note there is no auth in front of
+  # this: the unroutable address *is* the access control.
   systemd.services.vllm-stats-http = {
     description = "Serve the vLLM stats heatmap over HTTP";
     wants = [ "network-online.target" ];

@@ -61,6 +61,15 @@
       bun
       inputs.loom-tui.packages.${pkgs.system}.default
 
+      # Reaching the homelab from this machine. The corporate Cisco Secure
+      # Client runs tunnel-all and claims 192.168.0.0/24 outright, so the LAN is
+      # unreachable here even when sitting on the home network — a second
+      # layer-3 tunnel would just lose the same routing-table fight. cloudflared
+      # sidesteps it entirely: a userspace process speaking HTTPS out through
+      # whatever tunnel is up, no route and no interface of its own.
+      #   cloudflared access tcp --hostname <host> --url localhost:<port>
+      cloudflared
+
     ];
 
     programs.bash.initExtra = ''

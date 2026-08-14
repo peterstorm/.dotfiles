@@ -7,6 +7,11 @@ data:
     tunnel: homelab-k8s
     credentials-file: /etc/cloudflared/credentials.json
     no-autoupdate: true
+    # Carries WARP traffic for the 192.168.0.0/24 private network route declared
+    # in terraform-homelab/cloudflare/main.tf. Both halves are required: this
+    # flag makes the tunnel willing, the route tells Cloudflare where the LAN is.
+    # Services on `desktop` (vllm :8000, vllm-stats :8090) are reached this way
+    # rather than via ingress, so they stay off the public internet.
     warp-routing:
       enabled: true
     ingress:
@@ -26,8 +31,6 @@ data:
         service: http://overseerr.overseerr:5055
       - hostname: transmission.peterstorm.io
         service: http://transmission.transmission:80
-      - hostname: vllm-stats.peterstorm.io
-        service: http://192.168.0.80:8090
       - hostname: dotslash.dev
         service: http://dotslash-dev.dotslash-dev:3000
       - service: http_status:404

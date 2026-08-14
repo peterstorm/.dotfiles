@@ -90,29 +90,68 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 ## Service URLs
 
-### External (via Cloudflare tunnel)
+Every hostname below is a public DNS name, but they fall into two groups that
+differ in *who can route to the answer*. The distinction is the security model,
+so it is worth keeping straight.
+
+### Public — proxied tunnel CNAMEs, reachable by anyone
+
+These resolve to Cloudflare anycast and are served over the tunnel. There is no
+Cloudflare Access application on this zone, so **these are open to the internet**.
+A tunnel is transport, not authorization.
 
 | Service | URL |
 |---------|-----|
-| ArgoCD | https://argocd.peterstorm.io |
 | Echo Server | https://echo-server.peterstorm.io |
-| Grafana | https://grafana.peterstorm.io |
-| Sonarr | https://sonarr.peterstorm.io |
-| Radarr | https://radarr.peterstorm.io |
-| Prowlarr | https://prowlarr.peterstorm.io |
-| Overseerr | https://overseerr.peterstorm.io |
-| Transmission | https://transmission.peterstorm.io |
-| vLLM stats heatmap | https://vllm-stats.peterstorm.io |
+| dotslash.dev | https://dotslash.dev |
 
-### LAN (via Cilium Ingress on 192.168.0.240)
+### Private — unproxied A records in RFC1918 space
 
-Same hostnames resolve to `192.168.0.240` via Cloudflare DNS (not proxied).
-Requires DNS or `/etc/hosts` pointing `*.peterstorm.io` to `192.168.0.240`.
+These resolve to `192.168.0.x`, which nobody on the internet can route to. That
+makes the address itself the authorization boundary: no Access policy is needed
+because there is no public path to protect. They work from two places —
 
-| Service | URL |
-|---------|-----|
-| Plex | http://192.168.0.241:32400 |
-| vLLM stats heatmap (direct) | http://192.168.0.80:8090 |
+1. **On the LAN**, directly.
+2. **From anywhere, via WARP**, using the `192.168.0.0/24` private network route
+   declared in `terraform-homelab/cloudflare/main.tf`. Requires the device to be
+   enrolled in the Zero Trust org; enrollment is the gate.
+
+| Service | URL | Host |
+|---------|-----|------|
+| ArgoCD | https://argocd.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Grafana | https://grafana.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Sonarr | https://sonarr.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Radarr | https://radarr.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Prowlarr | https://prowlarr.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Overseerr | https://overseerr.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Transmission | https://transmission.peterstorm.io | Cilium ingress `192.168.0.242` |
+| Plex | http://plex.peterstorm.io:32400 | dedicated LB `192.168.0.241` |
+| vLLM inference | http://vllm.peterstorm.io:8000 | `desktop` `192.168.0.80` |
+| vLLM stats heatmap | http://vllm-stats.peterstorm.io:8090 | `desktop` `192.168.0.80` |
+
+### Reaching the private group from a machine with another VPN
+
+A host running a full-tunnel corporate VPN (Cisco Secure Client and friends
+typically claim `192.168.0.0/24` outright) cannot reach these even on the home
+network, and adding a second layer-3 tunnel just loses the same routing-table
+fight. Use WARP in **proxy mode**, which installs no routes and no interface:
+
+```sh
+warp-cli mode proxy      # SOCKS5 on 127.0.0.1:40000
+warp-cli connect
+curl --socks5-hostname 127.0.0.1:40000 http://vllm.peterstorm.io:8000/v1/models
+export ALL_PROXY=socks5h://127.0.0.1:40000   # OpenAI SDK / httpx honour this
+```
+
+The `h` in `socks5h` matters: DNS resolves at the proxy inside Cloudflare, so the
+corporate resolver never sees the query. Proxy mode is TCP-only — `ping` will not
+work and that is not a fault.
+
+Two settings are easy to miss and will silently break this:
+
+- WARP's default Split Tunnel is **Exclude** mode and the stock exclude list
+  contains all of RFC1918, `192.168.0.0/16` included. Remove that entry.
+- The device needs an enrollment policy covering it.
 
 ## Post-wipe bootstrap gotchas
 
@@ -173,7 +212,7 @@ The `monitoring/` app scrapes the vLLM instance on `desktop` (`192.168.0.80:8000
 Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only ledger: `systemd.timers.vllm-stats-record` (`machines/desktop/default.nix`) runs every 15 min, scrapes `127.0.0.1:8000/metrics`, appends deltas (handling counter resets) to `/var/lib/vllm-stats/stats.csv`, and re-renders a GitHub-style heatmap to `/var/lib/vllm-stats/heatmap/index.html`. Scripts: `scripts/vllm-stats-record.py`, `scripts/vllm-stats-heatmap.py`.
 
 - Activate on desktop: commit the new `scripts/` files (flake requires tracked files), then `nixos-rebuild switch --flake .#desktop` + `sudo systemctl start vllm-stats-record.timer` (first run only seeds the baseline)
-- Serving: `systemd.services.vllm-stats-http` serves the heatmap dir on :8090 (firewall-opened). Tunnel: `vllm-stats.peterstorm.io` → `192.168.0.80:8090` (`cloudflared/configmap.yaml` + proxied CNAME in `terraform-homelab/cloudflare/main.tf`; Cloudflare forbids a LAN A record alongside the tunnel CNAME). LAN: http://192.168.0.80:8090 direct.
+- Serving: `systemd.services.vllm-stats-http` serves the heatmap dir on :8090 (firewall-opened). DNS: `vllm-stats.peterstorm.io` is an unproxied A record → `192.168.0.80` (`terraform-homelab/cloudflare/main.tf`), so it is reachable on the LAN and via WARP but not from the internet. It was formerly a proxied tunnel CNAME, which published the heatmap publicly. LAN: http://192.168.0.80:8090 direct.
 - View the heatmap: `scp desktop:/var/lib/vllm-stats/heatmap/index.html .` and open it, or serve the dir
 - Quick re-run: `sudo systemctl start vllm-stats-record.service` (logs to journald)
 

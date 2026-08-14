@@ -80,6 +80,7 @@ module "cloudflare" {
 
   cloudflare_zone_id          = data.sops_file.cloudflare.data["zone_id"]
   cloudflare_dotslash_zone_id = data.sops_file.cloudflare.data["dotslash_zone_id"]
+  cloudflare_account_id       = data.sops_file.cloudflare.data["account_id"]
   cloudflare_tunnel_id        = var.cloudflare_tunnel_id
 }
 
