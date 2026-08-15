@@ -223,10 +223,11 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
   - `gpuPowerLimitWatts` (currently `null`) — see [Power limits](#power-limits)
   - Auto-scrub + TRIM
   - AMD microcode
-  - `specialisation.headless` — a second systemd-boot entry that boots to a console
-    instead of SDDM/XMonad, so the GPUs start empty for inference. See
-    [Going headless](#going-headless-to-free-gpu-memory). You can also flip live with
-    `sudo systemctl isolate multi-user.target` / `graphical.target` — no reboot needed.
+  - The base/default system boots headless to `multi-user.target`, so the GPUs start
+    empty for inference. `specialisation.graphical` provides an explicit SDDM/XMonad
+    boot entry. See [Headless by default](#headless-by-default-to-free-gpu-memory). You
+    can also flip live with `sudo systemctl isolate graphical.target` /
+    `multi-user.target` — no reboot needed.
 - **Home-manager is applied standalone**, like the laptops — it is *not* folded into the
   system closure. `homeManagerConfigurations.desktop` (in `flake.nix`) is the `peterstorm`
   user with a subset of roles (`core-apps window-manager/xmonad dunst`; the homelab/sops/
@@ -832,7 +833,7 @@ nvcc -O3 -o /tmp/p2p /tmp/p2p.cu && /tmp/p2p'
 
 If `RegistryDwords` is empty, the modprobe config didn't take: reboot, or stop everything
 holding the GPUs (`nvidia-persistenced`, containers, the display manager — see
-[Going headless](#going-headless-to-free-gpu-memory)) and reload `nvidia_uvm` /
+[Headless by default](#headless-by-default-to-free-gpu-memory)) and reload `nvidia_uvm` /
 `nvidia_modeset` / `nvidia`.
 
 ### Not applicable to us
@@ -1096,6 +1097,182 @@ The static repository contract is checked with:
 
 ```bash
 bash tests/qwen38-release-contract.sh
+```
+
+## Experimental Qwen3.8-27B DSpark on SGLang
+
+This is a separate, experimental acceleration profile for the same quality-first BF16
+Qwen3.8 target. It does **not** replace the vLLM baseline above. It serves the BF16 target
+through SGLang and attaches RadixArk's 1.36B BF16 DSpark draft, which proposes seven tokens
+per step and verifies an eight-token window against the target.
+
+The draft was trained and benchmarked against `Qwen/Qwen3.8-27B-FP8`, not BF16 TP2. In a
+correct speculative implementation that should affect acceptance and speed rather than the
+target distribution, but this exact BF16/TP2/eight-request combination has no published
+validation. Treat the first launch as a correctness and performance experiment.
+
+Primary references:
+
+- [RadixArk/Qwen3.8-27B-DSpark](https://huggingface.co/RadixArk/Qwen3.8-27B-DSpark)
+- [SGLang Qwen3.8-27B cookbook](https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-27B.html)
+- [SGLang DSpark roadmap #30344](https://github.com/sgl-project/sglang/issues/30344)
+- [Open TP compact-verify graph-tier fix #31195](https://github.com/sgl-project/sglang/pull/31195)
+- [Merged ragged-plan race fix #32467](https://github.com/sgl-project/sglang/pull/32467)
+- [Open CUDA-graph capture-initialization fix #33795](https://github.com/sgl-project/sglang/pull/33795)
+
+| Item | Value |
+|---|---|
+| Image | `lmsysorg/sglang:qwen38-27b` |
+| AMD64 registry digest | `sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124` |
+| Image base source label | `c4271c3fe1262fc2adbd162c33b25de5255251c5` plus the image's Qwen3.8-27B specialization |
+| Target | `Qwen/Qwen3.8-27B` BF16 at revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` |
+| Draft | `RadixArk/Qwen3.8-27B-DSpark` at revision `923ed3a8572615643f0137e424e4ce4edd7f1cda` |
+| Draft geometry | 1.36B BF16, five full-attention layers, gamma 7, verify width 8 |
+| Runtime profile | TP2, BF16 target/KV, FP32 GDN state, native 262K, eight requests |
+| Verification mode | Static/verify-all only; compact confidence scheduling is deliberately disabled |
+| Endpoint | Authenticated OpenAI-compatible API at `http://desktop:8000/v1` |
+
+The source draft repository currently declares `license: other` without a license text.
+Do not redistribute or treat third-party GGUF metadata claiming Apache-2.0 as relicensing
+the source weights.
+
+### Download and launch
+
+Download both independently pinned checkpoints. The target command can be skipped if the
+BF16 target is already complete:
+
+```bash
+bash scripts/download-qwen38-27b.sh
+docker logs -f qwen38-model-dl
+
+bash scripts/download-qwen38-27b-dspark.sh
+docker logs -f qwen38-dspark-model-dl
+```
+
+Wait for `DOWNLOAD_COMPLETE` from both containers. Stop whichever model owns port 8000,
+then go headless and launch:
+
+```bash
+docker stop ds4-0731-r33 2>/dev/null || true
+docker stop qwen38-27b-bf16 2>/dev/null || true
+sudo systemctl stop display-manager
+nvidia-smi --query-gpu=index,memory.used --format=csv
+
+bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
+docker logs -f qwen38-27b-bf16-dspark-sglang
+```
+
+The script reuses `~/.config/qwen38/api-key`, so clients do not need a different Qwen
+credential when switching engines. SGLang only exposes API authentication as a CLI field;
+`sglang-secure-entrypoint.py` reads `SGLANG_API_KEY` from a mode-0600 Docker env file,
+removes it from the inherited environment, and constructs SGLang's server arguments
+in-process. The key therefore does not appear in Docker's command array or
+`/proc/<pid>/cmdline`.
+
+Authenticated health and generation probes:
+
+```bash
+KEY="$(cat ~/.config/qwen38/api-key)"
+
+curl -fsS http://127.0.0.1:8000/health \
+  -H "Authorization: Bearer $KEY"
+
+curl -fsS http://127.0.0.1:8000/v1/chat/completions \
+  -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "qwen3.8-27b",
+    "messages": [{"role": "user", "content": "Reply with exactly OK."}],
+    "max_tokens": 2048,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "chat_template_kwargs": {
+      "enable_thinking": true,
+      "preserve_thinking": true
+    },
+    "reasoning_effort": "low"
+  }' | jq
+```
+
+SGLang reads the checkpoint's `generation_config.json` because the launcher pins
+`--sampling-defaults model`. Do not override the native chat template. The launcher only
+sets default template kwargs for thinking, preserved reasoning, and xhigh effort; each
+request may lower reasoning effort as shown above.
+
+### Why static verification is mandatory here
+
+The container is explicitly started with:
+
+```text
+SGLANG_RAGGED_VERIFY_MODE=static
+```
+
+SGLang's compact mode uses the confidence head to vary each request's verify length. With
+TP greater than one, open PR #31195 documents ranks independently choosing different
+compact CUDA-graph token tiers and hanging inside mismatched collectives. Static mode
+verifies all eight positions and avoids that path. Do not switch this TP2 profile to
+`compact` or `cap-accept`, and do not add an SPS table, until a pinned image contains the
+cross-rank budget fix and it passes the soak gate on this machine.
+
+The pinned image is newer than the merged #32467 ragged-plan producer fix. Other DSpark
+CUDA-graph hardening remains active upstream, so zero crashes on a short prompt is not
+sufficient evidence of stability.
+
+### State, context, and concurrency sizing
+
+Defaults are overrideable without editing the launcher:
+
+```text
+MAX_RUNNING_REQUESTS=8
+CONTEXT_LENGTH=262144
+CHUNKED_PREFILL_SIZE=2048
+MEM_FRACTION_STATIC=0.85
+DSPARK_GAMMA=7
+MAX_MAMBA_CACHE_SIZE=104
+```
+
+`MAX_MAMBA_CACHE_SIZE` defaults to
+`MAX_RUNNING_REQUESTS × (5 radix slots + gamma+1 verify slots)`. For eight requests and
+gamma seven this is 104. This explicit pin prevents SGLang's generic 0.9 Mamba/KV memory
+ratio from silently reducing concurrency. If request count or gamma changes, the script
+recomputes the pin unless `MAX_MAMBA_CACHE_SIZE` is explicitly overridden.
+
+The 2,048-token prefill chunk follows SGLang's RTX PRO 6000 guidance: hybrid GDN decode can
+stall behind larger prefill chunks. Keep BF16 KV and FP32 GDN state while evaluating this
+as a quality profile.
+
+### Validation and comparison gate
+
+Do not promote this launcher over the no-spec BF16 baseline until all of these pass:
+
+1. Cold boot completes CUDA-graph capture with both GPUs and no process restart.
+2. Health, low/medium/xhigh reasoning, native-template tool calls, and streaming all work.
+3. Deterministic prompts match a no-spec target semantically and show no malformed output.
+4. Logs report nontrivial DSpark acceptance; compare output tokens/s and inter-token
+   latency at concurrency 1 and 8. Acceptance length alone is not a speedup.
+5. A unique-prose needle ladder reaches the useful long-context range without corruption.
+6. A sustained eight-agent tool-use soak records zero CUDA faults, Xids, deadlocks,
+   empty completions, and container restarts.
+
+Metrics are enabled and authenticated like the other endpoints:
+
+```bash
+curl -fsS http://127.0.0.1:8000/metrics \
+  -H "Authorization: Bearer $KEY" |
+  grep -Ei 'spec|accept|token'
+```
+
+To return to the vLLM reference profile:
+
+```bash
+docker stop qwen38-27b-bf16-dspark-sglang
+bash scripts/run-qwen38-27b-bf16.sh
+```
+
+The static repository contract is checked with:
+
+```bash
+bash tests/qwen38-dspark-sglang-contract.sh
 ```
 
 ## Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)
@@ -1587,71 +1764,76 @@ on the NixOS side — `boot.devShmSize` (default `"50%"` of RAM) must exceed
 workers have mapped it, which fixed r16's orphaned `/dev/shm/vllm_offload_*.mmap` after a
 `SIGKILL`.
 
-### Going headless to free GPU memory
+### Headless by default to free GPU memory
 
-This is the one thing the config actively fights. `roles/dual-desktop-plasma` runs X11 +
-SDDM + XMonad **on these same GPUs**, so the X server and framebuffer hold VRAM that
-`GPU_MEMORY_UTILIZATION=0.975` assumes it can have. Upstream's headroom numbers (15.27 GiB
-for KV at 0.975) come from headless boxes.
+`roles/dual-desktop-plasma` still configures X11 + SDDM + XMonad **on these same GPUs**,
+but the base system now boots to `multi-user.target` so none of them starts automatically.
+That leaves the VRAM envelope expected by `GPU_MEMORY_UTILIZATION=0.975`; upstream's
+headroom numbers (15.27 GiB for KV at 0.975) come from headless boxes.
 
 **1. Pick a mode at the boot menu (this is already configured)**
 
-`machines/desktop/default.nix` defines a `headless` **specialisation**. systemd-boot
-lists specialisations as their own entries, so the boot menu offers:
+`machines/desktop/default.nix` makes the base system headless and defines a `graphical`
+**specialisation**. systemd-boot lists specialisations as their own entries:
 
 | Entry | Default unit | What you get |
 |---|---|---|
-| `NixOS` (default) | `graphical.target` | Workstation — SDDM, XMonad, both monitors |
-| `NixOS (headless)` | `multi-user.target` | Text login **on the attached monitor**, GPUs untouched |
+| `NixOS` (default) | `multi-user.target` | Text login **on the attached monitor**, GPUs untouched |
+| `NixOS (graphical)` | `graphical.target` | Workstation — SDDM, XMonad, both monitors |
 
-> "Headless" is a misleading name for it. The specialisation stops X and SDDM from
-> starting; it does not turn off video output. `getty` still runs, so a monitor plugged
-> into either card shows a normal text login. It means *no X server holding the GPUs*,
-> not *no screen*. This is the entry to pick for any console work on the box — including
-> before home-manager has been applied, when the stock XMonad has none of your
-> keybindings.
+> "Headless" does not mean "no screen". `getty` still runs, so a monitor plugged into
+> either card shows a normal text login. It means *no X server holding the GPUs*. The
+> default entry is therefore also the safe entry for console work before home-manager
+> has been applied.
 
-(The entry title comes from `systemd-boot-builder.py`, which formats specialisations as
-`"{distro} ({specialisation})"`.)
+(The graphical entry title comes from `systemd-boot-builder.py`, which formats
+specialisations as `"{distro} ({specialisation})"`.)
 
-Everything else is shared: same kernel, same driver, same ZFS pool, same generation.
-The specialisation changes one option:
+Everything else is shared: same kernel, driver, ZFS pool, and generation. The base profile
+also disables NVIDIA DRM modesetting so the firmware framebuffer keeps the console on its
+original connector; the graphical specialisation turns it back on:
 
 ```nix
-specialisation.headless.configuration = {
-  systemd.defaultUnit = lib.mkForce "multi-user.target";
+systemd.defaultUnit = lib.mkForce "multi-user.target";
+hardware.nvidia.modesetting.enable = lib.mkForce false;
+
+specialisation.graphical.configuration = {
+  systemd.defaultUnit = lib.mkOverride 40 "graphical.target";
+  hardware.nvidia.modesetting.enable = lib.mkOverride 40 true;
 };
 ```
 
-Because only the target changes, X is still fully configured in the headless entry —
-it just never starts. So you are not locked in:
+The graphical stack remains fully configured, so you are not locked in:
 
 ```bash
 sudo systemctl isolate graphical.target    # bring XMonad up, no reboot
 sudo systemctl isolate multi-user.target   # drop it again
 ```
 
-Two things about that one line are load-bearing:
+Two details are load-bearing:
 
 - **`services.xserver.autorun = false` would not work.** nixpkgs sets
   `systemd.defaultUnit = mkIf (xserver.autorun || displayManager.enable) "graphical.target"`
   in `services/misc/graphical-desktop.nix`, and `dual-desktop-plasma` enables SDDM — so
   `displayManager.enable` keeps the graphical target regardless of `autorun`.
-- **`mkForce` is required.** That nixpkgs definition is normal priority, so a second
-  plain definition is a conflict, not an override.
+- **The base needs `mkForce`.** The nixpkgs definition is normal priority, so a plain
+  second definition conflicts instead of overriding it. Specialisations inherit that
+  forced base value; the graphical profile therefore uses priority 40, stronger than
+  `mkForce`'s priority 50, to reverse it without an equal-priority conflict.
 
 Building and switching:
 
 ```bash
-./system-apply.sh                             # builds both; boots the workstation entry
-./system-apply.sh --specialisation headless   # builds both; activates headless now
+./system-apply.sh                               # builds both; activates/defaults headless
+./system-apply.sh --specialisation graphical    # builds both; activates graphical now
 ```
 
 `system-apply.sh` forwards its arguments to `nixos-rebuild`, and `nixos-rebuild` builds
-every specialisation on any switch — you only ever pick which one to *activate*.
+every specialisation on any switch. Selecting the graphical specialisation for a live
+switch does not change the next boot's default base entry.
 
 Switching specialisations live does not stop an already-running X server; it only changes
-what future boots and target isolations do. To free the VRAM in the current session, use
+the active closure and target defaults. To free the VRAM in the current session, use
 option 2 or `systemctl isolate multi-user.target`.
 
 **2. Per serving session — stop the display manager**

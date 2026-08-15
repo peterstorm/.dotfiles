@@ -125,12 +125,12 @@ in
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
-  # Two boot entries: the default is the workstation (X11 + SDDM + XMonad on the
-  # RTX 6000 Pros), "headless" boots to a console so the GPUs start empty for
-  # inference. systemd-boot lists specialisations as their own entries.
+  # Two boot entries: the base/default system is headless so the RTX 6000 Pros
+  # start empty for inference; the "graphical" specialisation starts SDDM +
+  # XMonad on both cards. systemd-boot lists specialisations as their own entries.
   #
-  # Only the default systemd unit changes, so the desktop stays one command away:
-  #   systemctl isolate graphical.target    # bring XMonad up without rebooting
+  # The desktop stays one command away without rebooting:
+  #   systemctl isolate graphical.target    # bring XMonad up
   #   systemctl isolate multi-user.target   # drop it again
   #
   # mkForce is required, not optional: nixpkgs sets
@@ -138,20 +138,20 @@ in
   # in services/misc/graphical-desktop.nix. That is a normal-priority definition,
   # so a second one here conflicts rather than overrides — and it is also why
   # `services.xserver.autorun = false` does nothing while SDDM is enabled.
-  specialisation.headless.configuration = {
-    systemd.defaultUnit = lib.mkForce "multi-user.target";
+  systemd.defaultUnit = lib.mkForce "multi-user.target";
 
-    # Also hand the console back to the firmware framebuffer.
-    #
-    # With modesetting on, nvidia-drm takes over the console partway through
-    # boot and can move it to a different connector than the one firmware was
-    # using. On a two-GPU box with up to eight outputs that reliably looks like
-    # a hang: messages scroll normally, then the screen freezes on the last line
-    # while the machine is fine and the login prompt is on a port you are not
-    # plugged into. Headless mode exists precisely to do console work, so it
-    # should not be the mode where the console can vanish. X is not running
-    # here, so nothing needs KMS.
-    hardware.nvidia.modesetting.enable = lib.mkForce false;
+  # Hand the default headless console back to the firmware framebuffer. With
+  # modesetting on, nvidia-drm can move the console to another connector partway
+  # through boot, which looks like a hang on a two-GPU/eight-output workstation.
+  # X is not running in the base profile, so nothing needs KMS.
+  hardware.nvidia.modesetting.enable = lib.mkForce false;
+
+  specialisation.graphical.configuration = {
+    # Specialisations inherit the base definitions, including their mkForce
+    # priority (50). Priority 40 is intentionally stronger so this opt-in profile
+    # can reverse both headless defaults without creating equal-priority conflicts.
+    systemd.defaultUnit = lib.mkOverride 40 "graphical.target";
+    hardware.nvidia.modesetting.enable = lib.mkOverride 40 true;
   };
 
   # GPU-to-GPU PCIe P2P for multi-GPU inference (DS4 v8 / vLLM b12x allreduce).

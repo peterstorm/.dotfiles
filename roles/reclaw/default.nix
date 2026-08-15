@@ -94,7 +94,7 @@
         # ~/.pi/agent/settings.json (github-copilot), whose quota exhausting
         # made every reply fail with 429 and reclaw parrot prompts back.
         RECLAW_PI_PROVIDER = "openai-codex";
-        RECLAW_PI_MODEL = "gpt-5.5";
+        RECLAW_PI_MODEL = "gpt-5.6-sol";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
