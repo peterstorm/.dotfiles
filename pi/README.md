@@ -67,12 +67,20 @@ Using a single symlink per directory (instead of per-file) means:
 `agents/` is the exception, because it is not purely source — Loom generates
 into it.
 
-## Local DeepSeek Workstation
+## Local AI Workstation
 
-`models.json` registers the OpenAI-compatible vLLM endpoint on the `desktop`
-workstation as `desktop-vllm/deepseek-v4-flash`. The API key is never committed:
-Pi reads it locally when running on `desktop`, or retrieves it through the hardened
-`ssh desktop` alias when running elsewhere.
+`models.json` registers the OpenAI-compatible endpoint on the `desktop` workstation
+with two selectable models:
+
+- `desktop-vllm/deepseek-v4-flash`
+- `desktop-vllm/qwen3.8-27b`
+
+Only one server owns port 8000 at a time. The Qwen launchers seed their credential from
+the existing DeepSeek key, so switching runtimes does not change Pi authentication. The
+key is never committed: Pi reads it locally on `desktop`, or retrieves it through the
+hardened `ssh desktop` alias when running elsewhere.
+
+### DeepSeek V4 Flash
 
 The r33 runtime supports exactly three reasoning-effort contracts. They are one model
 with a per-request Pi setting, not separate models:
@@ -100,6 +108,22 @@ before sending a prompt. Verify discovery without contacting the server:
 ```bash
 pi --list-models deepseek-v4-flash
 ```
+
+### Qwen3.8 27B
+
+Qwen runs text-only BF16 at its native 262,144-token context. Its checkpoint-native
+chat template accepts `low`, `medium`, and `xhigh` reasoning; Pi hides every other level
+and defaults new Qwen sessions to `xhigh`. The model-specific compatibility settings send
+one `system` role and map Pi's thinking state into `chat_template_kwargs` without changing
+DeepSeek's wire format.
+
+```bash
+pi --list-models qwen3.8-27b
+pi --model desktop-vllm/qwen3.8-27b:xhigh
+```
+
+The catalog is available before the server starts. Prompts work after either Qwen launcher
+has brought `qwen3.8-27b` up on port 8000.
 
 ## Child Model Routing
 

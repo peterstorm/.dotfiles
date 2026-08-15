@@ -31,11 +31,17 @@ KEYFILE="$CONFIG_DIR/api-key"
 ENVFILE="$CONFIG_DIR/container.env"
 install -m 700 -d "$CONFIG_DIR"
 
-# API key: prefer $VLLM_API_KEY, otherwise create and reuse a machine-local key.
+# API key: prefer $VLLM_API_KEY, otherwise reuse the workstation's existing
+# DeepSeek credential before generating one. Both models share :8000, so one
+# stable credential lets Pi switch models without changing provider auth.
 if [ -z "${VLLM_API_KEY:-}" ]; then
   if [ ! -f "$KEYFILE" ]; then
-    head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
-    chmod 600 "$KEYFILE"
+    if [ -r "$HOME/.config/ds4-flash/api-key" ]; then
+      install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"
+    else
+      head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
+      chmod 600 "$KEYFILE"
+    fi
   fi
   VLLM_API_KEY="$(cat "$KEYFILE")"
 fi

@@ -3,14 +3,7 @@
     "desktop-vllm": {
       "baseUrl": "http://192.168.0.80:8000/v1",
       "api": "openai-completions",
-      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'cat ~/.config/ds4-flash/api-key'; fi",
-      "compat": {
-        "supportsDeveloperRole": true,
-        "supportsReasoningEffort": true,
-        "maxTokensField": "max_tokens",
-        "requiresReasoningContentOnAssistantMessages": true,
-        "thinkingFormat": "deepseek"
-      },
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; else cat ~/.config/qwen38/api-key; fi'; fi",
       "models": [
         {
           "id": "deepseek-v4-flash",
@@ -33,6 +26,49 @@
             "output": 0,
             "cacheRead": 0,
             "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": true,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
+          "id": "qwen3.8-27b",
+          "name": "Qwen3.8 27B BF16 (local RTX workstation)",
+          "reasoning": true,
+          "defaultThinkingLevel": "xhigh",
+          "thinkingLevelMap": {
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": null,
+            "xhigh": "xhigh",
+            "max": null
+          },
+          "input": ["text"],
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": false,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "enable_thinking": { "$var": "thinking.enabled" },
+              "preserve_thinking": true,
+              "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
+            }
           }
         }
       ]

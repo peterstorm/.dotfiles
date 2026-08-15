@@ -933,10 +933,12 @@ bash scripts/run-qwen38-27b-bf16.sh
 docker logs -f qwen38-27b-bf16
 ```
 
-The launcher creates a persistent API key at `~/.config/qwen38/api-key`, passes it through
-a mode-0600 env file rather than Docker command arguments, and exposes the authenticated
-OpenAI-compatible API at `http://desktop:8000/v1`. The `/health` endpoint itself is not
-protected:
+The launcher keeps a persistent API key at `~/.config/qwen38/api-key`. On first launch it
+copies the existing DeepSeek endpoint key when available, so Pi authentication remains
+stable while switching models; otherwise it generates a new key. It passes the credential
+through a mode-0600 env file rather than Docker command arguments and exposes the
+authenticated OpenAI-compatible API at `http://desktop:8000/v1`. The `/health` endpoint
+itself is not protected:
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
@@ -1162,8 +1164,9 @@ bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
 docker logs -f qwen38-27b-bf16-dspark-sglang
 ```
 
-The script reuses `~/.config/qwen38/api-key`, so clients do not need a different Qwen
-credential when switching engines. SGLang only exposes API authentication as a CLI field;
+The script reuses `~/.config/qwen38/api-key`, initially seeded from DeepSeek's endpoint
+key when available, so clients do not need a different credential when switching models
+or engines. SGLang only exposes API authentication as a CLI field;
 `sglang-secure-entrypoint.py` reads `SGLANG_API_KEY` from a mode-0600 Docker env file,
 removes it from the inherited environment, and constructs SGLang's server arguments
 in-process. The key therefore does not appear in Docker's command array or
@@ -1377,18 +1380,27 @@ docker logs -f ds4-0731-r33
 ### Using the server from Pi
 
 The home-manager Pi role symlinks the tracked `pi/models.json` catalog to
-`~/.pi/agent/models.json`. It registers this endpoint as
-`desktop-vllm/deepseek-v4-flash` and resolves the API key without committing it: locally
-from `~/.config/ds4-flash/api-key` on this workstation, or over the `ssh desktop` alias
-from another configured machine.
+`~/.pi/agent/models.json`. It registers both models on the one mutually exclusive
+workstation endpoint:
 
-The model appears in `/model` even while the server is stopped. The server and LAN route
-only need to be available when a request is sent:
+- `desktop-vllm/deepseek-v4-flash`
+- `desktop-vllm/qwen3.8-27b`
+
+It resolves the shared API key without committing it: locally from the DeepSeek or Qwen
+key file on this workstation, or over the `ssh desktop` alias from another configured
+machine. Both models appear in `/model` even while the server is stopped. The matching
+server and LAN route only need to be available when a request is sent:
 
 ```bash
-pi --list-models deepseek-v4-flash
+pi --list-models desktop-vllm
 pi --model desktop-vllm/deepseek-v4-flash:high
+pi --model desktop-vllm/qwen3.8-27b:xhigh
 ```
+
+Qwen's catalog entry exposes only its native `low`, `medium`, and `xhigh` reasoning
+efforts, defaults to `xhigh`, sends a `system` role, and maps the selected effort into its
+checkpoint-native `chat_template_kwargs`. It declares the text-only launcher's native
+262,144-token context.
 
 DeepSeek 0731's `low`, `high`, and `max` reasoning contracts are request settings on the
 same loaded model, not separate checkpoints or containers. In Pi, select the model with

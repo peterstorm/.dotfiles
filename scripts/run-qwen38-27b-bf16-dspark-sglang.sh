@@ -52,15 +52,20 @@ KEYFILE="$CONFIG_DIR/api-key"
 ENVFILE="$CONFIG_DIR/sglang-dspark.env"
 install -m 700 -d "$CONFIG_DIR"
 
-# Reuse the Qwen endpoint key across vLLM and SGLang. Prefer $SGLANG_API_KEY,
-# then the existing $VLLM_API_KEY convention, otherwise create a machine-local key.
+# Reuse one workstation endpoint key across DeepSeek, Qwen vLLM, and Qwen
+# SGLang. Prefer explicit environment values, then seed Qwen's key from the
+# existing DeepSeek credential before generating a new machine-local key.
 if [ -z "${SGLANG_API_KEY:-}" ]; then
   SGLANG_API_KEY="${VLLM_API_KEY:-}"
 fi
 if [ -z "$SGLANG_API_KEY" ]; then
   if [ ! -f "$KEYFILE" ]; then
-    head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
-    chmod 600 "$KEYFILE"
+    if [ -r "$HOME/.config/ds4-flash/api-key" ]; then
+      install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"
+    else
+      head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
+      chmod 600 "$KEYFILE"
+    fi
   fi
   SGLANG_API_KEY="$(cat "$KEYFILE")"
 fi

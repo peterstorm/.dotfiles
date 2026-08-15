@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN="$ROOT/scripts/run-qwen38-27b-bf16.sh"
 DOWNLOAD="$ROOT/scripts/download-qwen38-27b.sh"
 DOC="$ROOT/docs/new-desktop-install.md"
+PI_MODELS="$ROOT/pi/models.json"
 IMAGE="vllm/vllm-openai:qwen38"
 DIGEST="sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e"
 MODEL_REV="1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -32,6 +33,7 @@ contains "$RUN" "DIGEST=\"$DIGEST\""
 contains "$RUN" 'NAME="qwen38-27b-bf16"'
 contains "$RUN" '--env-file "$ENVFILE"'
 contains "$RUN" "printf 'VLLM_API_KEY=%s\\n'"
+contains "$RUN" 'install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"'
 if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
   fail "$RUN exposes VLLM_API_KEY in process arguments"
 fi
@@ -59,4 +61,34 @@ contains "$DOC" "$IMAGE"
 contains "$DOC" "$DIGEST"
 contains "$DOC" "$MODEL_REV"
 
-printf 'PASS: Qwen3.8 BF16 release contract is internally consistent\n'
+jq -e '
+  .providers."desktop-vllm" as $provider |
+  ($provider.apiKey | contains("~/.config/qwen38/api-key")) and
+  ($provider.models | any(
+    .id == "deepseek-v4-flash" and .compat.thinkingFormat == "deepseek"
+  )) and
+  ($provider.models | any(
+    .id == "qwen3.8-27b" and
+    .defaultThinkingLevel == "xhigh" and
+    .contextWindow == 262144 and
+    .input == ["text"] and
+    .thinkingLevelMap == {
+      "off": null,
+      "minimal": null,
+      "low": "low",
+      "medium": "medium",
+      "high": null,
+      "xhigh": "xhigh",
+      "max": null
+    } and
+    .compat.supportsDeveloperRole == false and
+    .compat.thinkingFormat == "chat-template" and
+    .compat.chatTemplateKwargs == {
+      "enable_thinking": {"$var": "thinking.enabled"},
+      "preserve_thinking": true,
+      "reasoning_effort": {"$var": "thinking.effort", "omitWhenOff": true}
+    }
+  ))
+' "$PI_MODELS" >/dev/null || fail "Pi's desktop-vllm catalog does not expose the Qwen native-template contract"
+
+printf 'PASS: Qwen3.8 BF16 release and Pi model contracts are internally consistent\n'

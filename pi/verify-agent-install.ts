@@ -119,12 +119,19 @@ const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
         id?: string;
         defaultThinkingLevel?: string;
         thinkingLevelMap?: Record<string, string | null>;
+        contextWindow?: number;
+        compat?: {
+          supportsDeveloperRole?: boolean;
+          thinkingFormat?: string;
+          chatTemplateKwargs?: Record<string, unknown>;
+        };
       }>;
     }
   >;
 };
 const desktopProvider = modelsConfig.providers?.["desktop-vllm"];
 const deepSeek = desktopProvider?.models?.find((model) => model.id === "deepseek-v4-flash");
+const qwen = desktopProvider?.models?.find((model) => model.id === "qwen3.8-27b");
 if (desktopProvider?.baseUrl !== "http://192.168.0.80:8000/v1") {
   fail("desktop-vllm does not target the workstation's OpenAI-compatible endpoint");
 }
@@ -134,6 +141,31 @@ for (const level of ["low", "high", "max"] as const) {
   if (deepSeek.thinkingLevelMap?.[level] !== level) {
     fail(`deepseek-v4-flash does not expose the ${level} reasoning contract`);
   }
+}
+if (!qwen) fail("desktop-vllm is missing qwen3.8-27b");
+if (qwen.defaultThinkingLevel !== "xhigh") fail("qwen3.8-27b does not declare xhigh as its model default");
+if (qwen.contextWindow !== 262_144) fail("qwen3.8-27b does not declare its native 262K context");
+for (const level of ["low", "medium", "xhigh"] as const) {
+  if (qwen.thinkingLevelMap?.[level] !== level) {
+    fail(`qwen3.8-27b does not expose the ${level} reasoning contract`);
+  }
+}
+for (const level of ["off", "minimal", "high", "max"] as const) {
+  if (qwen.thinkingLevelMap?.[level] !== null) {
+    fail(`qwen3.8-27b does not hide unsupported ${level} reasoning`);
+  }
+}
+if (qwen.compat?.supportsDeveloperRole !== false || qwen.compat.thinkingFormat !== "chat-template") {
+  fail("qwen3.8-27b does not use its system-role native chat template contract");
+}
+const qwenTemplate = qwen.compat.chatTemplateKwargs;
+if (
+  JSON.stringify(qwenTemplate?.enable_thinking) !== JSON.stringify({ $var: "thinking.enabled" }) ||
+  qwenTemplate?.preserve_thinking !== true ||
+  JSON.stringify(qwenTemplate?.reasoning_effort) !==
+    JSON.stringify({ $var: "thinking.effort", omitWhenOff: true })
+) {
+  fail("qwen3.8-27b does not map Pi reasoning levels into Qwen chat-template kwargs");
 }
 
 const runtimeAgentDir = mkdtempSync(join(tmpdir(), "pi-routing-verify-"));
@@ -158,14 +190,18 @@ type RpcResponse = Readonly<{
   };
 }>;
 
-function runtimeThinkingLevel(extraArgs: readonly string[], includeModel: boolean = true): string | undefined {
+function runtimeThinkingLevel(
+  extraArgs: readonly string[],
+  includeModel: boolean = true,
+  model: string = "desktop-vllm/deepseek-v4-flash",
+): string | undefined {
   const result = spawnSync(
     "pi",
     [
       "--mode",
       "rpc",
       "--no-session",
-      ...(includeModel ? ["--model", "desktop-vllm/deepseek-v4-flash"] : []),
+      ...(includeModel ? ["--model", model] : []),
       ...extraArgs,
     ],
     {
@@ -180,7 +216,7 @@ function runtimeThinkingLevel(extraArgs: readonly string[], includeModel: boolea
     },
   );
   if (result.error || result.status !== 0) {
-    fail(`cannot inspect DeepSeek startup state: ${result.error?.message ?? result.stderr}`);
+    fail(`cannot inspect ${model} startup state: ${result.error?.message ?? result.stderr}`);
   }
   for (const line of result.stdout.split("\n")) {
     try {
@@ -285,6 +321,9 @@ async function thinkingAfterCycle(options: Readonly<{
 
 try {
   if (runtimeThinkingLevel([]) !== "max") fail("DeepSeek does not start at its max model default");
+  if (runtimeThinkingLevel([], true, "desktop-vllm/qwen3.8-27b") !== "xhigh") {
+    fail("Qwen does not start at its xhigh model default");
+  }
   const settingsAfterModelDefault = JSON.parse(readFileSync(join(runtimeAgentDir, "settings.json"), "utf8")) as {
     defaultThinkingLevel?: string;
   };
@@ -569,7 +608,7 @@ if (designer) {
 }
 
 process.stdout.write(
-  `Pi install verified: DeepSeek model catalog and local-aware routing, Obsidian skill, ${discovered.length} agents, ` +
+  `Pi install verified: DeepSeek/Qwen model catalog and local-aware routing, Obsidian skill, ${discovered.length} agents, ` +
     `${packageAgentDirs.length} package agent dir(s), ${renderedAgents.size} current Loom render(s), ` +
     `panel roster available.\n`,
 );
