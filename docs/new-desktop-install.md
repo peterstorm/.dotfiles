@@ -878,6 +878,226 @@ expandable segments, "because the shared host region requires stable registratio
 So if you enable native KV offload and something else in your environment
 has turned expandable segments on, the two are fighting over the same allocator.
 
+## Running Qwen3.8-27B BF16 on vLLM
+
+A quality-first local profile for the two RTX PRO 6000 Blackwell cards. Qwen3.8-27B is a
+27.8B-parameter dense hybrid Gated DeltaNet model with a vision tower, native 262,144-token
+context, tiered reasoning, and an in-checkpoint MTP head. This profile deliberately serves
+the unquantized BF16 checkpoint across both cards with BF16 attention KV and the model's
+FP32 GDN recurrent state. It is a researched launch baseline, not yet a measured receipt
+from this machine.
+
+Primary references:
+
+- [Qwen/Qwen3.8-27B model card](https://huggingface.co/Qwen/Qwen3.8-27B)
+- [vLLM Qwen3.8-27B recipe](https://github.com/vllm-project/recipes/blob/002576894984c12e203bb25421635fbb3f408e9d/models/Qwen/Qwen3.8-27B.yaml)
+- [vLLM recipe validation PR #805](https://github.com/vllm-project/recipes/pull/805)
+- [Open GDN speculative-decoding safety fix #50021](https://github.com/vllm-project/vllm/pull/50021)
+
+| Item | Value |
+|---|---|
+| Image | `vllm/vllm-openai:qwen38` |
+| AMD64 registry digest | `sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e` |
+| Image source label | `3a0914114705fa38d4c3171d0746c1a6b6f10209` (special vLLM recipe build; not an upstream public commit) |
+| Model | `Qwen/Qwen3.8-27B` |
+| Model revision | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` |
+| Weight footprint | 55,563,006,776 bytes (51.7 GiB), including the vision-language checkpoint |
+| Default profile | TP2, BF16 weights/KV, FP32 GDN state, text-only, native 262K context, eight scheduler slots |
+| Reasoning/tools | Native template, `qwen3` reasoning parser, `qwen3_coder` tool parser, xhigh default |
+| Speculative decoding | Disabled pending the upstream GDN accepted-token bounds fix |
+
+### Download and launch
+
+The downloader is pinned, resumable, and uses Hugging Face Xet from a throwaway Python
+container. It writes the checkpoint directly to `/models/Qwen3.8-27B`:
+
+```bash
+bash scripts/download-qwen38-27b.sh
+docker logs -f qwen38-model-dl
+```
+
+Wait for `DOWNLOAD_COMPLETE`, then stop whichever model currently owns port 8000. For the
+DeepSeek deployment documented below:
+
+```bash
+docker stop ds4-0731-r33
+```
+
+Go headless before launch so X does not retain GPU memory:
+
+```bash
+sudo systemctl stop display-manager
+nvidia-smi --query-gpu=index,memory.used --format=csv
+bash scripts/run-qwen38-27b-bf16.sh
+docker logs -f qwen38-27b-bf16
+```
+
+The launcher creates a persistent API key at `~/.config/qwen38/api-key`, passes it through
+a mode-0600 env file rather than Docker command arguments, and exposes the authenticated
+OpenAI-compatible API at `http://desktop:8000/v1`. The `/health` endpoint itself is not
+protected:
+
+```bash
+curl -fsS http://127.0.0.1:8000/health
+```
+
+Authenticated reasoning/tool probe:
+
+```bash
+KEY="$(cat ~/.config/qwen38/api-key)"
+curl -fsS http://127.0.0.1:8000/v1/chat/completions \
+  -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "qwen3.8-27b",
+    "messages": [{"role": "user", "content": "Reply with exactly OK."}],
+    "max_tokens": 2048,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "chat_template_kwargs": {
+      "enable_thinking": true,
+      "preserve_thinking": true
+    },
+    "reasoning_effort": "low"
+  }' | jq
+```
+
+To switch back, stop Qwen and run the pinned DeepSeek launcher. Its launcher recreates its
+own container and reclaims port 8000:
+
+```bash
+docker stop qwen38-27b-bf16
+bash scripts/run-ds4-v20-r33.sh
+```
+
+### Why BF16 TP2
+
+The checkpoint fits on one 96 GiB card, but this profile optimizes for answer fidelity and
+shared context capacity rather than aggregate replica throughput. TP2 shards roughly 51.7
+GiB of weights across both cards, leaving substantially more memory per card for BF16 KV,
+GDN recurrent states, activations, and eight concurrent scheduler slots. The valid TP set
+for this architecture includes 1, 2, 4, and 8; its 24 attention heads divide cleanly at
+TP2.
+
+This is intentionally different from an FP8/DP2 throughput profile:
+
+| Profile | Weight fidelity | KV fidelity | Expected strength |
+|---|---|---|---|
+| **BF16 TP2 (this runbook)** | Reference | Reference | Highest quality and greatest BF16 cache headroom |
+| BF16 DP2 | Reference | Depends on KV setting | Greater aggregate throughput, less cache per replica |
+| FP8 DP2 | Quantized | Usually FP8 | Maximum throughput and context capacity |
+
+Do not infer a quality delta that has not been measured: the official FP8 checkpoint may
+be close to BF16, but the release does not publish a controlled BF16-versus-FP8 coding
+comparison. BF16 is chosen because it removes that uncertainty and the cards can afford it.
+
+### Scheduler and cache profile
+
+The launcher defaults remain overrideable without editing it:
+
+```text
+MAX_MODEL_LEN=262144
+MAX_NUM_SEQS=8
+MAX_NUM_BATCHED_TOKENS=4096
+GPU_MEMORY_UTILIZATION=0.92
+```
+
+For example:
+
+```bash
+MAX_NUM_SEQS=4 GPU_MEMORY_UTILIZATION=0.94 \
+  bash scripts/run-qwen38-27b-bf16.sh
+```
+
+`MAX_NUM_SEQS=8` admits eight active requests; it does not reserve eight 262K caches.
+vLLM allocates paged cache blocks dynamically. The full-attention part alone uses 65,536
+bytes per token in BF16 before TP sharding; Qwen3.8 also has 48 GDN layers whose recurrent
+state is accounted for separately. Therefore eight simultaneous ~130K coding contexts
+must be pressure-tested on this machine before being called supported.
+
+`--kv-cache-dtype auto` preserves the checkpoint's BF16 attention KV dtype, while
+`--mamba-ssm-cache-dtype float32` explicitly preserves the checkpoint's declared GDN state
+dtype. Do not silently change either while calling this the reference-fidelity profile.
+`--language-model-only` omits the vision encoder to reserve memory for text-agent contexts;
+remove that flag and change client metadata before claiming image support.
+
+Prefix caching and chunked prefill are enabled because coding agents repeatedly share a
+large system/tool prefix and long prefills should not monopolize a decode iteration. The
+4,096-token batching ceiling is the initial latency/capacity compromise; benchmark 2,048
+and 8,192 only after the baseline is stable.
+
+### Native chat template and sampling
+
+Do not mount a Qwen3.5/3.6, Hermes, or custom coding template. The checkpoint-native
+Qwen3.8 template owns these contracts:
+
+- thinking enabled by default;
+- `reasoning_effort` values `low`, `medium`, and `xhigh` (default);
+- `preserve_thinking=true` by default for multi-turn replay;
+- `<think>...</think>` reasoning parsed by `--reasoning-parser qwen3`;
+- `<tool_call><function=...><parameter=...>` tool XML parsed by
+  `--tool-call-parser qwen3_coder`;
+- one initial `system` role, not an OpenAI `developer` role.
+
+The launcher pins Qwen's thinking-mode sampler:
+
+```text
+temperature=1.0
+top_p=0.95
+top_k=20
+min_p=0.0
+presence_penalty=0.0
+repetition_penalty=1.0
+```
+
+Non-thinking mode requires a different sampler (`temperature=0.7`, `top_p=0.80`,
+`presence_penalty=1.5`). Do not expose an on/off toggle in a client unless the client also
+switches those sampling values; `low`, `medium`, and `xhigh` all use the thinking sampler.
+
+### Why MTP is off
+
+The checkpoint contains a one-layer MTP draft head, and the official vLLM recipe uses:
+
+```text
+--speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+```
+
+It is not in the launch script yet. As of 2026-08-15, vLLM PR #50021 remains open. It
+bounds accepted-token-derived state indexes that can otherwise produce GPU address faults
+in hybrid GDN speculative decoding under agent-shaped traffic. Short release validation
+and good acceptance rates do not close that long-running safety gap. Add MTP only after a
+pinned image demonstrably contains the fix, then run the complete stress/soak gate. Do not
+use the older `qwen3_next_mtp` method or an unmeasured five-token depth.
+
+### Native 262K versus YaRN 1M
+
+The default is the model's native 262,144-token context. One million tokens is not enabled
+by merely raising `--max-model-len`; it requires the model card's nested static-YaRN
+configuration and `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1`. Static YaRN can reduce short-context
+quality, and a 1M envelope competes directly with eight-agent cache capacity. Keep it as a
+separate future profile rather than changing this quality baseline.
+
+### First-machine validation gate
+
+Do not label the profile validated until all of these pass on the desktop:
+
+1. Cold boot reaches `Application startup complete` with both GPUs visible and no restarts.
+2. `/health`, authenticated text generation, low/medium/xhigh reasoning, and a real tool
+   round trip all succeed using the native template.
+3. A 262K allocation starts without OOM; a unique-prose needle ladder verifies useful
+   recall rather than only allocation.
+4. Eight overlapping agent-shaped requests become active without preemption, cache
+   corruption, empty completions, or output-cap exhaustion.
+5. A sustained multi-turn tool-use soak records zero CUDA faults, Xids, deadlocks, and
+   container restarts.
+6. BF16 TP2 is benchmarked against BF16 TP1 and FP8 only after correctness is established.
+
+The static repository contract is checked with:
+
+```bash
+bash tests/qwen38-release-contract.sh
+```
+
 ## Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)
 
 Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v20-r33.md>
