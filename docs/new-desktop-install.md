@@ -1171,8 +1171,9 @@ key when available, so clients do not need a different credential when switching
 or engines. SGLang only exposes API authentication as a CLI field;
 `sglang-secure-entrypoint.py` reads `SGLANG_API_KEY` from a mode-0600 Docker env file,
 removes it from the inherited environment, and constructs SGLang's server arguments
-in-process. The key therefore does not appear in Docker's command array or
-`/proc/<pid>/cmdline`.
+in-process. It wraps the parsed credential in a string-compatible redacted value before
+SGLang logs its startup arguments. The key therefore does not appear in Docker's command
+array, `/proc/<pid>/cmdline`, or the `server_args` startup log.
 
 Authenticated health and generation probes:
 

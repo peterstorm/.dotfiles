@@ -124,7 +124,7 @@ docker run -d --init \
   --mamba-ssm-dtype float32 \
   --mamba-radix-cache-strategy extra_buffer \
   --max-mamba-cache-size "$MAX_MAMBA_CACHE_SIZE" \
-  --language-model-only \
+  --language-only \
   --attention-backend flashinfer \
   --cuda-graph-max-bs-decode "$MAX_RUNNING_REQUESTS" \
   --speculative-algorithm DSPARK \

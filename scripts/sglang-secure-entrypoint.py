@@ -17,6 +17,13 @@ from sglang.srt.server_args import prepare_server_args
 from sglang.srt.utils import kill_process_tree
 
 
+class RedactedSecret(str):
+    """String-compatible secret whose diagnostic representation is always masked."""
+
+    def __repr__(self) -> str:
+        return "'<redacted>'"
+
+
 def main() -> None:
     cli_args = sys.argv[1:]
     if any(arg == "--api-key" or arg.startswith("--api-key=") for arg in cli_args):
@@ -28,6 +35,9 @@ def main() -> None:
 
     load_plugins()
     server_args = prepare_server_args([*cli_args, "--api-key", api_key])
+    server_args = server_args.derive(
+        "secure-entrypoint-redaction", api_key=RedactedSecret(server_args.api_key)
+    )
     try:
         run_server(server_args)
     finally:
