@@ -142,11 +142,11 @@ def render(days, out_path):
     total_gen = int(sum(days.values()))
     total_prompt = int(sum(float(r[2] or 0) for r in rows))
     total_req = int(sum(float(r[4] or 0) for r in rows))
-    valid_timestamps = [int(r[0]) for r in rows if r and r[0].isdigit()]
-    last_recorded = (
-        dt.datetime.fromtimestamp(max(valid_timestamps)).strftime("%d %b %Y %H:%M")
-        if valid_timestamps else "never"
-    )
+    timestamped_rows = [r for r in rows if len(r) > 1 and r[0].isdigit()]
+    latest_row = max(timestamped_rows, key=lambda row: int(row[0])) if timestamped_rows else None
+    # Use the ledger's recorded local-time text rather than the renderer's
+    # timezone; containerized one-off renders may otherwise display UTC.
+    last_recorded = latest_row[1] if latest_row else "never"
     last7 = int(sum(days.get(today - dt.timedelta(days=i), 0) for i in range(7)))
     last30 = int(sum(days.get(today - dt.timedelta(days=i), 0) for i in range(30)))
     longest, current = streaks(days)

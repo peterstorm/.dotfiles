@@ -105,8 +105,7 @@ class HeatmapTest(unittest.TestCase):
                 page = output.read_text()
                 self.assertIn("Local inference token usage", page)
                 self.assertIn("all engines and models", page)
-                expected = heatmap.dt.datetime.fromtimestamp(1700000000).strftime("%d %b %Y %H:%M")
-                self.assertIn(f"ledger last recorded {expected}", page)
+                self.assertIn("ledger last recorded 2023-11-14 22:13:20", page)
                 self.assertIn("detects vLLM and SGLang", page)
             finally:
                 heatmap.DIR = old_dir
