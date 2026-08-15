@@ -3,6 +3,12 @@ keys:
   - &hansen142 age19sy7rulauhrkn2snk9g52cazt0ujs2ux9pf0k85r9p4mhwa3jqrsa7326q
   - &homelab age1p6c59j97s0nf6enr4fmwnhwn508s92eyvwtc2wmd24wkpecr3drshgt0n2
 creation_rules:
+  # Company-laptop Cloudflare credentials never need to be decrypted on homelab.
+  - path_regex: secrets/users/hansen142/cloudflare-access\.yaml$
+    key_groups:
+    - age:
+      - *peterstorm
+      - *hansen142
   # ArgoCD homelab app secrets (ksops)
   - path_regex: k8s/argocd-homelab/.*\.enc\.(yaml|json)$
     key_groups:

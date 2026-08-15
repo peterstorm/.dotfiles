@@ -1,0 +1,75 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: local-inference-runtime-normalization
+  labels:
+    release: {{ .Release.Name | quote }}
+spec:
+  groups:
+    - name: local-inference-runtime-normalization
+      interval: 15s
+      rules:
+        # Stable dashboard contract. Runtime-specific names belong only here.
+        # The engine label is part of every normalized series identity so a
+        # same-model runtime switch can never splice unrelated counters.
+        - record: inference:prompt_tokens_total
+          expr: >-
+            label_replace(vllm:prompt_tokens_total, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:prompt_tokens_total, "engine", "sglang", "__name__", ".*")
+        - record: inference:generation_tokens_total
+          expr: >-
+            label_replace(vllm:generation_tokens_total, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:generation_tokens_total, "engine", "sglang", "__name__", ".*")
+        - record: inference:request_success_total
+          expr: >-
+            label_replace(vllm:request_success_total,
+            "engine", "vllm", "__name__", ".*")
+            or label_replace(
+            label_replace(sglang:generation_tokens_histogram_count,
+            "finished_reason", "completed", "model_name", ".*"),
+            "engine", "sglang", "__name__", ".*")
+        - record: inference:num_requests_running
+          expr: >-
+            label_replace(vllm:num_requests_running, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:num_running_reqs, "engine", "sglang", "__name__", ".*")
+        - record: inference:num_requests_waiting
+          expr: >-
+            label_replace(vllm:num_requests_waiting, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:num_queue_reqs, "engine", "sglang", "__name__", ".*")
+        - record: inference:kv_cache_usage_ratio
+          expr: >-
+            label_replace(vllm:kv_cache_usage_perc, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:token_usage, "engine", "sglang", "__name__", ".*")
+        - record: inference:e2e_request_latency_seconds_bucket
+          expr: >-
+            label_replace(vllm:e2e_request_latency_seconds_bucket, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:e2e_request_latency_seconds_bucket, "engine", "sglang", "__name__", ".*")
+        - record: inference:time_to_first_token_seconds_bucket
+          expr: >-
+            label_replace(vllm:time_to_first_token_seconds_bucket, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:time_to_first_token_seconds_bucket, "engine", "sglang", "__name__", ".*")
+        - record: inference:inter_token_latency_seconds_bucket
+          expr: >-
+            label_replace(vllm:time_per_output_token_seconds_bucket, "engine", "vllm", "__name__", ".*")
+            or label_replace(sglang:inter_token_latency_seconds_bucket, "engine", "sglang", "__name__", ".*")
+        - record: inference:prefix_cache_hit_ratio
+          expr: >-
+            label_replace(
+            rate(vllm:prefix_cache_hits_total[5m])
+            / clamp_min(rate(vllm:prefix_cache_queries_total[5m]), 1e-9),
+            "engine", "vllm", "model_name", ".*")
+            or label_replace(sglang:cache_hit_rate,
+            "engine", "sglang", "__name__", ".*")
+
+        # SGLang speculative-decoding and hybrid-state observability. These
+        # series are simply absent for engines that do not expose the feature.
+        - record: inference:spec_accept_length
+          expr: label_replace(sglang:spec_accept_length, "engine", "sglang", "__name__", ".*")
+        - record: inference:spec_accept_rate
+          expr: label_replace(sglang:spec_accept_rate, "engine", "sglang", "__name__", ".*")
+        - record: inference:spec_verify_calls_total
+          expr: label_replace(sglang:spec_verify_calls_total, "engine", "sglang", "__name__", ".*")
+        - record: inference:spec_num_draft_tokens
+          expr: label_replace(sglang:spec_num_draft_tokens, "engine", "sglang", "__name__", ".*")
+        - record: inference:mamba_usage_ratio
+          expr: label_replace(sglang:mamba_usage, "engine", "sglang", "__name__", ".*")

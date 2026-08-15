@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""GitHub-style calendar heatmap of vLLM token usage.
+"""GitHub-style calendar heatmap of local inference token usage.
 
-Reads the ledger written by vllm-stats-record.py (per-interval token deltas)
+Reads the engine-neutral ledger written by vllm-stats-record.py (per-interval token deltas)
 and renders a self-contained static HTML page: generation tokens per day as a
 GitHub-style contribution calendar, a last-14-days bar list, lifetime stats,
 and explainers so the numbers can't be mistaken.
@@ -138,9 +138,15 @@ def render(days, out_path):
     step = cell + gap
     svg_w = len(weeks) * step + 40
 
+    rows = csv_rows()
     total_gen = int(sum(days.values()))
-    total_prompt = int(sum(float(r[2] or 0) for r in csv_rows()))
-    total_req = int(sum(float(r[4] or 0) for r in csv_rows()))
+    total_prompt = int(sum(float(r[2] or 0) for r in rows))
+    total_req = int(sum(float(r[4] or 0) for r in rows))
+    valid_timestamps = [int(r[0]) for r in rows if r and r[0].isdigit()]
+    last_recorded = (
+        dt.datetime.fromtimestamp(max(valid_timestamps)).strftime("%d %b %Y %H:%M")
+        if valid_timestamps else "never"
+    )
     last7 = int(sum(days.get(today - dt.timedelta(days=i), 0) for i in range(7)))
     last30 = int(sum(days.get(today - dt.timedelta(days=i), 0) for i in range(30)))
     longest, current = streaks(days)
@@ -197,7 +203,7 @@ def render(days, out_path):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>vLLM token usage — desktop</title>
+<title>Local inference token usage — desktop</title>
 <style>
   body {{ font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
          background: #0d1117; color: #e6edf3; margin: 0; padding: 40px 24px; }}
@@ -239,8 +245,8 @@ def render(days, out_path):
 </head>
 <body>
 <main>
-  <h1>vLLM token usage <span style="color:#8b949e;font-weight:400">— desktop (all vLLM models)</span></h1>
-  <div class="sub">Durable ledger, written to /var/lib/vllm-stats/stats.csv every 15 min · generated {dt.datetime.now().strftime('%d %b %Y %H:%M')}</div>
+  <h1>Local inference token usage <span style="color:#8b949e;font-weight:400">— desktop (all engines and models)</span></h1>
+  <div class="sub">Durable ledger, written to /var/lib/vllm-stats/stats.csv every 15 min · ledger last recorded {last_recorded} · page refreshed {dt.datetime.now().strftime('%d %b %Y %H:%M')}</div>
   <div class="sub">Calendar: generated tokens per day (darker = more). Hover any square for the exact count.</div>
 
   {stats_html}
@@ -255,7 +261,7 @@ def render(days, out_path):
   <div class="explain">
     <h2>Reading the numbers</h2>
     <p><b>What this page is:</b> once a day's square is dark, some output tokens were generated that day. The calendar shows at most the last 12 months; all-time totals are in the cards (hover them for definitions). It's the same data Grafana shows, but with a different baseline:</p>
-    <p><b>Why the totals differ from Grafana:</b> Grafana reads vLLM's own /metrics counters, which <i>reset to zero every time the vLLM container restarts</i>. This ledger records every 15-minute delta to disk and never resets; when it started (12 Aug 2026, ~20:45) it <b>backfilled the container's existing counter totals as a single row</b>, so lifetime numbers line up with vLLM's own counters. After a container restart, Grafana's totals start over while the ledger keeps counting — that's its job.</p>
+    <p><b>Why the totals differ from Grafana:</b> Grafana reads the active engine's live /metrics counters, which <i>reset whenever its container restarts or the runtime changes</i>. This ledger detects vLLM and SGLang, records every 15-minute delta to disk, and never resets. When it started (12 Aug 2026, ~20:45) it <b>backfilled the active container's counters as a single row</b>. After a restart or engine switch, Grafana's process totals start over while the ledger keeps counting — that's its job.</p>
     <p><b>Streak:</b> a day counts when at least one generation token was produced. Current streak ends today; if today is still empty it may not have started yet.</p>
     <p class="sub">Raw data: /var/lib/vllm-stats/stats.csv on desktop — one row per 15 minutes: <code>timestamp, local time, prompt tokens, generation tokens, requests</code>.</p>
   </div>

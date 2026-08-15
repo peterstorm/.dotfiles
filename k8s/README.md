@@ -127,7 +127,7 @@ because there is no public path to protect. They work from two places —
 | Transmission | https://transmission.peterstorm.io | Cilium ingress `192.168.0.242` |
 | Plex | http://plex.peterstorm.io:32400 | dedicated LB `192.168.0.241` |
 | vLLM inference | http://vllm.peterstorm.io:8000 | `desktop` `192.168.0.80` |
-| vLLM stats heatmap | http://vllm-stats.peterstorm.io:8090 | `desktop` `192.168.0.80` |
+| Inference stats heatmap | http://vllm-stats.peterstorm.io:8090 | `desktop` `192.168.0.80` |
 
 ### Access-gated — proxied CNAME behind a Cloudflare Access policy
 
@@ -334,12 +334,13 @@ When deploying on a node that previously ran flannel/kube-proxy (or any prior CN
 6. **Kubeconfig** — terraform providers must use `/etc/rancher/k3s/k3s.yaml` directly,
    not a stale copy at `~/.kube/config`. k3s rotates certs on restart.
 
-## vLLM monitoring (desktop)
+## Local inference monitoring (desktop)
 
-The `monitoring/` app scrapes the vLLM instance on `desktop` (`192.168.0.80:8000/metrics`, see `monitoring/values.yaml` → `prometheusSpec.additionalScrapeConfigs`). The dashboard `monitoring/dashboard-vllm.json` is auto-provisioned into Grafana via the sidecar ConfigMap (`monitoring/templates/dashboard-vllm.yaml`, label `grafana_dashboard=1`).
+The `monitoring/` app scrapes whichever inference engine owns `desktop:8000/metrics` (currently vLLM or SGLang; see `monitoring/values.yaml` → `prometheusSpec.additionalScrapeConfigs`). `monitoring/templates/inference-recording-rules.yaml` normalizes engine-specific names into a stable `inference:*` contract. The dashboard `monitoring/dashboard-vllm.json` consumes that contract and is auto-provisioned into Grafana via the sidecar ConfigMap (`monitoring/templates/dashboard-vllm.yaml`, label `grafana_dashboard=1`). Raw vLLM fallbacks preserve pre-normalization history.
 
 - Verify scraping: Grafana → Explore → `up{job="vllm-desktop"}` should be 1
-- vLLM counters reset on container restart; Prometheus `rate()`/`increase()` handle that transparently, so graphs stay continuous
+- Engine counters reset on container restart or runtime switch; Prometheus `rate()`/`increase()` handle process resets while the durable ledger below preserves lifetime totals
+- SGLang DSpark adds acceptance length/rate, verification-rate, and Mamba-state panels; those panels are absent rather than zero for runtimes without those features
 - Storage: PVC on `local-path` (thin-provisioned, claim 10Gi) + `retentionSize: 9GiB (B suffix required by CRD regex)` — Prometheus auto-deletes oldest blocks past 9Gi, so it can never fill the node disk; `retention: 30d`
 - Check homelab disk has room to grow (run from a machine that has SSH keys for it, e.g. laptop):
   ```bash
@@ -349,22 +350,22 @@ The `monitoring/` app scrapes the vLLM instance on `desktop` (`192.168.0.80:8000
 
 ### Lifetime token ledger (survives everything)
 
-Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only ledger: `systemd.timers.vllm-stats-record` (`machines/desktop/default.nix`) runs every 15 min, scrapes `127.0.0.1:8000/metrics`, appends deltas (handling counter resets) to `/var/lib/vllm-stats/stats.csv`, and re-renders a GitHub-style heatmap to `/var/lib/vllm-stats/heatmap/index.html`. Scripts: `scripts/vllm-stats-record.py`, `scripts/vllm-stats-heatmap.py`.
+Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only ledger: `systemd.timers.vllm-stats-record` (`machines/desktop/default.nix`) runs every 15 min, detects the vLLM or SGLang metric schema at `127.0.0.1:8000/metrics`, appends logical token/request deltas (handling restarts and engine switches) to `/var/lib/vllm-stats/stats.csv`, and re-renders a GitHub-style heatmap to `/var/lib/vllm-stats/heatmap/index.html`. Per-endpoint baselines survive partial outages, and a pending-interval journal makes CSV/state commits recoverable without loss or duplication. Scripts: `scripts/vllm-stats-record.py`, `scripts/vllm-stats-heatmap.py`.
 
 - Activate on desktop: commit the new `scripts/` files (flake requires tracked files), then `nixos-rebuild switch --flake .#desktop` + `sudo systemctl start vllm-stats-record.timer` (first run only seeds the baseline)
 - Serving: `systemd.services.vllm-stats-http` serves the heatmap dir on :8090 (firewall-opened). DNS: `vllm-stats.peterstorm.io` is an unproxied A record → `192.168.0.80` (`terraform-homelab/cloudflare/main.tf`), so it is reachable on the LAN and via WARP but not from the internet. It was formerly a proxied tunnel CNAME, which published the heatmap publicly. LAN: http://192.168.0.80:8090 direct.
 - View the heatmap: `scp desktop:/var/lib/vllm-stats/heatmap/index.html .` and open it, or serve the dir
 - Quick re-run: `sudo systemctl start vllm-stats-record.service` (logs to journald)
 
-### Adding another model (e.g. Qwen 27B)
+### Adding another model or runtime
 
-Everything keys off the `model_name` label in vLLM's metrics. A new model in the **same container** needs nothing. A **separate container on a new port** needs:
+The Grafana contract keys off `model_name` after normalizing runtime-specific metrics. A new model in the **same engine schema** needs nothing. A new engine on the existing exclusive port needs one mapping in `inference-recording-rules.yaml` and `COUNTER_SCHEMAS` in `vllm-stats-record.py`. A **separate concurrent endpoint on a new port** additionally needs:
 
 1. A launch script (mirror `scripts/run-ds4-v20-r33.sh`, different `PORT` + `SERVED_MODEL_NAME`)
 2. Firewall: add the port to `networking.firewall.allowedTCPPorts` in `machines/desktop/default.nix`
 3. Ledger: add the URL to `VLLM_METRICS_URLS` (whitespace-separated) in `systemd.services.vllm-stats-record` — per-endpoint baselines means a restart of one container never disturbs the other's accounting; the new endpoint seeds its baseline on the next run
 4. Prometheus: add a `- targets: ["192.168.0.80:8001"]` static target in `monitoring/values.yaml` → `additionalScrapeConfigs`
-5. Grafana: nothing — the `$model` dashboard variable auto-populates from `label_values(...)`
+5. Grafana: add the new raw metric family to the model-variable fallback only if its normalized recording rule can be delayed during rollout
 6. pi: add a provider/model entry in `pi/models.json`
 
 ## Troubleshooting
