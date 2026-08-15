@@ -75,8 +75,16 @@ fi
 printf 'SGLANG_API_KEY=%s\n' "$SGLANG_API_KEY" > "$ENVFILE"
 chmod 600 "$ENVFILE"
 
-sudo mkdir -p "$CACHE_HOST"
-sudo chown "$USER:users" "$CACHE_HOST"
+# First launch may need privilege to create the ZFS-backed cache root. Once it
+# exists, relaunches (including the download-completion user unit) stay unprivileged.
+if [ ! -d "$CACHE_HOST" ]; then
+  sudo mkdir -p "$CACHE_HOST"
+  sudo chown "$USER:users" "$CACHE_HOST"
+fi
+if [ ! -w "$CACHE_HOST" ]; then
+  echo "error: cache directory is not writable: $CACHE_HOST" >&2
+  exit 1
+fi
 
 docker rm -f "$NAME" 2>/dev/null || true
 if command -v ss >/dev/null 2>&1 && ss -H -ltn 'sport = :8000' | grep -q .; then

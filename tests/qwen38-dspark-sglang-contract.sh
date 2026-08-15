@@ -37,6 +37,8 @@ contains "$RUN" "IMAGE=\"$IMAGE\""
 contains "$RUN" "DIGEST=\"$DIGEST\""
 contains "$RUN" 'NAME="qwen38-27b-bf16-dspark-sglang"'
 contains "$RUN" '--env-file "$ENVFILE"'
+contains "$RUN" 'if [ ! -d "$CACHE_HOST" ]; then'
+contains "$RUN" 'if [ ! -w "$CACHE_HOST" ]; then'
 contains "$RUN" "printf 'SGLANG_API_KEY=%s\\n'"
 contains "$RUN" 'install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"'
 contains "$RUN" '-e SGLANG_RAGGED_VERIFY_MODE=static'
