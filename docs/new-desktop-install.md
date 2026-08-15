@@ -909,8 +909,10 @@ Primary references:
 
 ### Download and launch
 
-The downloader is pinned, resumable, and uses Hugging Face Xet from a throwaway Python
-container. It writes the checkpoint directly to `/models/Qwen3.8-27B`:
+The downloader is pinned and resumable, and uses Hugging Face's standard HTTP backend from
+a throwaway Python container. Xet is deliberately disabled: `hf-xet` 1.6.0 hung at 0% on
+both large checkpoints on this machine while direct Hub HTTPS remained healthy. It writes
+the checkpoint directly to `/models/Qwen3.8-27B`:
 
 ```bash
 bash scripts/download-qwen38-27b.sh

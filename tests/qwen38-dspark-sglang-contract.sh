@@ -69,6 +69,10 @@ if grep -Fq -- '--chat-template ' "$RUN"; then
 fi
 contains "$DOWNLOAD_TARGET" "REV=\"$TARGET_REV\""
 contains "$DOWNLOAD_DRAFT" "REV=\"$DRAFT_REV\""
+contains "$DOWNLOAD_DRAFT" 'export HF_HUB_DISABLE_XET=1'
+if grep -Fq 'HF_XET_HIGH_PERFORMANCE' "$DOWNLOAD_DRAFT"; then
+  fail "$DOWNLOAD_DRAFT re-enables the Xet backend that hangs on this workstation"
+fi
 contains "$DOC" 'Experimental Qwen3.8-27B DSpark on SGLang'
 contains "$DOC" "$IMAGE"
 contains "$DOC" "$DIGEST"

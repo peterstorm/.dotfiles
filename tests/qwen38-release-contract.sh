@@ -56,6 +56,10 @@ if grep -Fq -- '--chat-template' "$RUN"; then
   fail "$RUN overrides the checkpoint-native Qwen3.8 chat template"
 fi
 contains "$DOWNLOAD" "REV=\"$MODEL_REV\""
+contains "$DOWNLOAD" 'export HF_HUB_DISABLE_XET=1'
+if grep -Fq 'HF_XET_HIGH_PERFORMANCE' "$DOWNLOAD"; then
+  fail "$DOWNLOAD re-enables the Xet backend that hangs on this workstation"
+fi
 contains "$DOC" 'Running Qwen3.8-27B BF16 on vLLM'
 contains "$DOC" "$IMAGE"
 contains "$DOC" "$DIGEST"

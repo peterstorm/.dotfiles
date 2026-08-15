@@ -18,8 +18,10 @@ sudo chown "$USER:users" "$DEST"
 
 cat > /tmp/qwen38-dspark-dl.sh <<EOF
 set -e
-pip install -q 'huggingface_hub[hf_xet]'
-export HF_XET_HIGH_PERFORMANCE=1
+pip install -q huggingface_hub
+# hf-xet 1.6.0 was observed hanging indefinitely at 0% on this machine while
+# direct Hub HTTPS remained healthy. Force the standard resumable HTTP backend.
+export HF_HUB_DISABLE_XET=1
 hf download "$REPO" --revision "$REV" --local-dir "$DEST"
 echo DOWNLOAD_COMPLETE
 EOF
