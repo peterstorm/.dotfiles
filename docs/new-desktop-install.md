@@ -1275,7 +1275,9 @@ is calculated as a rolling five-minute, token-weighted ratio from
 `prefill_effective_tokens_total`; its instantaneous `cache_hit_rate` gauge is not suitable
 for a dashboard because idle or miss-only log intervals overwrite it with zero. The
 recording rule leaves no-prefill windows empty while preserving a real 0% for active,
-miss-only traffic. KV-cache occupancy and prefix-cache effectiveness are displayed
+miss-only traffic. Its `calculation="token_weighted_5m"` label prevents incompatible
+pre-correction gauge history from joining the new series. KV-cache occupancy and
+prefix-cache effectiveness are displayed
 separately because their healthy directions are opposite. The durable recorder performs
 the same schema detection before
 writing logical token/request deltas, so switching exclusive port 8000 between vLLM and

@@ -646,7 +646,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(max(inference:prefix_cache_hit_ratio{model_name=~\"$model\"}) * 100) or ((100 * (rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) or (0 * rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]))) / rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval])) and (rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]) > 0))",
+          "expr": "(max(inference:prefix_cache_hit_ratio{calculation=\"token_weighted_5m\",model_name=~\"$model\"}) * 100) or max(((100 * (rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) or (0 * rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]))) / rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval])) and (rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]) > 0)))",
           "legendFormat": "token-weighted cache hit",
           "refId": "A"
         }

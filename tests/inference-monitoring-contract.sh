@@ -31,7 +31,10 @@ jq -e '
   (.panels[] | select(.id == 20) |
     (.targets | length) == 1 and
     .gridPos.w == 8 and
-    (.targets[0].expr | contains("inference:prefix_cache_hit_ratio"))) and
+    (.targets[0].expr |
+      contains("inference:prefix_cache_hit_ratio") and
+      contains("calculation=\"token_weighted_5m\"") and
+      contains("or max(("))) and
   (.templating.list[] | select(.name == "model") | .query.query |
     contains("inference:generation_tokens_total") and
     contains("vllm:generation_tokens_total") and
@@ -42,6 +45,8 @@ jq -e '
   fail "normalized vLLM series do not preserve engine identity"
 [ "$(grep -Fc -- '"engine", "sglang"' "$RULES")" -ge 15 ] ||
   fail "normalized SGLang series do not preserve engine identity"
+grep -Fq -- 'calculation: token_weighted_5m' "$RULES" ||
+  fail "prefix-cache calculation identity is not versioned"
 grep -Fq -- 'sglang:prefill_effective_tokens_total{mode=~".*_hit"}[5m]' "$RULES" ||
   fail "SGLang prefix-cache ratio is not derived from token counters"
 if grep -Fq -- 'label_replace(sglang:cache_hit_rate' "$RULES"; then

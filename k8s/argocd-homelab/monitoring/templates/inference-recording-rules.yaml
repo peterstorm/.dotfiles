@@ -53,6 +53,8 @@ spec:
             label_replace(vllm:time_per_output_token_seconds_bucket, "engine", "vllm", "__name__", ".*")
             or label_replace(sglang:inter_token_latency_seconds_bucket, "engine", "sglang", "__name__", ".*")
         - record: inference:prefix_cache_hit_ratio
+          labels:
+            calculation: token_weighted_5m
           expr: >-
             label_replace(
             ((rate(vllm:prefix_cache_hits_total[5m])
