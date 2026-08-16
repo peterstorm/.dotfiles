@@ -89,3 +89,32 @@ spec:
           expr: label_replace(sglang:spec_num_draft_tokens, "engine", "sglang", "__name__", ".*")
         - record: inference:mamba_usage_ratio
           expr: label_replace(sglang:mamba_usage, "engine", "sglang", "__name__", ".*")
+
+        # vLLM speculative-decoding observability, derived from the spec-decode
+        # counters every vLLM spec method (MTP, EAGLE, DFlash/DSpark) reports
+        # through the shared scheduler stats path. vLLM's own convention: mean
+        # acceptance length includes the bonus token, so accept length =
+        # 1 + accepted/drafts; accept rate = accepted/draft_tokens. There is no
+        # mamba-state usage metric in vLLM v1 (SchedulerStats exposes a single
+        # kv_cache_usage), so inference:mamba_usage_ratio stays SGLang-only and
+        # KV cache occupancy is the vLLM proxy for hybrid state pressure.
+        - record: inference:spec_accept_length
+          expr: >
+            1 + rate(vllm:spec_decode_num_accepted_tokens_total[5m])
+            /
+            rate(vllm:spec_decode_num_drafts_total[5m])
+            and rate(vllm:spec_decode_num_drafts_total[5m]) > 0
+          labels:
+            engine: vllm
+        - record: inference:spec_accept_rate
+          expr: >
+            rate(vllm:spec_decode_num_accepted_tokens_total[5m])
+            /
+            rate(vllm:spec_decode_num_draft_tokens_total[5m])
+            and rate(vllm:spec_decode_num_draft_tokens_total[5m]) > 0
+          labels:
+            engine: vllm
+        - record: inference:spec_verify_calls_total
+          expr: label_replace(vllm:spec_decode_num_drafts_total, "engine", "vllm", "__name__", ".*")
+        - record: inference:spec_num_draft_tokens
+          expr: label_replace(vllm:spec_decode_num_draft_tokens_total, "engine", "vllm", "__name__", ".*")

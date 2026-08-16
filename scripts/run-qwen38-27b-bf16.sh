@@ -2,8 +2,14 @@
 # Launch Qwen3.8-27B BF16 on the desktop's two RTX PRO 6000 Blackwell GPUs.
 #
 # Quality-first profile: TP2, BF16 weights/attention KV, model-declared FP32
-# recurrent state, native 262K context, eight scheduler slots, native template, and
-# no speculative decoding. OpenAI-compatible endpoint on :8000.
+# recurrent state, native 262K context, eight scheduler slots, native template.
+# OpenAI-compatible endpoint on :8000.
+#
+# MTP speculative decoding (the in-checkpoint one-layer MTP head) is available as an
+# opt-in: TP_SIZE=1 SPEC_MTP=1 bash scripts/run-qwen38-27b-bf16.sh. It is refused at
+# TP>=2 while vLLM issue #52480 (qwen3_5 MTP drafter weight-load crash) is open, and the
+# image must demonstrably carry vLLM #51812 + #51674. Full rationale and gate:
+# docs/new-desktop-install.md, "Why MTP is off".
 #
 # The checkpoint must already be on disk — run scripts/download-qwen38-27b.sh.
 # Full rationale: docs/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
@@ -20,6 +26,31 @@ MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"
+TP_SIZE="${TP_SIZE:-2}"
+SPEC_MTP="${SPEC_MTP:-0}"
+SPEC_TOKENS="${SPEC_TOKENS:-3}"
+case "$TP_SIZE" in
+  1|2) ;;
+  *) echo "error: TP_SIZE must be 1 or 2 (got: $TP_SIZE)" >&2; exit 2 ;;
+esac
+SPEC_ARGS=()
+if [ "$SPEC_MTP" = "1" ]; then
+  if [ "$TP_SIZE" -ge 2 ]; then
+    echo "error: SPEC_MTP=1 is refused at TP_SIZE>=2: vLLM #52480 (qwen3_5 MTP drafter" >&2
+    echo "       weight-load crash at TP>=2) is still open. Use TP_SIZE=1 until fixed." >&2
+    exit 2
+  fi
+  case "$SPEC_TOKENS" in
+    1|2|3) ;;
+    *) echo "error: SPEC_TOKENS must be 1-3; depth 5 is unmeasured for this checkpoint" >&2; exit 2 ;;
+  esac
+  SPEC_ARGS=(--speculative-config "{\"method\":\"mtp\",\"num_speculative_tokens\":$SPEC_TOKENS}")
+  echo "MTP speculative decoding enabled at depth $SPEC_TOKENS (TP1)."
+  echo "Verify the image carries vLLM #51812 + #51674 before trusting long runs."
+elif [ "$SPEC_MTP" != "0" ]; then
+  echo "error: SPEC_MTP must be 0 or 1 (got: $SPEC_MTP)" >&2
+  exit 2
+fi
 
 if [ ! -e "$MODEL_HOST/config.json" ]; then
   echo "error: checkpoint not found at $MODEL_HOST — run scripts/download-qwen38-27b.sh first" >&2
@@ -79,16 +110,16 @@ docker run -d --init \
   "$MODEL_CONTAINER" \
   --served-model-name qwen3.8-27b \
   --dtype bfloat16 \
-  --tensor-parallel-size 2 \
+  --tensor-parallel-size "$TP_SIZE" \
   --max-model-len "$MAX_MODEL_LEN" \
   --max-num-seqs "$MAX_NUM_SEQS" \
   --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
   --kv-cache-dtype auto \
   --mamba-ssm-cache-dtype float32 \
-  --language-model-only \
   --enable-prefix-caching \
   --enable-chunked-prefill \
+  "${SPEC_ARGS[@]}" \
   --reasoning-parser qwen3 \
   --enable-auto-tool-choice \
   --tool-call-parser qwen3_coder \

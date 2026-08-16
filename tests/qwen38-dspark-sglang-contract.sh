@@ -61,7 +61,9 @@ contains "$RUN" 'CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-2048}"'
 contains "$RUN" 'MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.85}"'
 contains "$RUN" 'DSPARK_GAMMA="${DSPARK_GAMMA:-7}"'
 contains "$RUN" 'MAX_MAMBA_CACHE_SIZE="${MAX_MAMBA_CACHE_SIZE:-$((MAX_RUNNING_REQUESTS * (5 + DSPARK_GAMMA + 1)))}"'
-contains "$RUN" '--language-only'
+if grep -Fq -- '--language-only' "$RUN"; then
+  fail "$RUN strips the vision tower; the Qwen3.8 profile serves the full multimodal checkpoint"
+fi
 contains "$RUN" '--attention-backend flashinfer'
 contains "$RUN" '--speculative-algorithm DSPARK'
 contains "$RUN" '--speculative-draft-model-quantization unquant'

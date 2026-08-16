@@ -38,10 +38,13 @@ if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
   fail "$RUN exposes VLLM_API_KEY in process arguments"
 fi
 contains "$RUN" '--dtype bfloat16'
-contains "$RUN" '--tensor-parallel-size 2'
+contains "$RUN" 'TP_SIZE="${TP_SIZE:-2}"'
+contains "$RUN" '--tensor-parallel-size "$TP_SIZE"'
 contains "$RUN" '--kv-cache-dtype auto'
 contains "$RUN" '--mamba-ssm-cache-dtype float32'
-contains "$RUN" '--language-model-only'
+if grep -Fq -- '--language-model-only' "$RUN"; then
+  fail "$RUN strips the vision tower; the Qwen3.8 profile serves the full multimodal checkpoint"
+fi
 contains "$RUN" '--reasoning-parser qwen3'
 contains "$RUN" '--tool-call-parser qwen3_coder'
 contains "$RUN" '--enable-prefix-caching'
@@ -49,8 +52,16 @@ contains "$RUN" 'MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"'
 contains "$RUN" 'MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"'
 contains "$RUN" 'MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"'
 contains "$RUN" 'GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"'
-if grep -Fq -- '--speculative-config' "$RUN"; then
-  fail "$RUN enables speculative decoding before the GDN safety fix is available"
+# MTP speculative decoding is an opt-in, off by default, and refused at TP>=2
+# while vLLM #52480 (qwen3_5 MTP drafter weight-load crash) is open. The refusal
+# path runs before any filesystem access, so it is safe to execute here.
+contains "$RUN" 'SPEC_MTP="${SPEC_MTP:-0}"'
+contains "$RUN" 'SPEC_TOKENS="${SPEC_TOKENS:-3}"'
+mtp_refusal=""
+mtp_status=0
+mtp_refusal="$(SPEC_MTP=1 TP_SIZE=2 bash "$RUN" 2>&1)" || mtp_status=$?
+if [[ $mtp_status -ne 2 || "$mtp_refusal" != *"SPEC_MTP=1 is refused at TP_SIZE>=2"* ]]; then
+  fail "$RUN must refuse SPEC_MTP=1 at TP_SIZE>=2 with exit 2 while vLLM #52480 is open"
 fi
 if grep -Fq -- '--chat-template' "$RUN"; then
   fail "$RUN overrides the checkpoint-native Qwen3.8 chat template"
@@ -75,7 +86,7 @@ jq -e '
     .id == "qwen3.8-27b" and
     .defaultThinkingLevel == "xhigh" and
     .contextWindow == 262144 and
-    .input == ["text"] and
+    .input == ["text", "image"] and
     .thinkingLevelMap == {
       "off": null,
       "minimal": null,

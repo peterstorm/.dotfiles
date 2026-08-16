@@ -76,6 +76,15 @@ for metric in \
   grep -Fq -- "$metric" "$RULES" || fail "recording rules missing $metric"
 done
 
+# vLLM spec-decode counters must feed the normalized spec series, or a
+# DSpark/MTP-on-vLLM run leaves the dashboard acceptance panels empty.
+[ "$(grep -Fc -- 'vllm:spec_decode_num_drafts_total' "$RULES")" -ge 2 ] ||
+  fail "vLLM spec-decode drafts counter is not normalized"
+[ "$(grep -Fc -- 'vllm:spec_decode_num_accepted_tokens_total' "$RULES")" -ge 2 ] ||
+  fail "vLLM spec-decode accepted-tokens counter is not normalized"
+[ "$(grep -Fc -- 'vllm:spec_decode_num_draft_tokens_total' "$RULES")" -ge 2 ] ||
+  fail "vLLM spec-decode draft-tokens counter is not normalized"
+
 for marker in \
   '"vllm": {' \
   '"sglang": {' \

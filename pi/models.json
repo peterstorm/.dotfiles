@@ -49,7 +49,7 @@
             "xhigh": "xhigh",
             "max": null
           },
-          "input": ["text"],
+          "input": ["text", "image"],
           "contextWindow": 262144,
           "maxTokens": 32768,
           "cost": {

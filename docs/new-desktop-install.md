@@ -904,9 +904,9 @@ Primary references:
 | Model | `Qwen/Qwen3.8-27B` |
 | Model revision | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` |
 | Weight footprint | 55,563,006,776 bytes (51.7 GiB), including the vision-language checkpoint |
-| Default profile | TP2, BF16 weights/KV, FP32 GDN state, text-only, native 262K context, eight scheduler slots |
+| Default profile | TP2, BF16 weights/KV, FP32 GDN state, vision tower loaded, native 262K context, eight scheduler slots |
 | Reasoning/tools | Native template, `qwen3` reasoning parser, `qwen3_coder` tool parser, xhigh default |
-| Speculative decoding | Disabled pending the upstream GDN accepted-token bounds fix |
+| Speculative decoding | Off by default; opt-in MTP gated on vLLM issue #52480 (see [Why MTP is off](#why-mtp-is-off)) |
 
 ### Download and launch
 
@@ -1024,8 +1024,13 @@ must be pressure-tested on this machine before being called supported.
 `--kv-cache-dtype auto` preserves the checkpoint's BF16 attention KV dtype, while
 `--mamba-ssm-cache-dtype float32` explicitly preserves the checkpoint's declared GDN state
 dtype. Do not silently change either while calling this the reference-fidelity profile.
-`--language-model-only` omits the vision encoder to reserve memory for text-agent contexts;
-remove that flag and change client metadata before claiming image support.
+The vision tower is loaded (this profile does **not** use `--language-model-only`): the
+checkpoint is the multimodal `Qwen3_5ForConditionalGeneration`, and image input is part of
+the profile contract — Pi declares `input: ["text", "image"]` for `qwen3.8-27b`. The tower
+costs a few GiB across the two cards and image tokens consume context like any other
+input (roughly 1,024 tokens per 1024×1024 image at the checkpoint's patch/merge sizes).
+Video is supported by the checkpoint and vLLM's API but not sent by Pi's model metadata,
+which only exposes text and image.
 
 Prefix caching and chunked prefill are enabled because coding agents repeatedly share a
 large system/tool prefix and long prefills should not monopolize a decode iteration. The
@@ -1062,18 +1067,98 @@ switches those sampling values; `low`, `medium`, and `xhigh` all use the thinkin
 
 ### Why MTP is off
 
-The checkpoint contains a one-layer MTP draft head, and the official vLLM recipe uses:
+The checkpoint ships a one-layer MTP draft head (`text_config.mtp_num_hidden_layers: 1`,
+`mtp.*` tensors in the weight index), and the official vLLM recipe uses:
 
 ```text
 --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
 ```
 
-It is not in the launch script yet. As of 2026-08-15, vLLM PR #50021 remains open. It
-bounds accepted-token-derived state indexes that can otherwise produce GPU address faults
-in hybrid GDN speculative decoding under agent-shaped traffic. Short release validation
-and good acceptance rates do not close that long-running safety gap. Add MTP only after a
-pinned image demonstrably contains the fix, then run the complete stress/soak gate. Do not
-use the older `qwen3_next_mtp` method or an unmeasured five-token depth.
+`num_speculative_tokens` must be spelled out: vLLM reads `mtp_num_hidden_layers` off the
+top-level config, but this checkpoint carries it only under `text_config`, so the depth
+cannot be inferred and startup fails if the field is omitted.
+
+Status as of 2026-08-16 (researched against upstream, the Docker Hub registry, and the
+live container):
+
+- The original safety gate, vLLM PR #50021, is still open but has been superseded by two
+  merged PRs:
+  - #51812 "[Bugfix] Align Qwen GDN gates with speculative tokens" — merged 2026-08-11.
+  - #51674 "[Kernel][Perf] Add fused CUDA post-conv MTP decode kernel for Qwen3.5 GDN" —
+    merged 2026-08-14.
+- Fix containment by build:
+  - `v0.27.1` (released 2026-08-11 10:47 UTC, hours before #51812 merged) carries
+    **neither** fix. Verified by compare-API ancestry, not by date alone.
+  - `v0.27.2rc0` (tagged 2026-08-12) carries #51812 but not #51674, and has **no public
+    Docker image** on the Hub.
+  - `vllm/vllm-openai:nightly` (last push 2026-08-15) carries both.
+  - The pinned `vllm/vllm-openai:qwen38` recipe image is an **Inferact fork build**
+    (`ai.vllm.build.commit=3a0914114705`, `ai.vllm.image.tag=inferactinc/dev:wtn-3a09141-x86_64-cu13.0.1`,
+    pushed 2026-08-12). Its base commit is not in the public vllm repository, so fix
+    containment cannot be verified from outside; it predates #51674 either way.
+- New blocker for this exact profile: vLLM issue **#52480** (filed 2026-08-16 against
+  v0.27.1) — the `qwen3_5` MTP drafter crashes weight loading at
+  `--tensor-parallel-size >= 2`: the drafter shards `mtp.layers.0.mlp.down_proj` as if the
+  world size were four (loads width 4352 where TP2 row-parallel sharding requires 8704),
+  then the fused-column assert fires. Loads and serves fine at TP=1. No fix PR exists as
+  of this writing; the 0.27.1-era code in both the `qwen38` and `nightly` images is
+  presumed affected.
+- Other open risks on this stack (v0.27.1-era code, sm120):
+  - #52469: intermittent streamed-delta corruption with MTP on an RTX PRO 6000 (this box's
+    exact card, v0.27.1, FlashInfer): subwords dropped at quote-adjacent boundaries in
+    streamed output only; non-streaming is byte-clean; the incremental detokenizer was
+    exonerated by the reporter's offline replay; arms per server boot. Root cause unknown.
+  - #52475: MTP with `turboquant_*` KV cache degenerates into silent repetition collapse
+    on sm120; FP8 and (by extension) BF16 KV are clean. This profile keeps
+    `--kv-cache-dtype auto` (BF16) — do not "optimize" the KV dtype to turboquant while
+    MTP is enabled.
+  - #52481: cosmetic multimodal warning on the qwen3_5 MTP path (fix #52485 open).
+
+Evidence that MTP is worth enabling:
+
+- The vLLM recipe measures 92.2% acceptance at BF16 (84.8% FP8, 81.5–84.8% NVFP4) at
+  depth 3, using the in-checkpoint head — no separate speculator.
+- SGLang qualification (fakoli/anvil-serving #412, TP1, official FP8, MTP=3): 111.3 decode
+  tok/s with MTP, **+131.9% versus the matched no-spec control**, passing 389K retrieval,
+  tools, recovery, and OCR (they did not promote it in their fleet).
+- llama.cpp field notes (TheTom/offlabel #24, GB10, Q4_K_M + the separate 1.6 GiB
+  `mtp-Q4_0` draft GGUF): up to 3.5x at draft depth 7 on code generation; prose peaks at
+  depth 3 as draft acceptance falls (0.469 at 3, 0.229 at 7).
+- Against the live DSpark baseline on this box (agent-shaped traffic, 4–5 concurrent
+  requests, ~270K live tokens): acceptance length ~3.4 of the 8-token verify window,
+  acceptance rate ~0.36, 340–450 tok/s aggregate. A native 92%-acceptance three-token MTP
+  window with a ~0.7 GiB one-layer draft beats that on both cost per step and acceptance.
+
+Gate to turn MTP on for vLLM here (all of it):
+
+1. vLLM #52480 is fixed upstream — or accept a TP=1 profile: 51.7 GiB of weights plus the
+   MTP head fits one 96 GiB card (recipe minimum 67 GiB), at the cost of TP2's doubled KV
+   headroom.
+2. Pin an image that demonstrably contains #51812 and #51674. As of this writing only
+   `vllm/vllm-openai:nightly` qualifies; pin it by digest and re-verify
+   `ai.vllm.build.commit` ancestry against both merge commits before launch.
+3. `num_speculative_tokens=3`. Do not use the older `qwen3_next_mtp` method or an
+   unmeasured five-token depth.
+4. BF16 KV only (see #52475), then run the complete stress/soak gate above — and add a
+   streamed-vs-non-streamed delta canary, because the #52469 failure mode is invisible to
+   plain health probes.
+
+The launcher implements this as an opt-in: `TP_SIZE=1 SPEC_MTP=1 bash
+scripts/run-qwen38-27b-bf16.sh`. It refuses `SPEC_MTP=1` with `TP_SIZE>=2` until #52480 is
+resolved upstream.
+
+A faster A/B exists on the current SGLang image without touching vLLM at all: the pinned
+`lmsysorg/sglang:qwen38-27b` build ships a first-class `FROZEN_KV_MTP` speculative
+algorithm and a `qwen3_5_mtp` draft model that loads the in-checkpoint `mtp.*` head
+(frozen-KV draft: the draft reads the target KV pool read-only and owns no pool of its
+own). To run it, swap the DSpark launcher's speculative flags for
+`--speculative-algorithm FROZEN_KV_MTP`, `--speculative-draft-model-path` pointing at the
+**target** checkpoint (the `mtp.*` weights live in the target; SGLang's `qwen3_5_mtp`
+loader filters to exactly those),
+`--speculative-num-steps 3`, `--speculative-num-draft-tokens 4`, and re-check
+`MAX_MAMBA_CACHE_SIZE` for the shorter four-token verify window. Compare acceptance length
+and tok/s against the live DSpark numbers above; SGLang validates the speculative args at
+startup, so a mis-sized window fails fast rather than silently.
 
 ### Native 262K versus YaRN 1M
 
@@ -1088,8 +1173,8 @@ separate future profile rather than changing this quality baseline.
 Do not label the profile validated until all of these pass on the desktop:
 
 1. Cold boot reaches `Application startup complete` with both GPUs visible and no restarts.
-2. `/health`, authenticated text generation, low/medium/xhigh reasoning, and a real tool
-   round trip all succeed using the native template.
+2. `/health`, authenticated text generation, low/medium/xhigh reasoning, a real tool
+   round trip, and an image-input probe all succeed using the native template.
 3. A 262K allocation starts without OOM; a unique-prose needle ladder verifies useful
    recall rather than only allocation.
 4. Eight overlapping agent-shaped requests become active without preemption, cache
@@ -1267,7 +1352,8 @@ as a quality profile.
 Do not promote this launcher over the no-spec BF16 baseline until all of these pass:
 
 1. Cold boot completes CUDA-graph capture with both GPUs and no process restart.
-2. Health, low/medium/xhigh reasoning, native-template tool calls, and streaming all work.
+2. Health, low/medium/xhigh reasoning, native-template tool calls, an image-input
+   probe, and streaming all work.
 3. Deterministic prompts match a no-spec target semantically and show no malformed output.
 4. Logs report nontrivial DSpark acceptance; compare output tokens/s and inter-token
    latency at concurrency 1 and 8. Acceptance length alone is not a speedup.
@@ -1309,6 +1395,122 @@ The static repository contract is checked with:
 
 ```bash
 bash tests/qwen38-dspark-sglang-contract.sh
+```
+
+## Experimental Qwen3.8-27B DSpark on vLLM
+
+A second experimental profile for the same BF16 Qwen3.8 target: the RadixArk DSpark
+draft, but served by vLLM instead of SGLang. It exists for a direct engine A/B at
+identical target and draft, and because the in-checkpoint MTP path on vLLM is blocked
+at TP>=2 by issue #52480 while the DSpark path is not.
+
+A community write-up circulated the recipe (config surgery + `method: "dspark"`
+speculative config); every load-bearing claim in it was verified against upstream vLLM
+source and the draft on disk on 2026-08-16:
+
+- The draft ships `"architectures": ["DSparkDraftModel"]`. vLLM's registry maps that
+  string to the DeepSeek-V4 DSpark implementation
+  (`"DSparkDraftModel": ("vllm.models.deepseek_v4", "DSparkDeepseekV4ForCausalLM")`),
+  whose constructor reads DeepSeek-only fields (`config.hc_mult`), producing the
+  reported `AttributeError: 'Qwen3Config' object has no attribute 'hc_mult'`. The Qwen
+  path is selected by the string `Qwen3DSparkModel`
+  (`-> ("qwen3_dspark", "Qwen3DSparkForCausalLM")`), and the speculative-config layer
+  rewrites any non-Qwen/Gemma4/K3 dspark draft into the DeepSeek-V4 config, so renaming
+  the architectures field is both necessary and sufficient for routing.
+- The pinned image `vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9`
+  (digest `ecc6a14f...`) is a real upstream commit from 2026-08-14, so containment is
+  verifiable: DSpark landed via #46995 (merged 2026-07-01) and #47093 (2026-07-02);
+  the hybrid-GDN prefix-cache corruption (#43559) was fixed by commits merged
+  2026-07-12..18 ("Fix hybrid-Mamba prefix-cache corruption under MTP/EAGLE",
+  mamba-block-aligned prefill chunks, Mooncake cache-peek gate) and the issue was
+  closed completed 2026-08-06; the GDN spec-decode gate fix #51812 merged 2026-08-11.
+- Correction to the community post: PR #48361, cited there as "the fix" for #43559, is
+  a regression *test*. The substance is right, though: every build from 2026-07-18
+  onward carries the fix stack, so this profile keeps `--enable-prefix-caching` on.
+  The original degradation was silent (tool-calling accuracy), so the validation gate
+  below includes a tool-call probe regardless.
+- The reported aux-layer offset is by design, not a bug: `gpu_model_runner.py` adds 1
+  to `dflash_config.target_layer_ids` ("Add 1 to convert DFlash's aux layer id
+  semantics"), so this draft's `[4, 16, 28, 40, 52]` logs as `(5, 17, 29, 41, 53)`.
+- The Qwen3.6-27B RoPE gotcha from the post (inherited `partial_rotary_factor: 0.25`
+  + mrope collapsing acceptance to ~1%) does not appear in this checkpoint: the draft
+  config on disk has its own YaRN rope parameters and no `partial_rotary_factor` or
+  mrope keys. If measured acceptance still collapses near 1.0, that config is the
+  first thing to inspect.
+- `num_speculative_tokens: 7` matches the draft's trained `block_size: 7`; the draft
+  is 5 full-attention layers, 1.36B BF16, with the Markov/confidence heads
+  (`confidence_head_with_markov: true`, `markov_rank: 256`).
+
+The launcher performs the config surgery on an isolated copy so the SGLang profile
+keeps working from the untouched original:
+
+```text
+/models/Qwen3.8-27B-DSpark          (SGLang copy, byte-identical, never rewritten)
+/models/Qwen3.8-27B-DSpark-vllm     (vLLM copy, architectures -> Qwen3DSparkModel)
+```
+
+The copy is rebuilt only when the source changed or the copy is missing/half-written
+(the idempotency check verifies the rewritten architectures field). Prerequisites are
+the two existing downloaders. Launch:
+
+```bash
+docker stop qwen38-27b-bf16-dspark-sglang   # or whichever server owns :8000
+bash scripts/run-qwen38-27b-bf16-dspark-vllm.sh
+docker logs -f qwen38-27b-bf16-dspark-vllm
+```
+
+Startup checks in the logs:
+
+1. Two `Resolved architecture:` lines; the second (the draft) must read
+   `Qwen3DSparkModel`. A `DSparkDraftModel` second line means the surgery did not
+   take or the wrong directory is mounted.
+2. `Using auxiliary layers ... (5, 17, 29, 41, 53)` — expected for this draft (see
+   the offset note above).
+
+Comparison baseline — the SGLang DSpark profile on this box under agent-shaped
+traffic (4-5 concurrent requests, ~270K live tokens): acceptance length ~3.4 of the
+8-token verify window, acceptance rate ~0.36, 340-450 tok/s aggregate. The draft card
+reports a mean acceptance length of 3.39 (measured against the FP8 target; expect
+some drift on BF16). Read `vllm:spec_decode_*` on this profile the same way:
+
+```bash
+curl -fsS http://127.0.0.1:8000/metrics \
+  -H "Authorization: Bearer $KEY" | grep -Ei 'spec_decode|accept'
+```
+
+Acceptance length near 1.0 means no benefit and points at a miswired draft (RoPE
+first, then the aux-layer mapping).
+
+### Validation gate
+
+Do not promote this profile over the SGLang DSpark profile until all of these pass:
+
+1. Cold boot reaches `Application startup complete`; both `Resolved architecture:`
+   lines are correct; no process restart.
+2. Health, low/medium/xhigh reasoning, and native-template tool calls all succeed —
+   the tool-call probe is the #43559 canary, and an image-input probe confirms the
+   vision tower is live.
+3. Acceptance length is nontrivial (compare against ~3.4) and output tokens/s plus
+   inter-token latency at concurrency 1 and 8 beat or match the SGLang DSpark
+   baseline. Acceptance length alone is not a speedup.
+4. A unique-prose needle ladder reaches the useful long-context range without
+   corruption.
+5. A streamed-vs-non-streamed diff canary on several tool-heavy prompts shows clean
+   deltas (guards against #52469-class streaming corruption).
+6. A sustained eight-agent tool-use soak records zero CUDA faults, Xids, deadlocks,
+   empty completions, and container restarts.
+
+To return to the SGLang DSpark profile:
+
+```bash
+docker stop qwen38-27b-bf16-dspark-vllm
+bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
+```
+
+The static repository contract is checked with:
+
+```bash
+bash tests/qwen38-dspark-vllm-contract.sh
 ```
 
 ## Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)
