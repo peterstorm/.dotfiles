@@ -936,12 +936,16 @@ bash scripts/run-qwen38-27b-bf16.sh
 docker logs -f qwen38-27b-bf16
 ```
 
-The launcher keeps a persistent API key at `~/.config/qwen38/api-key`. On first launch it
-copies the existing DeepSeek endpoint key when available, so Pi authentication remains
-stable while switching models; otherwise it generates a new key. It passes the credential
-through a mode-0600 env file rather than Docker command arguments and exposes the
-authenticated OpenAI-compatible API at `http://desktop:8000/v1`. The `/health` endpoint
-itself is not protected:
+The launcher keeps synchronized copies of one persistent endpoint key at
+`~/.config/ds4-flash/api-key` and `~/.config/qwen38/api-key`. Each launch chooses an
+explicit `VLLM_API_KEY` first, then the existing DeepSeek key, the Qwen key, the Pi sops
+fallback, and finally generates one; it atomically writes the result to both paths. Pi uses the same
+DeepSeek-first order. When the launcher is invoked through `sudo`, it resolves `SUDO_USER`
+and owns both files and the private env file to the invoking user rather than creating an
+unreachable `/root/.config/qwen38/api-key`. It passes the credential through a mode-0600
+env file rather than Docker command arguments and exposes the authenticated
+OpenAI-compatible API at `http://desktop:8000/v1`. The `/health` endpoint itself is not
+protected:
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
@@ -950,9 +954,12 @@ curl -fsS http://127.0.0.1:8000/health
 Authenticated reasoning/tool probe:
 
 ```bash
-KEY="$(cat ~/.config/qwen38/api-key)"
-curl -fsS http://127.0.0.1:8000/v1/chat/completions \
-  -H "Authorization: Bearer $KEY" \
+auth_curl() {
+  local key
+  key="$(< ~/.config/qwen38/api-key)"
+  printf 'header = "Authorization: Bearer %s"\n' "$key" | curl --config - "$@"
+}
+auth_curl -fsS http://127.0.0.1:8000/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "qwen3.8-27b",
@@ -1266,9 +1273,11 @@ It archives the previous container's compressed log plus secret-free state metad
 20 launches. Durable one-second physical GPU samples live in `/var/lib/gpu-telemetry/`; see
 [`gpu-inference-crash-triage.md`](gpu-inference-crash-triage.md).
 
-The script reuses `~/.config/qwen38/api-key`, initially seeded from DeepSeek's endpoint
-key when available, so clients do not need a different credential when switching models
-or engines. SGLang only exposes API authentication as a CLI field;
+The script synchronizes `~/.config/ds4-flash/api-key` and
+`~/.config/qwen38/api-key` to one endpoint credential on every launch, so clients do not
+need a different credential when switching models or engines. This remains true under
+`sudo`: credential ownership and paths follow `SUDO_USER`, not `/root`. SGLang only
+exposes API authentication as a CLI field;
 `sglang-secure-entrypoint.py` reads `SGLANG_API_KEY` from a mode-0600 Docker env file,
 removes it from the inherited environment, and constructs SGLang's server arguments
 in-process. It wraps the parsed credential in a string-compatible redacted value before
@@ -1278,13 +1287,15 @@ array, `/proc/<pid>/cmdline`, or the `server_args` startup log.
 Authenticated health and generation probes:
 
 ```bash
-KEY="$(cat ~/.config/qwen38/api-key)"
+auth_curl() {
+  local key
+  key="$(< ~/.config/qwen38/api-key)"
+  printf 'header = "Authorization: Bearer %s"\n' "$key" | curl --config - "$@"
+}
 
-curl -fsS http://127.0.0.1:8000/health \
-  -H "Authorization: Bearer $KEY"
+auth_curl -fsS http://127.0.0.1:8000/health
 
-curl -fsS http://127.0.0.1:8000/v1/chat/completions \
-  -H "Authorization: Bearer $KEY" \
+auth_curl -fsS http://127.0.0.1:8000/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "qwen3.8-27b",
@@ -1365,9 +1376,7 @@ Metrics are enabled (and intentionally readable without the generation API key s
 homelab Prometheus target can scrape them). Supplying the key remains valid:
 
 ```bash
-curl -fsS http://127.0.0.1:8000/metrics \
-  -H "Authorization: Bearer $KEY" |
-  grep -Ei 'spec|accept|token'
+curl -fsS http://127.0.0.1:8000/metrics | grep -Ei 'spec|accept|token'
 ```
 
 Prometheus recording rules normalize SGLang's `sglang:*` names and vLLM's `vllm:*`
@@ -1474,8 +1483,7 @@ reports a mean acceptance length of 3.39 (measured against the FP8 target; expec
 some drift on BF16). Read `vllm:spec_decode_*` on this profile the same way:
 
 ```bash
-curl -fsS http://127.0.0.1:8000/metrics \
-  -H "Authorization: Bearer $KEY" | grep -Ei 'spec_decode|accept'
+curl -fsS http://127.0.0.1:8000/metrics | grep -Ei 'spec_decode|accept'
 ```
 
 Acceptance length near 1.0 means no benefit and points at a miswired draft (RoPE
@@ -1500,16 +1508,28 @@ Do not promote this profile over the SGLang DSpark profile until all of these pa
 6. A sustained eight-agent tool-use soak records zero CUDA faults, Xids, deadlocks,
    empty completions, and container restarts.
 
-To return to the SGLang DSpark profile:
+Use the switcher for either direction; it waits through cold startup, reports whether the
+running API accepts Pi's desktop-user key, and restarts an already-healthy target when its
+credential is stale:
 
 ```bash
-docker stop qwen38-27b-bf16-dspark-vllm
-bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
+bash scripts/switch-qwen38-backend.sh status
+bash scripts/switch-qwen38-backend.sh sglang
+bash scripts/switch-qwen38-backend.sh vllm
 ```
 
-The static repository contract is checked with:
+If Docker access on the workstation requires elevation, the same commands are safe with
+`sudo`; the launchers still use the invoking user's credential paths. This also repairs a
+server previously launched with a root-only key:
 
 ```bash
+sudo ./scripts/switch-qwen38-backend.sh vllm
+```
+
+The static repository contracts are checked with:
+
+```bash
+bash tests/inference-api-key-contract.sh
 bash tests/qwen38-dspark-vllm-contract.sh
 ```
 

@@ -75,10 +75,12 @@ with two selectable models:
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/qwen3.8-27b`
 
-Only one server owns port 8000 at a time. The Qwen launchers seed their credential from
-the existing DeepSeek key, so switching runtimes does not change Pi authentication. The
-key is never committed: Pi reads it locally on `desktop`, or retrieves it through the
-hardened `ssh desktop` alias when running elsewhere.
+Only one server owns port 8000 at a time. Every launcher synchronizes the historical
+DeepSeek and Qwen key files to one endpoint credential, so switching models or runtimes
+does not change Pi authentication. Launching through `sudo` still resolves `SUDO_USER`
+and writes the invoking desktop user's files—never a private `/root` credential. The key
+is never committed: Pi reads it locally on `desktop`, or retrieves it through the hardened
+`ssh desktop` alias when running elsewhere.
 
 ### DeepSeek V4 Flash
 
@@ -111,7 +113,7 @@ pi --list-models deepseek-v4-flash
 
 ### Qwen3.8 27B
 
-Qwen runs text-only BF16 at its native 262,144-token context. Its checkpoint-native
+Qwen runs multimodal BF16 at its native 262,144-token context. Its checkpoint-native
 chat template accepts `low`, `medium`, and `xhigh` reasoning; Pi hides every other level
 and defaults new Qwen sessions to `xhigh`. The model-specific compatibility settings send
 one `system` role and map Pi's thinking state into `chat_template_kwargs` without changing

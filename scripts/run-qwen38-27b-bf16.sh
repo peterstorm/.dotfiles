@@ -15,6 +15,10 @@
 # Full rationale: docs/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/inference-api-key.sh
+source "$SCRIPT_DIR/inference-api-key.sh"
+
 IMAGE="vllm/vllm-openai:qwen38"
 DIGEST="sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e"
 MODEL_HOST="/models/Qwen3.8-27B"
@@ -57,32 +61,22 @@ if [ ! -e "$MODEL_HOST/config.json" ]; then
   exit 1
 fi
 
-CONFIG_DIR="$HOME/.config/qwen38"
-KEYFILE="$CONFIG_DIR/api-key"
+# Resolve the human operator even under `sudo`, then synchronize the historical
+# DeepSeek/Qwen paths to one endpoint key. This prevents a root-only key from
+# silently replacing the credential Pi retrieves as the desktop user.
+inference_prepare_api_key "${VLLM_API_KEY:-}"
+VLLM_API_KEY="$INFERENCE_API_KEY"
+CONFIG_DIR="$INFERENCE_OPERATOR_HOME/.config/qwen38"
+KEYFILE="$INFERENCE_QWEN_KEYFILE"
 ENVFILE="$CONFIG_DIR/container.env"
-install -m 700 -d "$CONFIG_DIR"
-
-# API key: prefer $VLLM_API_KEY, otherwise reuse the workstation's existing
-# DeepSeek credential before generating one. Both models share :8000, so one
-# stable credential lets Pi switch models without changing provider auth.
-if [ -z "${VLLM_API_KEY:-}" ]; then
-  if [ ! -f "$KEYFILE" ]; then
-    if [ -r "$HOME/.config/ds4-flash/api-key" ]; then
-      install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"
-    else
-      head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
-      chmod 600 "$KEYFILE"
-    fi
-  fi
-  VLLM_API_KEY="$(cat "$KEYFILE")"
-fi
 
 # Keep the key out of Docker's command arguments and the host process list.
-printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY" > "$ENVFILE"
-chmod 600 "$ENVFILE"
+inference_write_private_file "$ENVFILE" <<EOF
+VLLM_API_KEY=$VLLM_API_KEY
+EOF
 
 sudo mkdir -p "$CACHE_HOST"
-sudo chown "$USER:users" "$CACHE_HOST"
+sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$CACHE_HOST"
 
 # Make relaunch idempotent, then reject a different server already owning :8000.
 docker rm -f "$NAME" 2>/dev/null || true

@@ -11,6 +11,10 @@
 # (Gilded Gnosis r33, K5)".
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/inference-api-key.sh
+source "$SCRIPT_DIR/inference-api-key.sh"
+
 IMG="voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-20260809-r33@sha256:fdde59fed7f9fc12f9fd5ef1b3b3ea8d5097bf10ebad54b348497102c3a83f82"
 MODEL_HOST="/models/DeepSeek-V4-Flash-0731"
 NAME="ds4-0731-r33"
@@ -28,22 +32,18 @@ if [ ! -e "$MODEL_HOST/config.json" ]; then
   exit 1
 fi
 
-# API key: prefer $VLLM_API_KEY, else a persistent per-machine key (not committed).
-KEYFILE="$HOME/.config/ds4-flash/api-key"
-ENVFILE="$HOME/.config/ds4-flash/container.env"
-if [ -z "${VLLM_API_KEY:-}" ]; then
-  if [ ! -f "$KEYFILE" ]; then
-    mkdir -p "$(dirname "$KEYFILE")"
-    head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
-    chmod 600 "$KEYFILE"
-  fi
-  VLLM_API_KEY="$(cat "$KEYFILE")"
-fi
+# Resolve the human operator even under `sudo` and synchronize the DeepSeek and
+# Qwen key paths. Every mutually exclusive server on :8000 uses one credential.
+inference_prepare_api_key "${VLLM_API_KEY:-}"
+VLLM_API_KEY="$INFERENCE_API_KEY"
+KEYFILE="$INFERENCE_DS4_KEYFILE"
+ENVFILE="$INFERENCE_OPERATOR_HOME/.config/ds4-flash/container.env"
 
 # Docker CLI arguments are visible through /proc. Keep the secret out of `ps` by
 # passing it through a private env file instead of `-e VLLM_API_KEY=value`.
-printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY" > "$ENVFILE"
-chmod 600 "$ENVFILE"
+inference_write_private_file "$ENVFILE" <<EOF
+VLLM_API_KEY=$VLLM_API_KEY
+EOF
 
 if [ ! -d /models/vllm-cache/r33/tmp ]; then
   sudo mkdir -p /models/vllm-cache/r33/tmp

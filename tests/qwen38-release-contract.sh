@@ -32,8 +32,9 @@ contains "$RUN" "IMAGE=\"$IMAGE\""
 contains "$RUN" "DIGEST=\"$DIGEST\""
 contains "$RUN" 'NAME="qwen38-27b-bf16"'
 contains "$RUN" '--env-file "$ENVFILE"'
-contains "$RUN" "printf 'VLLM_API_KEY=%s\\n'"
-contains "$RUN" 'install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"'
+contains "$RUN" 'source "$SCRIPT_DIR/inference-api-key.sh"'
+contains "$RUN" 'inference_prepare_api_key "${VLLM_API_KEY:-}"'
+contains "$RUN" 'inference_write_private_file "$ENVFILE" <<EOF'
 if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
   fail "$RUN exposes VLLM_API_KEY in process arguments"
 fi

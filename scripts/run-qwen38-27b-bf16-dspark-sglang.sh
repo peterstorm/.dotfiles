@@ -13,6 +13,11 @@
 # "Experimental Qwen3.8-27B DSpark on SGLang".
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/inference-api-key.sh
+source "$SCRIPT_DIR/inference-api-key.sh"
+inference_resolve_operator
+
 IMAGE="lmsysorg/sglang:qwen38-27b"
 DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124"
 MODEL_HOST="/models/Qwen3.8-27B"
@@ -20,7 +25,7 @@ MODEL_CONTAINER="/models/Qwen/Qwen3.8-27B"
 DRAFT_HOST="/models/Qwen3.8-27B-DSpark"
 DRAFT_CONTAINER="/models/RadixArk/Qwen3.8-27B-DSpark"
 CACHE_HOST="/models/sglang-cache/qwen38-bf16-dspark"
-ENTRYPOINT_HOST="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sglang-secure-entrypoint.py"
+ENTRYPOINT_HOST="$SCRIPT_DIR/sglang-secure-entrypoint.py"
 ENTRYPOINT_CONTAINER="/opt/reclaw/sglang-secure-entrypoint.py"
 NAME="qwen38-27b-bf16-dspark-sglang"
 
@@ -33,7 +38,7 @@ case "$GPU_ORDER" in
   0,1|1,0) ;;
   *) echo "error: GPU_ORDER must be 0,1 or 1,0 (got: $GPU_ORDER)" >&2; exit 2 ;;
 esac
-CONTAINER_ARCHIVE_DIR="${CONTAINER_ARCHIVE_DIR:-$HOME/.local/state/qwen38/container-archives}"
+CONTAINER_ARCHIVE_DIR="${CONTAINER_ARCHIVE_DIR:-$INFERENCE_OPERATOR_HOME/.local/state/qwen38/container-archives}"
 ARCHIVE_RETENTION_DAYS="${ARCHIVE_RETENTION_DAYS:-14}"
 ARCHIVE_MAX_COUNT="${ARCHIVE_MAX_COUNT:-20}"
 MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-350}"
@@ -88,50 +93,34 @@ for record in "${gpu_caps[@]}"; do
 done
 echo "Verified both GPU power caps are <= ${MAX_GPU_POWER_LIMIT}W."
 
-CONFIG_DIR="$HOME/.config/qwen38"
-KEYFILE="$CONFIG_DIR/api-key"
+# Resolve the human operator even under `sudo`, then synchronize the historical
+# DeepSeek/Qwen paths to one endpoint key. This prevents a root-only key from
+# silently replacing the credential Pi retrieves as the desktop user.
+inference_prepare_api_key "${SGLANG_API_KEY:-${VLLM_API_KEY:-}}"
+SGLANG_API_KEY="$INFERENCE_API_KEY"
+CONFIG_DIR="$INFERENCE_OPERATOR_HOME/.config/qwen38"
+KEYFILE="$INFERENCE_QWEN_KEYFILE"
 ENVFILE="$CONFIG_DIR/sglang-dspark.env"
-install -m 700 -d "$CONFIG_DIR"
-
-# Reuse one workstation endpoint key across DeepSeek, Qwen vLLM, and Qwen
-# SGLang. Prefer explicit environment values, then seed Qwen's key from the
-# existing DeepSeek credential before generating a new machine-local key.
-if [ -z "${SGLANG_API_KEY:-}" ]; then
-  SGLANG_API_KEY="${VLLM_API_KEY:-}"
-fi
-if [ -z "$SGLANG_API_KEY" ]; then
-  if [ ! -f "$KEYFILE" ]; then
-    if [ -r "$HOME/.config/ds4-flash/api-key" ]; then
-      install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"
-    else
-      head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
-      chmod 600 "$KEYFILE"
-    fi
-  fi
-  SGLANG_API_KEY="$(cat "$KEYFILE")"
-fi
 
 # SGLang has no native API-key environment variable. A tiny Python entrypoint
 # parses this value in-process so it never appears in Docker args or /proc cmdline.
-printf 'SGLANG_API_KEY=%s\n' "$SGLANG_API_KEY" > "$ENVFILE"
-chmod 600 "$ENVFILE"
+inference_write_private_file "$ENVFILE" <<EOF
+SGLANG_API_KEY=$SGLANG_API_KEY
+EOF
 
 # First launch may need privilege to create the ZFS-backed cache root. Once it
 # exists, relaunches (including the download-completion user unit) stay unprivileged.
 if [ ! -d "$CACHE_HOST" ]; then
   sudo mkdir -p "$CACHE_HOST"
-  sudo chown "$USER:users" "$CACHE_HOST"
+  sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$CACHE_HOST"
 fi
-if [ ! -w "$CACHE_HOST" ]; then
-  echo "error: cache directory is not writable: $CACHE_HOST" >&2
-  exit 1
-fi
+inference_require_cache_access "$CACHE_HOST"
 
 # Preserve crash evidence before docker rm destroys the old container log. The
 # metadata deliberately excludes Config.Env because it contains the API key.
 if docker container inspect "$NAME" >/dev/null 2>&1; then
   archive_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  install -m 700 -d "$CONTAINER_ARCHIVE_DIR"
+  inference_install_private_dir "$CONTAINER_ARCHIVE_DIR"
   archive_base="$CONTAINER_ARCHIVE_DIR/$archive_stamp"
   {
     docker inspect --format='id={{.Id}} created={{.Created}} started={{.State.StartedAt}} finished={{.State.FinishedAt}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} image={{.Config.Image}}' "$NAME"
@@ -140,7 +129,8 @@ if docker container inspect "$NAME" >/dev/null 2>&1; then
   if ! docker logs --timestamps "$NAME" 2>&1 | gzip -1 > "$archive_base.log.gz"; then
     echo "warning: container log archive was incomplete: $archive_base.log.gz" >&2
   fi
-  chmod 600 "$archive_base.metadata" "$archive_base.log.gz"
+  inference_secure_operator_file "$archive_base.metadata"
+  inference_secure_operator_file "$archive_base.log.gz"
   echo "Archived previous container evidence to $archive_base.{metadata,log.gz}"
 fi
 
@@ -218,6 +208,6 @@ docker run -d --init \
 echo "Started '$NAME' with CUDA_VISIBLE_DEVICES=$GPU_ORDER (logical device 0 / TP rank 0 is listed first)."
 echo "This is an experimental profile; first start compiles kernels and CUDA graphs."
 echo "Follow:  docker logs -f $NAME"
-echo "Health:  KEY=\$(cat $KEYFILE); curl -fsS -H \"Authorization: Bearer \$KEY\" http://127.0.0.1:8000/health"
+echo "Health/auth:  bash $SCRIPT_DIR/switch-qwen38-backend.sh status"
 echo "API key: $KEYFILE  (send as 'Authorization: Bearer <key>')"
 echo "Compare acceptance/throughput in logs before promoting it over the no-spec BF16 baseline."

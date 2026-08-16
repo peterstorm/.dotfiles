@@ -30,6 +30,10 @@
 #   jq (already in the core-apps package set)
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/inference-api-key.sh
+source "$SCRIPT_DIR/inference-api-key.sh"
+
 IMAGE="vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9"
 DIGEST="sha256:ecc6a14f77a9c788d78d5eee2eec371246567ab40989b58ec1d73a691c7cd54e"
 MODEL_HOST="/models/Qwen3.8-27B"
@@ -73,38 +77,25 @@ if [ ! -f "$DRAFT_VLLM_HOST/config.json" ] \
   jq -r '.architectures | join(",")' "$DRAFT_VLLM_HOST/config.json"
 fi
 
-CONFIG_DIR="$HOME/.config/qwen38"
-KEYFILE="$CONFIG_DIR/api-key"
+# Resolve the human operator even under `sudo`, then synchronize the historical
+# DeepSeek/Qwen paths to one endpoint key. This prevents a root-only key from
+# silently replacing the credential Pi retrieves as the desktop user.
+inference_prepare_api_key "${VLLM_API_KEY:-}"
+VLLM_API_KEY="$INFERENCE_API_KEY"
+CONFIG_DIR="$INFERENCE_OPERATOR_HOME/.config/qwen38"
+KEYFILE="$INFERENCE_QWEN_KEYFILE"
 ENVFILE="$CONFIG_DIR/vllm-dspark.env"
-install -m 700 -d "$CONFIG_DIR"
-
-# Reuse one workstation endpoint key across DeepSeek, Qwen vLLM, and Qwen
-# SGLang. Prefer explicit environment values, then seed from the existing
-# DeepSeek credential before generating a new machine-local key.
-if [ -z "${VLLM_API_KEY:-}" ]; then
-  if [ ! -f "$KEYFILE" ]; then
-    if [ -r "$HOME/.config/ds4-flash/api-key" ]; then
-      install -m 600 "$HOME/.config/ds4-flash/api-key" "$KEYFILE"
-    else
-      head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' > "$KEYFILE"
-      chmod 600 "$KEYFILE"
-    fi
-  fi
-  VLLM_API_KEY="$(cat "$KEYFILE")"
-fi
 
 # Keep the key out of Docker's command arguments and the host process list.
-printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY" > "$ENVFILE"
-chmod 600 "$ENVFILE"
+inference_write_private_file "$ENVFILE" <<EOF
+VLLM_API_KEY=$VLLM_API_KEY
+EOF
 
 if [ ! -d "$CACHE_HOST" ]; then
   sudo mkdir -p "$CACHE_HOST"
-  sudo chown "$USER:users" "$CACHE_HOST"
+  sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$CACHE_HOST"
 fi
-if [ ! -w "$CACHE_HOST" ]; then
-  echo "error: cache directory is not writable: $CACHE_HOST" >&2
-  exit 1
-fi
+inference_require_cache_access "$CACHE_HOST"
 
 # Make relaunch idempotent, then reject a different server already owning :8000
 # (typically the SGLang DSpark container — stop it first:
