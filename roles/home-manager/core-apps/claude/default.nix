@@ -18,6 +18,24 @@ let
   localPlugins = lib.listToAttrs
     (map (p: lib.nameValuePair "${p}@local" true) cfg.plugins);
 
+  # Third-party plugins live behind github marketplaces we do not own, so none
+  # of the workspace-clone machinery above applies — Claude Code fetches them
+  # itself. The registration and the enable line are still derived from ONE
+  # attrset, for the same reason localPlugins is derived from cfg.plugins: an
+  # enable line must not be able to name a marketplace nothing ever registered.
+  githubKnownMarketplaces = lib.mapAttrs
+    (_: m: { source = { source = "github"; repo = m.repo; }; })
+    cfg.githubMarketplaces;
+
+  githubPlugins = lib.listToAttrs (lib.concatLists (lib.mapAttrsToList
+    (mp: m: map (p: lib.nameValuePair "${p}@${mp}" true) m.plugins)
+    cfg.githubMarketplaces));
+
+  # Every plugin name enabled out of a github marketplace, for the collision
+  # assertion below.
+  githubEnabled = lib.concatLists
+    (lib.mapAttrsToList (_: m: m.plugins) cfg.githubMarketplaces);
+
   # The `local` marketplace points Claude Code at the workspace clones instead
   # of at github tarballs, so a plugin resolves LIVE from its checkout: edit the
   # repo, the plugin changes, no reinstall. It is generated at activation (see
@@ -54,20 +72,15 @@ let
     # before this role existed would survive every activation forever. `false`
     # is the only way to actually retract it. (A deliberate `claude plugin
     # install loom@loom` still works; the next activation just wins it back.)
-    enabledPlugins = localPlugins // {
+    enabledPlugins = localPlugins // githubPlugins // {
       "loom@loom" = false;
       "cortex@cortex" = false;
       "feynman@plugins" = false;
     };
-    extraKnownMarketplaces = {
+    extraKnownMarketplaces = githubKnownMarketplaces // {
       # Declares the local marketplace so a fresh machine registers it from the
       # dotfiles rather than needing `claude plugin marketplace add` by hand.
-      local.source           = { source = "directory"; path = localMarketplaceDir; };
-      impeccable.source      = { source = "github"; repo = "pbakaus/impeccable"; };
-      frontend-slides.source = { source = "github"; repo = "zarazhangrui/frontend-slides"; };
-      loom.source            = { source = "github"; repo = "peterstorm/loom"; };
-      cortex.source          = { source = "github"; repo = "peterstorm/cortex"; };
-      feynman.source         = { source = "github"; repo = "peterstorm/feynman"; };
+      local.source = { source = "directory"; path = localMarketplaceDir; };
     };
   };
 
@@ -102,18 +115,98 @@ in
         marketplace, never enabled.
       '';
     };
+
+    githubMarketplaces = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          repo = lib.mkOption {
+            type = lib.types.str;
+            example = "pbakaus/impeccable";
+            description = "GitHub owner/repo carrying the marketplace manifest.";
+          };
+          plugins = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "impeccable" ];
+            description = ''
+              Plugins from this marketplace to enable at user scope, i.e. in
+              every project. Empty leaves the marketplace registered and
+              browsable without turning anything on — the right state for one
+              that is only ever wanted per-project.
+            '';
+          };
+        };
+      });
+      default = {
+        # Frontend design vocabulary: one skill, ~23 `/impeccable:*` commands,
+        # and PostToolUse/Stop hooks that scan edited UI files for the tells of
+        # AI-default design. Enabled at user scope rather than per-project
+        # because the floor it enforces is not a property of any one repo, and a
+        # project-scoped copy pins a version that then rots (this machine had
+        # 3.0.7 pinned to one checkout while upstream reached 4.1.1).
+        #
+        # Its hooks need the node in home.packages below.
+        impeccable = {
+          repo = "pbakaus/impeccable";
+          plugins = [ "impeccable" ];
+        };
+
+        # Registered but off: only wanted in the odd repo that is actually
+        # building a deck, and its commands would otherwise sit in every
+        # session's context for nothing.
+        frontend-slides.repo = "zarazhangrui/frontend-slides";
+
+        # Retired sources for plugins that now resolve live out of `local`.
+        # Still declared because the settings merge can override a key but never
+        # delete one: dropping these here would not remove them from a
+        # settings.json that already has them, it would only hide where they
+        # came from. The matching `<name>@<name>` retractions are in
+        # managedSettings.
+        loom.repo = "peterstorm/loom";
+        cortex.repo = "peterstorm/cortex";
+        feynman.repo = "peterstorm/feynman";
+      };
+      description = ''
+        Third-party Claude Code marketplaces on github, keyed by marketplace
+        name. One attrset drives both the registration and the enable list, so a
+        plugin can never be enabled from a marketplace that was never declared.
+      '';
+    };
   };
 
   config = {
 
-  # A repo is a plugin or a plain checkout, never both. Listed twice it would be
-  # enabled as <name>@local while claiming not to be a plugin — the marketplace
-  # generator's manifest check would then silently decide which claim wins.
-  assertions = [{
-    assertion = lib.intersectLists cfg.plugins cfg.extraWorkspaceRepos == [];
-    message = "dotfiles.claude: repo(s) in both plugins and extraWorkspaceRepos: "
-      + lib.concatStringsSep ", " (lib.intersectLists cfg.plugins cfg.extraWorkspaceRepos);
-  }];
+  assertions = [
+    # A repo is a plugin or a plain checkout, never both. Listed twice it would
+    # be enabled as <name>@local while claiming not to be a plugin — the
+    # marketplace generator's manifest check would then silently decide which
+    # claim wins.
+    {
+      assertion = lib.intersectLists cfg.plugins cfg.extraWorkspaceRepos == [];
+      message = "dotfiles.claude: repo(s) in both plugins and extraWorkspaceRepos: "
+        + lib.concatStringsSep ", " (lib.intersectLists cfg.plugins cfg.extraWorkspaceRepos);
+    }
+
+    # The same plugin enabled from `local` and from a github marketplace is two
+    # live copies: both register their hooks, and every hook then fires twice
+    # per event. This is the failure the `<name>@<name>` retractions below were
+    # written by hand to undo; the assertion stops a new one being introduced.
+    {
+      assertion = lib.intersectLists cfg.plugins githubEnabled == [];
+      message = "dotfiles.claude: plugin(s) enabled from both the local marketplace "
+        + "and a github one (hooks would register twice): "
+        + lib.concatStringsSep ", " (lib.intersectLists cfg.plugins githubEnabled);
+    }
+  ];
+
+  # impeccable's PostToolUse/Stop hooks shell out to `node` and require >= 22.
+  # The wrapper degrades quietly when there is none — it drops a marker in
+  # ~/.impeccable, prints one notice, and never tries again — so a machine
+  # without node gets a plugin that looks installed while the half of it that
+  # watches edits does nothing at all. Nothing else here guarantees a node
+  # (core-apps carries bun, not node), so the role that turns the plugin on is
+  # the one that owes it a runtime.
+  home.packages = [ pkgs.nodejs_22 ];
 
   # 1. Provision the plugin/workspace repos that pi, opencode and reclaw read
   #    directly off disk. Idempotent — only clones a repo that isn't present.
