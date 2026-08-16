@@ -407,16 +407,16 @@ in
   };
 
 
-  # --- vLLM token ledger + heatmap ------------------------------------------
+  # --- Local inference token ledger + heatmap -------------------------------
   #
   # The homelab's Prometheus only keeps 30d of history and dies on cluster
-  # wipes (k3s uninstall/reinstall), and vLLM's own /metrics counters reset
-  # with every container restart. To keep a true lifetime stat, record
+  # wipes (k3s uninstall/reinstall), and inference-engine /metrics counters
+  # reset with every container restart or runtime switch. To keep a true lifetime stat, record
   # per-interval token deltas into an append-only CSV on this box's disk
   # (/var/lib/vllm-stats/stats.csv) every 15 minutes, and render a
   # GitHub-style heatmap from it. The CSV survives everything except the disk.
   systemd.services.vllm-stats-record = {
-    description = "Append vLLM token usage deltas to the durable ledger";
+    description = "Append local inference token usage deltas to the durable ledger";
     serviceConfig = {
       Type = "oneshot";
       ExecStart = [
@@ -427,7 +427,7 @@ in
   };
 
   systemd.timers.vllm-stats-record = {
-    description = "Run the vLLM stats recorder every 15 minutes";
+    description = "Run the local inference stats recorder every 15 minutes";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*:0/15";
@@ -442,7 +442,7 @@ in
   # route to it. Read-only static files, and note there is no auth in front of
   # this: the unroutable address *is* the access control.
   systemd.services.vllm-stats-http = {
-    description = "Serve the vLLM stats heatmap over HTTP";
+    description = "Serve the local inference stats heatmap over HTTP";
     wants = [ "network-online.target" ];
     after = [ "network-online.target" "vllm-stats-record.service" ];
     serviceConfig = {

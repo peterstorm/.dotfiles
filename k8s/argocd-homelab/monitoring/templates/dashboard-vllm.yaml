@@ -1,4 +1,4 @@
-# Grafana dashboard for the vLLM instance on `desktop` (192.168.0.80:8000).
+# Grafana dashboard for the active local inference engine on `desktop:8000`.
 # The kube-prometheus-stack Grafana sidecar (grafana_dashboard label) picks it
 # up automatically and provisions it.
 apiVersion: v1

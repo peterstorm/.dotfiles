@@ -46,7 +46,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(vllm:generation_tokens_total{model_name=~\"$model\"}[$__rate_interval]))",
+          "expr": "(sum(rate(inference:generation_tokens_total{model_name=~\"$model\"}[$__rate_interval]))) or (sum(rate(vllm:generation_tokens_total{model_name=~\"$model\"}[$__rate_interval])))",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -81,7 +81,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\"}[$__rate_interval]))",
+          "expr": "(sum(rate(inference:prompt_tokens_total{model_name=~\"$model\"}[$__rate_interval]))) or (sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\"}[$__rate_interval])))",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -116,7 +116,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(vllm:request_success_total{model_name=~\"$model\"}[$__rate_interval]))",
+          "expr": "(sum(rate(inference:request_success_total{model_name=~\"$model\"}[$__rate_interval]))) or (sum(rate(vllm:request_success_total{model_name=~\"$model\"}[$__rate_interval])))",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -151,7 +151,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(vllm:num_requests_running{model_name=~\"$model\"})",
+          "expr": "(sum(inference:num_requests_running{model_name=~\"$model\"})) or (sum(vllm:num_requests_running{model_name=~\"$model\"}))",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -186,7 +186,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\"})",
+          "expr": "(sum(inference:num_requests_waiting{model_name=~\"$model\"})) or (sum(vllm:num_requests_waiting{model_name=~\"$model\"}))",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -227,7 +227,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100",
+          "expr": "(max(inference:kv_cache_usage_ratio{model_name=~\"$model\"}) * 100) or (max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100)",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -262,12 +262,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(vllm:generation_tokens_total{model_name=~\"$model\"})",
+          "expr": "(sum(inference:generation_tokens_total{model_name=~\"$model\"})) or (sum(vllm:generation_tokens_total{model_name=~\"$model\"}))",
           "legendFormat": "__auto",
           "refId": "A"
         }
       ],
-      "title": "Output tokens since vLLM start",
+      "title": "Output tokens since engine start",
       "type": "stat"
     },
     {
@@ -297,7 +297,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model\"}[5m])) / clamp_min(sum(increase(vllm:request_success_total{model_name=~\"$model\"}[5m])), 1)",
+          "expr": "(sum(increase(inference:generation_tokens_total{model_name=~\"$model\"}[5m])) / clamp_min(sum(increase(inference:request_success_total{model_name=~\"$model\"}[5m])), 1)) or (sum(increase(vllm:generation_tokens_total{model_name=~\"$model\"}[5m])) / clamp_min(sum(increase(vllm:request_success_total{model_name=~\"$model\"}[5m])), 1))",
           "legendFormat": "__auto",
           "refId": "A"
         }
@@ -333,13 +333,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(vllm:generation_tokens_total{model_name=~\"$model\"}[$__rate_interval]))",
+          "expr": "(sum(rate(inference:generation_tokens_total{model_name=~\"$model\"}[$__rate_interval]))) or (sum(rate(vllm:generation_tokens_total{model_name=~\"$model\"}[$__rate_interval])))",
           "legendFormat": "output",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\"}[$__rate_interval]))",
+          "expr": "(sum(rate(inference:prompt_tokens_total{model_name=~\"$model\"}[$__rate_interval]))) or (sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\"}[$__rate_interval])))",
           "legendFormat": "input",
           "refId": "B"
         }
@@ -375,19 +375,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))",
+          "expr": "(histogram_quantile(0.50, sum by (le) (rate(inference:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.50, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate(inference:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))",
+          "expr": "(histogram_quantile(0.99, sum by (le) (rate(inference:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -423,19 +423,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))",
+          "expr": "(histogram_quantile(0.50, sum by (le) (rate(inference:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate(inference:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))",
+          "expr": "(histogram_quantile(0.99, sum by (le) (rate(inference:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -471,24 +471,24 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000",
+          "expr": "(histogram_quantile(0.50, sum by (le) (rate(inference:inter_token_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000) or (histogram_quantile(0.50, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000)",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate(inference:inter_token_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000) or (histogram_quantile(0.95, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000)",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000",
+          "expr": "(histogram_quantile(0.99, sum by (le) (rate(inference:inter_token_latency_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000) or (histogram_quantile(0.99, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))) * 1000)",
           "legendFormat": "p99",
           "refId": "C"
         }
       ],
-      "title": "Time per output token (TPOT)",
+      "title": "Inter-token latency (TPOT / ITL)",
       "type": "timeseries"
     },
     {
@@ -519,13 +519,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(vllm:num_requests_running{model_name=~\"$model\"})",
+          "expr": "(sum(inference:num_requests_running{model_name=~\"$model\"})) or (sum(vllm:num_requests_running{model_name=~\"$model\"}))",
           "legendFormat": "running",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\"})",
+          "expr": "(sum(inference:num_requests_waiting{model_name=~\"$model\"})) or (sum(vllm:num_requests_waiting{model_name=~\"$model\"}))",
           "legendFormat": "waiting",
           "refId": "B"
         }
@@ -561,7 +561,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum by (finished_reason) (increase(vllm:request_success_total{model_name=~\"$model\"}[30m]))",
+          "expr": "(sum by (finished_reason) (increase(inference:request_success_total{model_name=~\"$model\"}[30m]))) or (sum by (finished_reason) (increase(vllm:request_success_total{model_name=~\"$model\"}[30m])))",
           "legendFormat": "{{finished_reason}}",
           "refId": "A"
         }
@@ -603,24 +603,180 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100",
+          "expr": "(max(inference:kv_cache_usage_ratio{model_name=~\"$model\"}) * 100) or (max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100)",
           "legendFormat": "kv cache",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "100 * rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) / clamp_min(rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]), 1e-9)",
+          "expr": "(max(inference:prefix_cache_hit_ratio{model_name=~\"$model\"}) * 100) or (100 * rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) / clamp_min(rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]), 1e-9))",
           "legendFormat": "prefix cache hit rate",
           "refId": "B"
         }
       ],
       "title": "KV / prefix cache usage",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 2.5 },
+              { "color": "green", "value": 3.35 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 28 },
+      "id": 16,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max(inference:spec_accept_length{model_name=~\"$model\"})",
+          "legendFormat": "accepted tokens / verify",
+          "refId": "A"
+        }
+      ],
+      "title": "DSpark acceptance length",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 25 },
+              { "color": "green", "value": 35 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 28 },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max(inference:spec_accept_rate{model_name=~\"$model\"}) * 100",
+          "legendFormat": "accepted draft tokens",
+          "refId": "A"
+        }
+      ],
+      "title": "DSpark draft acceptance",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 28 },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(inference:spec_verify_calls_total{model_name=~\"$model\"}[$__rate_interval]))",
+          "legendFormat": "verifications / second",
+          "refId": "A"
+        }
+      ],
+      "title": "DSpark verification rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 95 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 28 },
+      "id": 19,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max(inference:mamba_usage_ratio{model_name=~\"$model\"}) * 100",
+          "legendFormat": "Mamba state slots",
+          "refId": "A"
+        }
+      ],
+      "title": "Mamba state usage",
+      "type": "stat"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["vllm"],
+  "tags": ["inference", "vllm", "sglang", "dspark"],
   "templating": {
     "list": [
       {
@@ -641,7 +797,7 @@
         "allValue": null,
         "current": {},
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
-        "definition": "label_values(vllm:generation_tokens_total, model_name)",
+        "definition": "label_values({__name__=~\"inference:generation_tokens_total|vllm:generation_tokens_total|sglang:generation_tokens_total\"}, model_name)",
         "hide": 0,
         "includeAll": true,
         "label": "Model",
@@ -649,7 +805,7 @@
         "name": "model",
         "options": [],
         "query": {
-          "query": "label_values(vllm:generation_tokens_total, model_name)",
+          "query": "label_values({__name__=~\"inference:generation_tokens_total|vllm:generation_tokens_total|sglang:generation_tokens_total\"}, model_name)",
           "refId": "A"
         },
         "refresh": 2,
@@ -663,7 +819,7 @@
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "vLLM — desktop (DeepSeek-V4-Flash)",
+  "title": "Local inference — desktop",
   "uid": "vllm-desktop-dashboard",
   "version": 1,
   "weekStart": ""

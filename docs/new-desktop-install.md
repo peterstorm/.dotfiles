@@ -1260,13 +1260,19 @@ Do not promote this launcher over the no-spec BF16 baseline until all of these p
 6. A sustained eight-agent tool-use soak records zero CUDA faults, Xids, deadlocks,
    empty completions, and container restarts.
 
-Metrics are enabled and authenticated like the other endpoints:
+Metrics are enabled (and intentionally readable without the generation API key so the
+homelab Prometheus target can scrape them). Supplying the key remains valid:
 
 ```bash
 curl -fsS http://127.0.0.1:8000/metrics \
   -H "Authorization: Bearer $KEY" |
   grep -Ei 'spec|accept|token'
 ```
+
+Prometheus recording rules normalize SGLang's `sglang:*` names and vLLM's `vllm:*`
+names into the dashboard's stable `inference:*` contract. The durable recorder performs
+the same schema detection before writing logical token/request deltas, so switching the
+exclusive port 8000 between vLLM and SGLang preserves the existing lifetime ledger.
 
 To return to the vLLM reference profile:
 

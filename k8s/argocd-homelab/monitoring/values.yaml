@@ -43,9 +43,9 @@ kube-prometheus-stack:
               requests:
                 storage: 10Gi
       replicas: 1
-      # vLLM runs on `desktop` (192.168.0.80:8000), outside the k8s cluster —
-      # scrape its /metrics directly. Needed so token/latency counters survive
-      # vLLM container restarts (in-process counters reset).
+      # The active local inference engine runs on `desktop:8000`, outside the
+      # k8s cluster. Scrape its /metrics directly; recording rules normalize
+      # vLLM and SGLang names into the dashboard's inference:* contract.
       additionalScrapeConfigs:
         - job_name: vllm-desktop
           scrape_interval: 15s
