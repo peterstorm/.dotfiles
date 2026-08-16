@@ -2,8 +2,9 @@
 # Launch the experimental Qwen3.8-27B BF16 + DSpark profile with SGLang.
 #
 # Quality-first target: TP2 BF16 weights/KV, FP32 GDN state, native 262K
-# context, eight running requests, checkpoint-native template, and the pinned
-# 1.36B BF16 DSpark draft. Static verification is mandatory for this TP2 probe.
+# context, eight running requests, checkpoint-native template, the pinned
+# 1.36B BF16 DSpark draft, and the full multimodal checkpoint (vision enabled).
+# Static verification is mandatory for this TP2 probe.
 # OpenAI-compatible endpoint on :8000.
 #
 # Prerequisites:
@@ -180,6 +181,7 @@ docker run -d --init \
   --model-path "$MODEL_CONTAINER" \
   --served-model-name qwen3.8-27b \
   --trust-remote-code \
+  --enable-multimodal \
   --dtype bfloat16 \
   --tp-size 2 \
   --context-length "$CONTEXT_LENGTH" \

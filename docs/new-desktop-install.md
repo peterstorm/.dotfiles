@@ -1226,8 +1226,16 @@ Primary references:
 | Draft | `RadixArk/Qwen3.8-27B-DSpark` at revision `923ed3a8572615643f0137e424e4ce4edd7f1cda` |
 | Draft geometry | 1.36B BF16, five full-attention layers, gamma 7, verify width 8 |
 | Runtime profile | TP2, BF16 target/KV, FP32 GDN state, native 262K, eight requests |
+| Multimodal | Full checkpoint served with vision enabled via `--enable-multimodal` |
 | Verification mode | Static/verify-all only; compact confidence scheduling is deliberately disabled |
 | Endpoint | Authenticated OpenAI-compatible API at `http://desktop:8000/v1` |
+
+The checkpoint is the full multimodal Qwen3.8-27B (language model plus vision tower).
+The launcher passes `--enable-multimodal` so image inputs are processed in-process, and
+the SGLang contract test fails if that flag is dropped or an explicit `--language-only`
+regresses. The image treats the flag as a no-op for non-multimodal models, so it is safe
+to keep permanently. Do not pass `--language-only`: it strips the vision tower and
+silently serves text only.
 
 The source draft repository currently declares `license: other` without a license text.
 Do not redistribute or treat third-party GGUF metadata claiming Apache-2.0 as relicensing
