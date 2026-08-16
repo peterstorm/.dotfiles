@@ -25,6 +25,13 @@ jq -e '
   ([.panels[].title] | index("DSpark draft acceptance") != null) and
   ([.panels[].title] | index("DSpark verification rate") != null) and
   ([.panels[].title] | index("Mamba state usage") != null) and
+  ([.panels[].title] | index("KV cache occupancy") != null) and
+  ([.panels[].title] | index("Prefix cache hit rate (5m)") != null) and
+  (.panels[] | select(.id == 15) | (.targets | length) == 1 and .gridPos.w == 8) and
+  (.panels[] | select(.id == 20) |
+    (.targets | length) == 1 and
+    .gridPos.w == 8 and
+    (.targets[0].expr | contains("inference:prefix_cache_hit_ratio"))) and
   (.templating.list[] | select(.name == "model") | .query.query |
     contains("inference:generation_tokens_total") and
     contains("vllm:generation_tokens_total") and
@@ -35,6 +42,19 @@ jq -e '
   fail "normalized vLLM series do not preserve engine identity"
 [ "$(grep -Fc -- '"engine", "sglang"' "$RULES")" -ge 15 ] ||
   fail "normalized SGLang series do not preserve engine identity"
+grep -Fq -- 'sglang:prefill_effective_tokens_total{mode=~".*_hit"}[5m]' "$RULES" ||
+  fail "SGLang prefix-cache ratio is not derived from token counters"
+if grep -Fq -- 'label_replace(sglang:cache_hit_rate' "$RULES"; then
+  fail "SGLang prefix-cache ratio still uses the instantaneous gauge"
+fi
+if grep -Fq -- 'clamp_min' "$RULES"; then
+  fail "idle prefix-cache windows are forced to a false zero"
+fi
+grep -Fq -- 'rate(sglang:prefill_effective_tokens_total[5m])' "$RULES" &&
+  grep -Fq -- ') > 0)' "$RULES" ||
+  fail "idle prefix-cache windows are not filtered"
+grep -Fq -- 'or (0 * sum without (mode, moe_ep_rank, pp_rank, tp_rank)' "$RULES" ||
+  fail "active miss-only prefix-cache windows do not produce 0%"
 
 for metric in \
   inference:prompt_tokens_total \
