@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD="$ROOT/k8s/argocd-homelab/monitoring/dashboard-vllm.json"
 RULES="$ROOT/k8s/argocd-homelab/monitoring/templates/inference-recording-rules.yaml"
 RECORDER="$ROOT/scripts/vllm-stats-record.py"
+HEATMAP="$ROOT/scripts/vllm-stats-heatmap.py"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -80,8 +81,21 @@ for marker in \
   'sglang:generation_tokens_histogram_count' \
   'engine changed' \
   'merge_endpoint_states' \
-  'recover_pending_interval'; do
+  'recover_pending_interval' \
+  'model_name' \
+  'Historical aggregate' \
+  'prompt_tokens_per_second' \
+  'generation_tokens_per_second'; do
   grep -Fq -- "$marker" "$RECORDER" || fail "recorder missing $marker"
+done
+
+for marker in \
+  'All models' \
+  'Model comparison' \
+  'Served throughput · 24 hours' \
+  'Filter statistics by model' \
+  'including idle time'; do
+  grep -Fq -- "$marker" "$HEATMAP" || fail "stats page missing: $marker"
 done
 
 echo "PASS: inference monitoring supports normalized vLLM and SGLang metrics"
