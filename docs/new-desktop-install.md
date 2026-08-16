@@ -25,7 +25,7 @@ driver (VRAM, power limit). See
 | PCIe topology | **confirmed** | **x8/x8, both from the CPU root complex** — P2P measured at **28.6 GB/s** (Gen5 x8 line rate) | whether GPU↔GPU P2P works at all |
 | GPUs | **confirmed** | 2× RTX PRO 6000 Blackwell **Workstation Edition** `[10de:2bb1]`, ~96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
 | GPU slots | **confirmed** | `PCIEX16(G5)_1` + `_2` → buses `01:00.0` / `03:00.0`, CPU root ports `00:01.1` / `00:01.3` | direct-attach P2P path |
-| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 450` |
+| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 400` (reduced from 450 after 2026-08-16 GPU0 Xid 79 dropouts — see [crash triage](gpu-inference-crash-triage.md)) |
 | WiFi | **confirmed** | **MediaTek MT7927** (Filogic 380) `[14c3:7927]`, driver `mt7925e` — out-of-tree, needs `iommu=pt` | see [WiFi (MT7927)](#wifi-mt7927) |
 | NICs | **confirmed** | `wlp10s0` (WiFi), `enp11s0` + `enp12s0` (2.5 Gb + 10 Gb) — flake `NICs` value is cosmetic (NetworkManager owns them) | non-blocking |
 

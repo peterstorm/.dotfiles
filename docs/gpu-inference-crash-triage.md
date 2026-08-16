@@ -39,13 +39,36 @@ cap). Xid 79 under that profile = power delivery or card hardware fault, not sof
   `mce`/thermal-trip logs, not Xid 79. (Still worth a temp check — see step 6 —
   because the cooler is undersized and CPU heat *can* degrade PCIe signal margin.)
 
+## Incident record: 2026-08-16 ~02:26 local (second dropout, GPU0, at 400 W cap)
+
+| Time (CEST) | Event |
+|---|---|
+| 01:42:38 | Boot after incident 1; sglang container back up, same model/TP=2 |
+| ~02:20–02:25 | `nvidia-smi -pl 400` applied as a test; both GPUs verified alive at the 400 W cap (86/73 °C, 2542/2610 MHz, 99 % util) |
+| 02:26:09–12 | GPU0 RPCs fail with `status 0xf`, `NV_ERR_GPU_IS_LOST (0x0000000F)`, "GPU lost from the bus" — same signature as incident 1, this time **while capped at 400 W** (last observed draw 400.1 W) |
+| 02:26:14 | Clean `systemd-shutdown` → power off → back up 02:28:22; container serving again |
+
+**What changes**: the first read — "450 W cap = overdraw" — is weakened. GPU0 fell off
+the bus at *both* 450 W and 400 W caps, always under saturated qwen3.8-27b TP=2 load.
+The smaller `deepseek-v4-flash` workload (lower sustained draw) never reproduced it.
+The failure follows **GPU0 under heavy load**, not a specific wattage. The 400 W cap
+remains as mitigation (less current through the 12VHPWR path, less VRM stress), and
+`gpuPowerLimitWatts` was set to 400 in `machines/desktop/default.nix` — but this is not
+the fix. The hardware question (12VHPWR seating/connector heat, GPU0 itself, or slot
+`PCIEX16(G5)_1`) is still open.
+
 **Fixes to try in order if it recurs on GPU0**:
 
-1. Reseat 12VHPWR on GPU0; feed all 3 connectors with **separate** PSU cables (no daisy chain)
-2. Check PSU headroom — 2×450 W + 9950X peaks >1100 W
-3. If it recurs on `01:00` specifically → RMA GPU0 (serial `1794425022466`)
+1. Reseat 12VHPWR on GPU0; feed all 3 connectors with **separate** PSU cables (no daisy chain).
+   While the card is out, inspect the connector and cable for discoloration/heat marks —
+   two dropouts in ~1 h of load makes a marginal connection the prime suspect.
+2. **Swap test**: move GPU0 and GPU1 (card follows card). Recurrence on the *card* in the
+   other slot → RMA GPU0 (serial `1794425022466`). Recurrence on the *slot/cable* →
+   power-delivery path for `PCIEX16(G5)_1` / its PSU cable.
+3. Check PSU headroom — 2×450 W + 9950X peaks >1100 W (less relevant now that dropouts
+   occur at 400 W, but transients still matter).
 4. Watch the CPU: undersized cooler; if package temps spike toward 95–105 °C at the
-   crash moment, improve cooling before chasing GPU hardware
+   crash moment, improve cooling before chasing GPU hardware.
 
 ## Triage playbook (fastest first)
 
@@ -141,7 +164,9 @@ Non-zero retired pages or pending remaps → RMA track.
 
 ## Decision summary
 
-- **Xid 79 + saturation + power at cap** → cables → PSU → RMA (in that order)
+- **Xid 79 + saturation + power at cap** → cables → PSU → RMA (in that order). On this
+  box both 2026-08-16 dropouts were GPU0, at *both* 450 W and 400 W caps, so the cap is
+  mitigation only — the card/connector/slot swap test decides RMA vs power path.
 - **Xid 48/63/64/94/95** or retired pages → VRAM → RMA
 - **Speed/width drops or AER errors** → slot/retimer/cable reseats, try the other slot
 - **No Xid, just OOM/413s/timeouts** → server-config problem (mem fraction, context

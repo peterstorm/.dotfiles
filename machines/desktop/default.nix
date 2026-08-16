@@ -3,20 +3,26 @@ let
   # Desired persistent per-GPU power cap in watts, or null to leave the cards at
   # their firmware default.
   #
-  # Why 450: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
+  # Why 400: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
   # the 600 W Workstation card holding ~300-305 Gflop/s/W flat across the whole
-  # 200-350 W band, and only reaching peak throughput at the full 600 W. Two of
-  # those is 1200 W of GPU alone in a consumer ATX case with shared airflow.
-  # Capping each at 450 gives up a few percent of throughput and buys back most
-  # of the thermals and noise — and on a two-up build, less throttling can leave
-  # *sustained* clocks higher than the uncapped pair.
+  # 200-350 W band, and only reaching peak throughput at the full 600 W — so 400
+  # stays near the flat-efficiency band and costs only a few percent of
+  # throughput. Two of those is 1200 W of GPU alone in a consumer ATX case with
+  # shared airflow; capping buys back thermals and noise, and on a two-up build
+  # less throttling can leave *sustained* clocks higher than the uncapped pair.
+  #
+  # Reliability override (2026-08-16): GPU0 (serial 1794425022466) fell off the
+  # PCIe bus (Xid 79) twice under saturated sglang load — once at the 450 W cap,
+  # once already capped at 400 W. The cap is a mitigation, not the fix; the
+  # lower stress margin is kept while the 12VHPWR/card/slot hardware question is
+  # open. See docs/gpu-inference-crash-triage.md (incident record + playbook).
   #
   # This is a request, not an assertion: the service below clamps it into the
   # range the installed cards actually report. The SKU here is still unverified,
   # and a 600 W Workstation card and a 300 W Max-Q do not share a valid range —
   # `nvidia-smi -pl` exits non-zero outside it, which would fail the unit on
   # every boot. Clamping means the same config is correct for either card.
-  gpuPowerLimitWatts = 450;
+  gpuPowerLimitWatts = 400;
 
   # --- MediaTek MT7927 / MT6639 (Filogic 380) WiFi 7 + Bluetooth -------------
   #
