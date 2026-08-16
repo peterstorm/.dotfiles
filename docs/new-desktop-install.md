@@ -1270,9 +1270,16 @@ curl -fsS http://127.0.0.1:8000/metrics \
 ```
 
 Prometheus recording rules normalize SGLang's `sglang:*` names and vLLM's `vllm:*`
-names into the dashboard's stable `inference:*` contract. The durable recorder performs
-the same schema detection before writing logical token/request deltas, so switching the
-exclusive port 8000 between vLLM and SGLang preserves the existing lifetime ledger.
+names into the dashboard's stable `inference:*` contract. SGLang prefix-cache effectiveness
+is calculated as a rolling five-minute, token-weighted ratio from
+`prefill_effective_tokens_total`; its instantaneous `cache_hit_rate` gauge is not suitable
+for a dashboard because idle or miss-only log intervals overwrite it with zero. The
+recording rule leaves no-prefill windows empty while preserving a real 0% for active,
+miss-only traffic. KV-cache occupancy and prefix-cache effectiveness are displayed
+separately because their healthy directions are opposite. The durable recorder performs
+the same schema detection before
+writing logical token/request deltas, so switching exclusive port 8000 between vLLM and
+SGLang preserves the existing lifetime ledger.
 
 To return to the vLLM reference profile:
 

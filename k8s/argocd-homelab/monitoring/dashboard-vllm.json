@@ -552,7 +552,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
       "id": 14,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
@@ -594,7 +594,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 },
       "id": 15,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
@@ -606,15 +606,53 @@
           "expr": "(max(inference:kv_cache_usage_ratio{model_name=~\"$model\"}) * 100) or (max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100)",
           "legendFormat": "kv cache",
           "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(max(inference:prefix_cache_hit_ratio{model_name=~\"$model\"}) * 100) or (100 * rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) / clamp_min(rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]), 1e-9))",
-          "legendFormat": "prefix cache hit rate",
-          "refId": "B"
         }
       ],
-      "title": "KV / prefix cache usage",
+      "title": "KV cache occupancy",
+      "description": "Active KV-cache occupancy. Lower values leave more headroom for running and queued requests.",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 80 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 20 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(max(inference:prefix_cache_hit_ratio{model_name=~\"$model\"}) * 100) or ((100 * (rate(vllm:prefix_cache_hits_total{model_name=~\"$model\"}[$__rate_interval]) or (0 * rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]))) / rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval])) and (rate(vllm:prefix_cache_queries_total{model_name=~\"$model\"}[$__rate_interval]) > 0))",
+          "legendFormat": "token-weighted cache hit",
+          "refId": "A"
+        }
+      ],
+      "title": "Prefix cache hit rate (5m)",
+      "description": "Rolling five-minute share of prefill tokens served from device, host, or storage prefix caches. Higher is better.",
       "type": "timeseries"
     },
     {

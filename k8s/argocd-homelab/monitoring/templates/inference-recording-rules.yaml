@@ -55,11 +55,25 @@ spec:
         - record: inference:prefix_cache_hit_ratio
           expr: >-
             label_replace(
-            rate(vllm:prefix_cache_hits_total[5m])
-            / clamp_min(rate(vllm:prefix_cache_queries_total[5m]), 1e-9),
+            ((rate(vllm:prefix_cache_hits_total[5m])
+            or (0 * rate(vllm:prefix_cache_queries_total[5m])))
+            / rate(vllm:prefix_cache_queries_total[5m]))
+            and (rate(vllm:prefix_cache_queries_total[5m]) > 0),
             "engine", "vllm", "model_name", ".*")
-            or label_replace(sglang:cache_hit_rate,
-            "engine", "sglang", "__name__", ".*")
+            or label_replace(
+            ((sum without (mode, moe_ep_rank, pp_rank, tp_rank) (
+              rate(sglang:prefill_effective_tokens_total{mode=~".*_hit"}[5m])
+            )
+            or (0 * sum without (mode, moe_ep_rank, pp_rank, tp_rank) (
+              rate(sglang:prefill_effective_tokens_total[5m])
+            )))
+            / sum without (mode, moe_ep_rank, pp_rank, tp_rank) (
+              rate(sglang:prefill_effective_tokens_total[5m])
+            ))
+            and (sum without (mode, moe_ep_rank, pp_rank, tp_rank) (
+              rate(sglang:prefill_effective_tokens_total[5m])
+            ) > 0),
+            "engine", "sglang", "model_name", ".*")
 
         # SGLang speculative-decoding and hybrid-state observability. These
         # series are simply absent for engines that do not expose the feature.

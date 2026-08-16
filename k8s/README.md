@@ -341,6 +341,7 @@ The `monitoring/` app scrapes whichever inference engine owns `desktop:8000/metr
 - Verify scraping: Grafana → Explore → `up{job="vllm-desktop"}` should be 1
 - Engine counters reset on container restart or runtime switch; Prometheus `rate()`/`increase()` handle process resets while the durable ledger below preserves lifetime totals
 - SGLang DSpark adds acceptance length/rate, verification-rate, and Mamba-state panels; those panels are absent rather than zero for runtimes without those features
+- Prefix-cache effectiveness is a rolling five-minute, token-weighted ratio derived from SGLang's monotonic `prefill_effective_tokens_total` counters; do not graph its last-interval `cache_hit_rate` gauge. Idle windows remain gaps rather than false 0% misses. KV occupancy and prefix-cache effectiveness are separate panels because lower occupancy and higher hit rate are desirable.
 - Storage: PVC on `local-path` (thin-provisioned, claim 10Gi) + `retentionSize: 9GiB (B suffix required by CRD regex)` — Prometheus auto-deletes oldest blocks past 9Gi, so it can never fill the node disk; `retention: 30d`
 - Check homelab disk has room to grow (run from a machine that has SSH keys for it, e.g. laptop):
   ```bash
