@@ -26,6 +26,24 @@ NAME="qwen38-27b-bf16-dspark-sglang"
 
 MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-8}"
 CONTEXT_LENGTH="${CONTEXT_LENGTH:-262144}"
+# Diagnostic knob: CUDA logical device 0 becomes TP rank 0. Reversing this
+# order distinguishes a rank-0 runtime failure from a physical GPU0 failure.
+GPU_ORDER="${GPU_ORDER:-0,1}"
+case "$GPU_ORDER" in
+  0,1|1,0) ;;
+  *) echo "error: GPU_ORDER must be 0,1 or 1,0 (got: $GPU_ORDER)" >&2; exit 2 ;;
+esac
+CONTAINER_ARCHIVE_DIR="${CONTAINER_ARCHIVE_DIR:-$HOME/.local/state/qwen38/container-archives}"
+ARCHIVE_RETENTION_DAYS="${ARCHIVE_RETENTION_DAYS:-14}"
+ARCHIVE_MAX_COUNT="${ARCHIVE_MAX_COUNT:-20}"
+MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-350}"
+for numeric in ARCHIVE_RETENTION_DAYS ARCHIVE_MAX_COUNT MAX_GPU_POWER_LIMIT; do
+  value="${!numeric}"
+  if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: $numeric must be a positive integer (got: $value)" >&2
+    exit 2
+  fi
+done
 CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-2048}"
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.85}"
 DSPARK_GAMMA="${DSPARK_GAMMA:-7}"
@@ -46,6 +64,29 @@ if [ ! -f "$ENTRYPOINT_HOST" ]; then
   echo "error: secure SGLang entrypoint not found at $ENTRYPOINT_HOST" >&2
   exit 1
 fi
+
+# Fail closed: never start this high-load diagnostic profile above its declared
+# safety cap. Override MAX_GPU_POWER_LIMIT explicitly when the diagnostic ends.
+mapfile -t gpu_caps < <(nvidia-smi --query-gpu=index,power.limit --format=csv,noheader,nounits 2>/dev/null)
+if [ "${#gpu_caps[@]}" -ne 2 ]; then
+  echo "error: expected two queryable GPUs before launch; found ${#gpu_caps[@]}" >&2
+  exit 3
+fi
+for record in "${gpu_caps[@]}"; do
+  IFS=',' read -r gpu_index gpu_cap <<< "$record"
+  gpu_index="${gpu_index//[[:space:]]/}"
+  gpu_cap="${gpu_cap//[[:space:]]/}"
+  if ! [[ "$gpu_index" =~ ^[0-9]+$ && "$gpu_cap" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "error: could not parse GPU power-cap record: $record" >&2
+    exit 3
+  fi
+  if awk -v cap="$gpu_cap" -v maximum="$MAX_GPU_POWER_LIMIT" 'BEGIN { exit !(cap > maximum) }'; then
+    echo "error: GPU $gpu_index cap is ${gpu_cap}W; diagnostic maximum is ${MAX_GPU_POWER_LIMIT}W" >&2
+    echo "apply the NixOS power-limit configuration before launching" >&2
+    exit 3
+  fi
+done
+echo "Verified both GPU power caps are <= ${MAX_GPU_POWER_LIMIT}W."
 
 CONFIG_DIR="$HOME/.config/qwen38"
 KEYFILE="$CONFIG_DIR/api-key"
@@ -86,6 +127,40 @@ if [ ! -w "$CACHE_HOST" ]; then
   exit 1
 fi
 
+# Preserve crash evidence before docker rm destroys the old container log. The
+# metadata deliberately excludes Config.Env because it contains the API key.
+if docker container inspect "$NAME" >/dev/null 2>&1; then
+  archive_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  install -m 700 -d "$CONTAINER_ARCHIVE_DIR"
+  archive_base="$CONTAINER_ARCHIVE_DIR/$archive_stamp"
+  {
+    docker inspect --format='id={{.Id}} created={{.Created}} started={{.State.StartedAt}} finished={{.State.FinishedAt}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} image={{.Config.Image}}' "$NAME"
+    docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' "$NAME" | grep '^CUDA_VISIBLE_DEVICES=' || true
+  } > "$archive_base.metadata"
+  if ! docker logs --timestamps "$NAME" 2>&1 | gzip -1 > "$archive_base.log.gz"; then
+    echo "warning: container log archive was incomplete: $archive_base.log.gz" >&2
+  fi
+  chmod 600 "$archive_base.metadata" "$archive_base.log.gz"
+  echo "Archived previous container evidence to $archive_base.{metadata,log.gz}"
+fi
+
+if [ -d "$CONTAINER_ARCHIVE_DIR" ]; then
+  find "$CONTAINER_ARCHIVE_DIR" -maxdepth 1 -type f \
+    \( -name '*.metadata' -o -name '*.log.gz' \) \
+    -mtime "+$ARCHIVE_RETENTION_DAYS" -delete
+  shopt -s nullglob
+  archives=("$CONTAINER_ARCHIVE_DIR"/*.log.gz)
+  if [ "${#archives[@]}" -gt "$ARCHIVE_MAX_COUNT" ]; then
+    mapfile -t archives < <(printf '%s\n' "${archives[@]}" | sort)
+    remove_count=$((${#archives[@]} - ARCHIVE_MAX_COUNT))
+    for ((archive_index = 0; archive_index < remove_count; archive_index++)); do
+      archive_base="${archives[$archive_index]%.log.gz}"
+      rm -f "$archive_base.log.gz" "$archive_base.metadata"
+    done
+  fi
+  shopt -u nullglob
+fi
+
 docker rm -f "$NAME" 2>/dev/null || true
 if command -v ss >/dev/null 2>&1 && ss -H -ltn 'sport = :8000' | grep -q .; then
   echo "error: TCP port 8000 is already in use; stop the current model server first" >&2
@@ -95,6 +170,7 @@ fi
 docker run -d --init \
   --restart unless-stopped \
   --name "$NAME" \
+  --label io.peterstorm.inference.gpu-order="$GPU_ORDER" \
   --gpus all \
   --ipc=host \
   --network host \
@@ -106,7 +182,7 @@ docker run -d --init \
   -v "$DRAFT_HOST":"$DRAFT_CONTAINER":ro \
   -v "$CACHE_HOST":/root/.cache \
   -v "$ENTRYPOINT_HOST":"$ENTRYPOINT_CONTAINER":ro \
-  -e CUDA_VISIBLE_DEVICES=0,1 \
+  -e CUDA_VISIBLE_DEVICES="$GPU_ORDER" \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e SGLANG_RAGGED_VERIFY_MODE=static \
   "$IMAGE@$DIGEST" \
@@ -140,7 +216,8 @@ docker run -d --init \
   --host 0.0.0.0 \
   --port 8000
 
-echo "Started '$NAME'. This is an experimental profile; first start compiles kernels and CUDA graphs."
+echo "Started '$NAME' with CUDA_VISIBLE_DEVICES=$GPU_ORDER (logical device 0 / TP rank 0 is listed first)."
+echo "This is an experimental profile; first start compiles kernels and CUDA graphs."
 echo "Follow:  docker logs -f $NAME"
 echo "Health:  KEY=\$(cat $KEYFILE); curl -fsS -H \"Authorization: Bearer \$KEY\" http://127.0.0.1:8000/health"
 echo "API key: $KEYFILE  (send as 'Authorization: Bearer <key>')"

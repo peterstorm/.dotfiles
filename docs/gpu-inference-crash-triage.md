@@ -5,6 +5,7 @@ record that motivated it. The machine:
 
 - **Desktop** (`ssh desktop`, 192.168.0.80) — NixOS 26.11, kernel 6.18.x
 - **CPU**: AMD Ryzen 9 9950X (16c/32t) — cooler currently **undersized** (known)
+- **PSU**: Seasonic 1600 W Platinum — ample aggregate capacity at the diagnostic 350 W GPU caps
 - **GPUs**: 2× NVIDIA RTX PRO 6000 Blackwell Workstation (GB202GL, 96 GB), driver 595.91.07
   - GPU0: PCI `01:00.0`, serial `1794425022466` (display attached)
   - GPU1: PCI `03:00.0`, serial `1791526036417`
@@ -25,13 +26,16 @@ record that motivated it. The machine:
 | 01:41:58 | Clean `systemd-shutdown` → reboot |
 | 01:43:21 | Docker restarts container (`unless-stopped`); 01:44:13 serving again |
 
-**Root cause**: GPU0 dropped off the PCIe bus under full load (drawn 451 W, at its 450 W
-cap). Xid 79 under that profile = power delivery or card hardware fault, not software.
+**Observed failure**: GPU0 became inaccessible over PCIe under full load (drawn 451 W,
+at its 450 W cap). Xid 79 strongly favors the physical card/power/slot path, but it does
+not by itself exclude a driver/GSP failure that wedges one TP rank. Root cause remains
+unproven until the logical-rank and physical-swap tests identify what the failure follows.
 
 **Ruled out** (with evidence):
 
 - OOM: no OOM kills; VRAM ~86/98 GB, within `mem_fraction_static=0.85` plan
-- sglang/model bug: scheduler SIGABRT was fallout from the GPU vanishing mid-NCCL-collective
+- ordinary sglang process failure: scheduler SIGABRT was fallout from the GPU vanishing
+  mid-NCCL collective; a repeatable rank-0 runtime/driver trigger is still not ruled out
 - PCIe link downgrade: slots are natively x8; AER clean on following boot; no retimer errors
 - Thermals (GPU): 80 °C at crash — fine for this card
 - VRAM degradation: 0 retired pages, 0 pending row-remaps, no remap failures
@@ -49,32 +53,70 @@ cap). Xid 79 under that profile = power delivery or card hardware fault, not sof
 | 02:26:14 | Clean `systemd-shutdown` → power off → back up 02:28:22; container serving again |
 
 **What changes**: the first read — "450 W cap = overdraw" — is weakened. GPU0 fell off
-the bus at *both* 450 W and 400 W caps, always under saturated qwen3.8-27b TP=2 load.
-The smaller `deepseek-v4-flash` workload (lower sustained draw) never reproduced it.
-The failure follows **GPU0 under heavy load**, not a specific wattage. The 400 W cap
-remains as mitigation (less current through the 12VHPWR path, less VRM stress), and
-`gpuPowerLimitWatts` was set to 400 in `machines/desktop/default.nix` — but this is not
-the fix. The hardware question (12VHPWR seating/connector heat, GPU0 itself, or slot
-`PCIEX16(G5)_1`) is still open.
+the bus at both 450 W and 400 W. The retained DS4 container log provides a real control:
+about 19.4 hours of scheduler samples, including about 46 minutes at eight concurrent
+requests, contain no CUDA launch failure or GPU-loss signature. That proves the Qwen
+SGLang profile is the trigger, but not whether the trigger exposes marginal hardware or
+a rank-0 driver/runtime defect. Historical DS4 power was not recorded, so the earlier
+claim that it necessarily drew less power was unsupported.
 
-**Fixes to try in order if it recurs on GPU0**:
+## Incident record: 2026-08-16 02:45 local (third dropout, GPU0, at 400 W cap)
 
-1. Reseat 12VHPWR on GPU0; feed all 3 connectors with **separate** PSU cables (no daisy chain).
-   While the card is out, inspect the connector and cable for discoloration/heat marks —
-   two dropouts in ~1 h of load makes a marginal connection the prime suspect.
-2. **Swap test**: move GPU0 and GPU1 (card follows card). Recurrence on the *card* in the
-   other slot → RMA GPU0 (serial `1794425022466`). Recurrence on the *slot/cable* →
-   power-delivery path for `PCIEX16(G5)_1` / its PSU cable.
-3. Check PSU headroom — 2×450 W + 9950X peaks >1100 W (less relevant now that dropouts
-   occur at 400 W, but transients still matter).
-4. Watch the CPU: undersized cooler; if package temps spike toward 95–105 °C at the
-   crash moment, improve cooling before chasing GPU hardware.
+| Time (CEST) | Event |
+|---|---|
+| 02:28:22 | Boot after incident 2; same container and model return |
+| 02:45:35–50 | Mixed prefill/decode load, 2–5 requests; chunked prefills include 40K–93K cached prefixes and up to 123K pending tokens; KV usage only 12–25% |
+| 02:45:50 | Physical GPU0 (`01:00.0`, serial `1794425022466`) reports Xid 79; SGLang rank 0 immediately receives `CUDA error: unspecified launch failure` |
+| 02:47:36 | Reboot after the driver marks node reboot required |
+
+All three failures follow the same physical GPU *and* TP rank 0 because the default CUDA
+order maps rank 0 to physical GPU0. Their phases differ: incident 1 was saturated mixed
+prefill/decode, incident 2 failed during decode at low KV use, and incident 3 failed during
+chunked prefill. There is no single reproducible kernel phase yet. A Seasonic 1600 W
+Platinum PSU makes aggregate capacity unlikely; individual card power delivery remains
+possible. Both cards report two firmware-controlled fans operating normally, and no host
+configuration pins GPU fan speed.
+
+**Discriminators, in order**:
+
+1. Keep both cards at the 350 W diagnostic cap and record one-second NVML telemetry.
+2. Relaunch with `GPU_ORDER=1,0` so physical GPU1 becomes logical device / TP rank 0.
+   Failure moving to `03:00.0` implicates rank-0 software/driver behavior; failure staying
+   at `01:00.0` implicates the physical GPU0/card/connector/slot path.
+3. If failure stays physical, cold-power-off, inspect/reseat GPU0 and its native PSU cable,
+   then swap the two cards while keeping slot-associated cabling fixed. Following serial
+   `1794425022466` means card/RMA; staying at slot 1 means slot/root/cable path.
+4. If failure follows rank 0, test target-only SGLang (no DSpark), then disable CUDA graphs,
+   then compare the plain Qwen BF16 vLLM control before changing hardware.
+5. Watch CPU/package and GPU temperatures throughout; GPU0 has been 10–14 °C hotter than
+   GPU1 under equal board-power caps even though no thermal-slowdown flag was active.
 
 ## Triage playbook (fastest first)
 
 Run everything over ssh: `ssh desktop '<cmd>'`. Note: **container logs are UTC, host
 journal is local time (CEST = UTC+2)**. Docker keeps logs across `docker restart` but not
-across container *recreation*.
+across container *recreation*; the Qwen launcher archives safe metadata and compressed
+logs before removing an old container.
+
+### 0. Preserve telemetry and container evidence
+
+`gpu-telemetry-record.service` writes one row per physical GPU per second. Samples rotate
+daily, fsync every second, survive reboots, and are retained for 14 days:
+
+```bash
+systemctl status gpu-telemetry-record.service
+sudo tail -10 /var/lib/gpu-telemetry/gpu-samples-$(date +%F).csv
+sudo tail -20 /var/lib/gpu-telemetry/events.csv
+ls -lh ~/.local/state/qwen38/container-archives/
+```
+
+Every row carries serial, UUID, PCI bus, both fan percentages, power, cap, temperature,
+utilization, clocks, PCIe generation/width/replay counter, throttle mask, and ECC state.
+Power, temperature, fans, utilization, and memory are sampled at 1 Hz; slower control-plane
+fields are refreshed every 10 seconds to limit observer load on the GSP/NVML path. This is
+the source of truth for the seconds before the next Xid; Prometheus's 15-second
+scrape is too coarse. Container archives intentionally exclude `Config.Env` so the API
+key is never copied into diagnostic metadata.
 
 ### 1. Did the container actually crash, and when?
 
@@ -164,9 +206,9 @@ Non-zero retired pages or pending remaps → RMA track.
 
 ## Decision summary
 
-- **Xid 79 + saturation + power at cap** → cables → PSU → RMA (in that order). On this
-  box both 2026-08-16 dropouts were GPU0, at *both* 450 W and 400 W caps, so the cap is
-  mitigation only — the card/connector/slot swap test decides RMA vs power path.
+- **Xid 79 on this box** → inspect the durable final samples, then logical rank reversal,
+  then physical card/slot swap. All three 2026-08-16 dropouts were physical GPU0 at both
+  450 W and 400 W; 350 W is diagnostic mitigation only, not a fix.
 - **Xid 48/63/64/94/95** or retired pages → VRAM → RMA
 - **Speed/width drops or AER errors** → slot/retimer/cable reseats, try the other slot
 - **No Xid, just OOM/413s/timeouts** → server-config problem (mem fraction, context

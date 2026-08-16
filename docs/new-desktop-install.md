@@ -25,7 +25,8 @@ driver (VRAM, power limit). See
 | PCIe topology | **confirmed** | **x8/x8, both from the CPU root complex** — P2P measured at **28.6 GB/s** (Gen5 x8 line rate) | whether GPU↔GPU P2P works at all |
 | GPUs | **confirmed** | 2× RTX PRO 6000 Blackwell **Workstation Edition** `[10de:2bb1]`, ~96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
 | GPU slots | **confirmed** | `PCIEX16(G5)_1` + `_2` → buses `01:00.0` / `03:00.0`, CPU root ports `00:01.1` / `00:01.3` | direct-attach P2P path |
-| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 400` (reduced from 450 after 2026-08-16 GPU0 Xid 79 dropouts — see [crash triage](gpu-inference-crash-triage.md)) |
+| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 350` during the GPU0 Xid 79 diagnostic — see [crash triage](gpu-inference-crash-triage.md) |
+| PSU | **confirmed** | **Seasonic 1600 W Platinum** | aggregate capacity is ample at the 2×350 W diagnostic cap; individual card/cable/slot and TP-rank behavior remain under test |
 | WiFi | **confirmed** | **MediaTek MT7927** (Filogic 380) `[14c3:7927]`, driver `mt7925e` — out-of-tree, needs `iommu=pt` | see [WiFi (MT7927)](#wifi-mt7927) |
 | NICs | **confirmed** | `wlp10s0` (WiFi), `enp11s0` + `enp12s0` (2.5 Gb + 10 Gb) — flake `NICs` value is cosmetic (NetworkManager owns them) | non-blocking |
 
@@ -1165,6 +1166,20 @@ nvidia-smi --query-gpu=index,memory.used --format=csv
 bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
 docker logs -f qwen38-27b-bf16-dspark-sglang
 ```
+
+The default physical/logical order is `GPU_ORDER=0,1`. During the recurrent GPU0 Xid 79
+diagnostic, reverse logical rank assignment without moving cards:
+
+```bash
+GPU_ORDER=1,0 bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
+```
+
+The launcher accepts only `0,1` or `1,0`, labels the container with the chosen order, and
+fails closed unless both physical cards are at or below the default 350 W diagnostic cap.
+It archives the previous container's compressed log plus secret-free state metadata under
+`~/.local/state/qwen38/container-archives/` before removal, retaining 14 days and at most
+20 launches. Durable one-second physical GPU samples live in `/var/lib/gpu-telemetry/`; see
+[`gpu-inference-crash-triage.md`](gpu-inference-crash-triage.md).
 
 The script reuses `~/.config/qwen38/api-key`, initially seeded from DeepSeek's endpoint
 key when available, so clients do not need a different credential when switching models

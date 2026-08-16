@@ -3,26 +3,29 @@ let
   # Desired persistent per-GPU power cap in watts, or null to leave the cards at
   # their firmware default.
   #
-  # Why 400: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
+  # Why 350: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
   # the 600 W Workstation card holding ~300-305 Gflop/s/W flat across the whole
-  # 200-350 W band, and only reaching peak throughput at the full 600 W — so 400
-  # stays near the flat-efficiency band and costs only a few percent of
-  # throughput. Two of those is 1200 W of GPU alone in a consumer ATX case with
-  # shared airflow; capping buys back thermals and noise, and on a two-up build
-  # less throttling can leave *sustained* clocks higher than the uncapped pair.
+  # 200-350 W band. This is therefore the lowest-risk diagnostic cap that stays
+  # inside the measured efficiency plateau.
   #
-  # Reliability override (2026-08-16): GPU0 (serial 1794425022466) fell off the
-  # PCIe bus (Xid 79) twice under saturated sglang load — once at the 450 W cap,
-  # once already capped at 400 W. The cap is a mitigation, not the fix; the
-  # lower stress margin is kept while the 12VHPWR/card/slot hardware question is
-  # open. See docs/gpu-inference-crash-triage.md (incident record + playbook).
+  # Reliability override (2026-08-16): physical GPU0 (serial 1794425022466,
+  # PCI 01:00.0) fell off the bus (Xid 79) three times under Qwen3.8 SGLang
+  # load: once at 450 W and twice at 400 W. A Seasonic 1600 W Platinum PSU makes
+  # aggregate PSU capacity unlikely, but does not distinguish the card, its
+  # connector/cable, the slot/root path, or a TP-rank-0 driver/runtime failure.
+  # Keep 350 W while the logical GPU-order and physical-swap tests run. This cap
+  # is mitigation, not a claimed fix. See docs/gpu-inference-crash-triage.md.
   #
   # This is a request, not an assertion: the service below clamps it into the
   # range the installed cards actually report. The SKU here is still unverified,
   # and a 600 W Workstation card and a 300 W Max-Q do not share a valid range —
   # `nvidia-smi -pl` exits non-zero outside it, which would fail the unit on
   # every boot. Clamping means the same config is correct for either card.
-  gpuPowerLimitWatts = 400;
+  gpuPowerLimitWatts = 350;
+
+  gpuTelemetryPython = pkgs.python3.withPackages (pythonPackages: [
+    pythonPackages.nvidia-ml-py
+  ]);
 
   # --- MediaTek MT7927 / MT6639 (Filogic 380) WiFi 7 + Bluetooth -------------
   #
@@ -318,6 +321,42 @@ in
           done
         '';
       });
+    };
+  };
+
+  # One-second, per-physical-GPU telemetry for the recurrent Xid 79 diagnosis.
+  # Daily CSV files retain the final power/temperature/link samples across a
+  # reboot without depending on Prometheus availability or scrape timing.
+  systemd.services.gpu-telemetry-record = {
+    description = "Record durable per-GPU health telemetry";
+    wantedBy = [ "multi-user.target" ];
+    wants = [ "nvidia-power-limit.service" ];
+    after = [ "nvidia-persistenced.service" "nvidia-power-limit.service" ];
+    environment = {
+      GPU_TELEMETRY_DIR = "/var/lib/gpu-telemetry";
+      GPU_TELEMETRY_INTERVAL = "1";
+      GPU_TELEMETRY_SLOW_INTERVAL = "10";
+      GPU_TELEMETRY_FSYNC_INTERVAL = "1";
+      LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+    };
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${gpuTelemetryPython}/bin/python3 ${../../scripts/gpu-telemetry-record.py}";
+      Restart = "always";
+      RestartSec = "3s";
+      DynamicUser = true;
+      StateDirectory = "gpu-telemetry";
+      StateDirectoryMode = "0750";
+      UMask = "0027";
+      CapabilityBoundingSet = "";
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      Nice = 10;
+      IOSchedulingClass = "idle";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      ReadWritePaths = [ "/var/lib/gpu-telemetry" ];
     };
   };
 
