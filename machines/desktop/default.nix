@@ -462,6 +462,19 @@ in
   # GitHub-style heatmap from it. The CSV survives everything except the disk.
   systemd.services.vllm-stats-record = {
     description = "Append local inference token usage deltas to the durable ledger";
+    # These bounds come from the explicit SGLang pre-ledger backfill row and
+    # the final aggregate scrape before model-aware recording. Port 8000 served
+    # only Qwen through SGLang in this interval, so these rows are attributable
+    # facts; older mixed-runtime rows remain Historical aggregate.
+    environment.VLLM_STATS_LEGACY_ATTRIBUTIONS = builtins.toJSON [
+      {
+        from_ts = 1786837395;
+        through_ts = 1786846530;
+        model = "qwen3.8-27b";
+        engine = "sglang";
+        endpoint = "http://127.0.0.1:8000/metrics";
+      }
+    ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = [

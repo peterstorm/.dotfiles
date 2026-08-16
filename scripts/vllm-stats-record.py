@@ -13,6 +13,9 @@ Environment:
   VLLM_METRICS_URLS  whitespace-separated /metrics URLs
   VLLM_METRICS_URL   legacy single-URL override
   VLLM_STATS_DIR     default /var/lib/vllm-stats
+  VLLM_STATS_LEGACY_ATTRIBUTIONS
+                     JSON array of explicit timestamp ranges whose historical
+                     rows have independently known model/engine identity
 """
 import csv
 import json
@@ -49,6 +52,7 @@ CSV_COLUMNS = [
     "prompt_tokens_per_second",
     "generation_tokens_per_second",
 ]
+LEGACY_ATTRIBUTIONS_RAW = os.environ.get("VLLM_STATS_LEGACY_ATTRIBUTIONS", "[]")
 
 COUNTER_SCHEMAS = {
     "vllm": {
@@ -338,6 +342,60 @@ def save_state(state):
     atomic_json_write(STATE, state)
 
 
+def parse_legacy_attributions(raw):
+    """Parse explicit, non-overlapping attribution ranges from deployment config."""
+    try:
+        values = json.loads(raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError("VLLM_STATS_LEGACY_ATTRIBUTIONS must be valid JSON") from error
+    if not isinstance(values, list):
+        raise ValueError("VLLM_STATS_LEGACY_ATTRIBUTIONS must be a JSON array")
+
+    parsed = []
+    required = {"from_ts", "through_ts", "model", "engine", "endpoint"}
+    for index, value in enumerate(values):
+        if not isinstance(value, dict) or set(value) != required:
+            raise ValueError(
+                f"legacy attribution {index} must contain exactly {sorted(required)!r}"
+            )
+        if type(value["from_ts"]) is not int or type(value["through_ts"]) is not int:
+            raise ValueError(f"legacy attribution {index} timestamps must be integers")
+        from_ts = value["from_ts"]
+        through_ts = value["through_ts"]
+        if from_ts < 0 or through_ts < from_ts:
+            raise ValueError(f"legacy attribution {index} has an invalid timestamp range")
+        identity = {}
+        for key in ("model", "engine", "endpoint"):
+            field = value[key]
+            if not isinstance(field, str) or not field.strip():
+                raise ValueError(f"legacy attribution {index} {key} must be non-empty text")
+            identity[key] = field.strip()
+        if identity["model"] == LEGACY_MODEL:
+            raise ValueError(f"legacy attribution {index} must name a concrete model")
+        parsed.append({"from_ts": from_ts, "through_ts": through_ts, **identity})
+
+    parsed.sort(key=lambda attribution: attribution["from_ts"])
+    for previous, current in zip(parsed, parsed[1:]):
+        if current["from_ts"] <= previous["through_ts"]:
+            raise ValueError("legacy attribution timestamp ranges must not overlap")
+    return tuple(parsed)
+
+
+def attribution_for_timestamp(raw_timestamp, attributions):
+    try:
+        timestamp = int(raw_timestamp)
+    except (TypeError, ValueError):
+        return None
+    return next(
+        (
+            attribution
+            for attribution in attributions
+            if attribution["from_ts"] <= timestamp <= attribution["through_ts"]
+        ),
+        None,
+    )
+
+
 def legacy_row_to_current(row):
     if len(row) != len(LEGACY_COLUMNS):
         raise ValueError(f"malformed legacy ledger row: {row!r}")
@@ -345,6 +403,18 @@ def legacy_row_to_current(row):
         row[0], row[1], LEGACY_MODEL, "legacy", "legacy",
         row[2], row[3], row[4], "", "", "",
     ]
+
+
+def atomic_csv_write(path, rows, suffix):
+    tmp = path + suffix
+    with open(tmp, "w", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(CSV_COLUMNS)
+        writer.writerows(rows)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(tmp, path)
+    fsync_parent(path)
 
 
 def migrate_csv_schema(path=None):
@@ -361,16 +431,49 @@ def migrate_csv_schema(path=None):
             raise ValueError(f"unsupported ledger header: {header!r}")
         legacy_rows = [row for row in reader if row]
 
-    tmp = path + ".schema-v2.tmp"
-    with open(tmp, "w", newline="") as stream:
-        writer = csv.writer(stream)
-        writer.writerow(CSV_COLUMNS)
-        writer.writerows(legacy_row_to_current(row) for row in legacy_rows)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(tmp, path)
-    fsync_parent(path)
+    atomic_csv_write(
+        path,
+        (legacy_row_to_current(row) for row in legacy_rows),
+        ".schema-v2.tmp",
+    )
     return True
+
+
+def migrate_legacy_attributions(path=None, attributions=None):
+    """Reclassify only explicitly bounded legacy rows, preserving every total."""
+    path = path or CSVFILE
+    attributions = parse_legacy_attributions(LEGACY_ATTRIBUTIONS_RAW) if attributions is None else attributions
+    if not attributions or not os.path.exists(path) or os.path.getsize(path) == 0:
+        return 0
+    with open(path, newline="") as stream:
+        reader = csv.DictReader(stream)
+        if reader.fieldnames != CSV_COLUMNS:
+            raise ValueError(f"unsupported ledger header: {reader.fieldnames!r}")
+        rows = list(reader)
+
+    changed = 0
+    for row in rows:
+        if not (
+            row.get("model") == LEGACY_MODEL
+            and row.get("engine") == "legacy"
+            and row.get("endpoint") == "legacy"
+        ):
+            continue
+        attribution = attribution_for_timestamp(row.get("ts"), attributions)
+        if attribution is None:
+            continue
+        row["model"] = attribution["model"]
+        row["engine"] = attribution["engine"]
+        row["endpoint"] = attribution["endpoint"]
+        changed += 1
+
+    if changed:
+        atomic_csv_write(
+            path,
+            ([row.get(column, "") for column in CSV_COLUMNS] for row in rows),
+            ".attribution-v1.tmp",
+        )
+    return changed
 
 
 def normalize_rows(rows):
@@ -508,9 +611,15 @@ def interval_rows(now, when, url, current, deltas, elapsed):
 
 def main():
     os.makedirs(DIR, exist_ok=True)
+    attributions = parse_legacy_attributions(LEGACY_ATTRIBUTIONS_RAW)
     if migrate_csv_schema():
-        print(f"migrated ledger to model-aware schema; old rows labelled {LEGACY_MODEL!r}")
+        print(f"migrated ledger to model-aware schema; unknown rows labelled {LEGACY_MODEL!r}")
+    # Recover before attribution repair so a crash-left pending row and its
+    # already-appended CSV twin still have identical identities for de-duplication.
     recover_pending_interval()
+    attributed = migrate_legacy_attributions(attributions=attributions)
+    if attributed:
+        print(f"attributed {attributed} historical ledger row(s) from explicit timestamp ranges")
 
     now = int(time.time())
     cur_per_url = {}

@@ -7,6 +7,7 @@ DASHBOARD="$ROOT/k8s/argocd-homelab/monitoring/dashboard-vllm.json"
 RULES="$ROOT/k8s/argocd-homelab/monitoring/templates/inference-recording-rules.yaml"
 RECORDER="$ROOT/scripts/vllm-stats-record.py"
 HEATMAP="$ROOT/scripts/vllm-stats-heatmap.py"
+DESKTOP="$ROOT/machines/desktop/default.nix"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -84,10 +85,18 @@ for marker in \
   'recover_pending_interval' \
   'model_name' \
   'Historical aggregate' \
+  'VLLM_STATS_LEGACY_ATTRIBUTIONS' \
+  'migrate_legacy_attributions' \
   'prompt_tokens_per_second' \
   'generation_tokens_per_second'; do
   grep -Fq -- "$marker" "$RECORDER" || fail "recorder missing $marker"
 done
+
+grep -Fq -- 'from_ts = 1786837395;' "$DESKTOP" &&
+grep -Fq -- 'through_ts = 1786846530;' "$DESKTOP" &&
+grep -Fq -- 'model = "qwen3.8-27b";' "$DESKTOP" &&
+grep -Fq -- 'engine = "sglang";' "$DESKTOP" ||
+  fail "desktop does not preserve the evidence-backed SGLang/Qwen attribution range"
 
 for marker in \
   'All models' \

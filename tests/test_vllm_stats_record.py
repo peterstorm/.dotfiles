@@ -201,6 +201,16 @@ class CounterDeltaTest(unittest.TestCase):
 
 
 class CsvMigrationTest(unittest.TestCase):
+    ATTRIBUTIONS = (
+        {
+            "from_ts": 200,
+            "through_ts": 300,
+            "model": "qwen3.8-27b",
+            "engine": "sglang",
+            "endpoint": "local",
+        },
+    )
+
     def test_migrates_legacy_rows_atomically_without_changing_totals(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "stats.csv"
@@ -217,6 +227,72 @@ class CsvMigrationTest(unittest.TestCase):
             self.assertEqual(sum(int(row["prompt_tokens"]) for row in rows), 4000)
             self.assertEqual(sum(int(row["generation_tokens"]) for row in rows), 600)
             self.assertTrue(all(row["prompt_tokens_per_second"] == "" for row in rows))
+
+    def test_post_schema_repair_attributes_only_explicit_timestamp_range(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "stats.csv"
+            path.write_text(
+                "ts,when,prompt_tokens,generation_tokens,requests\n"
+                "100,unknown,1000,100,1\n"
+                "200,known-start,2000,200,2\n"
+                "300,known-end,3000,300,3\n"
+                "400,unknown-again,4000,400,4\n"
+            )
+            self.assertTrue(record.migrate_csv_schema(str(path)))
+            self.assertEqual(
+                record.migrate_legacy_attributions(str(path), self.ATTRIBUTIONS), 2
+            )
+            with path.open(newline="") as stream:
+                rows = list(csv.DictReader(stream))
+
+            self.assertEqual(
+                [row["model"] for row in rows],
+                [record.LEGACY_MODEL, "qwen3.8-27b", "qwen3.8-27b", record.LEGACY_MODEL],
+            )
+            self.assertEqual(rows[1]["engine"], "sglang")
+            self.assertEqual(rows[1]["endpoint"], "local")
+            self.assertEqual(sum(int(row["generation_tokens"]) for row in rows), 1000)
+
+    def test_repairs_already_migrated_file_idempotently_without_changing_totals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "stats.csv"
+            rows = [
+                record.legacy_row_to_current(["100", "unknown", "1000", "100", "1"]),
+                record.legacy_row_to_current(["200", "known", "2000", "200", "2"]),
+                ["225", "ambiguous", record.LEGACY_MODEL, "sglang", "other", "7", "7", "1", "", "", ""],
+                ["250", "already", "qwen3.8-27b", "sglang", "local", "5", "5", "1", "50", "0.1", "0.1"],
+            ]
+            record.atomic_csv_write(str(path), rows, ".tmp")
+
+            self.assertEqual(
+                record.migrate_legacy_attributions(str(path), self.ATTRIBUTIONS), 1
+            )
+            self.assertEqual(
+                record.migrate_legacy_attributions(str(path), self.ATTRIBUTIONS), 0
+            )
+            with path.open(newline="") as stream:
+                migrated = list(csv.DictReader(stream))
+            self.assertEqual(migrated[0]["model"], record.LEGACY_MODEL)
+            self.assertEqual(migrated[1]["model"], "qwen3.8-27b")
+            self.assertEqual(migrated[2]["model"], record.LEGACY_MODEL)
+            self.assertEqual(migrated[2]["engine"], "sglang")
+            self.assertEqual(migrated[3]["generation_tokens"], "5")
+            self.assertEqual(sum(int(row["generation_tokens"]) for row in migrated), 312)
+
+    def test_attribution_parser_rejects_ambiguous_or_invalid_ranges(self):
+        overlap = json.dumps(
+            [
+                {**self.ATTRIBUTIONS[0], "from_ts": 100, "through_ts": 200},
+                {**self.ATTRIBUTIONS[0], "from_ts": 200, "through_ts": 300},
+            ]
+        )
+        with self.assertRaisesRegex(ValueError, "must not overlap"):
+            record.parse_legacy_attributions(overlap)
+        with self.assertRaisesRegex(ValueError, "must be a JSON array"):
+            record.parse_legacy_attributions("{}")
+        fractional = json.dumps([{**self.ATTRIBUTIONS[0], "from_ts": 199.5}])
+        with self.assertRaisesRegex(ValueError, "timestamps must be integers"):
+            record.parse_legacy_attributions(fractional)
 
     def test_heatmap_loader_accepts_unmigrated_legacy_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -276,6 +352,31 @@ class TransactionTest(unittest.TestCase):
         with open(record.CSVFILE, newline="") as stream:
             written = list(csv.reader(stream))
         self.assertEqual(len(written), 3)
+
+    def test_pending_legacy_row_is_recovered_before_attribution_without_duplication(self):
+        legacy_row = ["200", "known", "2000", "200", "2"]
+        pathlib.Path(record.CSVFILE).write_text(
+            ",".join(record.LEGACY_COLUMNS) + "\n" + ",".join(legacy_row) + "\n"
+        )
+        record.atomic_json_write(record.PENDING, {"state": {}, "row": legacy_row})
+        attributions = (
+            {
+                "from_ts": 200,
+                "through_ts": 300,
+                "model": "qwen3.8-27b",
+                "engine": "sglang",
+                "endpoint": "local",
+            },
+        )
+
+        self.assertTrue(record.migrate_csv_schema())
+        self.assertTrue(record.recover_pending_interval())
+        self.assertEqual(record.migrate_legacy_attributions(attributions=attributions), 1)
+        with open(record.CSVFILE, newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["model"], "qwen3.8-27b")
+        self.assertEqual(rows[0]["generation_tokens"], "200")
 
 
 class RecorderIntegrationTest(unittest.TestCase):

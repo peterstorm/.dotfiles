@@ -525,7 +525,7 @@ def render(rows, out_path):
   <section class="explain">
     <h2>How to read this page</h2>
     <p><strong>Durable totals:</strong> engine counters reset whenever a container restarts or the runtime changes. This ledger records counter deltas to disk and continues across vLLM, SGLang, restarts, and engine switches.</p>
-    <p><strong>Model history:</strong> rows recorded before model-aware tracking remain under <em>{LEGACY_MODEL}</em>. They are included in All models, but never falsely assigned to a current model.</p>
+    <p><strong>Model history:</strong> known historical intervals are assigned only from explicit runtime evidence. Genuinely unsplittable rows remain under <em>{LEGACY_MODEL}</em>; they are included in All models but never guessed into a model.</p>
     <p><strong>Served throughput:</strong> prompt and generation token deltas divided by the actual wall time between observations. It includes idle time and describes delivered traffic, not raw prefill-kernel or decode-only speed.</p>
     <p>Tracking began {started}. Raw data lives at <code>/var/lib/vllm-stats/stats.csv</code> on desktop.</p>
   </section>
