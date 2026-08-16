@@ -53,7 +53,6 @@
     jq
     gh
     pavucontrol
-    vscode
     cloudflare-warp
     cachix
     firefox
