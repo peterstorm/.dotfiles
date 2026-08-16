@@ -1,14 +1,22 @@
 { pkgs, config, lib, ... }:
 
 let
+  cfg = config.dotfiles.claude;
+
   homeDir = config.home.homeDirectory;
   pluginsDir = "${homeDir}/dev/claude-plugins";
 
-  # Each Claude Code plugin is its own git repo AND its own one-plugin
-  # marketplace (registered below via extraKnownMarketplaces). Other tools
-  # (pi, opencode, reclaw) read these repos directly off disk, so we also clone
-  # them into ~/dev/claude-plugins on every machine.
-  workspaceRepos = [ "loom" "cortex" "feynman" "obsidian" "reclaw" ];
+  # Every repo cloned into ~/dev/claude-plugins, plugin or not. Derived rather
+  # than hand-kept: a repo can be a plugin or a bare workspace checkout, never
+  # both (asserted below), and every enabled plugin is by construction a repo we
+  # clone. That kills the old failure mode where enabledPlugins named a plugin
+  # workspaceRepos never fetched.
+  workspaceRepos = cfg.plugins ++ cfg.extraWorkspaceRepos;
+
+  # `<name>@local` for each plugin — the marketplace generated at activation from
+  # these same clones.
+  localPlugins = lib.listToAttrs
+    (map (p: lib.nameValuePair "${p}@local" true) cfg.plugins);
 
   # The `local` marketplace points Claude Code at the workspace clones instead
   # of at github tarballs, so a plugin resolves LIVE from its checkout: edit the
@@ -34,20 +42,22 @@ let
     # below, so these resolve LIVE from ~/dev/claude-plugins/<name> — edit the
     # checkout and the plugin changes, no reinstall step.
     #
-    # The github-sourced copies (cortex@cortex etc.) are deliberately NOT
-    # enabled alongside them: two enabled copies of one plugin register their
-    # hooks twice, and the github tarball ships no engine/node_modules, so its
-    # embedder cannot load at all. The marketplaces stay registered below so a
-    # github install remains one command away.
-    #
     # The marketplace these point at is gitignored, but claudeLocalMarketplace
     # regenerates it on every activation, so a fresh machine needs no manual
     # step.
-    enabledPlugins = {
-      "loom@local" = true;
-      "cortex@local" = true;
-      "feynman@local" = true;
-      "obsidian@local" = true;
+    #
+    # The pre-local github/directory installs are pinned to `false`, not merely
+    # left out. Two enabled copies of one plugin register their hooks twice, and
+    # the github tarball ships no engine/node_modules so cortex's embedder cannot
+    # load at all — but claudeSettings deep-merges, and a merge can only override
+    # a key, never delete one. Absent here, a stale `"loom@loom": true` written
+    # before this role existed would survive every activation forever. `false`
+    # is the only way to actually retract it. (A deliberate `claude plugin
+    # install loom@loom` still works; the next activation just wins it back.)
+    enabledPlugins = localPlugins // {
+      "loom@loom" = false;
+      "cortex@cortex" = false;
+      "feynman@plugins" = false;
     };
     extraKnownMarketplaces = {
       # Declares the local marketplace so a fresh machine registers it from the
@@ -65,6 +75,46 @@ let
     (builtins.toJSON managedSettings);
 in
 {
+  # Per-machine surface. The defaults are the full set; a machine that lacks the
+  # backing state for one of them (no Obsidian vault, no reclaw work) narrows the
+  # list from its flake entry rather than forking this role. See lib/user.nix →
+  # mkHMUser's extraModules.
+  options.dotfiles.claude = {
+    plugins = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "loom" "cortex" "feynman" "obsidian" ];
+      example = [ "loom" "cortex" ];
+      description = ''
+        peterstorm/<name> repos that are Claude Code plugins. Each is cloned into
+        ~/dev/claude-plugins, published through the generated `local` marketplace,
+        and enabled as <name>@local. One list drives all three, so a plugin can
+        never be enabled without being fetched.
+      '';
+    };
+
+    extraWorkspaceRepos = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "reclaw" ];
+      example = [ ];
+      description = ''
+        peterstorm/<name> repos cloned into ~/dev/claude-plugins that are NOT
+        plugins — other tools read them straight off disk. Never published to the
+        marketplace, never enabled.
+      '';
+    };
+  };
+
+  config = {
+
+  # A repo is a plugin or a plain checkout, never both. Listed twice it would be
+  # enabled as <name>@local while claiming not to be a plugin — the marketplace
+  # generator's manifest check would then silently decide which claim wins.
+  assertions = [{
+    assertion = lib.intersectLists cfg.plugins cfg.extraWorkspaceRepos == [];
+    message = "dotfiles.claude: repo(s) in both plugins and extraWorkspaceRepos: "
+      + lib.concatStringsSep ", " (lib.intersectLists cfg.plugins cfg.extraWorkspaceRepos);
+  }];
+
   # 1. Provision the plugin/workspace repos that pi, opencode and reclaw read
   #    directly off disk. Idempotent — only clones a repo that isn't present.
   home.activation.claudePluginsWorkspace =
@@ -166,4 +216,6 @@ in
       fi
       chmod 644 "$settings"
     '';
+
+  };
 }

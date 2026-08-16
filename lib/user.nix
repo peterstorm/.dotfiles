@@ -2,7 +2,12 @@
 with builtins;
 {
 
- mkHMUser = {roles, username}:
+ # extraModules is the per-machine layer on top of the shared roles. Roles are
+ # plain home-manager modules, so a machine that wants a role with different
+ # settings sets that role's options here rather than forking the role — the
+ # module system merges the two. Use it for machine-bound facts only (this box
+ # has no Obsidian vault); anything true everywhere belongs in the role.
+ mkHMUser = {roles, username, extraModules ? []}:
  let
   mkRole = name: import (../roles/home-manager + "/${name}");
   mod_roles = map (r: mkRole r) roles;
@@ -26,7 +31,7 @@ with builtins;
       home.username = username;
       home.homeDirectory = homeDirectory;
     }
-  ] ++ mod_roles;
+  ] ++ mod_roles ++ extraModules;
   };
 
 

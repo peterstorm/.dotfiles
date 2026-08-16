@@ -88,9 +88,13 @@ in
   # file is not byte-for-byte the current render — so they must be generated
   # here, per machine, and never committed.
   #
-  # Runs after claudePluginsWorkspace, which provisions the Loom checkout and
-  # its node_modules. Configurations without that module (darwin) simply have no
-  # Loom checkout, and the render step below reports it and moves on.
+  # Runs after claudePluginsWorkspace, which provisions the Loom checkout and its
+  # node_modules. Every configuration that imports this role also imports
+  # core-apps/claude, so that ordering holds — but the edge is only advisory:
+  # home-manager's topological sort ignores a dependency on an absent node rather
+  # than failing, so a configuration that dropped the claude role would still
+  # activate, just with no Loom checkout. The render step below reports that and
+  # moves on.
   home.activation.piAgents = lib.hm.dag.entryAfter ["writeBoundary" "claudePluginsWorkspace"] ''
     export PATH="${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.diffutils pkgs.gnugrep ]}:$PATH"
     agentsDir="${piAgentDir}/agents"

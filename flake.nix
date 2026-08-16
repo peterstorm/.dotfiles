@@ -76,6 +76,9 @@
             username = "peterstorm";
           };
 
+          # Work Mac. Picks core-apps roles individually rather than importing the
+          # whole set, so the Linux-only members (window manager, dunst) and the
+          # git role's personal user.name/user.email stay off this box.
           hansen142 = user.mkHMUser {
             roles = [
               "core-apps/neovim"
@@ -85,8 +88,18 @@
               "core-apps/starship"
               "core-apps/alacritty"
               "core-apps/pi"
+              "core-apps/claude"
             ];
             username = "hansen142";
+            # The claude role in full assumes the homelab/desktop workspace. This
+            # box has neither the Obsidian vault the obsidian plugin reads nor any
+            # reclaw work, and cloning a repo whose backing state is absent buys a
+            # plugin that can only fail at runtime. Narrowed here rather than in
+            # the role: the other machines still want both.
+            extraModules = [{
+              dotfiles.claude.plugins = [ "loom" "cortex" "feynman" ];
+              dotfiles.claude.extraWorkspaceRepos = [ ];
+            }];
           };
 
           homelab = user.mkHMUser {
