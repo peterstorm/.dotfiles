@@ -24,6 +24,13 @@ Match the ask. If it's "do this," deliver the finished product, not a plan to bu
 
 Time. Fatigue. Complexity. Backwards compatibility for code that hasn't shipped.
 
+## Code implementation
+
+Whenever implementing code, reference Loom:
+
+- **Rules** — `/home/peterstorm/dev/claude-plugins/loom/rules/`: read `architecture.md` always, plus the files matching the languages in scope (`typescript-patterns.md`, `java-patterns.md`, `rust-patterns.md`; `property-testing.md` when adding business-rule tests).
+- **Skills** — load `deepen` when the work touches module interfaces, structure, or coupling (depth, seams, leverage, locality); load `distill` and run it as a behavior-preserving simplification pass after implementation.
+
 # Memory systems
 
 **DO NOT USE THE IN BUILT MEMORY**
