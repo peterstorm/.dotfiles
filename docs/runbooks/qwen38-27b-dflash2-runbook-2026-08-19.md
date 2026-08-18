@@ -51,7 +51,7 @@ It is a draft model only; it never runs standalone.
 | engine | status | detail |
 |---|---|---|
 | SGLang | **usable now, on the pinned digest** | `lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124` is a custom build (`0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) that already carries the DFlash stack: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `parse_dflash_draft_config()` reads `block_size`/`mask_token_id`/`target_layer_ids`/`layer_types`/`sliding_window` from the checkpoint. Upstream PR [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371) is still **open** — the support reaches stable SGLang only on merge. |
-| vLLM | **blocked on upstream** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) is **open** (checked via GitHub API 2026-08-19). No released or nightly vLLM image carries DFlash 2, and this box has no vLLM image at all. The card's vLLM instructions require `pip install vllm @ git+...@refs/pull/52816/head` — a from-source build (full CUDA extension compile) against a moving PR head; not an acceptable pin for a production launcher yet. |
+| vLLM | **PR-branch image (experimental, in build 2026-08-19)** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) is **open** (checked via GitHub API 2026-08-19) — no released or nightly vLLM image carries DFlash 2, and this box had no vLLM image at all. Rather than wait, we build vLLM's own Dockerfile (`--target vllm-openai`, the same image variant as `nightly-aa99034`) from the pinned PR head: see *vLLM via the PR branch* below. |
 
 Re-check before any re-pin:
 
@@ -60,10 +60,16 @@ curl -s https://api.github.com/repos/vllm-project/vllm/pulls/52816 | grep -E '"(
 curl -s https://api.github.com/repos/sgl-project/sglang/pulls/35371 | grep -E '"(merged_at|merge_commit_sha)"'
 ```
 
-**vLLM, when #52816 merges:** build/pull the first nightly that verifiably contains it, record
-image tag + digest, add `run-qwen38-27b-bf16-dflash2-vllm.sh` (method `"dflash"`,
-`num_speculative_tokens 7` per the card) and a `dflash2-vllm` switcher mode, mirroring the
-DSpark v1/v2 pair.
+**vLLM via the PR branch (experimental).** `scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh` builds the pinned PR head — not the moving `refs/pull/52816/head`: head branch `subsir/upstream-dflash2` at commit `19c9351904df4c63042671bc67a866ca48dc7d6f` (base `main @ 9842d701`), commit check-runs **SUCCESS** at pin time, +755 lines across 11 files. The build reuses vLLM's own `docker/Dockerfile`, stage `vllm-openai` (`ENTRYPOINT ["vllm","serve"]`), with its own defaults: CUDA 13.0.3, Python 3.12, Ubuntu 24.04, NCCL 2.30.7, `torch==2.13.0` (the PR's pyproject pin), builder `pytorch/manylinux2_28-builder:cuda13.0`. Result: `peterstorm/vllm:qwen38-dflash2-pr52816-19c9351` — one-off pull + 1-2 h source build (Rust + C++/CUDA); idempotent, prints the manifest digest on completion. The post-build probe asserts the `DFlash2DraftModel` registry entry and imports `DFlash2Speculator`.
+
+What the PR code fixes about the serving flags (verified at the pinned SHA):
+
+- `vllm/model_executor/models/registry.py`: `"DFlash2DraftModel": ("qwen3_dflash2", "DFlash2Qwen3ForCausalLM")` — **native registration, so no draft-config surgery on the vLLM side**; the canonical Desktop tree is mounted as-is.
+- `vllm/config/speculative.py`: `DFlashModelTypes = Literal["dflash"]` — the method string stays `"dflash"` for both generations.
+- `vllm/config/vllm.py`: `_is_dflash2_draft()` selects v2 by the draft's `architectures` containing `DFlash2DraftModel` and "force[s] V2 as for dspark" when it does — the checkpoint's own config is the trigger.
+- Speculative config, per the card: `{"method":"dflash","model":"<draft>","num_speculative_tokens":7}` (seven draft tokens per verification step, block size 8).
+
+Status: build started 2026-08-19 on the desktop (log: `~/.local/state/qwen38/vllm-dflash2-build.log`); the manifest digest, the vLLM run script, and the `dflash2-vllm` switcher mode land here as soon as the build verifies. This remains an **experimental profile**: unmerged, unreviewed engine code with no upstream release to bisect against, and the card's benchmark numbers are SGLang-only.
 
 ## Draft-config surgery (why the launcher copies the draft)
 
@@ -175,7 +181,10 @@ trees; rolling back touches nothing of them.
 
 1. **sgl-project/sglang#35371 merge** → pin an official SGLang release that carries DFlash 2;
    re-validate on the box before dropping the custom image.
-2. **vllm-project/vllm#52816 merge** → add the vLLM variant (see status section above).
+2. **vllm-project/vllm#52816 merge** → re-point the vLLM profile at the first
+   official nightly that verifiably contains it (record tag + digest), retire
+   the PR-branch image. Until then the PR image's pin is the head SHA above;
+   if the PR head moves, decide deliberately whether to re-pin.
 3. **Native `DFlash2DraftModel` registration** in SGLang → surgery becomes redundant; keep it
    (image-agnostic, idempotent) until the pin moves.
 4. **Checkpoint revision drift** — the pinned sha is `ac04198`; if `z-lab` pushes new weights,
