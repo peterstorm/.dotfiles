@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Switch the Qwen3.8-27B DSpark server on :8000 across the four 08-16/v2
-# backend containers. V2-first: the default backends are the 2026-08-18 v2
-# profiles (draft pinned to 85ef153, vLLM image aa99034).
+# Switch the Qwen3.8-27B DSpark/DFlash2 server on :8000 across the five
+# 08-16/v2 backend containers. V2-first: the default backends are the
+# 2026-08-18 v2 profiles (DSpark draft pinned to 85ef153, vLLM image
+# aa99034); 'dflash2' is the 2026-08-19 SGLang profile with the DFlash 2
+# draft (z-lab/Qwen3.8-27B-DFlash2, block size 8).
 #
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status      # who owns :8000, is it healthy
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh vllm        # -> vLLM v2
-#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang      # -> SGLang v2
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang      # -> SGLang v2 (DSpark draft)
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2     # -> SGLang v2 (DFlash 2 draft)
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-vllm     # -> vLLM 08-16 (rollback)
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-sglang   # -> SGLang 08-16 (rollback)
 #
@@ -31,15 +34,17 @@ VLLM_V1_NAME="qwen38-27b-bf16-dspark-vllm"
 VLLM_V1_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-vllm.sh"
 SGLANG_V1_NAME="qwen38-27b-bf16-dspark-sglang"
 SGLANG_V1_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-sglang.sh"
-ALL_NAMES=("$VLLM_V2_NAME" "$SGLANG_V2_NAME" "$VLLM_V1_NAME" "$SGLANG_V1_NAME")
+DFLASH2_SGLANG_NAME="qwen38-27b-bf16-dflash2-sglang"
+DFLASH2_SGLANG_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dflash2-sglang.sh"
+ALL_NAMES=("$VLLM_V2_NAME" "$SGLANG_V2_NAME" "$DFLASH2_SGLANG_NAME" "$VLLM_V1_NAME" "$SGLANG_V1_NAME")
 
 HEALTH_URL="http://127.0.0.1:8000/health"
 MODELS_URL="http://127.0.0.1:8000/v1/models"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-1200}" # cold-start budget in seconds
 
 case "${1:-}" in
-  status|vllm|sglang|v1-vllm|v1-sglang) ;;
-  *) echo "usage: $0 {status|vllm|sglang|v1-vllm|v1-sglang}" >&2; exit 2 ;;
+  status|vllm|sglang|dflash2|v1-vllm|v1-sglang) ;;
+  *) echo "usage: $0 {status|vllm|sglang|dflash2|v1-vllm|v1-sglang}" >&2; exit 2 ;;
 esac
 MODE="${1:-status}"
 
@@ -121,15 +126,18 @@ fi
 case "$MODE" in
   vllm)     START_NAME="$VLLM_V2_NAME";   START_SCRIPT="$VLLM_V2_SCRIPT" ;;
   sglang)   START_NAME="$SGLANG_V2_NAME"; START_SCRIPT="$SGLANG_V2_SCRIPT" ;;
+  dflash2)  START_NAME="$DFLASH2_SGLANG_NAME"; START_SCRIPT="$DFLASH2_SGLANG_SCRIPT" ;;
   v1-vllm)  START_NAME="$VLLM_V1_NAME";   START_SCRIPT="$VLLM_V1_SCRIPT" ;;
   v1-sglang) START_NAME="$SGLANG_V1_NAME"; START_SCRIPT="$SGLANG_V1_SCRIPT" ;;
 esac
 
 # Same-engine profile on the other side of the v1/v2 line — the fallback a
-# failed cutover suggests.
+# failed cutover suggests. dflash2 falls back to the DSpark-draft SGLang
+# profile (same engine, previous-generation draft).
 case "$MODE" in
   vllm) FALLBACK="v1-vllm" ;;
   sglang) FALLBACK="v1-sglang" ;;
+  dflash2) FALLBACK="sglang" ;;
   v1-vllm) FALLBACK="vllm" ;;
   v1-sglang) FALLBACK="sglang" ;;
 esac
@@ -232,6 +240,11 @@ case "$START_NAME" in
     echo "  docker logs $START_NAME 2>&1 | grep 'Resolved architecture' | head -2"
     echo "Verify spec decode is actually drafting:"
     echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^vllm:spec_decode_num_(drafts|accepted)' | head -4"
+    ;;
+  *dflash2*)
+    echo "Verify spec decode is actually drafting (acceptance length near 4.1-5.5;"
+    echo "the DFlash 2 card beats DSpark's 3.0-4.4 on the same benchmarks; near 1.0 means miswired):"
+    echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^sglang:spec_' | head -4"
     ;;
   *)
     echo "Verify spec decode is actually drafting:"
