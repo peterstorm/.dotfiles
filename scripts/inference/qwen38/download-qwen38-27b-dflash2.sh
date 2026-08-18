@@ -23,14 +23,21 @@ set -euo pipefail
 REPO="z-lab/Qwen3.8-27B-DFlash2"
 REV="ac04198556d7e8867853cbc356807b969f311b05"
 
-# Resolve the desktop user's home even when invoked under sudo, so the
-# default destination lands in the human's Desktop, not /root.
+# Resolve the desktop user even when invoked under sudo, so the default
+# destination lands in the human's Desktop (not /root) and ownership is
+# handed back to the human (not root).
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != root ]]; then
-  DESKTOP_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+  TARGET_USER="$SUDO_USER"
 else
-  DESKTOP_HOME="$HOME"
+  TARGET_USER="$USER"
 fi
+DESKTOP_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 DEST="${DFLASH2_DEST:-$DESKTOP_HOME/Desktop/Qwen3.8-27B-DFlash2}"
+TARGET_UID="$(getent passwd "$TARGET_USER" | cut -d: -f3)"
+TARGET_GID="$(getent group users | cut -d: -f3)"
+[[ -n "$DESKTOP_HOME" && -n "$TARGET_UID" ]] || {
+  echo "error: could not resolve user $TARGET_USER (home/uid)" >&2; exit 2;
+}
 
 # Optional HF auth: if a token exists at the standard hf CLI location, mount
 # it into the container at huggingface_hub's default token path so the
@@ -48,7 +55,7 @@ fi
 mkdir -p "$DEST"
 # The container runs as root; hand the directory back to the desktop user so
 # a later unprivileged re-run (or the SGLang launcher's cp -a) can operate on it.
-chown "$USER:users" "$DEST"
+chown "$TARGET_USER:users" "$DEST"
 
 # Map the host destination into the container's namespace: only the desktop
 # home (mounted at /home/dl) and /models (mounted 1:1) are reachable. Anything
@@ -66,6 +73,9 @@ pip install -q huggingface_hub
 # direct Hub HTTPS remained healthy. Force the standard resumable HTTP backend.
 export HF_HUB_DISABLE_XET=1
 hf download "$REPO" --revision "$REV" --local-dir "$CONTAINER_DEST"
+# The download runs as root and this host's user cannot sudo non-interactively:
+# hand the whole tree back to the desktop user from inside the container.
+chown -R "$TARGET_UID:$TARGET_GID" "$CONTAINER_DEST"
 echo DOWNLOAD_COMPLETE
 EOF
 

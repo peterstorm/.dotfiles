@@ -21,10 +21,11 @@
 # architectures: ["DFlash2DraftModel"], which the image's model registry does
 # NOT know — the registry only has DFlashDraftModel (models/dflash.py) and
 # the DSpark classes. As with the DSpark-on-vLLM launcher, we prepare an
-# ISOLATED copy under /models with that one field rewritten to
-# ["DFlashDraftModel"]; the downloaded canonical tree is never touched.
-# Idempotent: skip when the copy is already prepared, rebuild it when the
-# source changed or the copy is half-written.
+# ISOLATED copy with that one field rewritten to ["DFlashDraftModel"]
+# (everything else byte-identical, idempotent, rebuilt only when stale).
+# The copy lives NEXT TO the canonical tree on the desktop user's Desktop
+# (user-writable without sudo — /models is root-owned on this box); the
+# downloaded canonical tree is never touched.
 #
 # Differences from the DSpark v2 SGLang launcher
 # (run-qwen38-27b-bf16-dspark-sglang-v2.sh):
@@ -68,7 +69,9 @@ else
   DFLASH2_HOME="$HOME"
 fi
 DRAFT_HOST="${DFLASH2_DRAFT_HOST:-$DFLASH2_HOME/Desktop/Qwen3.8-27B-DFlash2}"
-DRAFT_SGLANG_HOST="${DFLASH2_DRAFT_SGLANG_HOST:-/models/Qwen3.8-27B-DFlash2-sglang}"
+# Surgery copy: next to the canonical tree (user-writable, no sudo). /models
+# is root:root on this box and the launcher runs unprivileged.
+DRAFT_SGLANG_HOST="${DFLASH2_DRAFT_SGLANG_HOST:-$DFLASH2_HOME/Desktop/Qwen3.8-27B-DFlash2-sglang}"
 DRAFT_CONTAINER="/models/z-lab/Qwen3.8-27B-DFlash2-sglang"
 CACHE_HOST="/models/sglang-cache/qwen38-bf16-dflash2"
 ENTRYPOINT_HOST="$SCRIPT_DIR/../shared/sglang-secure-entrypoint.py"

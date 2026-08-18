@@ -70,10 +70,12 @@ DSpark v1/v2 pair.
 The checkpoint declares `architectures: ["DFlash2DraftModel"]`. The image's model registry does
 **not** know that name — it only has `DFlashDraftModel` (`sglang/srt/models/dflash.py`) and the
 DSpark classes. The launcher therefore prepares an **isolated copy** at
-`/models/Qwen3.8-27B-DFlash2-sglang` with that one field rewritten to `["DFlashDraftModel"]`
-(everything else byte-identical, idempotent, rebuilt only when stale). The downloaded canonical
-tree is never modified — same pattern as the DSpark-on-vLLM launcher. If upstream ever adds
-native `DFlash2DraftModel` registration, the surgery stays (it is image-agnostic and idempotent).
+`$HOME/Desktop/Qwen3.8-27B-DFlash2-sglang` — next to the canonical tree, because `/models` is
+`root:root` on this box and the launcher runs unprivileged — with that one field rewritten to
+`["DFlashDraftModel"]` (everything else byte-identical, idempotent, rebuilt only when stale). The
+downloaded canonical tree is never modified — same pattern as the DSpark-on-vLLM launcher. If
+upstream ever adds native `DFlash2DraftModel` registration, the surgery stays (it is
+image-agnostic and idempotent).
 
 ## Prerequisites
 
@@ -99,8 +101,12 @@ docker logs -f qwen38-dflash2-model-dl   # ...until DOWNLOAD_COMPLETE
 ```bash
 jq -e '.architectures == ["DFlash2DraftModel"] and .dflash_config.block_size == 8' \
   "$HOME/Desktop/Qwen3.8-27B-DFlash2/config.json"
-ls -lh "$HOME/Desktop/Qwen3.8-27B-DFlash2/model.safetensors"   # ≈3.6 GiB
+ls -lh "$HOME/Desktop/Qwen3.8-27B-DFlash2/model.safetensors"   # 3,848,817,896 bytes on the 2026-08-19 download
 ```
+
+The download container runs as root and hands the tree back to the desktop user via an
+in-container `chown` (this host's user cannot sudo non-interactively). If an older run left the
+tree root-owned, one-time fix: `sudo chown -R $USER:users "$HOME/Desktop/Qwen3.8-27B-DFlash2"`.
 
 ## 2. Serve
 
@@ -148,7 +154,7 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
 - `sglang:spec_*` counters must move; after a short chat completion the acceptance length should
   land near **4.1–5.5** (card range at this concurrency class). Near 1.0 ⇒ miswired draft —
   check the log for the draft's resolved architecture and re-verify the surgery copy:
-  `jq -c '.architectures' /models/Qwen3.8-27B-DFlash2-sglang/config.json`.
+  `jq -c '.architectures' "$HOME/Desktop/Qwen3.8-27B-DFlash2-sglang/config.json`.
 - Both GPUs within the 450 W cap; sustained load clean before benchmarking.
 - A/B against the DSpark v2 profile (same target, same flags, one drafter apart) before
   promoting DFlash 2 as the default: switch `sglang` ⇄ `dflash2` and compare acceptance +
@@ -161,7 +167,7 @@ bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang    # DSpark v2 
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-sglang # 08-16 SGLang
 ```
 
-The DFlash 2 trees (Desktop canonical draft, `/models/Qwen3.8-27B-DFlash2-sglang` surgery copy,
+The DFlash 2 trees (Desktop canonical draft, Desktop `-sglang` surgery copy,
 `/models/sglang-cache/qwen38-bf16-dflash2` cache) are side-by-side with every other profile's
 trees; rolling back touches nothing of them.
 

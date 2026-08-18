@@ -61,6 +61,9 @@ contains "$DFLASH2_DL" 'docker rm -f qwen38-dflash2-model-dl'
 contains "$DFLASH2_DL" 'CONTAINER_DEST="/home/dl${DEST#"$DESKTOP_HOME"}"'
 contains "$DFLASH2_DL" 'hf download "$REPO" --revision "$REV" --local-dir "$CONTAINER_DEST"'
 contains "$DFLASH2_DL" '-v "$DESKTOP_HOME:/home/dl" -v /models:/models'
+# The tree must be handed back to the desktop user from INSIDE the root
+# container (this host's user cannot sudo non-interactively).
+contains "$DFLASH2_DL" 'chown -R "$TARGET_UID:$TARGET_GID" "$CONTAINER_DEST"'
 if grep -Eq '^DEST="/models/' "$DFLASH2_DL"; then
   fail "$DFLASH2_DL defaults to a /models destination; the agreed default is the Desktop folder"
 fi
@@ -71,6 +74,12 @@ contains "$DFLASH2_SGLANG" 'DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b91
 contains "$DFLASH2_SGLANG" 'NAME="qwen38-27b-bf16-dflash2-sglang"'
 contains "$DFLASH2_SGLANG" 'ENVFILE="$CONFIG_DIR/sglang-dflash2.env"'
 contains "$DFLASH2_SGLANG" 'DRAFT_CONTAINER="/models/z-lab/Qwen3.8-27B-DFlash2-sglang"'
+# The surgery copy must live in the user-writable Desktop (next to the
+# canonical tree), NOT under /models (root:root, unwritable unprivileged).
+contains "$DFLASH2_SGLANG" 'DFLASH2_DRAFT_SGLANG_HOST:-$DFLASH2_HOME/Desktop/Qwen3.8-27B-DFlash2-sglang'
+if grep -Eq 'DRAFT_SGLANG_HOST=\"\$\{?DFLASH2_DRAFT_SGLANG_HOST:-/models' "$DFLASH2_SGLANG"; then
+  fail "$DFLASH2_SGLANG defaults the surgery copy to /models, which the user cannot write"
+fi
 contains "$DFLASH2_SGLANG" 'DFLASH2_BLOCK_SIZE="${DFLASH2_BLOCK_SIZE:-8}"'
 contains "$DFLASH2_SGLANG" '--speculative-algorithm DFLASH'
 contains "$DFLASH2_SGLANG" '--speculative-draft-model-path "$DRAFT_CONTAINER"'
