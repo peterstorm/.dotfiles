@@ -43,21 +43,19 @@ kube-prometheus-stack:
               requests:
                 storage: 10Gi
       replicas: 1
-      # The active local inference engine runs on `desktop:8000`, outside the
-      # k8s cluster. Scrape its /metrics directly; recording rules normalize
-      # vLLM and SGLang names into the dashboard's inference:* contract.
+      # The local inference engines run outside the cluster. Port 8000 serves
+      # Qwen or DeepSeek; port 8001 concurrently serves Muse Glimmer. Recording
+      # rules normalize vLLM and SGLang names into the inference:* contract.
       additionalScrapeConfigs:
         - job_name: vllm-desktop
           scrape_interval: 15s
           metrics_path: /metrics
           static_configs:
-            - targets:
-                - "192.168.0.80:8000"
-          relabel_configs:
-            # Give the target a stable label for dashboards, since we can't
-            # rely on __address__ staying pretty.
-            - source_labels: [__address__]
-              target_label: instance
-              replacement: desktop:8000
+            - targets: ["192.168.0.80:8000"]
+              labels:
+                instance: desktop:8000
+            - targets: ["192.168.0.80:8001"]
+              labels:
+                instance: desktop:8001
   prometheusOperator:
     replicas: 1

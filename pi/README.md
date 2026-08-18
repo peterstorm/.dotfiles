@@ -69,17 +69,19 @@ into it.
 
 ## Local AI Workstation
 
-`models.json` registers the OpenAI-compatible endpoint on the `desktop` workstation
-with two selectable models:
+`models.json` registers two OpenAI-compatible providers on the `desktop` workstation
+with three selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/qwen3.8-27b`
+- `desktop-muse/muse-glimmer-30b`
 
-Only one server owns port 8000 at a time. Every launcher synchronizes the historical
-DeepSeek and Qwen key files to one endpoint credential, so switching models or runtimes
-does not change Pi authentication. Launching through `sudo` still resolves `SUDO_USER`
-and writes the invoking desktop user's files—never a private `/root` credential. The key
-is never committed: Pi reads it locally on `desktop`, or retrieves it through the hardened
+DeepSeek and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when the
+one-model-per-GPU profile is active. Every launcher synchronizes the DeepSeek, Qwen, and
+Muse key files to one endpoint credential, so switching models, runtimes, or ports does
+not change Pi authentication. Launching through `sudo` still resolves `SUDO_USER` and
+writes the invoking desktop user's files—never a private `/root` credential. The key is
+never committed: Pi reads it locally on `desktop`, or retrieves it through the hardened
 `ssh desktop` alias when running elsewhere.
 
 ### DeepSeek V4 Flash
@@ -127,13 +129,30 @@ pi --model desktop-vllm/qwen3.8-27b:xhigh
 The catalog is available before the server starts. Prompts work after either Qwen launcher
 has brought `qwen3.8-27b` up on port 8000.
 
+### Muse Glimmer 30B
+
+Muse Glimmer runs the BF16 language model and official BF16 DFlash draft at its native
+131,072-token context. The initial profile is text-only. Pi maps `low`, `medium`, `high`,
+and `xhigh` into the checkpoint's `chat_template_kwargs.reasoning_strength` value and
+hides unsupported off, minimal, and max levels. SGLang's native `muse` parsers expose the
+model's ATEM reasoning and tool protocol as OpenAI-compatible fields.
+
+```bash
+pi --list-models muse-glimmer-30b
+pi --model desktop-muse/muse-glimmer-30b:xhigh
+```
+
+The separate provider is required because Muse listens on port 8001 while Qwen remains on
+port 8000. Both `desktop-vllm/*` and `desktop-muse/*` are explicitly classified as local by
+`model-routing.json`, so nested Pi workloads inherit either local parent exactly.
+
 ## Child Model Routing
 
 `model-routing.json` is the explicit policy boundary between parent-session models and
 nested Pi workloads. Provider names, endpoint URLs, and model prices are never used to
 guess whether a model is local.
 
-The initial policy classifies only `desktop-vllm/*` as local and applies this invariant:
+The policy classifies `desktop-vllm/*` and `desktop-muse/*` as local and applies this invariant:
 
 | Active parent | Subagent launch binding |
 |---|---|
@@ -194,7 +213,7 @@ agent declaration, `parent` uses the snapshotted parent binding, and `named` cho
 configured exact target.
 
 Cortex already preserves its declared cheap cloud extraction target for known cloud
-providers and reuses unknown/custom active models, including `desktop-vllm`; DeepSeek's
+providers and reuses unknown/custom active models, including both desktop providers; DeepSeek's
 catalog default makes local extraction children use `max` unless an explicit level is passed.
 Centralized Cortex-specific
 rule selectors would require Cortex to consume this policy API, but are not needed for the

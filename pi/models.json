@@ -3,7 +3,7 @@
     "desktop-vllm": {
       "baseUrl": "http://192.168.0.80:8000/v1",
       "api": "openai-completions",
-      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; else cat ~/.config/qwen38/api-key; fi'; fi",
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/muse-glimmer/api-key ]; then cat ~/.config/muse-glimmer/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; else cat ~/.config/muse-glimmer/api-key; fi'; fi",
       "models": [
         {
           "id": "deepseek-v4-flash",
@@ -44,7 +44,7 @@
             "off": null,
             "minimal": null,
             "low": "low",
-            "medium": "medium",
+            "medium": null,
             "high": null,
             "xhigh": "xhigh",
             "max": null
@@ -68,6 +68,48 @@
               "enable_thinking": { "$var": "thinking.enabled" },
               "preserve_thinking": true,
               "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
+            }
+          }
+        }
+      ]
+    },
+    "desktop-muse": {
+      "baseUrl": "http://192.168.0.80:8001/v1",
+      "api": "openai-completions",
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/muse-glimmer/api-key ]; then cat ~/.config/muse-glimmer/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; else cat ~/.config/muse-glimmer/api-key; fi'; fi",
+      "models": [
+        {
+          "id": "muse-glimmer-30b",
+          "name": "Muse Glimmer 30B BF16 + DFlash (local RTX workstation)",
+          "reasoning": true,
+          "defaultThinkingLevel": "xhigh",
+          "thinkingLevelMap": {
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "xhigh": "xhigh",
+            "max": null
+          },
+          "input": ["text"],
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": false,
+            "supportsStrictMode": false,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "reasoning_strength": { "$var": "thinking.effort" }
             }
           }
         }

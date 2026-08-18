@@ -3,7 +3,8 @@
   "defaultClass": "cloud",
   "modelClasses": {
     "local": [
-      "desktop-vllm/*"
+      "desktop-vllm/*",
+      "desktop-muse/*"
     ]
   },
   "targets": {},

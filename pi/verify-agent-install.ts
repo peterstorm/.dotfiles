@@ -80,8 +80,9 @@ if (resolve(dirname(routingLink), readlinkSync(routingLink)) !== expectedRouting
 const loadedRouting = loadModelRoutingPolicy(agentDir);
 if (!loadedRouting.ok) fail(`invalid model routing policy: ${loadedRouting.error.message}`);
 const deepSeekModel = parseModelReference("desktop-vllm/deepseek-v4-flash");
+const museModel = parseModelReference("desktop-muse/muse-glimmer-30b");
 const cloudModel = parseModelReference("openai-codex/gpt-5.6-sol");
-if (!deepSeekModel.ok || !cloudModel.ok) fail("verification model references are invalid");
+if (!deepSeekModel.ok || !museModel.ok || !cloudModel.ok) fail("verification model references are invalid");
 const deepSeekBinding = {
   model: deepSeekModel.value,
   thinkingLevel: "max" as const,
@@ -109,6 +110,26 @@ if (
 ) {
   fail("local parent does not override a subagent's declared cloud binding");
 }
+const museRoute = resolveModelRoute(
+  loadedRouting.value.policy,
+  {
+    parent: { model: museModel.value, thinkingLevel: "xhigh" },
+    declared: { model: cloudModel.value, thinkingLevel: "high" },
+    workload: "subagent",
+    profile: "general-review",
+    agent: "code-reviewer",
+  },
+  loadedRouting.value.digest,
+);
+if (
+  !museRoute.ok ||
+  museRoute.value.kind !== "override" ||
+  museRoute.value.effective?.model.provider !== "desktop-muse" ||
+  museRoute.value.effective?.model.id !== "muse-glimmer-30b" ||
+  museRoute.value.effective?.thinkingLevel !== "xhigh"
+) {
+  fail("Muse is not classified as a local parent for nested workloads");
+}
 
 const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
   providers?: Record<
@@ -122,6 +143,8 @@ const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
         contextWindow?: number;
         compat?: {
           supportsDeveloperRole?: boolean;
+          supportsReasoningEffort?: boolean;
+          supportsStrictMode?: boolean;
           thinkingFormat?: string;
           chatTemplateKwargs?: Record<string, unknown>;
         };
@@ -132,6 +155,8 @@ const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
 const desktopProvider = modelsConfig.providers?.["desktop-vllm"];
 const deepSeek = desktopProvider?.models?.find((model) => model.id === "deepseek-v4-flash");
 const qwen = desktopProvider?.models?.find((model) => model.id === "qwen3.8-27b");
+const museProvider = modelsConfig.providers?.["desktop-muse"];
+const muse = museProvider?.models?.find((model) => model.id === "muse-glimmer-30b");
 if (desktopProvider?.baseUrl !== "http://192.168.0.80:8000/v1") {
   fail("desktop-vllm does not target the workstation's OpenAI-compatible endpoint");
 }
@@ -166,6 +191,32 @@ if (
     JSON.stringify({ $var: "thinking.effort", omitWhenOff: true })
 ) {
   fail("qwen3.8-27b does not map Pi reasoning levels into Qwen chat-template kwargs");
+}
+if (museProvider?.baseUrl !== "http://192.168.0.80:8001/v1") {
+  fail("desktop-muse does not target the workstation's concurrent Muse endpoint");
+}
+if (!muse) fail("desktop-muse is missing muse-glimmer-30b");
+if (muse.defaultThinkingLevel !== "xhigh") fail("muse-glimmer-30b does not default to xhigh reasoning");
+if (muse.contextWindow !== 131_072) fail("muse-glimmer-30b does not declare its native 128K context");
+for (const level of ["low", "medium", "high", "xhigh"] as const) {
+  if (muse.thinkingLevelMap?.[level] !== level) {
+    fail(`muse-glimmer-30b does not expose the ${level} reasoning contract`);
+  }
+}
+for (const level of ["off", "minimal", "max"] as const) {
+  if (muse.thinkingLevelMap?.[level] !== null) {
+    fail(`muse-glimmer-30b does not hide unsupported ${level} reasoning`);
+  }
+}
+if (
+  muse.compat?.supportsDeveloperRole !== false ||
+  muse.compat?.supportsReasoningEffort !== false ||
+  muse.compat?.supportsStrictMode !== false ||
+  muse.compat?.thinkingFormat !== "chat-template" ||
+  JSON.stringify(muse.compat.chatTemplateKwargs?.reasoning_strength) !==
+    JSON.stringify({ $var: "thinking.effort" })
+) {
+  fail("muse-glimmer-30b does not map Pi reasoning into Muse's chat-template contract");
 }
 
 const runtimeAgentDir = mkdtempSync(join(tmpdir(), "pi-routing-verify-"));

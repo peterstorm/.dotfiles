@@ -5,9 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD="$ROOT/k8s/argocd-homelab/monitoring/dashboard-vllm.json"
 RULES="$ROOT/k8s/argocd-homelab/monitoring/templates/inference-recording-rules.yaml"
-RECORDER="$ROOT/scripts/vllm-stats-record.py"
-HEATMAP="$ROOT/scripts/vllm-stats-heatmap.py"
+RECORDER="$ROOT/scripts/inference/shared/vllm-stats-record.py"
+HEATMAP="$ROOT/scripts/inference/shared/vllm-stats-heatmap.py"
 DESKTOP="$ROOT/machines/desktop/default.nix"
+PROMETHEUS="$ROOT/k8s/argocd-homelab/monitoring/values.yaml"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -106,6 +107,14 @@ grep -Fq -- 'through_ts = 1786846530;' "$DESKTOP" &&
 grep -Fq -- 'model = "qwen3.8-27b";' "$DESKTOP" &&
 grep -Fq -- 'engine = "sglang";' "$DESKTOP" ||
   fail "desktop does not preserve the evidence-backed SGLang/Qwen attribution range"
+grep -Fq -- 'VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics"' "$DESKTOP" ||
+  fail "durable recorder does not scrape both concurrent inference endpoints"
+for endpoint in '192.168.0.80:8000' '192.168.0.80:8001'; do
+  grep -Fq -- "$endpoint" "$PROMETHEUS" || fail "Prometheus does not scrape $endpoint"
+done
+for instance in 'desktop:8000' 'desktop:8001'; do
+  grep -Fq -- "instance: $instance" "$PROMETHEUS" || fail "Prometheus does not preserve instance $instance"
+done
 
 for marker in \
   'All models' \

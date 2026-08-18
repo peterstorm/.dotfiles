@@ -14,7 +14,7 @@ let
   # aggregate PSU capacity unlikely, but does not distinguish the card, its
   # connector/cable, the slot/root path, or a TP-rank-0 driver/runtime failure.
   # Keep 350 W while the logical GPU-order and physical-swap tests run. This cap
-  # is mitigation, not a claimed fix. See docs/gpu-inference-crash-triage.md.
+  # is mitigation, not a claimed fix. See docs/runbooks/gpu-inference-crash-triage.md.
   #
   # This is a request, not an assertion: the service below clamps it into the
   # range the installed cards actually report. The SKU here is still unverified,
@@ -236,7 +236,7 @@ in
     # Hardware diagnostics. These are on the installer ISO but were missing from
     # the installed system, which is backwards: this box's whole reason for
     # existing is two GPUs on a specific PCIe topology, and the P2P verification
-    # steps in docs/new-desktop-install.md are literally `lspci -PP` and
+    # steps in docs/runbooks/new-desktop-install.md are literally `lspci -PP` and
     # `lspci -vv | grep LnkSta`. Not having pciutils here meant the one machine
     # that needs to answer PCIe questions could not.
     pciutils
@@ -341,7 +341,7 @@ in
     };
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${gpuTelemetryPython}/bin/python3 ${../../scripts/gpu-telemetry-record.py}";
+      ExecStart = "${gpuTelemetryPython}/bin/python3 ${../../scripts/inference/shared/gpu-telemetry-record.py}";
       Restart = "always";
       RestartSec = "3s";
       DynamicUser = true;
@@ -478,6 +478,7 @@ in
     # the final aggregate scrape before model-aware recording. Port 8000 served
     # only Qwen through SGLang in this interval, so these rows are attributable
     # facts; older mixed-runtime rows remain Historical aggregate.
+    environment.VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics";
     environment.VLLM_STATS_LEGACY_ATTRIBUTIONS = builtins.toJSON [
       {
         from_ts = 1786837395;
@@ -490,8 +491,8 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = [
-        "${pkgs.python3}/bin/python3 ${../../scripts/vllm-stats-record.py}"
-        "${pkgs.python3}/bin/python3 ${../../scripts/vllm-stats-heatmap.py} --write"
+        "${pkgs.python3}/bin/python3 ${../../scripts/inference/shared/vllm-stats-record.py}"
+        "${pkgs.python3}/bin/python3 ${../../scripts/inference/shared/vllm-stats-heatmap.py} --write"
       ];
     };
   };
@@ -551,8 +552,8 @@ in
     allowInterfaces = [ "wlp10s0" "enp11s0" "enp12s0" ];
   };
 
-  # Expose the vLLM / DS4 v8 OpenAI-compatible server (PORT=8000, --network host)
-  # to the LAN, plus the stats heatmap server (8090). sshd opens 22 itself; the
-  # wifi role opens 8081. Merges with those.
-  networking.firewall.allowedTCPPorts = [ 8000 8090 ];
+  # Expose the concurrent inference endpoints (Qwen/DeepSeek on 8000 and Muse on
+  # 8001, both --network host) plus the stats heatmap server (8090). sshd opens
+  # 22 itself; the wifi role opens 8081. Merges with those.
+  networking.firewall.allowedTCPPorts = [ 8000 8001 8090 ];
 }
