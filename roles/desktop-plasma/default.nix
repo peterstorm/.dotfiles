@@ -40,17 +40,14 @@
     windowManager.xmonad = {
       enable = true;
       enableContribAndExtras = true;
-      # Without `config` the none+xmonad session runs STOCK XMonad: Alt-based
-      # default bindings, and none of the custom Super-based ones — including
-      # the Super+Ctrl+R / Super+Shift+R recompile/restart shortcuts. Install
-      # the shared config (same file the desktop gets via the home-manager
-      # desktop profile) so the session loads it.
-      config = ../home-manager/window-manager/xmonad/xmonad.hs;
+      # The custom config is deliberately NOT here: it is home-manager managed
+      # — the `laptop` profile's window-manager/xmonad role installs and
+      # compiles ~/.xmonad/xmonad.hs, exactly the desktop's split (NixOS
+      # provides the session, HM owns the config). Without it the none+xmonad
+      # session runs STOCK XMonad: Alt-based defaults, none of the Super
+      # bindings or the recompile/restart shortcuts.
     };
   };
-
-  # The custom xmonad.hs launches `xmobar` for the top bar.
-  programs.xmobar.enable = true;
 
   # Escape hatches for a config-less XMonad fallback: if the recompile ever
   # fails, stock XMonad's Alt+Shift+Return (xterm) and Alt+p (dmenu) are the

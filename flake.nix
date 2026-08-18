@@ -76,6 +76,17 @@
             username = "peterstorm";
           };
 
+          # Laptops (laptop-xps, laptop-work): the window-manager role installs
+          # and compiles ~/.xmonad/xmonad.hs, enables xmobar (home-manager's
+          # own module — nixpkgs dropped its NixOS one), and ensures the
+          # Firefox scratchpad profiles. Same split as the desktop profile:
+          # NixOS provides the session, HM owns the config. Apply with
+          # `./hm-apply.sh laptop` after `nixos-rebuild switch`.
+          laptop = user.mkHMUser {
+            roles = [ "window-manager/xmonad" ];
+            username = "peterstorm";
+          };
+
           # Work Mac. Picks core-apps roles individually rather than importing the
           # whole set, so the Linux-only members (window manager, dunst) and the
           # git role's personal user.name/user.email stay off this box.
