@@ -12,7 +12,6 @@
     (util.sops.userSecret "azure-client-secret" "keycloak.yaml" "azure_client_secret")
     (util.sops.userSecret "keycloak-admin-password-onr" "keycloak.yaml" "keycloak_admin_password_onr")
     (util.sops.userSecret "keycloak-admin-password-opr" "keycloak.yaml" "keycloak_admin_password_opr")
-    (util.sops.userSecret "gemini-api-key" "gemini.yaml" "api_key")
     (util.sops.userSecret "cf-access-vllm-id" "cloudflare-access.yaml" "vllm_client_id")
     (util.sops.userSecret "cf-access-vllm-secret" "cloudflare-access.yaml" "vllm_client_secret")
     (util.sops.userSecret "vllm-api-key" "cloudflare-access.yaml" "vllm_api_key")
@@ -32,9 +31,6 @@
       AZURE_CLIENT_SECRET = "azure-client-secret";
       KEYCLOAK_ADMIN_PASSWORD_ONR = "keycloak-admin-password-onr";
       KEYCLOAK_ADMIN_PASSWORD_OPR = "keycloak-admin-password-opr";
-    })
-    (util.sops.envTemplate "gemini-env" {
-      GEMINI_API_KEY = "gemini-api-key";
     })
     (util.sops.envTemplate "cf-access-env" {
       CF_ACCESS_CLIENT_ID = "cf-access-vllm-id";
@@ -110,7 +106,6 @@
     ];
 
     programs.bash.initExtra = ''
-      source ${config.sops.templates."gemini-env".path}
       source ${config.sops.templates."vllm-env".path}
     '';
 
@@ -125,7 +120,6 @@
       initContent = ''
         # Source database environment variables
         source ${config.sops.templates."db-env".path}
-        source ${config.sops.templates."gemini-env".path}
         source ${config.sops.templates."vllm-env".path}
 
         # GitHub token for Maven/GitHub Packages authentication

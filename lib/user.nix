@@ -7,19 +7,19 @@ with builtins;
  # settings sets that role's options here rather than forking the role — the
  # module system merges the two. Use it for machine-bound facts only (this box
  # has no Obsidian vault); anything true everywhere belongs in the role.
- mkHMUser = {roles, username, extraModules ? []}:
+
+ # The module list shared by both deployment paths: the standalone
+ # homeManagerConfigurations (mkHMUser, non-NixOS hosts) and NixOS hosts that
+ # integrate home-manager via home-manager.users (host.mkHost's hmUsers). One
+ # list, two activation paths, no drift between them.
+ mkHMUserModules = {roles, username, extraModules ? []}:
  let
   mkRole = name: import (../roles/home-manager + "/${name}");
   mod_roles = map (r: mkRole r) roles;
   homeDirectory = if pkgs.stdenv.isDarwin
     then "/Users/${username}"
     else "/home/${username}";
-  # Import util libraries to make them available to roles
-  util = import ./. { inherit inputs pkgs home-manager lib overlays; };
- in home-manager.lib.homeManagerConfiguration {
-  inherit pkgs;
-  extraSpecialArgs = { inherit inputs util; };
-  modules = [
+ in [
     inputs.sops-nix.homeManagerModules.sops
     (import ../roles/home-manager/sops-config)
     {
@@ -32,6 +32,15 @@ with builtins;
       home.homeDirectory = homeDirectory;
     }
   ] ++ mod_roles ++ extraModules;
+
+ mkHMUser = {roles, username, extraModules ? []}:
+ let
+  # Import util libraries to make them available to roles
+  util = import ./. { inherit inputs pkgs home-manager lib overlays; };
+ in home-manager.lib.homeManagerConfiguration {
+  inherit pkgs;
+  extraSpecialArgs = { inherit inputs util; };
+  modules = mkHMUserModules {inherit roles username extraModules;};
   };
 
 

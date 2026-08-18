@@ -1,4 +1,4 @@
-{ inputs, system, pkgs, home-manager, lib, user, ...}:
+{ inputs, system, pkgs, home-manager, lib, user, overlays, ...}:
 with builtins;
 {
 
@@ -33,12 +33,15 @@ with builtins;
       machine,
       cpuCores,
       users,
+      hmUsers ? [],
       wifi ? [],
       gpuTempSensor ? null,
       cpuTempSensor ? null}:
     let
-      # Import util to make it available to NixOS roles
-      util = import ./. { inherit inputs pkgs home-manager lib; overlays = []; };
+      # Import util to make it available to NixOS roles. Overlays are the
+      # real ones (not []), so home-manager users integrated via hmUsers get
+      # the same package set as the standalone homeManagerConfigurations.
+      util = import ./. { inherit inputs pkgs home-manager lib overlays; };
       networkCfg = listToAttrs (map (n: {
         name = "${n}"; value = { useDHCP = true; };
       }) NICs);
@@ -54,6 +57,17 @@ with builtins;
       machine_mods = (map (m: mkMachine m) machine );
       sys_users = (map (u: user.mkSystemUser u) users);
 
+      # home-manager integrated into the system build: one atomic
+      # `nixos-rebuild switch` applies the system and the user's home config
+      # together. No separate hm-apply step, no window in which the two
+      # layers can disagree (that gap is how the laptops ran stock XMonad).
+      hm_users = lib.listToAttrs (map (u: {
+        name = u.username;
+        # home-manager.users.<name> is a single module; compose the list of
+        # role modules through `imports` (the documented shape).
+        value = { imports = util.user.mkHMUserModules u; };
+      }) hmUsers);
+
       flaten = lst: foldl' (l: r: l // r) {} lst;
 
       mkRole = name: import (../roles + "/${name}");
@@ -68,8 +82,22 @@ with builtins;
       };
 
       modules = [
+        # Imported unconditionally: every mkHost machine is a real host with
+        # home-manager users. The installer ISO does not go through mkHost
+        # (it uses mkInstaller), so nothing HM-related is baked into it.
+        inputs.home-manager.nixosModules.home-manager
         {
           imports = [ ../modules ] ++ roles_mods ++ sys_users ++ machine_mods;
+
+          home-manager = {
+            users = hm_users;
+            # The roles expect the repo's `util` (and `inputs`) as module
+            # arguments — the same extraSpecialArgs mkHMUser provides in the
+            # standalone builder. Without them the module system falls back to
+            # querying `_module.args`, which forces `config` mid-evaluation:
+            # infinite recursion.
+            extraSpecialArgs = { inherit inputs util; };
+          };
 
           environment.etc = {
             "hmsystemdata.json".text = builtins.toJSON userCfg;

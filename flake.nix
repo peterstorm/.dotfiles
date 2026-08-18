@@ -58,34 +58,12 @@
 
         legacyPackages.homeManagerConfigurations = {
 
-          # Homelab server: headless (no X11/seat ever — dunst's 201 boot failures
-          # over 2 weeks are the proof), so xmonad/dunst are vestigial here. The
-          # desktop profile below keeps them for the real display machine.
-          peterstorm = user.mkHMUser {
-            roles = [ "core-apps" "sops-homelab" "obsidian-git-sync" "obsidian-headless-sync" "vdirsyncer" "sonarr-missing-search" ];
-            username = "peterstorm";
-          };
-
-          # Desktop workstation: same user, but a subset of roles. The obsidian/
-          # vdirsyncer/sonarr homelab roles are omitted (they want services this
-          # box doesn't run), but sops-homelab IS included so cortex gets its
-          # GEMINI_API_KEY for embeddings — that needs the age key seeded at
-          # ~/.config/sops/age/keys.txt. Apply with `./hm-apply.sh desktop`.
-          desktop = user.mkHMUser {
-            roles = [ "core-apps" "window-manager/xmonad" "dunst" "sops-homelab" "desktop-audio" ];
-            username = "peterstorm";
-          };
-
-          # Laptops (laptop-xps, laptop-work): the window-manager role installs
-          # and compiles ~/.xmonad/xmonad.hs, enables xmobar (home-manager's
-          # own module — nixpkgs dropped its NixOS one), and ensures the
-          # Firefox scratchpad profiles. Same split as the desktop profile:
-          # NixOS provides the session, HM owns the config. Apply with
-          # `./hm-apply.sh laptop` after `nixos-rebuild switch`.
-          laptop = user.mkHMUser {
-            roles = [ "window-manager/xmonad" ];
-            username = "peterstorm";
-          };
+          # Standalone home-manager outputs are for NON-NixOS hosts only (the
+          # work Mac). NixOS hosts integrate their home-manager config into the
+          # system build via home-manager.users (see the hmUsers field on each
+          # host below), so `nixos-rebuild switch` applies system and home
+          # atomically — no separate hm-apply step, no window where the two
+          # layers can disagree.
 
           # Work Mac. Picks core-apps roles individually rather than importing the
           # whole set, so the Linux-only members (window manager, dunst) and the
@@ -112,11 +90,6 @@
               dotfiles.claude.extraWorkspaceRepos = [ ];
             }];
           };
-
-          homelab = user.mkHMUser {
-            roles = [ "core-apps" ];
-            username = "homelab";
-          };
         };
 
         legacyPackages.nixosConfigurations = {
@@ -124,6 +97,13 @@
           laptop-xps = host.mkHost {
             name = "laptop-xps";
             roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "laptop-nvidia-graphics" "warp" ];
+            hmUsers = [
+              # core-apps restores the user config the August HM decoupling
+              # stranded (nvim, tmux, ...); the window-manager role owns
+              # ~/.xmonad/xmonad.hs + xmobar. No homelab-sync roles: this box
+              # runs none of those services.
+              { username = "peterstorm"; roles = [ "core-apps" "window-manager/xmonad" "dunst" ]; }
+            ];
             machine = [ "laptop-xps" ];
             NICs = [ "wlp0s20f3" ];
             kernelPackage = pkgs.linuxPackages_latest;
@@ -144,6 +124,9 @@
           laptop-work = host.mkHost {
             name = "laptop-work";
             roles = [ "core" "wifi" "efi" "bluetooth" "desktop-plasma" "laptop" "warp" ];
+            hmUsers = [
+              { username = "peterstorm"; roles = [ "core-apps" "window-manager/xmonad" "dunst" ]; }
+            ];
             machine = [ "laptop-work" ];
             NICs = [ "wlp0s20f3" ];
             kernelPackage = pkgs.linuxPackages_latest;
@@ -164,6 +147,12 @@
           desktop = host.mkHost {
             name = "desktop";
             roles = [ "core" "ssh" "wifi" "efi" "bluetooth" "dual-desktop-plasma" "nvidia-graphics" ];
+            hmUsers = [
+              # No sops-homelab: the Gemini key it carried is no longer needed
+              # (cortex embeds locally). No homelab-sync roles either: the
+              # obsidian/vdirsyncer/sonarr services run on the homelab box.
+              { username = "peterstorm"; roles = [ "core-apps" "window-manager/xmonad" "dunst" "desktop-audio" ]; }
+            ];
             machine = [ "desktop" ];
             NICs = [ "wlp5s0" "enp6s0" ];
             initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
@@ -184,6 +173,13 @@
           homelab = host.mkHost {
             name = "homelab";
             roles = [ "core" "wifi" "efi" "bluetooth" "ssh" "k3s" "cloudflared" "reclaw" ];
+            hmUsers = [
+              # HEADLESS: no X11/seat on this box (dunst's 201 boot failures
+              # over 2 weeks are the proof), so no window-manager/dunst roles
+              # — those stay on the display machines only.
+              { username = "peterstorm"; roles = [ "core-apps" "obsidian-git-sync" "obsidian-headless-sync" "vdirsyncer" "sonarr-missing-search" ]; }
+              { username = "homelab"; roles = [ "core-apps" ]; }
+            ];
             machine = [ "homelab" ];
             NICs = [ "wlp3s0" ];
             initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
