@@ -379,15 +379,19 @@ in
   # immune to the EC re-asserting registers, and self-healing: any tick that
   # finds enable flipped back repairs it within a minute.
   #
-  # The service must NOT set RemainAfterExit: a oneshot that stays
-  # "active (exited)" turns every OnUnitActiveSec elapse into a no-op start
-  # job, so duties are computed once at boot (cold CPU) and never again.
-  # That stale-fan bug bit on 2026-08-18: fans stuck at boot-time duty while
-  # vLLM held the package >80 C.
+  # Timer trap (2026-08-18 incident): the first version used
+  # OnUnitActiveSec=60 with RemainAfterExit=true. The oneshot stayed
+  # "active (exited)" after its boot run, so every elapse queued a no-op
+  # start job and duties were computed once from the cold boot temp — fans
+  # sat at ~35 % while vLLM held the package >80 C. OnUnitActiveSec alone
+  # also proved unreliable at re-arming (timer left with no NextElapse),
+  # so the timer uses absolute OnCalendar elapses and the service has no
+  # RemainAfterExit.
   #
-  # Curves (PECI temp → duty 0-255):
-  #   * CPU fan (pwm1/fan1): 90 (35 %) @ 40 °C … 255 (100 %) @ 70 °C
-  #   * Case fan (pwm6/fan6): 80 (31 %) @ 30 °C … 255 (100 %) @ 70 °C
+  # Curves (PECI temp → duty 0-255) — raised 2026-08: higher floors, and the
+  # 100 % ceiling now 5 °C earlier (vLLM loads keep the package hot):
+  #   * CPU fan (pwm1/fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
+  #   * Case fan (pwm6/fan6): 105 (41 %) @ 25 °C … 255 (100 %) @ 65 °C
   #
   # fan2 (CPU_OPT) keeps its BIOS curve — it was already PECI-driven and runs
   # at ~100 % under load. PWM channels 3/4/5/7 read 0 RPM even at full duty:
@@ -434,10 +438,10 @@ in
 
           peci=$(cat "$h/temp8_input")
 
-          # CPU fan (fan1): 90 @ 40 °C … 255 @ 70 °C
-          d1=$(interp "$peci" 40000 90 70000 255)
-          # Case fan (fan6): 80 @ 30 °C … 255 @ 70 °C
-          d6=$(interp "$peci" 30000 80 70000 255)
+          # CPU fan (fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
+          d1=$(interp "$peci" 35000 120 65000 255)
+          # Case fan (fan6): 105 (41 %) @ 25 °C … 255 (100 %) @ 65 °C
+          d6=$(interp "$peci" 25000 105 65000 255)
 
           ed pwm1_enable 1
           ed pwm1 "$d1"
@@ -452,8 +456,10 @@ in
     description = "Re-apply NCT6799D fan duties every minute";
     wantedBy = [ "timers.target" ];
     timerConfig = {
+      # Absolute elapses — OnUnitActiveSec did not re-arm for this oneshot
+      # (see note above). Fires at :00s past each minute, plus a boot offset.
       OnBootSec = "30";
-      OnUnitActiveSec = "60";
+      OnCalendar = "*-*-* *:*:00";
     };
   };
 
