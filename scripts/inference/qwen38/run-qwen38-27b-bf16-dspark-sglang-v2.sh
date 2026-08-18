@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
-# Launch the experimental Qwen3.8-27B BF16 + DSpark profile with SGLang.
+# v2 (2026-08-18) of the experimental Qwen3.8-27B BF16 + DSpark SGLang profile.
+#
+# Differences from the 08-16 launcher (run-qwen38-27b-bf16-dspark-sglang.sh),
+# per docs/research/2026-08-18-qwen38-upstream-update-research.md:
+#   * Draft re-pinned to 85ef153 (dflash.py verify-window fix; weights
+#     byte-identical), served from the separate /models/Qwen3.8-27B-DSpark-v2
+#     tree so the 08-16 profile keeps its exact revision.
+#   * MAX_MAMBA_CACHE_SIZE follows the 08-17 SGLang cookbook formula
+#     (PR #35064): target_concurrency x S, where S is the radix state slots
+#     per request (5 for extra_buffer). The 08-16 pin folded the speculative
+#     verify window (D = gamma + 1 = 8) into the same pin, which over-
+#     provisions the GDN state pool — the engine sizes the verify buffer
+#     separately — and hands that memory away from the KV pool. After boot,
+#     confirm the log's max_running_requests line is not clamped below the
+#     requested concurrency.
+#   * Container/env suffix -v2 so it coexists with the 08-16 profile.
 #
 # Quality-first target: TP2 BF16 weights/KV, FP32 GDN state, native 262K
 # context, eight running requests, checkpoint-native template, the pinned
@@ -9,9 +24,9 @@
 #
 # Prerequisites:
 #   scripts/inference/qwen38/download-qwen38-27b.sh
-#   scripts/inference/qwen38/download-qwen38-27b-dspark.sh
-# Full rationale: docs/runbooks/new-desktop-install.md —
-# "Experimental Qwen3.8-27B DSpark on SGLang".
+#   scripts/inference/qwen38/download-qwen38-27b-dspark-v2.sh
+# Full rationale: docs/runbooks/qwen38-27b-runbook-2026-08-18.md —
+# "Experimental Qwen3.8-27B DSpark on SGLang (v2)".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,12 +38,12 @@ IMAGE="lmsysorg/sglang:qwen38-27b"
 DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124"
 MODEL_HOST="/models/Qwen3.8-27B"
 MODEL_CONTAINER="/models/Qwen/Qwen3.8-27B"
-DRAFT_HOST="/models/Qwen3.8-27B-DSpark"
-DRAFT_CONTAINER="/models/RadixArk/Qwen3.8-27B-DSpark"
+DRAFT_HOST="/models/Qwen3.8-27B-DSpark-v2"
+DRAFT_CONTAINER="/models/RadixArk/Qwen3.8-27B-DSpark-v2"
 CACHE_HOST="/models/sglang-cache/qwen38-bf16-dspark"
 ENTRYPOINT_HOST="$SCRIPT_DIR/../shared/sglang-secure-entrypoint.py"
 ENTRYPOINT_CONTAINER="/opt/reclaw/sglang-secure-entrypoint.py"
-NAME="qwen38-27b-bf16-dspark-sglang"
+NAME="qwen38-27b-bf16-dspark-sglang-v2"
 
 MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-8}"
 CONTEXT_LENGTH="${CONTEXT_LENGTH:-262144}"
@@ -53,17 +68,21 @@ done
 CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-2048}"
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.85}"
 DSPARK_GAMMA="${DSPARK_GAMMA:-7}"
-# extra_buffer keeps five radix state slots per request; static DSpark gamma=7
-# needs an eight-state verify window. The explicit pin prevents SGLang's default
-# Mamba/KV ratio from silently reducing the requested concurrency.
-MAX_MAMBA_CACHE_SIZE="${MAX_MAMBA_CACHE_SIZE:-$((MAX_RUNNING_REQUESTS * (5 + DSPARK_GAMMA + 1)))}"
+# extra_buffer keeps five radix state slots per request. The 08-17 SGLang
+# cookbook (PR #35064) documents the explicit pin as target_concurrency x S:
+# the engine divides the state pool by S ALONE and sizes the speculative
+# verify buffer (D = gamma + 1) separately, so folding D into this pin
+# over-provisions the GDN state pool and shrinks the KV pool. The 08-16
+# launcher's 8 x (5 + gamma + 1) = 104 predates that clarification.
+MAMBA_STATE_SLOTS="${MAMBA_STATE_SLOTS:-5}"
+MAX_MAMBA_CACHE_SIZE="${MAX_MAMBA_CACHE_SIZE:-$((MAX_RUNNING_REQUESTS * MAMBA_STATE_SLOTS))}"
 
 if [ ! -e "$MODEL_HOST/config.json" ]; then
   echo "error: target checkpoint not found at $MODEL_HOST — run scripts/inference/qwen38/download-qwen38-27b.sh first" >&2
   exit 1
 fi
 if [ ! -e "$DRAFT_HOST/config.json" ]; then
-  echo "error: DSpark checkpoint not found at $DRAFT_HOST — run scripts/inference/qwen38/download-qwen38-27b-dspark.sh first" >&2
+  echo "error: DSpark checkpoint not found at $DRAFT_HOST — run scripts/inference/qwen38/download-qwen38-27b-dspark-v2.sh first" >&2
   exit 1
 fi
 if [ ! -f "$ENTRYPOINT_HOST" ]; then
@@ -101,7 +120,7 @@ inference_prepare_api_key "${SGLANG_API_KEY:-${VLLM_API_KEY:-}}"
 SGLANG_API_KEY="$INFERENCE_API_KEY"
 CONFIG_DIR="$INFERENCE_OPERATOR_HOME/.config/qwen38"
 KEYFILE="$INFERENCE_QWEN_KEYFILE"
-ENVFILE="$CONFIG_DIR/sglang-dspark.env"
+ENVFILE="$CONFIG_DIR/sglang-dspark-v2.env"
 
 # SGLang has no native API-key environment variable. A tiny Python entrypoint
 # parses this value in-process so it never appears in Docker args or /proc cmdline.
@@ -210,6 +229,6 @@ docker run -d --init \
 echo "Started '$NAME' with CUDA_VISIBLE_DEVICES=$GPU_ORDER (logical device 0 / TP rank 0 is listed first)."
 echo "This is an experimental profile; first start compiles kernels and CUDA graphs."
 echo "Follow:  docker logs -f $NAME"
-echo "Health/auth:  bash $SCRIPT_DIR/switch-qwen38-backend.sh status"
-echo "API key: $KEYFILE  (send as 'Authorization: Bearer <key>')"
+echo "Health/auth:  curl -fsS http://127.0.0.1:8000/health  (key: $KEYFILE)"
+echo "Note: the 08-16 backend switcher does not cover this -v2 container; switch by hand."
 echo "Compare acceptance/throughput in logs before promoting it over the no-spec BF16 baseline."

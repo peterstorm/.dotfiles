@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Contract for the shared :8000 inference credential and sudo-safe ownership.
+# Contract for the shared multi-endpoint inference credential and sudo-safe ownership.
 # shellcheck disable=SC2016 # Assertions intentionally match literal shell source.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HELPER="$ROOT/scripts/inference-api-key.sh"
-SWITCH="$ROOT/scripts/switch-qwen38-backend.sh"
+HELPER="$ROOT/scripts/inference/shared/inference-api-key.sh"
+SWITCH="$ROOT/scripts/inference/qwen38/switch-qwen38-backend.sh"
 LAUNCHERS=(
-  "$ROOT/scripts/run-ds4-v20-r33.sh"
-  "$ROOT/scripts/run-qwen38-27b-bf16.sh"
-  "$ROOT/scripts/run-qwen38-27b-bf16-dspark-vllm.sh"
-  "$ROOT/scripts/run-qwen38-27b-bf16-dspark-sglang.sh"
+  "$ROOT/scripts/inference/deepseek/run-ds4-v20-r33.sh"
+  "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
+  "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh"
+  "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
+  "$ROOT/scripts/inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
 )
 
 fail() {
@@ -33,15 +34,16 @@ contains "$HELPER" 'SUDO_USER'
 contains "$HELPER" 'getent passwd "$INFERENCE_OPERATOR_USER"'
 contains "$HELPER" 'INFERENCE_DS4_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/ds4-flash/api-key"'
 contains "$HELPER" 'INFERENCE_QWEN_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/qwen38/api-key"'
+contains "$HELPER" 'INFERENCE_MUSE_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/muse-glimmer/api-key"'
 contains "$HELPER" 'INFERENCE_SOPS_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/sops-nix/secrets/vllm-api-key"'
 contains "$HELPER" 'inference_install_private_dir "$INFERENCE_OPERATOR_HOME/.config"'
 
 for launcher in "${LAUNCHERS[@]}"; do
   bash -n "$launcher"
-  contains "$launcher" 'source "$SCRIPT_DIR/inference-api-key.sh"'
+  contains "$launcher" 'source "$SCRIPT_DIR/../shared/inference-api-key.sh"'
   contains "$launcher" 'inference_prepare_api_key'
 done
-contains "$SWITCH" 'source "$SCRIPT_DIR/inference-api-key.sh"'
+contains "$SWITCH" 'source "$SCRIPT_DIR/../shared/inference-api-key.sh"'
 contains "$SWITCH" 'authenticated_status'
 contains "$SWITCH" 'refusing a speculative restart'
 contains "$SWITCH" 'HEALTHY + AUTHENTICATED:'
@@ -50,7 +52,7 @@ if grep -Eq -- 'curl .*Authorization: Bearer' "$SWITCH"; then
   fail "$SWITCH puts the API key in curl argv"
 fi
 
-# A pre-existing Qwen-only installation migrates to both historical paths.
+# A pre-existing Qwen-only installation migrates to every model-specific path.
 (
   export HOME="$sandbox/qwen-only"
   unset SUDO_USER VLLM_API_KEY SGLANG_API_KEY
@@ -60,7 +62,9 @@ fi
   source "$HELPER"
   inference_prepare_api_key ""
   cmp -s "$HOME/.config/qwen38/api-key" "$HOME/.config/ds4-flash/api-key" \
-    || fail "Qwen-only migration did not synchronize both key paths"
+    || fail "Qwen-only migration did not synchronize the DeepSeek key path"
+  cmp -s "$HOME/.config/qwen38/api-key" "$HOME/.config/muse-glimmer/api-key" \
+    || fail "Qwen-only migration did not synchronize the Muse key path"
   grep -Fxq 'qwen-fixture-key-0123456789abcdef' "$HOME/.config/ds4-flash/api-key" \
     || fail "Qwen-only migration changed the key"
 )
@@ -77,6 +81,8 @@ fi
   inference_prepare_api_key ""
   grep -Fxq 'canonical-ds4-key-0123456789abcdef' "$HOME/.config/qwen38/api-key" \
     || fail "diverged paths did not converge on Pi's DeepSeek-first key"
+  grep -Fxq 'canonical-ds4-key-0123456789abcdef' "$HOME/.config/muse-glimmer/api-key" \
+    || fail "Muse path did not converge on Pi's DeepSeek-first key"
 )
 
 # A host with only the Pi sops fallback migrates it into both writable paths.
@@ -91,7 +97,9 @@ fi
   grep -Fxq 'sops-fixture-key-0123456789abcdef0' "$HOME/.config/ds4-flash/api-key" \
     || fail "sops-only migration did not seed the writable endpoint key"
   cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" \
-    || fail "sops-only migration did not synchronize both key paths"
+    || fail "sops-only migration did not synchronize the Qwen key path"
+  cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/muse-glimmer/api-key" \
+    || fail "sops-only migration did not synchronize the Muse key path"
 )
 
 # A fresh install always generates a validation-safe fixed-length key.
@@ -105,10 +113,12 @@ fi
   [[ "${#generated_key}" -eq 32 ]] || fail "generated API key is not exactly 32 characters"
   inference_validate_api_key "$generated_key" || fail "generated API key fails its own validator"
   cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" \
-    || fail "generated key was not synchronized"
+    || fail "generated key was not synchronized to Qwen"
+  cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/muse-glimmer/api-key" \
+    || fail "generated key was not synchronized to Muse"
 )
 
-# An explicit rotation is persisted atomically to both paths with private modes.
+# An explicit rotation is persisted atomically to every path with private modes.
 (
   export HOME="$sandbox/explicit"
   unset SUDO_USER VLLM_API_KEY SGLANG_API_KEY
@@ -121,11 +131,11 @@ fi
   if inference_validate_api_key 'invalid key with spaces 0123456789abcdef' 2>/dev/null; then
     fail "API key with unsafe characters passed validation"
   fi
-  for keyfile in "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key"; do
+  for keyfile in "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" "$HOME/.config/muse-glimmer/api-key"; do
     grep -Fxq 'rotated-fixture-key-0123456789abcdef' "$keyfile" || fail "explicit key was not persisted to $keyfile"
     [[ "$(stat -c '%a' "$keyfile")" = 600 ]] || fail "$keyfile is not mode 0600"
   done
-  for directory in "$HOME/.config" "$HOME/.config/ds4-flash" "$HOME/.config/qwen38"; do
+  for directory in "$HOME/.config" "$HOME/.config/ds4-flash" "$HOME/.config/qwen38" "$HOME/.config/muse-glimmer"; do
     [[ "$(stat -c '%a' "$directory")" = 700 ]] || fail "$directory is not mode 0700"
   done
   inference_write_private_file "$HOME/.config/qwen38/test.env" <<EOF
@@ -138,18 +148,19 @@ EOF
 # Exercise the switcher's stale-key repair and its fail-closed indeterminate path
 # with Docker/curl/ss boundary stubs. No model or daemon is touched.
 switch_fixture="$sandbox/switch-fixture"
-mkdir -p "$switch_fixture/scripts" "$switch_fixture/bin" "$switch_fixture/home/.config/ds4-flash"
-cp "$SWITCH" "$HELPER" "$switch_fixture/scripts/"
+mkdir -p "$switch_fixture/scripts/qwen38" "$switch_fixture/scripts/shared" "$switch_fixture/bin" "$switch_fixture/home/.config/ds4-flash"
+cp "$SWITCH" "$switch_fixture/scripts/qwen38/"
+cp "$HELPER" "$switch_fixture/scripts/shared/"
 printf '%s\n' 'switch-fixture-key-0123456789abcdef' >"$switch_fixture/home/.config/ds4-flash/api-key"
-cat >"$switch_fixture/scripts/run-qwen38-27b-bf16-dspark-vllm.sh" <<'SH'
+cat >"$switch_fixture/scripts/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/inference-api-key.sh"
+source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 inference_prepare_api_key ""
 printf '%s\n' "$INFERENCE_API_KEY" >"$TEST_SWITCH_STATE"
 SH
-cat >"$switch_fixture/scripts/run-qwen38-27b-bf16-dspark-sglang.sh" <<'SH'
+cat >"$switch_fixture/scripts/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh" <<'SH'
 #!/usr/bin/env bash
 exit 99
 SH
@@ -190,7 +201,7 @@ cat >"$switch_fixture/bin/ss" <<'SH'
 #!/usr/bin/env bash
 exit 1
 SH
-chmod +x "$switch_fixture/scripts/"*.sh "$switch_fixture/bin/"*
+chmod +x "$switch_fixture/scripts/qwen38/"*.sh "$switch_fixture/bin/"*
 
 printf '%s\n' old >"$switch_fixture/state"
 switch_output="$(
@@ -198,7 +209,7 @@ switch_output="$(
   PATH="$switch_fixture/bin:$PATH" \
   TEST_SWITCH_STATE="$switch_fixture/state" \
   TEST_INITIAL_AUTH_STATUS=401 \
-  bash "$switch_fixture/scripts/switch-qwen38-backend.sh" vllm
+  bash "$switch_fixture/scripts/qwen38/switch-qwen38-backend.sh" vllm
 )"
 grep -Fq 'restarting with the synchronized key' <<<"$switch_output" \
   || fail "switcher did not restart a healthy target with a rejected key"
@@ -214,7 +225,7 @@ switch_output="$(
   PATH="$switch_fixture/bin:$PATH" \
   TEST_SWITCH_STATE="$switch_fixture/state" \
   TEST_INITIAL_AUTH_STATUS=500 \
-  bash "$switch_fixture/scripts/switch-qwen38-backend.sh" vllm 2>&1
+  bash "$switch_fixture/scripts/qwen38/switch-qwen38-backend.sh" vllm 2>&1
 )" || switch_status=$?
 [[ "$switch_status" -eq 1 ]] || fail "switcher did not fail closed for indeterminate authentication"
 grep -Fq 'refusing a speculative restart' <<<"$switch_output" \

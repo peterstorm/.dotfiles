@@ -4,9 +4,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUN="$ROOT/scripts/run-qwen38-27b-bf16.sh"
-DOWNLOAD="$ROOT/scripts/download-qwen38-27b.sh"
-DOC="$ROOT/docs/new-desktop-install.md"
+RUN="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
+DOWNLOAD="$ROOT/scripts/inference/qwen38/download-qwen38-27b.sh"
+DOC="$ROOT/docs/runbooks/new-desktop-install.md"
 PI_MODELS="$ROOT/pi/models.json"
 IMAGE="vllm/vllm-openai:qwen38"
 DIGEST="sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e"
@@ -32,7 +32,7 @@ contains "$RUN" "IMAGE=\"$IMAGE\""
 contains "$RUN" "DIGEST=\"$DIGEST\""
 contains "$RUN" 'NAME="qwen38-27b-bf16"'
 contains "$RUN" '--env-file "$ENVFILE"'
-contains "$RUN" 'source "$SCRIPT_DIR/inference-api-key.sh"'
+contains "$RUN" 'source "$SCRIPT_DIR/../shared/inference-api-key.sh"'
 contains "$RUN" 'inference_prepare_api_key "${VLLM_API_KEY:-}"'
 contains "$RUN" 'inference_write_private_file "$ENVFILE" <<EOF'
 if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
@@ -92,7 +92,7 @@ jq -e '
       "off": null,
       "minimal": null,
       "low": "low",
-      "medium": "medium",
+      "medium": null,
       "high": null,
       "xhigh": "xhigh",
       "max": null

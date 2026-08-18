@@ -1,5 +1,24 @@
 #!/usr/bin/env bash
-# Experimental: Qwen3.8-27B BF16 + RadixArk DSpark draft on vLLM (TP2).
+# v2 (2026-08-18): Qwen3.8-27B BF16 + RadixArk DSpark draft on vLLM (TP2).
+#
+# Differences from the 08-16 launcher (run-qwen38-27b-bf16-dspark-vllm.sh),
+# per docs/research/2026-08-18-qwen38-upstream-update-research.md:
+#   * Image re-pinned to upstream commit aa99034 (2026-08-18) — verifiably
+#     carries everything ac7509e2 carried PLUS #52197 (08-17: DSpark drafts
+#     with architectures=DSparkDraftModel + model_type=qwen3 are now natively
+#     normalized to Qwen3DSparkModel in vllm/config/speculative.py), #52539
+#     (fused GDN MTP kernel for Qwen head ratios), #50729 (Mamba state-copy
+#     race fix) and #50685 (Qwen3Next sequence-parallel boundaries).
+#     #52480 (MTP TP>=2) is NOT fixed in this build; the DSpark path is
+#     unaffected, as before.
+#   * The draft-config surgery below is RETAINED as an image-independent
+#     fallback: with #52197 in, the image would normalize the unsurgically-
+#     copied draft anyway, but the surgery is idempotent, routes correctly on
+#     old images, and keeps this launcher image-agnostic.
+#   * Draft re-pinned to 85ef153 via the separate /models/Qwen3.8-27B-DSpark-v2
+#     tree; the vLLM-side surgical copy is /models/Qwen3.8-27B-DSpark-vllm-v2.
+#     The 08-16 profile's trees are never touched.
+#   * Container/env suffix -v2 so it coexists with the 08-16 profile.
 #
 # Same target quality profile as scripts/inference/qwen38/run-qwen38-27b-bf16.sh (BF16 weights/KV,
 # FP32 GDN state, 262K context, eight scheduler slots, prefix caching) plus the
@@ -7,42 +26,27 @@
 # equivalent of the SGLang DSpark profile, for engine A/B at identical draft/target.
 # OpenAI-compatible endpoint on :8000.
 #
-# Verified 2026-08-16 against the vLLM source (see docs/runbooks/new-desktop-install.md,
-# "Experimental Qwen3.8-27B DSpark on vLLM"):
-#   * The draft ships `"architectures": ["DSparkDraftModel"]`, which vLLM's
-#     registry maps to the DeepSeek-V4 DSpark implementation that reads
-#     DeepSeek-only fields (`config.hc_mult`) and crashes on this Qwen3Config.
-#     The Qwen path is selected by the `Qwen3DSparkModel` architecture string,
-#     so this script prepares a vLLM-only copy of the draft with that one field
-#     rewritten. The SGLang copy at /models/Qwen3.8-27B-DSpark is never touched.
-#   * The pinned image is an UPSTREAM commit (ac7509e2, 2026-08-14), so
-#     containment is verifiable: DSpark (#46995/#47093), the hybrid-GDN
-#     prefix-cache fix stack for #43559 (merged 2026-07-12..18; the issue was
-#     closed completed 2026-08-06), and the GDN gate fix #51812 all landed
-#     before it. Prefix caching is therefore kept ON — probe tool calls in the
-#     validation gate anyway, because the degradation mode was silent.
-#   * vLLM#52480 (MTP drafter weight-load crash at TP>=2) does NOT affect this
-#     DSpark path; TP2 is the default and point of this profile.
-#
 # Prerequisites:
 #   scripts/inference/qwen38/download-qwen38-27b.sh
-#   scripts/inference/qwen38/download-qwen38-27b-dspark.sh
+#   scripts/inference/qwen38/download-qwen38-27b-dspark-v2.sh
 #   jq (already in the core-apps package set)
+# Full rationale: docs/runbooks/qwen38-27b-runbook-2026-08-18.md —
+# "Experimental Qwen3.8-27B DSpark on vLLM (v2)".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 
-IMAGE="vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9"
-DIGEST="sha256:ecc6a14f77a9c788d78d5eee2eec371246567ab40989b58ec1d73a691c7cd54e"
+IMAGE="vllm/vllm-openai:nightly-aa9903490c616dc6871e5acc62cec7bb1e5e9434"
+DIGEST="sha256:7eb4028507367e69cb0abfa213042d1814c27c1b499af45fbffec8f16d9cbc6f"
 MODEL_HOST="/models/Qwen3.8-27B"
 MODEL_CONTAINER="/models/Qwen/Qwen3.8-27B"
-DRAFT_HOST="/models/Qwen3.8-27B-DSpark"
-DRAFT_VLLM_HOST="/models/Qwen3.8-27B-DSpark-vllm"
-DRAFT_CONTAINER="/models/RadixArk/Qwen3.8-27B-DSpark-vllm"
+DRAFT_HOST="/models/Qwen3.8-27B-DSpark-v2"
+DRAFT_VLLM_HOST="/models/Qwen3.8-27B-DSpark-vllm-v2"
+DRAFT_CONTAINER="/models/RadixArk/Qwen3.8-27B-DSpark-vllm-v2"
 CACHE_HOST="/models/vllm-cache/qwen38-bf16-dspark"
-NAME="qwen38-27b-bf16-dspark-vllm"
+NAME="qwen38-27b-bf16-dspark-vllm-v2"
 DSARK_BLOCK_SIZE=7
 
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"
@@ -57,7 +61,7 @@ if [ ! -e "$MODEL_HOST/config.json" ]; then
   exit 1
 fi
 if [ ! -e "$DRAFT_HOST/config.json" ]; then
-  echo "error: DSpark draft not found at $DRAFT_HOST — run scripts/inference/qwen38/download-qwen38-27b-dspark.sh first" >&2
+  echo "error: DSpark draft not found at $DRAFT_HOST — run scripts/inference/qwen38/download-qwen38-27b-dspark-v2.sh first" >&2
   exit 1
 fi
 
@@ -84,7 +88,7 @@ inference_prepare_api_key "${VLLM_API_KEY:-}"
 VLLM_API_KEY="$INFERENCE_API_KEY"
 CONFIG_DIR="$INFERENCE_OPERATOR_HOME/.config/qwen38"
 KEYFILE="$INFERENCE_QWEN_KEYFILE"
-ENVFILE="$CONFIG_DIR/vllm-dspark.env"
+ENVFILE="$CONFIG_DIR/vllm-dspark-v2.env"
 
 # Keep the key out of Docker's command arguments and the host process list.
 inference_write_private_file "$ENVFILE" <<EOF

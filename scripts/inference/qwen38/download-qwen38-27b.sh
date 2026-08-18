@@ -5,7 +5,7 @@
 # Writes to /models/Qwen3.8-27B. Runs in a throwaway Python container because
 # the host intentionally has no Python/Hugging Face CLI. Idempotent and resumable.
 #
-# See docs/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
+# See docs/runbooks/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
 set -euo pipefail
 
 REPO="Qwen/Qwen3.8-27B"

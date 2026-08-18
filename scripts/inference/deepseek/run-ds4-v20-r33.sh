@@ -6,14 +6,15 @@
 # endpoint on :8000. Go headless first (`sudo systemctl stop display-manager`)
 # so the GPUs aren't held by X.
 #
-# The checkpoint must already be on disk — run scripts/download-ds4-flash.sh first.
-# Full rationale: docs/new-desktop-install.md — "Running DeepSeek-V4-Flash
+# The checkpoint must already be on disk —
+# run scripts/inference/deepseek/download-ds4-flash.sh first.
+# Full rationale: docs/runbooks/new-desktop-install.md — "Running DeepSeek-V4-Flash
 # (Gilded Gnosis r33, K5)".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/inference-api-key.sh
-source "$SCRIPT_DIR/inference-api-key.sh"
+# shellcheck source=scripts/inference/shared/inference-api-key.sh
+source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 
 IMG="voipmonitor/vllm:gilded-gnosis-v20-vllmfa13d33-b12x06db0f4-fi1ac6942-cu132-20260809-r33@sha256:fdde59fed7f9fc12f9fd5ef1b3b3ea8d5097bf10ebad54b348497102c3a83f82"
 MODEL_HOST="/models/DeepSeek-V4-Flash-0731"
@@ -28,12 +29,12 @@ GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.975}"
 KV_OFFLOADING_SIZE="${KV_OFFLOADING_SIZE:-0}"
 
 if [ ! -e "$MODEL_HOST/config.json" ]; then
-  echo "error: checkpoint not found at $MODEL_HOST — run scripts/download-ds4-flash.sh first" >&2
+  echo "error: checkpoint not found at $MODEL_HOST — run scripts/inference/deepseek/download-ds4-flash.sh first" >&2
   exit 1
 fi
 
-# Resolve the human operator even under `sudo` and synchronize the DeepSeek and
-# Qwen key paths. Every mutually exclusive server on :8000 uses one credential.
+# Resolve the human operator even under `sudo` and synchronize every model-specific
+# key path. The exclusive :8000 profiles and concurrent Muse endpoint share one credential.
 inference_prepare_api_key "${VLLM_API_KEY:-}"
 VLLM_API_KEY="$INFERENCE_API_KEY"
 KEYFILE="$INFERENCE_DS4_KEYFILE"

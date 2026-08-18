@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# Launch Qwen3.8-27B BF16 on the desktop's two RTX PRO 6000 Blackwell GPUs.
+# Launch Qwen3.8-27B BF16 on one or both RTX PRO 6000 Blackwell GPUs.
 #
-# Quality-first profile: TP2, BF16 weights/attention KV, model-declared FP32
-# recurrent state, native 262K context, eight scheduler slots, native template.
-# OpenAI-compatible endpoint on :8000.
+# The standalone default remains quality-first TP2. The concurrent Muse profile
+# sets TP_SIZE=1 GPU_DEVICES=1, keeps BF16 weights/KV and FP32 recurrent state,
+# and leaves physical GPU0 for Muse. OpenAI-compatible endpoint on :8000.
 #
 # MTP speculative decoding (the in-checkpoint one-layer MTP head) is available as an
-# opt-in: TP_SIZE=1 SPEC_MTP=1 bash scripts/run-qwen38-27b-bf16.sh. It is refused at
-# TP>=2 while vLLM issue #52480 (qwen3_5 MTP drafter weight-load crash) is open, and the
-# image must demonstrably carry vLLM #51812 + #51674. Full rationale and gate:
-# docs/new-desktop-install.md, "Why MTP is off".
+# opt-in: TP_SIZE=1 SPEC_MTP=1 bash scripts/inference/qwen38/run-qwen38-27b-bf16.sh.
+# It is refused at TP>=2 while vLLM issue #52480 (qwen3_5 MTP drafter weight-load crash)
+# is open, and the image must demonstrably carry vLLM #51812 + #51674. Full rationale
+# and gate: docs/runbooks/new-desktop-install.md, "Why MTP is off".
 #
-# The checkpoint must already be on disk — run scripts/download-qwen38-27b.sh.
-# Full rationale: docs/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
+# The checkpoint must already be on disk —
+# run scripts/inference/qwen38/download-qwen38-27b.sh.
+# Full rationale: docs/runbooks/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/inference-api-key.sh
-source "$SCRIPT_DIR/inference-api-key.sh"
+# shellcheck source=scripts/inference/shared/inference-api-key.sh
+source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 
 IMAGE="vllm/vllm-openai:qwen38"
 DIGEST="sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e"
@@ -31,12 +32,34 @@ MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"
 TP_SIZE="${TP_SIZE:-2}"
+GPU_DEVICES="${GPU_DEVICES:-}"
+PORT="${PORT:-8000}"
 SPEC_MTP="${SPEC_MTP:-0}"
 SPEC_TOKENS="${SPEC_TOKENS:-3}"
 case "$TP_SIZE" in
   1|2) ;;
   *) echo "error: TP_SIZE must be 1 or 2 (got: $TP_SIZE)" >&2; exit 2 ;;
 esac
+if [ -z "$GPU_DEVICES" ]; then
+  if [ "$TP_SIZE" = "1" ]; then
+    GPU_DEVICES="0"
+  else
+    GPU_DEVICES="0,1"
+  fi
+fi
+case "$TP_SIZE:$GPU_DEVICES" in
+  1:0|1:1) CONTAINER_CUDA_VISIBLE_DEVICES="0" ;;
+  2:0,1|2:1,0) CONTAINER_CUDA_VISIBLE_DEVICES="0,1" ;;
+  *)
+    echo "error: GPU_DEVICES must select exactly TP_SIZE distinct devices from 0,1" >&2
+    echo "       examples: TP_SIZE=1 GPU_DEVICES=1 or TP_SIZE=2 GPU_DEVICES=0,1" >&2
+    exit 2
+    ;;
+esac
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1024 || PORT > 65535)); then
+  echo "error: PORT must be an integer from 1024 through 65535 (got: $PORT)" >&2
+  exit 2
+fi
 SPEC_ARGS=()
 if [ "$SPEC_MTP" = "1" ]; then
   if [ "$TP_SIZE" -ge 2 ]; then
@@ -57,12 +80,12 @@ elif [ "$SPEC_MTP" != "0" ]; then
 fi
 
 if [ ! -e "$MODEL_HOST/config.json" ]; then
-  echo "error: checkpoint not found at $MODEL_HOST — run scripts/download-qwen38-27b.sh first" >&2
+  echo "error: checkpoint not found at $MODEL_HOST — run scripts/inference/qwen38/download-qwen38-27b.sh first" >&2
   exit 1
 fi
 
-# Resolve the human operator even under `sudo`, then synchronize the historical
-# DeepSeek/Qwen paths to one endpoint key. This prevents a root-only key from
+# Resolve the human operator even under `sudo`, then synchronize all model-specific
+# key paths to one credential. This prevents a root-only key from
 # silently replacing the credential Pi retrieves as the desktop user.
 inference_prepare_api_key "${VLLM_API_KEY:-}"
 VLLM_API_KEY="$INFERENCE_API_KEY"
@@ -78,17 +101,18 @@ EOF
 sudo mkdir -p "$CACHE_HOST"
 sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$CACHE_HOST"
 
-# Make relaunch idempotent, then reject a different server already owning :8000.
+# Make relaunch idempotent, then reject a different server already owning the port.
 docker rm -f "$NAME" 2>/dev/null || true
-if command -v ss >/dev/null 2>&1 && ss -H -ltn 'sport = :8000' | grep -q .; then
-  echo "error: TCP port 8000 is already in use; stop the current model server first" >&2
+if command -v ss >/dev/null 2>&1 && ss -H -ltn "sport = :$PORT" | grep -q .; then
+  echo "error: TCP port $PORT is already in use; stop the current model server first" >&2
   exit 1
 fi
 
 docker run -d --init \
   --restart unless-stopped \
   --name "$NAME" \
-  --gpus all \
+  --label io.peterstorm.inference.physical-gpus="$GPU_DEVICES" \
+  --gpus "\"device=$GPU_DEVICES\"" \
   --ipc=host \
   --network host \
   --ulimit memlock=-1 \
@@ -97,7 +121,7 @@ docker run -d --init \
   --env-file "$ENVFILE" \
   -v "$MODEL_HOST":"$MODEL_CONTAINER":ro \
   -v "$CACHE_HOST":/root/.cache \
-  -e CUDA_VISIBLE_DEVICES=0,1 \
+  -e CUDA_VISIBLE_DEVICES="$CONTAINER_CUDA_VISIBLE_DEVICES" \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e VLLM_NO_USAGE_STATS=1 \
   "$IMAGE@$DIGEST" \
@@ -120,9 +144,10 @@ docker run -d --init \
   --default-chat-template-kwargs '{"enable_thinking":true,"preserve_thinking":true,"reasoning_effort":"xhigh"}' \
   --override-generation-config '{"temperature":1.0,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}' \
   --host 0.0.0.0 \
-  --port 8000
+  --port "$PORT"
 
-echo "Started '$NAME'. First start downloads/compiles runtime kernels and may take several minutes."
+echo "Started '$NAME' with TP_SIZE=$TP_SIZE on physical GPU device(s) $GPU_DEVICES at :$PORT."
+echo "First start downloads/compiles runtime kernels and may take several minutes."
 echo "Follow:  docker logs -f $NAME"
-echo "Health:  curl -fsS http://127.0.0.1:8000/health"
+echo "Health:  curl -fsS http://127.0.0.1:$PORT/health"
 echo "API key: $KEYFILE  (send as 'Authorization: Bearer <key>')"

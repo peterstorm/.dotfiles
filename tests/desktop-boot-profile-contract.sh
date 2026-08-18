@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DOC="$ROOT/docs/new-desktop-install.md"
+DOC="$ROOT/docs/runbooks/new-desktop-install.md"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2

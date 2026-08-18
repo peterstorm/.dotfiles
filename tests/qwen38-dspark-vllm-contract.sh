@@ -4,10 +4,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUN="$ROOT/scripts/run-qwen38-27b-bf16-dspark-vllm.sh"
-DOWNLOAD_TARGET="$ROOT/scripts/download-qwen38-27b.sh"
-DOWNLOAD_DRAFT="$ROOT/scripts/download-qwen38-27b-dspark.sh"
-DOC="$ROOT/docs/new-desktop-install.md"
+RUN="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh"
+DOWNLOAD_TARGET="$ROOT/scripts/inference/qwen38/download-qwen38-27b.sh"
+DOWNLOAD_DRAFT="$ROOT/scripts/inference/qwen38/download-qwen38-27b-dspark.sh"
+DOC="$ROOT/docs/runbooks/new-desktop-install.md"
 IMAGE="vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9"
 DIGEST="sha256:ecc6a14f77a9c788d78d5eee2eec371246567ab40989b58ec1d73a691c7cd54e"
 TARGET_REV="1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -41,7 +41,7 @@ contains "$RUN" 'NAME="qwen38-27b-bf16-dspark-vllm"'
 
 # Key handling: env-file only, never Docker command arguments.
 contains "$RUN" '--env-file "$ENVFILE"'
-contains "$RUN" 'source "$SCRIPT_DIR/inference-api-key.sh"'
+contains "$RUN" 'source "$SCRIPT_DIR/../shared/inference-api-key.sh"'
 contains "$RUN" 'inference_prepare_api_key "${VLLM_API_KEY:-}"'
 contains "$RUN" 'inference_write_private_file "$ENVFILE" <<EOF'
 contains "$RUN" 'inference_require_cache_access "$CACHE_HOST"'

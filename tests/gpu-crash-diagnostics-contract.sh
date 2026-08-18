@@ -3,10 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RECORDER="$ROOT/scripts/gpu-telemetry-record.py"
-LAUNCHER="$ROOT/scripts/run-qwen38-27b-bf16-dspark-sglang.sh"
+RECORDER="$ROOT/scripts/inference/shared/gpu-telemetry-record.py"
+LAUNCHER="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
 MACHINE="$ROOT/machines/desktop/default.nix"
-TRIAGE="$ROOT/docs/gpu-inference-crash-triage.md"
+TRIAGE="$ROOT/docs/runbooks/gpu-inference-crash-triage.md"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -54,7 +54,7 @@ done
 
 # Exercise rotation/output/signal handling without requiring NVIDIA hardware.
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp" "$ROOT/scripts/__pycache__"' EXIT
+trap 'rm -rf "$tmp" "$ROOT/scripts/inference/shared/__pycache__"' EXIT
 cat > "$tmp/pynvml.py" <<'PY'
 class NVMLError(Exception):
     pass

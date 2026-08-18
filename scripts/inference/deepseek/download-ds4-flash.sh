@@ -6,7 +6,7 @@
 # compression). Runs in a throwaway python container because the host has no
 # python/hf CLI on purpose. Idempotent + resumable: re-run to continue.
 #
-# See docs/new-desktop-install.md — "Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)".
+# See docs/runbooks/new-desktop-install.md — "Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)".
 set -euo pipefail
 
 REPO="deepseek-ai/DeepSeek-V4-Flash-0731"

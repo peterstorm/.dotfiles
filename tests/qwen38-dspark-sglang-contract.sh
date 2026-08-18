@@ -4,11 +4,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUN="$ROOT/scripts/run-qwen38-27b-bf16-dspark-sglang.sh"
-DOWNLOAD_TARGET="$ROOT/scripts/download-qwen38-27b.sh"
-DOWNLOAD_DRAFT="$ROOT/scripts/download-qwen38-27b-dspark.sh"
-ENTRYPOINT="$ROOT/scripts/sglang-secure-entrypoint.py"
-DOC="$ROOT/docs/new-desktop-install.md"
+RUN="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
+DOWNLOAD_TARGET="$ROOT/scripts/inference/qwen38/download-qwen38-27b.sh"
+DOWNLOAD_DRAFT="$ROOT/scripts/inference/qwen38/download-qwen38-27b-dspark.sh"
+ENTRYPOINT="$ROOT/scripts/inference/shared/sglang-secure-entrypoint.py"
+DOC="$ROOT/docs/runbooks/new-desktop-install.md"
 IMAGE="lmsysorg/sglang:qwen38-27b"
 DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124"
 TARGET_REV="1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -39,7 +39,7 @@ contains "$RUN" 'NAME="qwen38-27b-bf16-dspark-sglang"'
 contains "$RUN" '--env-file "$ENVFILE"'
 contains "$RUN" 'if [ ! -d "$CACHE_HOST" ]; then'
 contains "$RUN" 'inference_require_cache_access "$CACHE_HOST"'
-contains "$RUN" 'source "$SCRIPT_DIR/inference-api-key.sh"'
+contains "$RUN" 'source "$SCRIPT_DIR/../shared/inference-api-key.sh"'
 contains "$RUN" 'inference_prepare_api_key "${SGLANG_API_KEY:-${VLLM_API_KEY:-}}"'
 contains "$RUN" 'inference_write_private_file "$ENVFILE" <<EOF'
 contains "$RUN" '-e SGLANG_RAGGED_VERIFY_MODE=static'

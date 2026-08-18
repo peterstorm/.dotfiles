@@ -28,7 +28,7 @@ let
     lib.splitString "\n" (builtins.readFile ../../authorized_keys.txt)
   );
 
-  # The hardware questions docs/new-desktop-install.md opens with. Answering them
+  # The hardware questions docs/runbooks/new-desktop-install.md opens with. Answering them
   # from the ISO matters because PCIe link width decides whether GPU↔GPU P2P — and
   # therefore the whole DS4 inference story — is even possible on this board. That
   # is a reason not to install, so it wants answering before disko wipes anything.
@@ -98,7 +98,7 @@ let
       report "lspci -vv" "$(lspci -vv -d 10de: 2>/dev/null | grep -E 'LnkCap:|LnkSta:' || true)"
 
       printf '\n\033[1mNext:\033[0m record these in the Hardware assumptions table of\n'
-      printf 'docs/new-desktop-install.md before installing.\n'
+      printf 'docs/runbooks/new-desktop-install.md before installing.\n'
     '';
   };
 
@@ -221,7 +221,7 @@ in
           ssh root@installer.local
 
       Run `survey-hardware` to answer the hardware questions in
-      docs/new-desktop-install.md before installing.
+      docs/runbooks/new-desktop-install.md before installing.
 
     ${lib.optionalString (target != null) ''
       This image carries the full `desktop` closure. To install with no laptop

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Switch the Qwen3.8-27B DSpark backend on :8000 between SGLang and vLLM.
 #
-#   bash scripts/switch-qwen38-backend.sh status    # who owns :8000, is it healthy
-#   bash scripts/switch-qwen38-backend.sh vllm      # stop SGLang DSpark, start vLLM DSpark
-#   bash scripts/switch-qwen38-backend.sh sglang    # the reverse
+#   bash scripts/inference/qwen38/switch-qwen38-backend.sh status    # who owns :8000, is it healthy
+#   bash scripts/inference/qwen38/switch-qwen38-backend.sh vllm      # stop SGLang DSpark, start vLLM DSpark
+#   bash scripts/inference/qwen38/switch-qwen38-backend.sh sglang    # the reverse
 #
 # The cutover is a hard stop: :8000 is down between container stop and first
 # healthy response (a cold vLLM start takes minutes — kernel compile + CUDA
@@ -14,8 +14,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/inference-api-key.sh
-source "$SCRIPT_DIR/inference-api-key.sh"
+# shellcheck source=scripts/inference/shared/inference-api-key.sh
+source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 VLLM_NAME="qwen38-27b-bf16-dspark-vllm"
 VLLM_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-vllm.sh"
 SGLANG_NAME="qwen38-27b-bf16-dspark-sglang"
