@@ -56,6 +56,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
+inference_resolve_operator
 
 IMAGE="lmsysorg/sglang:qwen38-27b"
 DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124"

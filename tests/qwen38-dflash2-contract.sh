@@ -135,6 +135,9 @@ contains "$DFLASH2_SGLANG" '--enable-metrics'
 contains "$DFLASH2_SGLANG" '--reasoning-parser qwen3'
 contains "$DFLASH2_SGLANG" '--tool-call-parser qwen3_coder'
 contains "$DFLASH2_SGLANG" 'source "$SCRIPT_DIR/../shared/inference-api-key.sh"'
+# INFERENCE_OPERATOR_HOME is used (CONTAINER_ARCHIVE_DIR) before the key is
+# prepared, so the operator must be resolved right after sourcing.
+contains "$DFLASH2_SGLANG" 'inference_resolve_operator'
 contains "$DFLASH2_SGLANG" 'inference_prepare_api_key "${SGLANG_API_KEY:-${VLLM_API_KEY:-}}"'
 contains "$DFLASH2_SGLANG" 'inference_write_private_file "$ENVFILE" <<EOF'
 contains "$DFLASH2_SGLANG" 'ENTRYPOINT_HOST="$SCRIPT_DIR/../shared/sglang-secure-entrypoint.py"'
