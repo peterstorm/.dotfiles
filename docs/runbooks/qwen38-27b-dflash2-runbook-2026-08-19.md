@@ -157,10 +157,16 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
 ```
 
 - `status` must report `qwen38-27b-bf16-dflash2-sglang`, health OK, client authentication OK.
-- `sglang:spec_*` counters must move; after a short chat completion the acceptance length should
-  land near **4.1–5.5** (card range at this concurrency class). Near 1.0 ⇒ miswired draft —
-  check the log for the draft's resolved architecture and re-verify the surgery copy:
-  `jq -c '.architectures' "$HOME/Desktop/Qwen3.8-27B-DFlash2-sglang/config.json`.
+- `sglang:spec_*` counters must move. `spec_accept_length` is a **windowed** gauge (8-token
+  blocks = 1 bonus + 7 drafts) and reads low for the first moments after boot — not a fault.
+  The card's **4.1–5.5** is a *benchmark-condition* range (H200/FA3, benchmark prompts,
+  temp 1.0 / top-p 0.95 / top-k 20, `xhigh`, 4096 max tokens); on live Pi traffic (long
+  context, `xhigh` reasoning at temp 1.0) expect lower: measured 2026-08-19 — **~2.2–2.6**
+  on live traffic, **~3.4** after a greedy (temp 0) math probe; DSpark on the same box
+  measured 3.575 live. Persistent ~1.0 under sustained traffic ⇒ miswired draft — check the
+  log for `Initialized DFLASH draft runner ... block_size=8` and re-verify the surgery copy:
+  `jq -c .architectures` must be `["DFlashDraftModel"]`, `jq -c .dflash_config` must keep
+  `block_size: 8` + `mask_token_id: 248070`.
 - Both GPUs within the 450 W cap; sustained load clean before benchmarking.
 - A/B against the DSpark v2 profile (same target, same flags, one drafter apart) before
   promoting DFlash 2 as the default: switch `sglang` ⇄ `dflash2` and compare acceptance +
