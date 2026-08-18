@@ -25,8 +25,8 @@ driver (VRAM, power limit). See
 | PCIe topology | **confirmed** | **x8/x8, both from the CPU root complex** — P2P measured at **28.6 GB/s** (Gen5 x8 line rate) | whether GPU↔GPU P2P works at all |
 | GPUs | **confirmed** | 2× RTX PRO 6000 Blackwell **Workstation Edition** `[10de:2bb1]`, ~96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
 | GPU slots | **confirmed** | `PCIEX16(G5)_1` + `_2` → buses `01:00.0` / `03:00.0`, CPU root ports `00:01.1` / `00:01.3` | direct-attach P2P path |
-| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals, `gpuPowerLimitWatts = 350` during the GPU0 Xid 79 diagnostic — see [crash triage](gpu-inference-crash-triage.md) |
-| PSU | **confirmed** | **Seasonic 1600 W Platinum** | aggregate capacity is ample at the 2×350 W diagnostic cap; individual card/cable/slot and TP-rank behavior remain under test |
+| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals; `gpuPowerLimitWatts = 450` (350 W during the 2026-08-16 Xid 79 diagnostic, raised 2026-08-18 after a clean sustained-load window) — see [crash triage](gpu-inference-crash-triage.md) |
+| PSU | **confirmed** | **Seasonic 1600 W Platinum** | ample at the 2×450 W operational cap (2×350 W during the Xid 79 diagnostic); per-card behavior stays under the triage runbook |
 | WiFi | **confirmed** | **MediaTek MT7927** (Filogic 380) `[14c3:7927]`, driver `mt7925e` — out-of-tree, needs `iommu=pt` | see [WiFi (MT7927)](#wifi-mt7927) |
 | NICs | **confirmed** | `wlp10s0` (WiFi), `enp11s0` + `enp12s0` (2.5 Gb + 10 Gb) — flake `NICs` value is cosmetic (NetworkManager owns them) | non-blocking |
 
@@ -221,7 +221,7 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
   - `virtualisation.docker.storageDriver = "zfs"` — see
     [Docker on ZFS](#docker-on-zfs-is-not-optional-here)
   - `powerManagement.cpuFreqGovernor = "performance"`
-  - `gpuPowerLimitWatts` (currently `null`) — see [Power limits](#power-limits)
+  - `gpuPowerLimitWatts` (currently `450`) — see [Power limits](#power-limits)
   - Auto-scrub + TRIM
   - AMD microcode
   - The base/default system boots headless to `multi-user.target`, so the GPUs start
@@ -267,7 +267,7 @@ Read these once before `nixos-anywhere` — they're the only places hardware ass
 | `roles/dual-desktop-plasma/default.nix` | xrandr `setupCommands` | **confirmed** `DP-4` (2560×1440) **rotated right / portrait** at 0,0 (left), `DP-6` (3840×1600 ultrawide) primary to its right at `1440x750` | Output names are per-GPU/cable — re-check with `xrandr --query` if you move a cable or swap a monitor |
 | `authorized_keys.txt` | your pubkey | 4 keys | Must contain the key you SSH from. It is baked into **both** the installer ISO and the installed system, so a missing key locks you out of the install itself, not just the finished machine |
 | `machines/desktop/disks.nix` | `models/native-l2` `quota` | `512G` | Raise together with `NATIVE_L2_GB`, never separately. Also check it fits the actual disk |
-| `machines/desktop/default.nix` | `gpuPowerLimitWatts` | `null` | Set once `nvidia-smi -q -d POWER` tells you the card's range — see [Power limits](#power-limits) |
+| `machines/desktop/default.nix` | `gpuPowerLimitWatts` | `450` | Verified on the 600 W Workstation card (2026-08-18); keep `null` until `nvidia-smi -q -d POWER` confirms the range on an unknown SKU — see [Power limits](#power-limits) |
 
 ## Prerequisites (one-time, on your laptop)
 
@@ -563,7 +563,7 @@ thermals and noise — and on a shared-airflow build, less throttling can leave 
 clocks higher than the uncapped pair.
 
 `machines/desktop/default.nix` has a `gpuPowerLimitWatts` binding that generates a
-`nvidia-power-limit` oneshot unit when set. It is `null` until the SKU is known, because
+`nvidia-power-limit` oneshot unit when set. It is `null` on unknown SKUs, because
 `nvidia-smi -pl` exits non-zero for a value outside the card's supported range and the
 600 W and 300 W cards do not share one:
 
@@ -1275,7 +1275,7 @@ Wait for the single final `DOWNLOAD_COMPLETE`. The downloader writes revision-be
 wrong-revision tree even when an early `config.json` already exists.
 
 The dual switch is deliberately fail-closed. Before stopping the current TP2 server it
-checks both checkpoints, both GPUs, both 350 W power caps, and that the display manager is
+checks both checkpoints, both GPUs, both 450 W power caps, and that the display manager is
 stopped. Conflicting containers are stopped rather than deleted so their crash logs survive
 until their own launcher archives/replaces them. After the stop, both cards must fall below
 2 GiB of existing use; this catches an unrelated process before either new model loads. The
@@ -1471,7 +1471,7 @@ GPU_ORDER=1,0 bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 ```
 
 The launcher accepts only `0,1` or `1,0`, labels the container with the chosen order, and
-fails closed unless both physical cards are at or below the default 350 W diagnostic cap.
+fails closed unless both physical cards are at or below the default 450 W cap.
 It archives the previous container's compressed log plus secret-free state metadata under
 `~/.local/state/qwen38/container-archives/` before removal, retaining 14 days and at most
 20 launches. Durable one-second physical GPU samples live in `/var/lib/gpu-telemetry/`; see

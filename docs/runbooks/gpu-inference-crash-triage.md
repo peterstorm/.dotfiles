@@ -5,7 +5,7 @@ record that motivated it. The machine:
 
 - **Desktop** (`ssh desktop`, 192.168.0.80) — NixOS 26.11, kernel 6.18.x
 - **CPU**: AMD Ryzen 9 9950X (16c/32t) — cooler currently **undersized** (known)
-- **PSU**: Seasonic 1600 W Platinum — ample aggregate capacity at the diagnostic 350 W GPU caps
+- **PSU**: Seasonic 1600 W Platinum — ample aggregate capacity at the 450 W operational GPU caps (350 W during the 2026-08-16 diagnostic)
 - **GPUs**: 2× NVIDIA RTX PRO 6000 Blackwell Workstation (GB202GL, 96 GB), driver 595.91.07
   - GPU0: PCI `01:00.0`, serial `1794425022466` (display attached)
   - GPU1: PCI `03:00.0`, serial `1791526036417`
@@ -212,7 +212,9 @@ Non-zero retired pages or pending remaps → RMA track.
 
 - **Xid 79 on this box** → inspect the durable final samples, then logical rank reversal,
   then physical card/slot swap. All three 2026-08-16 dropouts were physical GPU0 at both
-  450 W and 400 W; 350 W is diagnostic mitigation only, not a fix.
+  450 W and 400 W; 350 W was diagnostic mitigation only, not a fix. 2026-08-18:
+  450 W restored as the operational cap after a clean sustained-load window —
+  revert to 350 W if Xid 79 recurs.
 - **Xid 48/63/64/94/95** or retired pages → VRAM → RMA
 - **Speed/width drops or AER errors** → slot/retimer/cable reseats, try the other slot
 - **No Xid, just OOM/413s/timeouts** → server-config problem (mem fraction, context

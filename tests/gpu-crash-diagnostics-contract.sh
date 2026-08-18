@@ -25,14 +25,14 @@ for marker in \
   'container-archives' \
   'docker logs --timestamps' \
   'Config.Env' \
-  'MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-350}"' \
+  'MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"' \
   '--query-gpu=index,power.limit' \
   'ARCHIVE_MAX_COUNT="${ARCHIVE_MAX_COUNT:-20}"'; do
   grep -Fq -- "$marker" "$LAUNCHER" || fail "launcher missing: $marker"
 done
 
 for marker in \
-  'gpuPowerLimitWatts = 350;' \
+  'gpuPowerLimitWatts = 450;' \
   'pythonPackages.nvidia-ml-py' \
   'systemd.services.gpu-telemetry-record' \
   'StateDirectory = "gpu-telemetry";' \
@@ -90,8 +90,8 @@ def nvmlDeviceGetNumFans(handle): return 2
 def nvmlDeviceGetFanSpeed_v2(handle, fan): return 40 + handle + fan
 def nvmlDeviceGetPowerState(handle): return 1
 def nvmlDeviceGetTemperature(handle, sensor): return 70 + handle
-def nvmlDeviceGetPowerUsage(handle): return 350000
-def nvmlDeviceGetEnforcedPowerLimit(handle): return 350000
+def nvmlDeviceGetPowerUsage(handle): return 450000
+def nvmlDeviceGetEnforcedPowerLimit(handle): return 450000
 def nvmlDeviceGetClockInfo(handle, clock): return 2500 if clock == NVML_CLOCK_SM else 7000
 def nvmlDeviceGetCurrPcieLinkGeneration(handle): return 5
 def nvmlDeviceGetCurrPcieLinkWidth(handle): return 8

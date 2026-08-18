@@ -42,7 +42,7 @@ esac
 CONTAINER_ARCHIVE_DIR="${CONTAINER_ARCHIVE_DIR:-$INFERENCE_OPERATOR_HOME/.local/state/qwen38/container-archives}"
 ARCHIVE_RETENTION_DAYS="${ARCHIVE_RETENTION_DAYS:-14}"
 ARCHIVE_MAX_COUNT="${ARCHIVE_MAX_COUNT:-20}"
-MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-350}"
+MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"
 for numeric in ARCHIVE_RETENTION_DAYS ARCHIVE_MAX_COUNT MAX_GPU_POWER_LIMIT; do
   value="${!numeric}"
   if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
@@ -71,8 +71,9 @@ if [ ! -f "$ENTRYPOINT_HOST" ]; then
   exit 1
 fi
 
-# Fail closed: never start this high-load diagnostic profile above its declared
-# safety cap. Override MAX_GPU_POWER_LIMIT explicitly when the diagnostic ends.
+# Fail closed: never start this high-load profile above its declared power cap
+# (matches gpuPowerLimitWatts in machines/desktop/default.nix). Override
+# MAX_GPU_POWER_LIMIT to change the cap.
 mapfile -t gpu_caps < <(nvidia-smi --query-gpu=index,power.limit --format=csv,noheader,nounits 2>/dev/null)
 if [ "${#gpu_caps[@]}" -ne 2 ]; then
   echo "error: expected two queryable GPUs before launch; found ${#gpu_caps[@]}" >&2
@@ -87,7 +88,7 @@ for record in "${gpu_caps[@]}"; do
     exit 3
   fi
   if awk -v cap="$gpu_cap" -v maximum="$MAX_GPU_POWER_LIMIT" 'BEGIN { exit !(cap > maximum) }'; then
-    echo "error: GPU $gpu_index cap is ${gpu_cap}W; diagnostic maximum is ${MAX_GPU_POWER_LIMIT}W" >&2
+    echo "error: GPU $gpu_index cap is ${gpu_cap}W; declared maximum is ${MAX_GPU_POWER_LIMIT}W" >&2
     echo "apply the NixOS power-limit configuration before launching" >&2
     exit 3
   fi

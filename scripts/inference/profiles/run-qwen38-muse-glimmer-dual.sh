@@ -4,7 +4,7 @@
 # Physical GPU1: Qwen3.8-27B BF16, vLLM TP1, :8000.
 # Physical GPU0: Muse Glimmer 30B BF16 + DFlash, SGLang TP1, :8001.
 #
-# The script preflights both checkpoints and the 350 W safety cap before stopping
+# The script preflights both checkpoints and the 450 W safety cap before stopping
 # the mutually exclusive TP2 containers. It then waits until both authenticated
 # endpoints are healthy. On a failed transition, both new containers are removed
 # instead of leaving a half-installed dual profile.
@@ -21,7 +21,7 @@ MUSE_NAME="muse-glimmer-30b-bf16-dflash"
 QWEN_PORT=8000
 MUSE_PORT=8001
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-1800}"
-MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-350}"
+MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"
 MAX_EXISTING_GPU_MEMORY_MIB="${MAX_EXISTING_GPU_MEMORY_MIB:-2048}"
 QWEN_MAX_NUM_SEQS="${QWEN_MAX_NUM_SEQS:-4}"
 QWEN_GPU_MEMORY_UTILIZATION="${QWEN_GPU_MEMORY_UTILIZATION:-0.90}"

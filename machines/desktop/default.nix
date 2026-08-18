@@ -3,25 +3,33 @@ let
   # Desired persistent per-GPU power cap in watts, or null to leave the cards at
   # their firmware default.
   #
-  # Why 350: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
+  # Why 450: upstream's sweep (hardware/blackwell-power-limit-sweep.md) measures
   # the 600 W Workstation card holding ~300-305 Gflop/s/W flat across the whole
-  # 200-350 W band. This is therefore the lowest-risk diagnostic cap that stays
-  # inside the measured efficiency plateau.
+  # 200-350 W band and peaking only at full 600 W. 450 W is the highest cap the
+  # box has sustained cleanly: 2026-08-18 decode tests ran sustained vLLM/Qwen3.8
+  # load at 450 W with no Xid, 61-73 C GPU temps, and ~20-25% more throughput
+  # than the 350 W band.
   #
-  # Reliability override (2026-08-16): physical GPU0 (serial 1794425022466,
+  # Reliability history (2026-08-16): physical GPU0 (serial 1794425022466,
   # PCI 01:00.0) fell off the bus (Xid 79) three times under Qwen3.8 SGLang
   # load: once at 450 W and twice at 400 W. A Seasonic 1600 W Platinum PSU makes
   # aggregate PSU capacity unlikely, but does not distinguish the card, its
   # connector/cable, the slot/root path, or a TP-rank-0 driver/runtime failure.
-  # Keep 350 W while the logical GPU-order and physical-swap tests run. This cap
-  # is mitigation, not a claimed fix. See docs/runbooks/gpu-inference-crash-triage.md.
+  # 350 W was applied as diagnostic mitigation, not a fix, while the logical
+  # GPU-order and physical-swap tests ran.
+  #
+  # Resolution (2026-08-18): 450 W restored as the operational cap after the
+  # clean sustained-load window above, with the CPU cooler replacement in flight
+  # (the package sat at ~94 C, and a hot CPU/VRM can erode PCIe signal margin —
+  # see the triage runbook). If Xid 79 recurs, revert to 350 W here and resume
+  # the physical-swap track. See docs/runbooks/gpu-inference-crash-triage.md.
   #
   # This is a request, not an assertion: the service below clamps it into the
-  # range the installed cards actually report. The SKU here is still unverified,
-  # and a 600 W Workstation card and a 300 W Max-Q do not share a valid range —
+  # range the installed cards actually report. The SKU is confirmed as the
+  # 600 W Workstation card, but a 300 W Max-Q would not share a valid range —
   # `nvidia-smi -pl` exits non-zero outside it, which would fail the unit on
-  # every boot. Clamping means the same config is correct for either card.
-  gpuPowerLimitWatts = 350;
+  # every boot. Clamping means the same config survives a card swap.
+  gpuPowerLimitWatts = 450;
 
   gpuTelemetryPython = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.nvidia-ml-py
