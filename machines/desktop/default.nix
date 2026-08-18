@@ -379,6 +379,12 @@ in
   # immune to the EC re-asserting registers, and self-healing: any tick that
   # finds enable flipped back repairs it within a minute.
   #
+  # The service must NOT set RemainAfterExit: a oneshot that stays
+  # "active (exited)" turns every OnUnitActiveSec elapse into a no-op start
+  # job, so duties are computed once at boot (cold CPU) and never again.
+  # That stale-fan bug bit on 2026-08-18: fans stuck at boot-time duty while
+  # vLLM held the package >80 C.
+  #
   # Curves (PECI temp → duty 0-255):
   #   * CPU fan (pwm1/fan1): 90 (35 %) @ 40 °C … 255 (100 %) @ 70 °C
   #   * Case fan (pwm6/fan6): 80 (31 %) @ 30 °C … 255 (100 %) @ 70 °C
@@ -394,7 +400,7 @@ in
     after = [ "systemd-modules-load.service" ];
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
+      # deliberately no RemainAfterExit — it breaks the timer re-trigger (see above)
       ExecStart = lib.getExe (pkgs.writeShellApplication {
         name = "asus-fan-control";
         runtimeInputs = [ pkgs.coreutils ];
