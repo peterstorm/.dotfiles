@@ -49,9 +49,17 @@ else
     git clone https://github.com/vllm-project/vllm.git "$BUILD_ROOT/src"
   fi
   echo "Checking out $VLLM_PR_SHA ($VLLM_PR head)..."
+  # A plain clone does not contain PR head commits (they live under
+  # refs/pull/N/head, not on any upstream branch) — fetch the PR ref
+  # explicitly, then verify the checkout lands exactly on the pinned SHA.
   git -C "$BUILD_ROOT/src" fetch --tags origin
-  git -C "$BUILD_ROOT/src" checkout --detach "$VLLM_PR_SHA"
-  git -C "$BUILD_ROOT/src" rev-parse HEAD
+  git -C "$BUILD_ROOT/src" fetch origin pull/52816/head
+  git -C "$BUILD_ROOT/src" checkout --detach FETCH_HEAD
+  HEAD_SHA="$(git -C "$BUILD_ROOT/src" rev-parse HEAD)"
+  if [ "$HEAD_SHA" != "$VLLM_PR_SHA" ]; then
+    echo "error: checkout landed on $HEAD_SHA, expected $VLLM_PR_SHA (PR ref moved?)" >&2
+    exit 1
+  fi
 
   echo "Building $IMAGE (stage vllm-openai)..."
   docker build \
