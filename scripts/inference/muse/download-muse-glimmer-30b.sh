@@ -23,6 +23,19 @@ DRAFT_DEST="/models/Muse-Glimmer-30B-assistant"
 DOWNLOAD_SCRIPT="/tmp/muse-glimmer-dl.sh"
 NAME="muse-glimmer-model-dl"
 
+# Optional HF auth: if a token exists at the standard hf CLI location, mount
+# it into the container at huggingface_hub's default token path so the
+# download authenticates (higher rate limits, no unauthenticated warning).
+# Get a read token at https://huggingface.co/settings/tokens and save it:
+#   mkdir -p ~/.config/hf && echo "hf_..." > ~/.config/hf/token && chmod 600 ~/.config/hf/token
+TOKEN_FILE="$HOME/.config/hf/token"
+EXTRA_VOLS=()
+if [[ -f "$TOKEN_FILE" ]]; then
+  EXTRA_VOLS+=(-v "$TOKEN_FILE:/root/.cache/huggingface/token:ro")
+else
+  echo "note: no HF token at $TOKEN_FILE - downloading unauthenticated (lower rate limits)" >&2
+fi
+
 sudo mkdir -p "$TARGET_DEST" "$DRAFT_DEST"
 sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$TARGET_DEST" "$DRAFT_DEST"
 
@@ -43,6 +56,7 @@ docker run -d --name "$NAME" --network host \
   -v "$TARGET_DEST":"$TARGET_DEST" \
   -v "$DRAFT_DEST":"$DRAFT_DEST" \
   -v "$DOWNLOAD_SCRIPT":/dl.sh:ro \
+  ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
   python:3.11-slim bash /dl.sh
 
 echo "Downloading both Muse checkpoints in container '$NAME'."

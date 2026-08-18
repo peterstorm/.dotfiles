@@ -1,48 +1,61 @@
 #!/usr/bin/env bash
-# Switch the Qwen3.8-27B DSpark backend on :8000 between SGLang and vLLM.
+# Switch the Qwen3.8-27B DSpark server on :8000 across the four 08-16/v2
+# backend containers. V2-first: the default backends are the 2026-08-18 v2
+# profiles (draft pinned to 85ef153, vLLM image aa99034).
 #
-# NOTE: superseded by switch-qwen38-backend-v2.sh, which also knows the -v2
-# (2026-08-18) containers and can stop them. This script cannot see a running
-# -v2 profile and its launchers refuse to start while :8000 is bound by one.
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status      # who owns :8000, is it healthy
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh vllm        # -> vLLM v2
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang      # -> SGLang v2
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-vllm     # -> vLLM 08-16 (rollback)
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-sglang   # -> SGLang 08-16 (rollback)
 #
-#   bash scripts/inference/qwen38/switch-qwen38-backend.sh status    # who owns :8000, is it healthy
-#   bash scripts/inference/qwen38/switch-qwen38-backend.sh vllm      # stop SGLang DSpark, start vLLM DSpark
-#   bash scripts/inference/qwen38/switch-qwen38-backend.sh sglang    # the reverse
-#
-# The cutover is a hard stop: :8000 is down between container stop and first
-# healthy response (a cold vLLM start takes minutes — kernel compile + CUDA
-# graphs). Anything riding on desktop-vllm (pi sessions, probes) loses
-# in-flight requests and reconnects once health is green; the served model
-# name, key, and endpoint are identical across both profiles, so no client
-# changes are needed. Run this on the desktop.
+# Supersedes switch-qwen38-backend.sh, which only knows the v1 containers and
+# cannot stop a running -v2 profile. Same hard-stop cutover semantics: :8000
+# is down between container stop and first healthy response (a cold vLLM
+# start takes minutes — kernel compile + CUDA graphs). Anything riding on
+# desktop-vllm (pi sessions, probes) loses in-flight requests and reconnects
+# once health is green; the served model name, key, and endpoint are
+# identical across all four profiles, so no client changes are needed.
+# Run this on the desktop.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
-VLLM_NAME="qwen38-27b-bf16-dspark-vllm"
-VLLM_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-vllm.sh"
-SGLANG_NAME="qwen38-27b-bf16-dspark-sglang"
-SGLANG_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-sglang.sh"
+
+VLLM_V2_NAME="qwen38-27b-bf16-dspark-vllm-v2"
+VLLM_V2_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-vllm-v2.sh"
+SGLANG_V2_NAME="qwen38-27b-bf16-dspark-sglang-v2"
+SGLANG_V2_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-sglang-v2.sh"
+VLLM_V1_NAME="qwen38-27b-bf16-dspark-vllm"
+VLLM_V1_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-vllm.sh"
+SGLANG_V1_NAME="qwen38-27b-bf16-dspark-sglang"
+SGLANG_V1_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-sglang.sh"
+ALL_NAMES=("$VLLM_V2_NAME" "$SGLANG_V2_NAME" "$VLLM_V1_NAME" "$SGLANG_V1_NAME")
+
 HEALTH_URL="http://127.0.0.1:8000/health"
 MODELS_URL="http://127.0.0.1:8000/v1/models"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-1200}" # cold-start budget in seconds
 
 case "${1:-}" in
-  status|vllm|sglang) ;;
-  *) echo "usage: $0 {status|vllm|sglang}" >&2; exit 2 ;;
+  status|vllm|sglang|v1-vllm|v1-sglang) ;;
+  *) echo "usage: $0 {status|vllm|sglang|v1-vllm|v1-sglang}" >&2; exit 2 ;;
 esac
 MODE="${1:-status}"
 
-running_name() {
-  local n
-  for n in "$VLLM_NAME" "$SGLANG_NAME"; do
-    if docker inspect -f '{{.State.Running}}' "$n" 2>/dev/null | grep -q true; then
+is_running() {
+  docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null | grep -q true
+}
+
+running_names() {
+  local n found=0
+  for n in "${ALL_NAMES[@]}"; do
+    if is_running "$n"; then
       printf '%s\n' "$n"
-      return 0
+      found=1
     fi
   done
-  return 1
+  return $((1 - found))
 }
 
 port_bound() {
@@ -86,8 +99,8 @@ server_healthy() {
 }
 
 if [ "$MODE" = "status" ]; then
-  current="$(running_name || true)"
-  echo "backend container: ${current:-none}"
+  mapfile -t current < <(running_names || true)
+  echo "backend container: ${current[*]:-none}"
   if server_healthy; then
     echo "health: OK"
     auth_status="$(authenticated_status "$MODELS_URL" 2>/dev/null)"
@@ -105,11 +118,21 @@ if [ "$MODE" = "status" ]; then
   exit 0
 fi
 
-if [ "$MODE" = "vllm" ]; then
-  START_NAME="$VLLM_NAME"; START_SCRIPT="$VLLM_SCRIPT"
-else
-  START_NAME="$SGLANG_NAME"; START_SCRIPT="$SGLANG_SCRIPT"
-fi
+case "$MODE" in
+  vllm)     START_NAME="$VLLM_V2_NAME";   START_SCRIPT="$VLLM_V2_SCRIPT" ;;
+  sglang)   START_NAME="$SGLANG_V2_NAME"; START_SCRIPT="$SGLANG_V2_SCRIPT" ;;
+  v1-vllm)  START_NAME="$VLLM_V1_NAME";   START_SCRIPT="$VLLM_V1_SCRIPT" ;;
+  v1-sglang) START_NAME="$SGLANG_V1_NAME"; START_SCRIPT="$SGLANG_V1_SCRIPT" ;;
+esac
+
+# Same-engine profile on the other side of the v1/v2 line — the fallback a
+# failed cutover suggests.
+case "$MODE" in
+  vllm) FALLBACK="v1-vllm" ;;
+  sglang) FALLBACK="v1-sglang" ;;
+  v1-vllm) FALLBACK="vllm" ;;
+  v1-sglang) FALLBACK="sglang" ;;
+esac
 
 wait_until_healthy() {
   local started_at now elapsed last_log
@@ -125,7 +148,7 @@ wait_until_healthy() {
       echo "error: $START_NAME not healthy after $((HEALTH_TIMEOUT / 60)) min" >&2
       echo "Last log lines:" >&2
       docker logs --tail 30 "$START_NAME" 2>&1 | tail -30 >&2 || true
-      echo "Recovery: bash $0 $( [ "$MODE" = vllm ] && echo sglang || echo vllm )" >&2
+      echo "Recovery: bash $0 $FALLBACK" >&2
       return 1
     fi
     last_log="$(docker logs --tail 1 "$START_NAME" 2>&1 | tail -1 | cut -c1-160 || true)"
@@ -149,8 +172,15 @@ stop_backend() {
   echo "Port 8000 free."
 }
 
-current="$(running_name || true)"
-if [ "$current" = "$START_NAME" ]; then
+mapfile -t current < <(running_names || true)
+
+if [ "${#current[@]}" -gt 1 ]; then
+  echo "error: multiple DSpark containers are running: ${current[*]}" >&2
+  echo "This should not happen (they share :8000). Stop the extras manually before switching." >&2
+  exit 1
+fi
+
+if [ -n "${current[0]:-}" ] && [ "${current[0]}" = "$START_NAME" ]; then
   echo "$START_NAME is already running; waiting for readiness before checking its key."
   wait_until_healthy
   auth_status="$(authenticated_status "$MODELS_URL" 2>/dev/null)"
@@ -169,8 +199,12 @@ if [ "$current" = "$START_NAME" ]; then
   esac
 fi
 
-if [ -n "$current" ]; then
-  stop_backend "$current"
+if [ -n "${current[0]:-}" ]; then
+  stop_backend "${current[0]}"
+elif port_bound; then
+  echo "error: port 8000 is bound but no DSpark container is running" >&2
+  echo "(typically the DeepSeek-V4-Flash server: docker stop ds4-0731-r33) — stop it explicitly first." >&2
+  exit 1
 fi
 
 echo "Starting $START_NAME (cold start can take several minutes) ..."
@@ -192,11 +226,17 @@ esac
 
 echo
 echo "HEALTHY + AUTHENTICATED: $START_NAME is serving qwen3.8-27b on :8000."
-if [ "$MODE" = "vllm" ]; then
-  echo "Verify the draft routed to the Qwen implementation (second line must read Qwen3DSparkModel):"
-  echo "  docker logs $START_NAME 2>&1 | grep 'Resolved architecture' | head -2"
-  echo "Verify spec decode is actually drafting:"
-  echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^vllm:spec_decode_num_(drafts|accepted)' | head -4"
-fi
-echo "Acceptance appears in the Grafana DSpark panels (legend switches to '$MODE')."
+case "$START_NAME" in
+  *vllm*)
+    echo "Verify the draft routed to the Qwen implementation (second line must read Qwen3DSparkModel):"
+    echo "  docker logs $START_NAME 2>&1 | grep 'Resolved architecture' | head -2"
+    echo "Verify spec decode is actually drafting:"
+    echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^vllm:spec_decode_num_(drafts|accepted)' | head -4"
+    ;;
+  *)
+    echo "Verify spec decode is actually drafting:"
+    echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^sglang:spec_(accept_length|draft)' | head -4"
+    ;;
+esac
+echo "Acceptance appears in the Grafana DSpark panels."
 echo "Anything that was mid-request during the cutover: just resend it."
