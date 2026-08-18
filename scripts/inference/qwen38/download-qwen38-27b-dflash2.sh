@@ -50,21 +50,30 @@ mkdir -p "$DEST"
 # a later unprivileged re-run (or the SGLang launcher's cp -a) can operate on it.
 chown "$USER:users" "$DEST"
 
+# Map the host destination into the container's namespace: only the desktop
+# home (mounted at /home/dl) and /models (mounted 1:1) are reachable. Anything
+# else is refused rather than silently written into the container layer.
+case "$DEST" in
+  "$DESKTOP_HOME"/*) CONTAINER_DEST="/home/dl${DEST#"$DESKTOP_HOME"}" ;;
+  /models/*)         CONTAINER_DEST="$DEST" ;;
+  *) echo "error: DFLASH2_DEST must be under $DESKTOP_HOME or /models (got: $DEST)" >&2; exit 2 ;;
+esac
+
 cat > /tmp/qwen38-dflash2-dl.sh <<EOF
 set -e
 pip install -q huggingface_hub
 # hf-xet 1.6.0 was observed hanging indefinitely at 0% on this machine while
 # direct Hub HTTPS remained healthy. Force the standard resumable HTTP backend.
 export HF_HUB_DISABLE_XET=1
-hf download "$REPO" --revision "$REV" --local-dir "$DEST"
+hf download "$REPO" --revision "$REV" --local-dir "$CONTAINER_DEST"
 echo DOWNLOAD_COMPLETE
 EOF
 
 docker rm -f qwen38-dflash2-model-dl 2>/dev/null || true
 docker run -d --name qwen38-dflash2-model-dl --network host \
-  -v "$DESKTOP_HOME:/home/dl" -v /tmp/qwen38-dflash2-dl.sh:/dl.sh:ro \
+  -v "$DESKTOP_HOME:/home/dl" -v /models:/models -v /tmp/qwen38-dflash2-dl.sh:/dl.sh:ro \
   ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
   python:3.11-slim bash /dl.sh
 
 echo "Downloading in container 'qwen38-dflash2-model-dl'. Follow with: docker logs -f qwen38-dflash2-model-dl"
-echo "Destination: $DEST"
+echo "Destination: $DEST (container path: $CONTAINER_DEST)"

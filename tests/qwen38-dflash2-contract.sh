@@ -55,6 +55,12 @@ contains "$DFLASH2_DL" 'REV="ac04198556d7e8867853cbc356807b969f311b05"'
 contains "$DFLASH2_DL" 'DFLASH2_DEST:-$DESKTOP_HOME/Desktop/Qwen3.8-27B-DFlash2'
 contains "$DFLASH2_DL" 'export HF_HUB_DISABLE_XET=1'
 contains "$DFLASH2_DL" 'docker rm -f qwen38-dflash2-model-dl'
+# The in-container destination must be the mapped path (host home is mounted
+# at /home/dl, /models 1:1); downloading to the raw host path would land in
+# the container layer, not on the host.
+contains "$DFLASH2_DL" 'CONTAINER_DEST="/home/dl${DEST#"$DESKTOP_HOME"}"'
+contains "$DFLASH2_DL" 'hf download "$REPO" --revision "$REV" --local-dir "$CONTAINER_DEST"'
+contains "$DFLASH2_DL" '-v "$DESKTOP_HOME:/home/dl" -v /models:/models'
 if grep -Eq '^DEST="/models/' "$DFLASH2_DL"; then
   fail "$DFLASH2_DL defaults to a /models destination; the agreed default is the Desktop folder"
 fi
