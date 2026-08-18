@@ -738,16 +738,17 @@ a riser, which is not what we are doing. What *does* need attention is the physi
 
 ### Reaching the server from the LAN
 
-`machines/desktop/default.nix` opens TCP **8000** in the firewall, so the vLLM
-OpenAI-compatible endpoint (`PORT=8000`, container runs `--network host`) is reachable at
-`http://<desktop-ip>:8000/v1` from other LAN machines (e.g. `http://192.168.0.80:8000/v1`).
-Use the IP, not `desktop:8000`, from arbitrary devices — `.local` mDNS is unreliable over
-some WiFi APs (see [WiFi](#wifi-mt7927)); only hosts with an explicit alias/hosts entry
-resolve the name. Change the port there if you launch the server on a different one.
+`machines/desktop/default.nix` opens TCP **8000** and **8001** in the firewall. Port 8000
+serves the Qwen/DeepSeek OpenAI-compatible endpoint; port 8001 serves concurrent Muse
+Glimmer. Both containers use `--network host`, so LAN clients reach
+`http://192.168.0.80:8000/v1` and `http://192.168.0.80:8001/v1`. Use the IP rather than
+`desktop.local` from arbitrary devices—mDNS is unreliable over some WiFi APs (see
+[WiFi](#wifi-mt7927)); only hosts with an explicit alias/hosts entry reliably resolve
+`desktop`.
 
-That firewall entry only matters under `--network host`, which both the DS4 v8 helper and
-the r33 profile use. If you swap in `-p 8000:8000`, Docker publishes through its own
-iptables chain and the port is reachable whether or not it is in `allowedTCPPorts`.
+Those firewall entries matter under `--network host`, which all repository launchers use.
+If a profile instead publishes with `-p HOST:CONTAINER`, Docker routes through its own
+iptables chain and the port can be reachable independently of `allowedTCPPorts`.
 
 ### Model cache → /models
 
@@ -882,6 +883,13 @@ has turned expandable segments on, the two are fighting over the same allocator.
 
 ## Running Qwen3.8-27B BF16 on vLLM
 
+> **Update 2026-08-18:** the Qwen3.8 material in this runbook has a
+> newer-version companion — `qwen38-27b-runbook-2026-08-18.md` (same folder)
+> — with the refreshed MTP gate status, the `-v2` DSpark scripts (new vLLM
+> nightly + re-pinned draft + corrected mamba pin), updated evidence, and
+> the Pi `medium` reasoning-effort fix. This section remains the validated
+> 2026-08-16 baseline; where the two disagree, the 2026-08-18 document wins.
+
 A quality-first local profile for the two RTX PRO 6000 Blackwell cards. Qwen3.8-27B is a
 27.8B-parameter dense hybrid Gated DeltaNet model with a vision tower, native 262,144-token
 context, tiered reasoning, and an in-checkpoint MTP head. This profile deliberately serves
@@ -916,7 +924,7 @@ both large checkpoints on this machine while direct Hub HTTPS remained healthy. 
 the checkpoint directly to `/models/Qwen3.8-27B`:
 
 ```bash
-bash scripts/download-qwen38-27b.sh
+bash scripts/inference/qwen38/download-qwen38-27b.sh
 docker logs -f qwen38-model-dl
 ```
 
@@ -932,17 +940,18 @@ Go headless before launch so X does not retain GPU memory:
 ```bash
 sudo systemctl stop display-manager
 nvidia-smi --query-gpu=index,memory.used --format=csv
-bash scripts/run-qwen38-27b-bf16.sh
+bash scripts/inference/qwen38/run-qwen38-27b-bf16.sh
 docker logs -f qwen38-27b-bf16
 ```
 
 The launcher keeps synchronized copies of one persistent endpoint key at
-`~/.config/ds4-flash/api-key` and `~/.config/qwen38/api-key`. Each launch chooses an
-explicit `VLLM_API_KEY` first, then the existing DeepSeek key, the Qwen key, the Pi sops
-fallback, and finally generates one; it atomically writes the result to both paths. Pi uses the same
-DeepSeek-first order. When the launcher is invoked through `sudo`, it resolves `SUDO_USER`
-and owns both files and the private env file to the invoking user rather than creating an
-unreachable `/root/.config/qwen38/api-key`. It passes the credential through a mode-0600
+`~/.config/ds4-flash/api-key`, `~/.config/qwen38/api-key`, and
+`~/.config/muse-glimmer/api-key`. Each launch chooses an explicit `VLLM_API_KEY` first,
+then the existing DeepSeek, Qwen, or Muse key, then the Pi sops fallback, and finally
+generates one; it atomically writes the result to all three paths. Pi uses the same
+DeepSeek-first order. When invoked through `sudo`, the launcher resolves `SUDO_USER` and
+owns the files and private env file to the invoking user rather than creating an
+unreachable `/root` credential. It passes the credential through a mode-0600
 env file rather than Docker command arguments and exposes the authenticated
 OpenAI-compatible API at `http://desktop:8000/v1`. The `/health` endpoint itself is not
 protected:
@@ -980,7 +989,7 @@ own container and reclaims port 8000:
 
 ```bash
 docker stop qwen38-27b-bf16
-bash scripts/run-ds4-v20-r33.sh
+bash scripts/inference/deepseek/run-ds4-v20-r33.sh
 ```
 
 ### Why BF16 TP2
@@ -1019,7 +1028,7 @@ For example:
 
 ```bash
 MAX_NUM_SEQS=4 GPU_MEMORY_UTILIZATION=0.94 \
-  bash scripts/run-qwen38-27b-bf16.sh
+  bash scripts/inference/qwen38/run-qwen38-27b-bf16.sh
 ```
 
 `MAX_NUM_SEQS=8` admits eight active requests; it does not reserve eight 262K caches.
@@ -1151,7 +1160,7 @@ Gate to turn MTP on for vLLM here (all of it):
    plain health probes.
 
 The launcher implements this as an opt-in: `TP_SIZE=1 SPEC_MTP=1 bash
-scripts/run-qwen38-27b-bf16.sh`. It refuses `SPEC_MTP=1` with `TP_SIZE>=2` until #52480 is
+scripts/inference/qwen38/run-qwen38-27b-bf16.sh`. It refuses `SPEC_MTP=1` with `TP_SIZE>=2` until #52480 is
 resolved upstream.
 
 A faster A/B exists on the current SGLang image without touching vLLM at all: the pinned
@@ -1194,6 +1203,193 @@ The static repository contract is checked with:
 
 ```bash
 bash tests/qwen38-release-contract.sh
+```
+
+## Muse Glimmer BF16 + DFlash beside Qwen
+
+This is the concurrent quality profile for the two 96 GiB cards: Qwen3.8 BF16 TP1 on
+physical GPU1 and Muse Glimmer BF16 TP1 on physical GPU0. It is not Muse Spark. Glimmer is
+a dense 29.6B multimodal/agentic model distilled from Spark, with native 131,072-token
+context, controllable reasoning, and Muse's ATEM tool protocol. The runtime parser converts
+that protocol into ordinary OpenAI `reasoning_content` and `tool_calls` fields.
+
+The current Qwen SGLang DSpark profile is TP2 and occupies both cards, so it cannot coexist
+with Muse. The dual switcher replaces it with the existing vLLM BF16 Qwen target at TP1;
+DeepSeek r33 remains an exclusive two-card profile.
+
+Primary references:
+
+- [Meta Muse Glimmer model card](https://huggingface.co/meta-models/Muse-Glimmer-30B)
+- [SGLang Muse Glimmer cookbook](https://docs.sglang.io/cookbook/autoregressive/Meta/MuseGlimmer.html)
+- [SGLang Muse support #34262](https://github.com/sgl-project/sglang/pull/34262)
+- [DFlash causality fix #34524](https://github.com/sgl-project/sglang/pull/34524)
+- [Muse tool-parser fix #34781](https://github.com/sgl-project/sglang/pull/34781)
+- [vLLM SM120 block-FP8 loader issue #51884](https://github.com/vllm-project/vllm/issues/51884)
+
+| Item | Value |
+|---|---|
+| SGLang image | `lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267` |
+| Multi-architecture digest | `sha256:0d73f8dd82c8adbbe481d8520cb6d62d80828f1e62267ee41a3c67cf3dd77528` |
+| BF16 target | `meta-models/Muse-Glimmer-30B` at `a4e59da52a7bc87ae7251dd5545c0dd437c44b68` |
+| BF16 draft | `meta-models/Muse-Glimmer-30B-assistant` at `e8192f3a8f617f74be2ce220360c89ef4789f39f` |
+| Weight footprint | Target 59.55 GB / 55.46 GiB; draft 5.11 GB / 4.76 GiB |
+| Muse profile | BF16 target + BF16 DFlash, TP1, text-only, 128K, four running requests, static memory fraction 0.85 |
+| Qwen profile | BF16 target, TP1, physical GPU1, 262K, four scheduler slots, memory utilization 0.90, MTP off |
+| Endpoints | Qwen `http://desktop:8000/v1`; Muse `http://desktop:8001/v1` |
+
+The pinned SGLang commit descends from all three support/fix merges above. DFlash is
+speculative decoding: the BF16 target verifies every proposal, so it changes throughput,
+not the target distribution. The first deployment uses `--language-model-only`; that skips
+the perception encoder without quantizing or otherwise changing the language model. Remove
+that flag only as a separately tested multimodal profile, then change Pi's Muse `input`
+metadata from `["text"]` to `["text", "image"]` in the same change.
+
+### Why BF16 instead of a quant
+
+BF16 is the highest-fidelity artifact and fits with the draft on one card. The available
+compressed paths are alternatives, not upgrades:
+
+| Artifact | Approximate weight size | Decision here |
+|---|---:|---|
+| BF16 target | 55.46 GiB | Reference; use this |
+| Red Hat block FP8 | 32.03 GiB | Highest-bit quant, but current vLLM loading hits #51884 on SM120 unless DeepGEMM is disabled |
+| RadixArk NVFP4/MXFP8 | 18.32 GiB | SGLang/RTX PRO 6000 serving is verified, but it is text-only and its full accuracy suite is pending |
+| Official Dynamic K-Quant Q4 | 19.65 GB | Meta reports 0.2% average degradation; optimized for the llama.cpp path, unnecessary on 96 GiB |
+
+Do not transfer the K-Quant accuracy number to NVFP4 or FP8: they are different recipes.
+If throughput later becomes the priority, benchmark NVFP4 against this BF16 receipt using
+the same coding/tool corpus before promotion.
+
+### Download and launch both models
+
+The Muse downloader fetches both pinned repositories in one resumable container. It forces
+standard Hub HTTPS because `hf-xet` 1.6.0 hung at 0% on this machine:
+
+```bash
+bash scripts/inference/muse/download-muse-glimmer-30b.sh
+docker logs -f muse-glimmer-model-dl
+```
+
+Wait for the single final `DOWNLOAD_COMPLETE`. The downloader writes revision-bearing
+`.download-complete` markers into both directories; the launcher refuses a partial or
+wrong-revision tree even when an early `config.json` already exists.
+
+The dual switch is deliberately fail-closed. Before stopping the current TP2 server it
+checks both checkpoints, both GPUs, both 350 W power caps, and that the display manager is
+stopped. Conflicting containers are stopped rather than deleted so their crash logs survive
+until their own launcher archives/replaces them. After the stop, both cards must fall below
+2 GiB of existing use; this catches an unrelated process before either new model loads. The
+wrapper then starts isolated Docker device requests—each container can see only its assigned
+physical GPU—and waits up to 30 minutes for both authenticated health endpoints. If either
+server exits or times out, it removes both new containers instead of leaving a half-active
+profile.
+
+```bash
+sudo systemctl stop display-manager
+bash scripts/inference/profiles/run-qwen38-muse-glimmer-dual.sh
+```
+
+Cold start pulls a roughly 14 GB SGLang image and compiles both runtimes, so follow both
+logs from another terminal:
+
+```bash
+docker logs -f qwen38-27b-bf16
+docker logs -f muse-glimmer-30b-bf16-dflash
+nvidia-smi --query-gpu=index,name,memory.used,power.draw,power.limit --format=csv
+```
+
+The underlying Qwen launcher still defaults to standalone TP2. Its new `GPU_DEVICES` and
+`PORT` inputs are strict: the number of selected physical devices must equal `TP_SIZE`.
+The dual wrapper invokes the exact one-card profile as:
+
+```text
+TP_SIZE=1 GPU_DEVICES=1 PORT=8000 MAX_NUM_SEQS=4
+GPU_MEMORY_UTILIZATION=0.90 SPEC_MTP=0
+```
+
+Muse defaults to physical GPU0 and port 8001. To launch only Muse after an intentional
+partial stop, use `GPU_DEVICE=0 PORT=8001 bash
+scripts/inference/muse/run-muse-glimmer-30b-bf16-dflash.sh`; normally prefer the transactional wrapper.
+
+### Authentication, Pi, and reasoning
+
+DeepSeek, Qwen, and Muse use one synchronized bearer credential. The helper now maintains
+mode-0600 copies at `~/.config/ds4-flash/api-key`, `~/.config/qwen38/api-key`, and
+`~/.config/muse-glimmer/api-key`; the secure SGLang entrypoint removes the key from its
+environment and redacts it before startup arguments are logged.
+
+Pi exposes Muse through the separate provider `desktop-muse/muse-glimmer-30b`, because one
+provider has one base URL. Its native chat template accepts
+`chat_template_kwargs.reasoning_strength`; Pi maps low, medium, high, and xhigh directly.
+Off, minimal, and max are hidden because Muse does not support them. `supportsStrictMode`
+is false while Muse guided/structured decoding remains unqualified; normal function tools
+still use SGLang's native `muse` parser.
+
+Authenticated probes, with the key kept out of curl's process arguments:
+
+```bash
+auth_curl() {
+  local key
+  key="$(< ~/.config/muse-glimmer/api-key)"
+  printf 'header = "Authorization: Bearer %s"\n' "$key" | curl --config - "$@"
+}
+
+auth_curl -fsS http://127.0.0.1:8001/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "muse-glimmer-30b",
+    "messages": [{"role": "user", "content": "Reply with exactly OK."}],
+    "max_tokens": 2048,
+    "chat_template_kwargs": {"reasoning_strength": "low"}
+  }' | jq
+```
+
+For the acceptance receipt, test both streaming and non-streaming, all four reasoning
+strengths, a required tool call followed by a tool result, multiple consecutive tool calls,
+and prose after a tool call. Muse does not emit ordinary JSON tool syntax or `<think>`
+blocks; a response without the `muse` reasoning/tool parsers is not a valid integration.
+
+### Network and monitoring activation
+
+The NixOS profile opens 8001 and configures the durable recorder to scrape both endpoints.
+Prometheus also has separate static targets/instance labels for `desktop:8000` and
+`desktop:8001`, preventing same-name metrics from colliding. Apply the host configuration
+and let Argo CD sync the monitoring values before relying on remote access or dashboards:
+
+```bash
+# On desktop, from the tracked dotfiles checkout:
+sudo nixos-rebuild switch --flake .#desktop
+sudo systemctl start vllm-stats-record.service
+
+# From the homelab/k8s admin context after the commit is available to Argo CD:
+kubectl -n monitoring get prometheus
+```
+
+Port 8001 is LAN/WARP-only. The existing Cloudflare Access TCP hostname still routes only
+to port 8000; Muse is not silently published through a second tunnel.
+
+### Dual-profile validation gate
+
+Do not call the profile stable until:
+
+1. Both containers reach healthy state with only their assigned GPU visible.
+2. Qwen passes text, image, reasoning, tool, streaming, and useful 262K recall probes at TP1.
+3. Muse passes reasoning separation and the native tool round trips described above.
+4. DFlash metrics show nontrivial acceptance and improve end-to-end decode throughput over
+   a matched target-only Muse run; acceptance alone is not a speedup.
+5. Four concurrent agent-shaped requests per endpoint complete without preemption, OOM,
+   empty output, or malformed replayed reasoning.
+6. A sustained simultaneous soak records zero CUDA faults, Xids, container restarts, and
+   `/dev/shm` exhaustion. Correlate any physical GPU0 failure with the durable one-second
+   telemetry and the Xid playbook.
+
+Static repository contracts:
+
+```bash
+bash tests/inference-api-key-contract.sh
+bash tests/inference-monitoring-contract.sh
+bash tests/qwen38-release-contract.sh
+bash tests/muse-glimmer-dual-contract.sh
 ```
 
 ## Experimental Qwen3.8-27B DSpark on SGLang
@@ -1247,10 +1443,10 @@ Download both independently pinned checkpoints. The target command can be skippe
 BF16 target is already complete:
 
 ```bash
-bash scripts/download-qwen38-27b.sh
+bash scripts/inference/qwen38/download-qwen38-27b.sh
 docker logs -f qwen38-model-dl
 
-bash scripts/download-qwen38-27b-dspark.sh
+bash scripts/inference/qwen38/download-qwen38-27b-dspark.sh
 docker logs -f qwen38-dspark-model-dl
 ```
 
@@ -1263,7 +1459,7 @@ docker stop qwen38-27b-bf16 2>/dev/null || true
 sudo systemctl stop display-manager
 nvidia-smi --query-gpu=index,memory.used --format=csv
 
-bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
+bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 docker logs -f qwen38-27b-bf16-dspark-sglang
 ```
 
@@ -1271,7 +1467,7 @@ The default physical/logical order is `GPU_ORDER=0,1`. During the recurrent GPU0
 diagnostic, reverse logical rank assignment without moving cards:
 
 ```bash
-GPU_ORDER=1,0 bash scripts/run-qwen38-27b-bf16-dspark-sglang.sh
+GPU_ORDER=1,0 bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 ```
 
 The launcher accepts only `0,1` or `1,0`, labels the container with the chosen order, and
@@ -1281,9 +1477,9 @@ It archives the previous container's compressed log plus secret-free state metad
 20 launches. Durable one-second physical GPU samples live in `/var/lib/gpu-telemetry/`; see
 [`gpu-inference-crash-triage.md`](gpu-inference-crash-triage.md).
 
-The script synchronizes `~/.config/ds4-flash/api-key` and
-`~/.config/qwen38/api-key` to one endpoint credential on every launch, so clients do not
-need a different credential when switching models or engines. This remains true under
+The script synchronizes the DeepSeek, Qwen, and Muse key files to one endpoint credential
+on every launch, so clients do not need a different credential when switching models,
+engines, or ports. This remains true under
 `sudo`: credential ownership and paths follow `SUDO_USER`, not `/root`. SGLang only
 exposes API authentication as a CLI field;
 `sglang-secure-entrypoint.py` reads `SGLANG_API_KEY` from a mode-0600 Docker env file,
@@ -1405,7 +1601,7 @@ To return to the vLLM reference profile:
 
 ```bash
 docker stop qwen38-27b-bf16-dspark-sglang
-bash scripts/run-qwen38-27b-bf16.sh
+bash scripts/inference/qwen38/run-qwen38-27b-bf16.sh
 ```
 
 The static repository contract is checked with:
@@ -1472,7 +1668,7 @@ the two existing downloaders. Launch:
 
 ```bash
 docker stop qwen38-27b-bf16-dspark-sglang   # or whichever server owns :8000
-bash scripts/run-qwen38-27b-bf16-dspark-vllm.sh
+bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh
 docker logs -f qwen38-27b-bf16-dspark-vllm
 ```
 
@@ -1521,9 +1717,9 @@ running API accepts Pi's desktop-user key, and restarts an already-healthy targe
 credential is stale:
 
 ```bash
-bash scripts/switch-qwen38-backend.sh status
-bash scripts/switch-qwen38-backend.sh sglang
-bash scripts/switch-qwen38-backend.sh vllm
+bash scripts/inference/qwen38/switch-qwen38-backend.sh status
+bash scripts/inference/qwen38/switch-qwen38-backend.sh sglang
+bash scripts/inference/qwen38/switch-qwen38-backend.sh vllm
 ```
 
 If Docker access on the workstation requires elevation, the same commands are safe with
@@ -1531,7 +1727,7 @@ If Docker access on the workstation requires elevation, the same commands are sa
 server previously launched with a root-only key:
 
 ```bash
-sudo ./scripts/switch-qwen38-backend.sh vllm
+sudo ./scripts/inference/qwen38/switch-qwen38-backend.sh vllm
 ```
 
 The static repository contracts are checked with:
@@ -1566,7 +1762,7 @@ preferred launch path; it creates a persistent machine-local API key and pins th
 digest:
 
 ```bash
-bash scripts/run-ds4-v20-r33.sh
+bash scripts/inference/deepseek/run-ds4-v20-r33.sh
 ```
 
 Its equivalent `docker run` contract is below. Put the key in a private env file rather
@@ -1721,7 +1917,7 @@ The launch-time defaults remain overrideable, for example:
 
 ```bash
 MAX_NUM_SEQS=4 MAX_MODEL_LEN=1048576 MAX_NUM_BATCHED_TOKENS=4096 \
-  bash scripts/run-ds4-v20-r33.sh
+  bash scripts/inference/deepseek/run-ds4-v20-r33.sh
 ```
 
 Four agents get a larger dynamic share of the same pool; no separate cache partition is
@@ -1778,10 +1974,11 @@ Two things still worth knowing:
   it was carried over from an older command on this page and is in no Compose file, so the
   helper's own default applies. Removing it makes this the release profile exactly.
 
-`--network host` means the vLLM endpoint binds every interface, so the
-`allowedTCPPorts = [ 8000 ]` entry in `machines/desktop/default.nix` is what makes
-`http://desktop:8000/v1` reachable. `VLLM_API_KEY` is doing the access control — keep it
-set. For a contained alternative, swap `--network host` for `-p 8000:8000`.
+`--network host` means the vLLM endpoint binds every interface, so port 8000 in the
+`allowedTCPPorts = [ 8000 8001 8090 ]` entry is what makes
+`http://desktop:8000/v1` reachable. Port 8001 is reserved for concurrent Muse.
+`VLLM_API_KEY` is doing the access control—keep it set. For a contained alternative, swap
+`--network host` for `-p 8000:8000`.
 
 ### CUDA graph sizing is automatic (`GRAPH=auto`)
 

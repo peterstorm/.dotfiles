@@ -87,7 +87,11 @@ configuration pins GPU fan speed.
    then swap the two cards while keeping slot-associated cabling fixed. Following serial
    `1794425022466` means card/RMA; staying at slot 1 means slot/root/cable path.
 4. If failure follows rank 0, test target-only SGLang (no DSpark), then disable CUDA graphs,
-   then compare the plain Qwen BF16 vLLM control before changing hardware.
+   then compare the plain Qwen BF16 vLLM control before changing hardware. The concurrent
+   Qwen + Muse profile is a stronger isolation probe: Qwen vLLM TP1 is restricted to
+   physical GPU1 while Muse SGLang TP1 is restricted to physical GPU0, so there is no NCCL
+   rank coupling. A GPU0 Xid while the GPU1 server remains healthy favors the physical
+   GPU0/card/connector/slot path over a TP-rank interaction.
 5. Watch CPU/package and GPU temperatures throughout; GPU0 has been 10–14 °C hotter than
    GPU1 under equal board-power caps even though no thermal-slowdown flag was active.
 
