@@ -53,7 +53,7 @@ It is a draft model only; it never runs standalone.
 
 | engine | status | detail |
 |---|---|---|
-| SGLang | **ready, but a degraded draft on the pinned image** | `lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124` is a custom build (`0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) that carries the DFlash **v1** stack: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `DFlashDraftModel` (`models/dflash.py`, 589 lines). It does **not** carry DFlash 2's `DFlashGroupedConv` / `CandidateSelector` / `DFlash2DraftModel` — those land in upstream PR [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371), still **open**. Consequence: the surgery loads the DFlash 2 checkpoint into the v1 class (23 conv/selector tensors dropped, silently) — lossless and functional, but ~2.0–3.4 acceptance instead of the card's 4.1–5.5. See *Surgery reality* below and `benchmarks/vllm-tps/2026-08-19-dflash2.md`. |
+| SGLang | **degraded on the pinned image; real support merged upstream 2026-08-19** | The pinned custom build (`lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124`, `0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) carries the DFlash **v1** stack only: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `DFlashDraftModel` (`models/dflash.py`, 589 lines). It does **not** carry DFlash 2's `DFlashGroupedConv` / `CandidateSelector` / `DFlash2DraftModel`. Consequence: the surgery loads the DFlash 2 checkpoint into the v1 class (23 conv/selector tensors dropped, silently) — lossless and functional, but ~2.0–2.7 acceptance instead of the card's 4.1–5.5. DFlash 2 proper is now **merged upstream**: [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371) → main at `c14312a66420b75ca9a11bf1817c4db1fa26b097` (merged 2026-08-19T00:07:28Z). Build it with `scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh`; the launcher auto-detects native support and skips the surgery. See *Surgery reality*, *SGLang at the merged commit*, and `benchmarks/vllm-tps/2026-08-19-dflash2.md`. |
 | vLLM | **PR-branch image (experimental, in build 2026-08-19)** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) is **open** (checked via GitHub API 2026-08-19) — no released or nightly vLLM image carries DFlash 2, and this box had no vLLM image at all. Rather than wait, we build vLLM's own Dockerfile (`--target vllm-openai`, the same image variant as `nightly-aa99034`) from the pinned PR head: see *vLLM via the PR branch* below. |
 
 Re-check before any re-pin:
@@ -77,6 +77,37 @@ buildx client died with the launching ssh session); **relaunched detached (setsi
 2026-08-19**, buildkit cache warm. The manifest digest, the vLLM run script, and the
 `dflash2-vllm` switcher mode land here as soon as the build verifies. This remains an **experimental profile**: unmerged, unreviewed engine code with no upstream release to bisect against, and the card's benchmark numbers are SGLang-only.
 
+## SGLang at the merged commit (real DFlash 2)
+
+PR #35371 **merged to SGLang main 2026-08-19** (merge commit `c14312a66420b75ca9a11bf1817c4db1fa26b097`,
+base `87a09494fa3fbd685bd7c88d6a2dbdd3135de602`). No release or nightly carries it yet (v0.5.17 is
+2026-08-08; the newest nightly at pin time, `20260818-c0b6474b`, predates the merge), so the concrete
+pin is a build from the merge commit:
+
+```bash
+bash scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh
+# -> peterstorm/sglang:qwen38-dflash2-c14312a (SGLang's own Dockerfile, stage `runtime`;
+#    nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04, ~1-2 h — hpc-ops/CUTLASS compile is the long pole)
+```
+
+- Native `DFlash2DraftModel` + `CandidateSelector` + `DFlashGroupedConv`: the launcher probes the
+  image and **skips the surgery** — the canonical Desktop tree is mounted as-is (the `-sglang`
+  surgery copy is then unused; harmless to leave in place).
+- Upstream `c14312a6` also carries `models/dspark.py`, so the image can host both speculative
+  algorithms; the DSpark profile keeps its own pinned image (rollback preserved) — consolidating all
+  profiles onto the merged-commit build is a later task, not a precondition.
+- The pinned fork's dflash files differ from the PR base (69–231 changed lines each), so this is a
+  full from-source build, not a thin overlay on `qwen38-27b`.
+- Expectation check: if the 08-19 diagnosis holds (v1-class draft caps acceptance at ~2–2.7), the
+  `c14312a6` image should approach the card's 4.1–5.5 under the card's conditions and beat DSpark's
+  84.2 tok/s prose cell. If it doesn't, the diagnosis is wrong — re-investigate before believing
+  either engine.
+
+**Status 2026-08-19:** build queued behind the vLLM PR build (CPU contention); log at
+`~/.local/state/qwen38/sglang-dflash2-build.log`. On completion: record the digest in this section,
+flip the launcher defaults (`DFLASH2_IMAGE` / `DFLASH2_IMAGE_DIGEST` or the baked-in `IMAGE`/
+`DIGEST` lines), re-run the validation gate, then A/B against the DSpark v2 profile.
+
 ## Draft-config surgery (why the launcher copies the draft)
 
 The checkpoint declares `architectures: ["DFlash2DraftModel"]`. The image's model registry does
@@ -85,9 +116,10 @@ DSpark classes. The launcher therefore prepares an **isolated copy** at
 `$HOME/Desktop/Qwen3.8-27B-DFlash2-sglang` — next to the canonical tree, because `/models` is
 `root:root` on this box and the launcher runs unprivileged — with that one field rewritten to
 `["DFlashDraftModel"]` (everything else byte-identical, idempotent, rebuilt only when stale). The
-downloaded canonical tree is never modified — same pattern as the DSpark-on-vLLM launcher. If
-upstream ever adds native `DFlash2DraftModel` registration, the surgery stays (it is
-image-agnostic and idempotent).
+downloaded canonical tree is never modified — same pattern as the DSpark-on-vLLM launcher. **This
+applies to the pinned pre-merge image only:** the launcher probes the image at boot and, when
+`DFlash2DraftModel` is registered natively (any build at/after `c14312a6`), serves the canonical
+tree as-is and skips the copy entirely (see *SGLang at the merged commit*).
 
 **Surgery reality (verified 2026-08-19 — read before trusting this profile's speed):**
 the pinned image's `DFlashDraftModel` is the **DFlash v1** class. PR #35371's `dflash.py`
@@ -102,11 +134,11 @@ only, no dynamic convs, no candidate selector, v1 sampling). Measured 2026-08-19
 77.1 tok/s prose-decode and 19.2–19.9 s on the xhigh 1500-tok probe cell vs DSpark's
 84.2 / 16.8 s — the card claims the opposite. It is **lossless and correct**, just not the
 real DFlash 2. Do not use this profile as a DFlash 2 performance baseline; for real DFlash 2
-wait on the vLLM PR image (native, no surgery) or a SGLang image carrying PR #35371 (the PR
-is python-only: `models/dflash.py`, `speculative/dflash_worker_v2.py`,
-`speculative/dflash_utils.py`, `model_runner_components/spec_aux_hidden_state.py` — a thin
-overlay on the pinned image is the candidate build, pending a compatibility check against
-the PR's newer base).
+use the vLLM PR image (native, no surgery) or the SGLang merge-commit build — PR #35371 is now
+**merged to main as `c14312a6`** (2026-08-19). The compatibility check showed the pinned fork's
+dflash files differ from the PR base (69–231 changed lines each), so the SGLang path is a **full
+from-source build at the merge commit** (`build-qwen38-dflash2-sglang-image.sh`), not a thin
+overlay — see *SGLang at the merged commit*.
 
 ## Prerequisites
 
@@ -188,7 +220,9 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
   probe cells (verified 2026-08-19, two probe runs; DSpark on the same box:
   3.45 cells / 3.575 live — see
   `benchmarks/vllm-tps/2026-08-19-dflash2.md`). The card's **4.1–5.5** needs
-  PR #35371's code, which the pinned image lacks (see *Surgery reality*).
+  PR #35371's code, which the pinned image lacks (see *Surgery reality*); on the
+  `c14312a6` build (*SGLang at the merged commit*) the same gate expects the
+  card's range under the card's conditions.
   If it sits near **1.0** under sustained traffic the draft is additionally
   miswired — check
   the log for `Initialized DFLASH draft runner ... block_size=8` and re-verify the surgery
@@ -212,14 +246,17 @@ trees; rolling back touches nothing of them.
 
 ## Watch-list
 
-1. **sgl-project/sglang#35371 merge** → pin an official SGLang release that carries DFlash 2;
+1. **sgl-project/sglang#35371 — MERGED 2026-08-19** (main at `c14312a6`) → the local
+   merge-commit build (`peterstorm/sglang:qwen38-dflash2-c14312a`) is the pin for now; re-pin
+   the dflash2 profile to the first official release/nightly that contains the merge, and
    re-validate on the box before dropping the custom image.
 2. **vllm-project/vllm#52816 merge** → re-point the vLLM profile at the first
    official nightly that verifiably contains it (record tag + digest), retire
    the PR-branch image. Until then the PR image's pin is the head SHA above;
    if the PR head moves, decide deliberately whether to re-pin.
-3. **Native `DFlash2DraftModel` registration** in SGLang → surgery becomes redundant; keep it
-   (image-agnostic, idempotent) until the pin moves.
+3. **First official SGLang release/nightly containing `c14312a6`** → re-pin the dflash2 profile
+   from the local merge-commit build to the official image; the surgery path stays in the launcher
+   (it self-disables on native images) until every profile is off the pinned fork image.
 4. **Checkpoint revision drift** — the pinned sha is `ac04198`; if `z-lab` pushes new weights,
    decide deliberately whether to re-pin (weights are not byte-identical across revisions).
 5. Concurrency-1 numbers (card's 3.43×) are the headline use case for Pi; the 8-request profile

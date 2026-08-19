@@ -58,8 +58,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 inference_resolve_operator
 
-IMAGE="lmsysorg/sglang:qwen38-27b"
-DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124"
+# The pinned custom image predates DFlash 2 (its registry knows
+# DFlashDraftModel, not DFlash2DraftModel — the surgery below handles that).
+# DFLASH2_IMAGE / DFLASH2_IMAGE_DIGEST target a newer build — e.g. the PR
+# #35371 merge-commit build from build-qwen38-dflash2-sglang-image.sh
+# (peterstorm/sglang:qwen38-dflash2-c14312a) — which registers the
+# checkpoint's own architecture natively and skips the surgery.
+IMAGE="${DFLASH2_IMAGE:-lmsysorg/sglang:qwen38-27b}"
+DIGEST="${DFLASH2_IMAGE_DIGEST:-sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124}"
 MODEL_HOST="/models/Qwen3.8-27B"
 MODEL_CONTAINER="/models/Qwen/Qwen3.8-27B"
 # Canonical draft tree: the download script's default (desktop user's Desktop
@@ -113,8 +119,6 @@ DFLASH2_BLOCK_SIZE="${DFLASH2_BLOCK_SIZE:-8}"
 MAMBA_STATE_SLOTS="${MAMBA_STATE_SLOTS:-5}"
 MAX_MAMBA_CACHE_SIZE="${MAX_MAMBA_CACHE_SIZE:-$((MAX_RUNNING_REQUESTS * MAMBA_STATE_SLOTS))}"
 
-command -v jq >/dev/null 2>&1 || { echo "error: jq is required (draft config surgery)" >&2; exit 2; }
-
 if [ ! -e "$MODEL_HOST/config.json" ]; then
   echo "error: target checkpoint not found at $MODEL_HOST — run scripts/inference/qwen38/download-qwen38-27b.sh first" >&2
   exit 1
@@ -128,20 +132,34 @@ if [ ! -f "$ENTRYPOINT_HOST" ]; then
   exit 1
 fi
 
-# SGLang's model registry in this image knows DFlashDraftModel, not the
-# checkpoint's DFlash2DraftModel. Prepare an isolated copy with that one
-# field rewritten; the canonical downloaded tree is left byte-identical.
-if [ ! -f "$DRAFT_SGLANG_HOST/config.json" ] \
-  || ! jq -e '.architectures == ["DFlashDraftModel"]' "$DRAFT_SGLANG_HOST/config.json" >/dev/null 2>&1; then
-  echo "Preparing SGLang draft copy at $DRAFT_SGLANG_HOST (architectures -> DFlashDraftModel)..."
-  mkdir -p "$(dirname "$DRAFT_SGLANG_HOST")"
-  rm -rf "${DRAFT_SGLANG_HOST}.tmp"
-  cp -a "$DRAFT_HOST" "${DRAFT_SGLANG_HOST}.tmp"
-  jq '(.architectures = ["DFlashDraftModel"])' "${DRAFT_SGLANG_HOST}.tmp/config.json" > "${DRAFT_SGLANG_HOST}.tmp/config.json.new"
-  mv "${DRAFT_SGLANG_HOST}.tmp/config.json.new" "${DRAFT_SGLANG_HOST}.tmp/config.json"
-  rm -rf "$DRAFT_SGLANG_HOST"
-  mv "${DRAFT_SGLANG_HOST}.tmp" "$DRAFT_SGLANG_HOST"
-  jq -r '.architectures | join(",")' "$DRAFT_SGLANG_HOST/config.json"
+# Draft wiring is image-dependent. Builds at/after PR #35371 (merged to
+# SGLang main 2026-08-19, c14312a6) register DFlash2DraftModel natively and
+# run the canonical tree as-is. The pinned qwen38-27b fork build predates
+# that and only knows DFlashDraftModel, so it gets the one-field surgery on
+# an isolated copy — the canonical downloaded tree is never modified.
+# Probe the image instead of guessing: serving the DFlash 2 checkpoint
+# through the v1 class silently drops its conv/selector weights (runbook:
+# "Surgery reality").
+DRAFT_SERVE_HOST="$DRAFT_SGLANG_HOST"
+if docker image inspect "$IMAGE" >/dev/null 2>&1 \
+  && docker run --rm --entrypoint python3 "$IMAGE" \
+       -c "import sglang.srt.models.dflash as m; raise SystemExit(0 if hasattr(m, 'DFlash2DraftModel') else 1)" >/dev/null 2>&1; then
+  DRAFT_SERVE_HOST="$DRAFT_HOST"
+  echo "Image registers DFlash2DraftModel natively — serving the canonical tree (no surgery)."
+else
+  command -v jq >/dev/null 2>&1 || { echo "error: jq is required (draft config surgery)" >&2; exit 2; }
+  if [ ! -f "$DRAFT_SGLANG_HOST/config.json" ] \
+    || ! jq -e '.architectures == ["DFlashDraftModel"]' "$DRAFT_SGLANG_HOST/config.json" >/dev/null 2>&1; then
+    echo "Preparing SGLang draft copy at $DRAFT_SGLANG_HOST (architectures -> DFlashDraftModel)..."
+    mkdir -p "$(dirname "$DRAFT_SGLANG_HOST")"
+    rm -rf "${DRAFT_SGLANG_HOST}.tmp"
+    cp -a "$DRAFT_HOST" "${DRAFT_SGLANG_HOST}.tmp"
+    jq '(.architectures = ["DFlashDraftModel"])' "${DRAFT_SGLANG_HOST}.tmp/config.json" > "${DRAFT_SGLANG_HOST}.tmp/config.json.new"
+    mv "${DRAFT_SGLANG_HOST}.tmp/config.json.new" "${DRAFT_SGLANG_HOST}.tmp/config.json"
+    rm -rf "$DRAFT_SGLANG_HOST"
+    mv "${DRAFT_SGLANG_HOST}.tmp" "$DRAFT_SGLANG_HOST"
+    jq -r '.architectures | join(",")' "$DRAFT_SGLANG_HOST/config.json"
+  fi
 fi
 
 # Fail closed: never start this high-load profile above its declared power cap
@@ -244,7 +262,7 @@ docker run -d --init \
   --ulimit stack=67108864 \
   --env-file "$ENVFILE" \
   -v "$MODEL_HOST":"$MODEL_CONTAINER":ro \
-  -v "$DRAFT_SGLANG_HOST":"$DRAFT_CONTAINER":ro \
+  -v "$DRAFT_SERVE_HOST":"$DRAFT_CONTAINER":ro \
   -v "$CACHE_HOST":/root/.cache \
   -v "$ENTRYPOINT_HOST":"$ENTRYPOINT_CONTAINER":ro \
   -e CUDA_VISIBLE_DEVICES="$GPU_ORDER" \

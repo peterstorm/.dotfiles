@@ -14,9 +14,9 @@
 #     image's model registry).
 #   * switch-qwen38-backend-v2.sh gains a 'dflash2' mode with the SGLang
 #     DSpark v2 profile as its same-engine fallback.
-#   * The runbook documents the checkpoint pin, the open upstream PRs
-#     (sglang #35371, vllm #52816) that gate future re-pins, and the
-#     Desktop destination.
+#   * The runbook documents the checkpoint pin, the upstream DFlash 2 PRs
+#     (sglang #35371 — merged 2026-08-19 as c14312a6; vllm #52816 — open)
+#     that gate future re-pins, and the Desktop destination.
 #
 # No GPU, container, or network access is required.
 # shellcheck disable=SC2016 # Assertions intentionally match literal shell source.
@@ -68,9 +68,9 @@ if grep -Eq '^DEST="/models/' "$DFLASH2_DL"; then
   fail "$DFLASH2_DL defaults to a /models destination; the agreed default is the Desktop folder"
 fi
 
-# --- SGLang DFlash 2: same pinned image, DFLASH spec path, surgery ---------
-contains "$DFLASH2_SGLANG" 'IMAGE="lmsysorg/sglang:qwen38-27b"'
-contains "$DFLASH2_SGLANG" 'DIGEST="sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124"'
+# --- SGLang DFlash 2: image override, DFLASH spec path, conditional surgery -
+contains "$DFLASH2_SGLANG" 'IMAGE="${DFLASH2_IMAGE:-lmsysorg/sglang:qwen38-27b}"'
+contains "$DFLASH2_SGLANG" 'DIGEST="${DFLASH2_IMAGE_DIGEST:-sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124}"'
 contains "$DFLASH2_SGLANG" 'NAME="qwen38-27b-bf16-dflash2-sglang"'
 contains "$DFLASH2_SGLANG" 'ENVFILE="$CONFIG_DIR/sglang-dflash2.env"'
 contains "$DFLASH2_SGLANG" 'DRAFT_CONTAINER="/models/z-lab/Qwen3.8-27B-DFlash2-sglang"'
@@ -91,6 +91,13 @@ fi
 if grep -Eq '(^|[^A-Z_])export SGLANG_RAGGED_VERIFY_MODE=|^[[:space:]]*-e SGLANG_RAGGED_VERIFY_MODE=' "$DFLASH2_SGLANG"; then
   fail "$DFLASH2_SGLANG exports SGLANG_RAGGED_VERIFY_MODE, which this image build does not consume"
 fi
+
+# Capability probe: images at/after PR #35371's merge register DFlash2DraftModel
+# natively and skip surgery (canonical tree served as-is); pre-merge images
+# fall through to the isolated-copy surgery below.
+contains "$DFLASH2_SGLANG" "hasattr(m, 'DFlash2DraftModel')"
+contains "$DFLASH2_SGLANG" 'DRAFT_SERVE_HOST="$DRAFT_HOST"'
+contains "$DFLASH2_SGLANG" '-v "$DRAFT_SERVE_HOST":"$DRAFT_CONTAINER":ro'
 
 # Draft config surgery: rewrite architectures on an ISOLATED copy (the image
 # knows DFlashDraftModel, not the checkpoint's DFlash2DraftModel), only when
@@ -153,6 +160,16 @@ if grep -Eq '^[[:space:]]*-e SGLANG_API_KEY=' "$DFLASH2_SGLANG"; then
   fail "$DFLASH2_SGLANG exposes SGLANG_API_KEY in Docker command arguments"
 fi
 
+# --- SGLang merge-commit build (real DFlash 2, PR #35371 merged 2026-08-19) -
+SGL_BUILD="$ROOT/scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh"
+[[ -f "$SGL_BUILD" ]] || fail "missing $SGL_BUILD"
+[[ -x "$SGL_BUILD" ]] || fail "$SGL_BUILD is not executable"
+bash -n "$SGL_BUILD"
+contains "$SGL_BUILD" 'SGL_MERGE_SHA="c14312a66420b75ca9a11bf1817c4db1fa26b097"'
+contains "$SGL_BUILD" 'IMAGE="peterstorm/sglang:qwen38-dflash2-c14312a"'
+contains "$SGL_BUILD" -- '--target runtime'
+contains "$SGL_BUILD" 'DFlash2DraftModel'
+
 # --- switcher: new dflash2 mode, SGLang DSpark v2 as same-engine fallback --
 contains "$SWITCHER" 'status|vllm|sglang|dflash2|v1-vllm|v1-sglang'
 contains "$SWITCHER" 'DFLASH2_SGLANG_NAME="qwen38-27b-bf16-dflash2-sglang"'
@@ -165,6 +182,8 @@ bash -n "$SWITCHER"
 contains "$DOC" 'ac04198556d7e8867853cbc356807b969f311b05'
 contains "$DOC" 'sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124'
 contains "$DOC" 'sgl-project/sglang#35371'
+contains "$DOC" 'c14312a66420b75ca9a11bf1817c4db1fa26b097'
+contains "$DOC" 'build-qwen38-dflash2-sglang-image.sh'
 contains "$DOC" 'vllm-project/vllm#52816'
 contains "$DOC" 'block_size 8'
 contains "$DOC" 'Desktop/Qwen3.8-27B-DFlash2'
