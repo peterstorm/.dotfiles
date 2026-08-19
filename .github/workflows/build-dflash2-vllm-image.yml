@@ -65,6 +65,19 @@ jobs:
           echo "--- disk after reclaim ---"
           df -h / /mnt
 
+      - name: Add swap (parallel CUDA/Rust compiles OOM the 16 GB runner)
+        run: |
+          set -x
+          # CUTLASS/hpc-ops nvcc units are multi-GB each and buildkit runs the
+          # CUDA + Rust builder stages concurrently; 16 GB RAM gets OOM-killed
+          # (exit 143). A large swapfile on root (docker data-root is on /mnt)
+          # lets transient spikes swap instead of dying. Slower, but $0.
+          sudo fallocate -l 24G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=24576
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
       - name: Log in to GHCR
         if: ${{ inputs.push }}
         uses: docker/login-action@v3
