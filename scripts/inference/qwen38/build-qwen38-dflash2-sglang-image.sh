@@ -57,12 +57,14 @@ else
   fi
 
   # Upstream's Dockerfile at c14312a6 force-reinstalls a pinned NCCL wheel
-  # (ARG NCCL_VERSION default 2.28.3-1) that is NOT published on PyPI — only
-  # 2.28.3 (and later) exist, so the stock build dies with
-  # "No matching distribution found for nvidia-nccl-cu13==2.28.3-1". Pin to an
-  # available release (same patch, minus the bogus -1 packaging suffix).
-  # Override with SGL_NCCL_VERSION if upstream fixes the default or bumps it.
-  SGL_NCCL_VERSION="${SGL_NCCL_VERSION:-2.28.3}"
+  # (ARG NCCL_VERSION default 2.28.3-1) that is BOTH unpublished on PyPI and
+  # too old for the torch it installs: torch 2.13.0+cu130 depends on
+  # nvidia-nccl-cu13 2.29.7 and is built against it, so anything older breaks
+  # `import torch` with "undefined symbol: ncclCommResume" (which then cascades
+  # into missing torch/*.h in the hpc-ops stage). Pin to the version torch
+  # itself pulls, making the force-reinstall a no-op instead of a downgrade.
+  # Override with SGL_NCCL_VERSION if upstream aligns the pins.
+  SGL_NCCL_VERSION="${SGL_NCCL_VERSION:-2.29.7}"
   echo "Building $IMAGE (stage runtime, NCCL_VERSION=$SGL_NCCL_VERSION)..."
   docker build \
     --target runtime \
