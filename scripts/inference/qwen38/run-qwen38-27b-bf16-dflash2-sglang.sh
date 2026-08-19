@@ -89,7 +89,7 @@ MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-8}"
 CONTEXT_LENGTH="${CONTEXT_LENGTH:-262144}"
 # Diagnostic knob: CUDA logical device 0 becomes TP rank 0. Reversing this
 # order distinguishes a rank-0 runtime failure from a physical GPU0 failure.
-GPU_ORDER="${GPU_ORDER:-0,1}"
+GPU_ORDER="${GPU_ORDER:-1,0}"
 case "$GPU_ORDER" in
   0,1|1,0) ;;
   *) echo "error: GPU_ORDER must be 0,1 or 1,0 (got: $GPU_ORDER)" >&2; exit 2 ;;

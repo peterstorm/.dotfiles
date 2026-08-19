@@ -44,7 +44,7 @@ if [ -z "$GPU_DEVICES" ]; then
   if [ "$TP_SIZE" = "1" ]; then
     GPU_DEVICES="0"
   else
-    GPU_DEVICES="0,1"
+    GPU_DEVICES="1,0"
   fi
 fi
 case "$TP_SIZE:$GPU_DEVICES" in

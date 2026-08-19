@@ -6,22 +6,40 @@
  * current context) before it implements code with `write` / `edit` (or
  * bash-based file mutations).
  *
- * How "read" is verified (bypass-resistant):
- *   - A `read` tool call whose RESULT (a non-error toolResult message) is
- *     present in the model's current context for the required file.
- *     A read issued in the SAME assistant message as the write does NOT
- *     count — the model generated the code without having seen the file.
- *   - For skills: a `<skill name="X">` block in a user message (i.e. the
- *     human ran `/skill:X`), in addition to reading the SKILL.md path.
- *   - Evidence is taken from `buildContextEntries()`, i.e. what the model
- *     can currently see. After compaction, re-reads are required —
- *     intentionally, so the rules are back in context.
+ * Four checks, in order, all bypass-resistant:
+ *
+ * 1. RULES/SKILLS IN CONTEXT — a `read` tool call whose RESULT (a non-error
+ *    toolResult message) is present in the model's current context for the
+ *    required file. A read issued in the SAME assistant message as the write
+ *    does NOT count — the model generated the code without having seen the
+ *    file. For skills, a `<skill name="X">` block in a user message (i.e. the
+ *    human ran `/skill:X`) also satisfies the skill requirement.
+ * 2. FULL READS ONLY — a read with a `limit:` argument covers only
+ *    [offset, offset+limit) lines; coverage across all successful reads of a
+ *    file must reach EOF. A `limit: 60` skim of a 400-line rule does not
+ *    count. Files larger than the read tool's 2000-line truncation need
+ *    explicit `offset` reads; the union of ranges is what matters.
+ * 3. TARGET FILE KNOWN — the file being edited must either have been fully
+ *    read in context, or been created by a successful `write` earlier in the
+ *    session (search-before-write; your own newly written file is already
+ *    known).
+ * 4. ADHERENCE STATED — before the first gated write of a context window, an
+ *    assistant text message must contain a `LOOM: applying <rule|skill> — <how>`
+ *    line naming at least one of the required rules/skills. The gate proves
+ *    the marker exists; CLAUDE.md makes the substance of it part of the work.
+ *    Survives until compaction, exactly like the read evidence — after
+ *    compaction it must be stated again.
+ *
+ * Evidence is taken from `buildContextEntries()`, i.e. what the model can
+ * currently see. After compaction, re-reads and a fresh marker are required —
+ * intentionally, so the rules are back in context.
  *
  * Main orchestrator vs subagents:
  *   The `subagent` extension spawns subagents as SEPARATE pi processes:
  *   `pi --mode json -p --no-session`. That signature (mode "json" AND no
  *   session file) is detected and exempted. Everything else (tui, rpc,
- *   print, json with a session) is gated.
+ *   print, json with a session) is gated. Subagents inherit the rules their
+ *   task prompt carries; the orchestrator owns compliance.
  *
  * Escape hatches (env):
  *   LOOM_GATE=off          disable the gate entirely
@@ -35,11 +53,19 @@
  *   - Extensionless files (server, Makefile, ...) and custom tools
  *     (pi.registerTool) that write files are not gated; write/edit/bash
  *     are the standard mutation paths.
+ *   - Full-read coverage assumes the read tool's 2000-line cap. A read that
+ *     hits the tool's 50KB byte cap before 2000 lines is treated as reaching
+ *     only 2000 lines of coverage — a file whose lines average >25 bytes
+ *     could be byte-truncated without the gate noticing. Rule/skill files
+ *     are far below that; target files with very long lines are a known
+ *     residual gap, not a silent hole.
+ *   - The gate proves context and articulation, never genuine adherence.
+ *     That is what the marker + human review are for.
  */
 
 import type { ExtensionAPI, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
-import { existsSync, realpathSync, readdirSync } from "node:fs";
+import { existsSync, realpathSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { extname, isAbsolute, join, resolve } from "node:path";
 
@@ -96,6 +122,13 @@ const REQUIRED_SKILLS = ["deepen", "distill"];
 /** Gate bash mutations of code files (heuristic). */
 const GATE_BASH = true;
 
+/** The read tool truncates output at this many lines. */
+const READ_TOOL_MAX_LINES = 2000;
+
+/** Adherence marker: `LOOM: applying <rule|skill> — <how>` naming a required rule. */
+const ADHERENCE_RE = /\bLOOM:\s*applying\b/i;
+const RULE_NAME_RE = /\b(architecture|typescript-patterns|java-patterns|rust-patterns|property-testing|deepen|distill)\b/i;
+
 // ---------------------------------------------------------------------------
 // Path canonicalization
 // ---------------------------------------------------------------------------
@@ -148,21 +181,78 @@ function discoverSkillFiles(skillName: string, cwd: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Full-read coverage
+// ---------------------------------------------------------------------------
+
+/** Line counts are read-only facts; cache them like canonical paths. */
+const lineCountCache = new Map<string, number>();
+
+function lineCountFor(p: string): number {
+	const cached = lineCountCache.get(p);
+	if (cached !== undefined) return cached;
+	let lines: number;
+	try {
+		lines = readFileSync(p, "utf8").split("\n").length;
+	} catch {
+		// Unreadable file: coverage can never complete, which blocks — correct.
+		lines = Number.POSITIVE_INFINITY;
+	}
+	lineCountCache.set(p, lines);
+	return lines;
+}
+
+/**
+ * True when the merged half-open line intervals [start, end) cover the whole
+ * file, i.e. every line 1..lineCount falls inside at least one interval.
+ */
+function coveredInFull(ranges: Array<[number, number]>, lineCount: number): boolean {
+	if (lineCount === Number.POSITIVE_INFINITY) return false;
+	if (lineCount <= 0) return true;
+	const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+	let cursor = 1;
+	for (const [start, end] of sorted) {
+		if (start > cursor + 1) return false; // uncovered gap
+		cursor = Math.max(cursor, end);
+		if (cursor > lineCount) return true;
+	}
+	return cursor > lineCount;
+}
+
+// ---------------------------------------------------------------------------
 // Session evidence: what is actually in the model's current context
 // ---------------------------------------------------------------------------
 
 interface Requirement {
-	/** Absolute canonical paths; ANY one read successfully satisfies the requirement. */
+	/** Absolute canonical paths; ANY one fully-read path satisfies the requirement. */
 	paths: string[];
 	/** If set and this name appears in a <skill> block in context, requirement is satisfied. */
 	skillName?: string;
+	/** Target-file requirement: a prior successful write to the path also satisfies it. */
+	writable?: boolean;
 	why: string;
 }
 
-function collectEvidence(entries: SessionEntry[], cwd: string) {
-	const readPathByCallId = new Map<string, string>();
-	const failedCallIds = new Set<string>();
+interface Evidence {
+	/** Canonical paths whose full contents are covered by successful reads in context. */
+	fullyReadPaths: Set<string>;
+	/** Canonical paths created by successful writes in context. */
+	successfullyWritten: Set<string>;
+	invokedSkillNames: Set<string>;
+	adherenceStated: boolean;
+}
+
+interface ReadCall {
+	path: string;
+	start: number; // 1-indexed first line
+	limit: number; // lines covered (capped at the read tool's truncation)
+}
+
+function collectEvidence(entries: SessionEntry[], cwd: string): Evidence {
+	const readCalls = new Map<string, ReadCall>();
+	const writeCalls = new Map<string, string>();
+	const succeededResults = new Set<string>();
 	const invokedSkillNames = new Set<string>();
+	let adherenceStated = false;
 	const skillBlockRe = /<skill name="([^"]+)" location="[^"]*">/g;
 
 	for (const entry of entries) {
@@ -174,12 +264,29 @@ function collectEvidence(entries: SessionEntry[], cwd: string) {
 				if (part.type === "toolCall" && part.name === "read") {
 					const p = part.arguments?.path ?? part.arguments?.file_path;
 					if (typeof p === "string" && p.length > 0) {
-						readPathByCallId.set(part.id, canonical(p, cwd));
+						const rawOffset = Number(part.arguments?.offset);
+						const rawLimit = Number(part.arguments?.limit);
+						// Effective coverage per read is capped by the tool's truncation.
+						readCalls.set(part.id, {
+							path: canonical(p, cwd),
+							start: Math.max(1, Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 1),
+							limit: Math.min(READ_TOOL_MAX_LINES, Math.max(1, Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : READ_TOOL_MAX_LINES)),
+						});
+					}
+				} else if (part.type === "toolCall" && part.name === "write") {
+					const p = part.arguments?.path ?? part.arguments?.file_path;
+					if (typeof p === "string" && p.length > 0) {
+						writeCalls.set(part.id, canonical(p, cwd));
+					}
+				} else if (part.type === "text" && typeof part.text === "string") {
+					const m = ADHERENCE_RE.exec(part.text);
+					if (m && RULE_NAME_RE.test(part.text.slice(m.index, m.index + 300))) {
+						adherenceStated = true;
 					}
 				}
 			}
 		} else if (msg.role === "toolResult") {
-			if (msg.toolName === "read" && msg.isError) failedCallIds.add(msg.toolCallId);
+			if (!msg.isError) succeededResults.add(msg.toolCallId);
 		} else if (msg.role === "user") {
 			const text =
 				typeof msg.content === "string"
@@ -193,12 +300,26 @@ function collectEvidence(entries: SessionEntry[], cwd: string) {
 		}
 	}
 
-	const successfullyRead = new Set<string>();
-	for (const [callId, p] of readPathByCallId) {
-		if (!failedCallIds.has(callId)) successfullyRead.add(p);
+	// Merge successful reads into per-path line coverage.
+	const rangesByPath = new Map<string, Array<[number, number]>>();
+	for (const [callId, r] of readCalls) {
+		if (!succeededResults.has(callId)) continue; // read must have COMPLETED
+		const ranges = rangesByPath.get(r.path) ?? [];
+		ranges.push([r.start, r.start + r.limit]);
+		rangesByPath.set(r.path, ranges);
 	}
 
-	return { successfullyRead, invokedSkillNames };
+	const fullyReadPaths = new Set<string>();
+	for (const [p, ranges] of rangesByPath) {
+		if (coveredInFull(ranges, lineCountFor(p))) fullyReadPaths.add(p);
+	}
+
+	const successfullyWritten = new Set<string>();
+	for (const [callId, p] of writeCalls) {
+		if (succeededResults.has(callId)) successfullyWritten.add(p);
+	}
+
+	return { fullyReadPaths, successfullyWritten, invokedSkillNames, adherenceStated };
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +349,23 @@ function requirementsFor(targetPath: string, cwd: string): Requirement[] {
 		}
 	}
 
+	// Target file must be known: fully read, or written by this session earlier.
+	const canonTarget = canonical(targetPath, cwd);
+	if (existsSync(canonTarget)) {
+		reqs.push({
+			paths: [canonTarget],
+			writable: true,
+			why: `target file in context — the file being edited must have been read in full (or written earlier this session) before it is changed (search before writing)`,
+		});
+	}
+
 	return reqs;
 }
 
-function missingRequirements(reqs: Requirement[], evidence: { successfullyRead: Set<string>; invokedSkillNames: Set<string> }): Requirement[] {
+function missingRequirements(reqs: Requirement[], evidence: Evidence): Requirement[] {
 	return reqs.filter((r) => {
-		if (r.paths.some((p) => evidence.successfullyRead.has(p))) return false;
+		if (r.writable && r.paths.some((p) => evidence.successfullyWritten.has(p))) return false;
+		if (r.paths.some((p) => evidence.fullyReadPaths.has(p))) return false;
 		if (r.skillName && evidence.invokedSkillNames.has(r.skillName)) return false;
 		return true;
 	});
@@ -305,7 +437,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		const rulesOk = ALWAYS_REQUIRED_RULES.every((r) => existsSync(join(LOOM_RULES_DIR, r)));
 		if (rulesOk) {
-			ctx.ui.notify("loom-rules-gate active: rules/skills must be in context before code writes", "info");
+			ctx.ui.notify("loom-rules-gate active: rules/skills must be fully read and stated before code writes", "info");
 		} else {
 			ctx.ui.notify(`loom-rules-gate WARNING: missing rules in ${LOOM_RULES_DIR}`, "warning");
 		}
@@ -318,7 +450,22 @@ export default function (pi: ExtensionAPI) {
 			`Read each of these files with the \`read\` tool, THEN retry the same operation:\n` +
 			missing.map((r, i) => `  ${i + 1}. ${r.paths[0]}   (${r.why})`).join("\n") +
 			`\nNotes: reads must have completed before this operation (a read in the same message does not count). ` +
-			`If a skill was already provided via /skill:<name> by the user, it is satisfied.`,
+			`Partial reads (with a \`limit:\` argument) do NOT count — the file must be covered in full; ` +
+			`use \`offset\` reads for files longer than ${READ_TOOL_MAX_LINES} lines. ` +
+			`If a skill was already provided via /skill:<name> by the user, it is satisfied. ` +
+			`If the target file exists and you have not read it fully, read it first.`,
+	});
+
+	const blockForMarker = (action: string): { block: true; reason: string } => ({
+		block: true,
+		reason:
+			`BLOCKED by loom-rules-gate: no adherence marker in context for ${action}.\n` +
+			`Before the first gated edit of a session (or after context compaction), state in a short ` +
+			`text-only message which rule/skill applies to this change and the specific principle it honors, e.g.:\n` +
+			`  LOOM: applying architecture.md — FC/IS: extraction stays pure, Either at the boundary\n` +
+			`(must name at least one of: architecture, typescript-patterns, java-patterns, rust-patterns, ` +
+			`property-testing, deepen, distill — then retry the edit in the NEXT message so this line is ` +
+			`already in context). Stating it once per context window is enough.\n`,
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -351,8 +498,7 @@ export default function (pi: ExtensionAPI) {
 
 		const evidence = collectEvidence(ctx.sessionManager.buildContextEntries(), ctx.cwd);
 		const missing = missingRequirements(reqs, evidence);
-		if (missing.length === 0) return;
-
-		return blockForMissing(missing, action);
+		if (missing.length > 0) return blockForMissing(missing, action);
+		if (!evidence.adherenceStated) return blockForMarker(action);
 	});
 }

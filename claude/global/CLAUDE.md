@@ -14,6 +14,7 @@ The standard is "holy shit, that's done" — not "good enough," not "politely sa
 - No workarounds when the real fix is reachable.
 - No "table this for later" when the permanent solve is in reach.
 - Docs updated where they live — vault notes, READMEs, types.
+- Changes conform to the loaded rules/skills; deviations documented.
 - UI changes loaded in a browser before reporting success.
 
 ## When asked for something
@@ -26,10 +27,15 @@ Time. Fatigue. Complexity. Backwards compatibility for code that hasn't shipped.
 
 ## Code implementation
 
-Whenever implementing code, reference Loom:
+**The Loom rules and skills are binding, not advisory.** The harness gate (loom-rules-gate) only proves the files are in context — applying them is the work. A change that violates the loaded rules fails review even when the gate passed.
 
-- **Rules** — `/home/peterstorm/dev/claude-plugins/loom/rules/`: read `architecture.md` always, plus the files matching the languages in scope (`typescript-patterns.md`, `java-patterns.md`, `rust-patterns.md`; `property-testing.md` when adding business-rule tests).
-- **Skills** — load `deepen` when the work touches module interfaces, structure, or coupling (depth, seams, leverage, locality); load `distill` and run it as a behavior-preserving simplification pass after implementation.
+Before the first code edit of a session:
+
+1. **Load, don't skim.** Read `/home/peterstorm/dev/claude-plugins/loom/rules/architecture.md` in FULL — a read with a `limit:` argument does not count as loaded (the gate counts it; that is a loophole, not a contract). Same for the language rule in scope (`typescript-patterns.md`, `java-patterns.md`, `rust-patterns.md`; add `property-testing.md` when adding business-rule tests).
+2. **Load the applicable skills.** `deepen` when the change touches module interfaces, structure, or coupling (depth, seams, leverage, locality). `distill` after every implementation, run in apply mode as the final pass: green baseline first, one move at a time, then report moves applied and opportunities skipped.
+3. **State adherence before the first gated edit.** In the message that makes the edit, one line naming the rule/skill applied and the specific principle this change honors — e.g. `LOOM: applying architecture.md — FC/IS: extraction stays pure, Either at the boundary`. The gate enforces this marker; the substance of it is part of the work product, not commentary.
+
+Rules outrank taste. If a rule conflicts with a local convention, follow the rule and flag the conflict in the final summary.
 
 # Memory systems
 

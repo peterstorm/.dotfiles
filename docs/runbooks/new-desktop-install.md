@@ -1463,11 +1463,13 @@ bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 docker logs -f qwen38-27b-bf16-dspark-sglang
 ```
 
-The default physical/logical order is `GPU_ORDER=0,1`. During the recurrent GPU0 Xid 79
-diagnostic, reverse logical rank assignment without moving cards:
+The default physical/logical order is now `GPU_ORDER=1,0` (logical device 0 / TP rank 0 on
+physical GPU1, `03:00.0`) — flipped 2026-08-19 so Qwen workloads carry rank 0 off the
+historically failing GPU0 (`01:00.0`) while the hardware track runs. The old order is
+available as an explicit override:
 
 ```bash
-GPU_ORDER=1,0 bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
+GPU_ORDER=0,1 bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 ```
 
 The launcher accepts only `0,1` or `1,0`, labels the container with the chosen order, and

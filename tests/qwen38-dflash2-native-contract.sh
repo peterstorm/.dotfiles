@@ -58,7 +58,7 @@ absent   "$NATIVE" 'fp8_e4m3'
 
 # --- TP2, two-GPU quality profile (matches the surgery sibling) ------------
 contains "$NATIVE" '--tp-size 2'
-contains "$NATIVE" 'GPU_ORDER="${GPU_ORDER:-0,1}"'
+contains "$NATIVE" 'GPU_ORDER="${GPU_ORDER:-1,0}"'
 contains "$NATIVE" 'expected two queryable GPUs'
 contains "$NATIVE" 'MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-8}"'
 contains "$NATIVE" 'CONTEXT_LENGTH="${CONTEXT_LENGTH:-262144}"'

@@ -123,7 +123,7 @@ docker run -d --init \
   -v "$MODEL_HOST":"$MODEL_CONTAINER":ro \
   -v "$DRAFT_VLLM_HOST":"$DRAFT_CONTAINER":ro \
   -v "$CACHE_HOST":/root/.cache \
-  -e CUDA_VISIBLE_DEVICES=0,1 \
+  -e CUDA_VISIBLE_DEVICES=1,0 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e VLLM_NO_USAGE_STATS=1 \
   "$IMAGE@$DIGEST" \

@@ -220,6 +220,12 @@ Non-zero retired pages or pending remaps → RMA track.
   bus dropout. Orthogonal to the physical track (reseat card + 12V-2×6 connector),
   which remains the leading hypothesis. Note `NVreg_EnableGpuFirmware=0` is NOT an
   option here: the Blackwell cards run the open kernel modules, which mandate GSP.
+- **2026-08-19 (rank reversal made the default):** every qwen38 run launcher now defaults
+  to `GPU_ORDER=1,0` — logical device 0 / TP rank 0 lands on physical GPU1 (`03:00.0`),
+  keeping Qwen workloads off the historically failing GPU0 (`01:00.0`). This doubles as
+  the step-2 discriminator: a drop that *follows* the rank (physical GPU1) implicates
+  rank-0 software/driver behavior; a drop that *stays* on physical GPU0 implicates the
+  card/connector/slot path. `GPU_ORDER=0,1` restores the old order.
 - **Xid 48/63/64/94/95** or retired pages → VRAM → RMA
 - **Speed/width drops or AER errors** → slot/retimer/cable reseats, try the other slot
 - **No Xid, just OOM/413s/timeouts** → server-config problem (mem fraction, context
