@@ -214,7 +214,12 @@ Non-zero retired pages or pending remaps → RMA track.
   then physical card/slot swap. All three 2026-08-16 dropouts were physical GPU0 at both
   450 W and 400 W; 350 W was diagnostic mitigation only, not a fix. 2026-08-18:
   450 W restored as the operational cap after a clean sustained-load window —
-  revert to 350 W if Xid 79 recurs.
+  revert to 350 W if Xid 79 recurs. 2026-08-19: added `pcie_aspm=off` to
+  `boot.kernelParams` (machines/desktop/default.nix) as a config-side mitigation —
+  ASPM can drop a marginal PCIe link the GPU never cleanly resumes, presenting as a
+  bus dropout. Orthogonal to the physical track (reseat card + 12V-2×6 connector),
+  which remains the leading hypothesis. Note `NVreg_EnableGpuFirmware=0` is NOT an
+  option here: the Blackwell cards run the open kernel modules, which mandate GSP.
 - **Xid 48/63/64/94/95** or retired pages → VRAM → RMA
 - **Speed/width drops or AER errors** → slot/retimer/cable reseats, try the other slot
 - **No Xid, just OOM/413s/timeouts** → server-config problem (mem fraction, context

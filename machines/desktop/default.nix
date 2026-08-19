@@ -198,7 +198,19 @@ in
   # checkpoint that is read once per start, sequentially, off a 1M-recordsize
   # dataset — so an unbounded ARC evicts pages that are reused to cache data
   # nobody reads twice. 16 GiB is ample for /nix and metadata.
-  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=17179869184" ];
+  # pcie_aspm=off: disable PCIe Active State Power Management. The recurrent
+  # failure on this box is Xid 79 "GPU has fallen off the bus" (GPU0, at both
+  # 450 W and 400 W caps — see docs/runbooks/gpu-inference-crash-triage.md).
+  # ASPM can drop a marginal PCIe link into a low-power state the GPU does not
+  # cleanly resume from, which presents exactly as a bus dropout. Turning it
+  # off is a low-risk, well-known Xid 79 mitigation and is orthogonal to the
+  # nvidia driver's own powerManagement (already disabled in
+  # roles/nvidia-graphics). Note: NVreg_EnableGpuFirmware=0 (a common companion
+  # fix elsewhere) is NOT usable here — the Blackwell RTX 6000 Pro runs the
+  # open kernel modules, which require GSP firmware, so GSP cannot be disabled.
+  # Verify after reboot: `cat /proc/cmdline` shows pcie_aspm=off; then confirm
+  # `journalctl -k | grep -i xid` stays clean under sustained load.
+  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=17179869184" "pcie_aspm=off" ];
   boot.extraModprobeConfig = ''
     options nvidia_uvm uvm_disable_hmm=1
     options nvidia NVreg_RegistryDwords="ForceP2P=0x11;RMForceP2PType=1;RMPcieP2PType=2;GrdmaPciTopoCheckOverride=1;EnableResizableBar=1"
