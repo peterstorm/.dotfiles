@@ -56,6 +56,21 @@ else
     exit 1
   fi
 
+  # hpc-ops' setup.py hardcodes `cmake --build . -j16`, and its fused-MoE
+  # CUTLASS translation units (fuse_moe.cu) are multi-GB each. 16-way parallel
+  # nvcc OOM-kills a 16 GB CI runner mid-compile (exit 143), even with swap;
+  # MAX_JOBS/CMAKE_BUILD_PARALLEL_LEVEL are ignored because -j16 is explicit.
+  # hpc-ops is cloned INSIDE SGLang's Dockerfile, so patch the Dockerfile to
+  # sed hpc-ops' -j16 down right after its checkout. Override SGL_HPC_OPS_JOBS.
+  HPC_OPS_JOBS="${SGL_HPC_OPS_JOBS:-2}"
+  DOCKERFILE="$BUILD_ROOT/src/docker/Dockerfile"
+  if ! grep -q 'sed -i .s/-j16/' "$DOCKERFILE"; then
+    sed -i "s#python3 setup.py bdist_wheel -d /wheels;#sed -i 's/-j16/-j${HPC_OPS_JOBS}/' setup.py \&\& python3 setup.py bdist_wheel -d /wheels;#" "$DOCKERFILE"
+  fi
+  grep -q "sed -i 's/-j16/-j${HPC_OPS_JOBS}/' setup.py" "$DOCKERFILE" \
+    || { echo "error: failed to inject hpc-ops -j cap into $DOCKERFILE (upstream layout changed?)" >&2; exit 1; }
+  echo "Capped hpc-ops CUTLASS build to -j${HPC_OPS_JOBS} (was -j16; avoids CI OOM)."
+
   # Upstream's Dockerfile at c14312a6 force-reinstalls a pinned NCCL wheel
   # (ARG NCCL_VERSION default 2.28.3-1) that is BOTH unpublished on PyPI and
   # too old for the torch it installs: torch 2.13.0+cu130 depends on
