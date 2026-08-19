@@ -61,9 +61,25 @@ else
     exit 1
   fi
 
-  echo "Building $IMAGE (stage vllm-openai)..."
+  # vLLM's Dockerfile defaults `max_jobs=2`, which runs the CUDA/CUTLASS
+  # compile nearly serially (observed: one nvcc at a time) — hours on a
+  # many-core box instead of ~30 min. Parallelize by core count, capped by RAM
+  # (~3 GB peak per concurrent CUDA unit) and a ceiling of 16 (the heaviest
+  # CUTLASS units gate beyond that; more jobs just raise peak memory). Pair
+  # with nvcc_threads=2 so jobs x threads tracks the core count rather than
+  # the Dockerfile's default 8. Override VLLM_MAX_JOBS / VLLM_NVCC_THREADS.
+  _cores="$(nproc)"
+  _ram_gb="$(free -g | awk '/^Mem:/{print $2}')"
+  _by_ram=$(( _ram_gb / 3 )); [ "$_by_ram" -lt 1 ] && _by_ram=1
+  _jobs="$_cores"; [ "$_by_ram" -lt "$_jobs" ] && _jobs="$_by_ram"
+  [ "$_jobs" -gt 16 ] && _jobs=16
+  VLLM_MAX_JOBS="${VLLM_MAX_JOBS:-$_jobs}"
+  VLLM_NVCC_THREADS="${VLLM_NVCC_THREADS:-2}"
+  echo "Building $IMAGE (stage vllm-openai, max_jobs=$VLLM_MAX_JOBS nvcc_threads=$VLLM_NVCC_THREADS)..."
   docker build \
     --target vllm-openai \
+    --build-arg max_jobs="$VLLM_MAX_JOBS" \
+    --build-arg nvcc_threads="$VLLM_NVCC_THREADS" \
     -t "$IMAGE" \
     -f "$BUILD_ROOT/src/docker/Dockerfile" \
     "$BUILD_ROOT/src"
