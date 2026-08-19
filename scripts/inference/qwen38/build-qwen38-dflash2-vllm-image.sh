@@ -76,8 +76,13 @@ else
   VLLM_MAX_JOBS="${VLLM_MAX_JOBS:-$_jobs}"
   VLLM_NVCC_THREADS="${VLLM_NVCC_THREADS:-2}"
   echo "Building $IMAGE (stage vllm-openai, max_jobs=$VLLM_MAX_JOBS nvcc_threads=$VLLM_NVCC_THREADS)..."
+  # RUN_WHEEL_CHECK=false: vLLM's check-wheel-size.py gates the CUDA 13 wheel
+  # at a size the DFlash2/FA3 custom kernels legitimately exceed (the build
+  # died there once, 2026-08-19, after the 5h compile). Local image — size is
+  # not a concern.
   docker build \
     --target vllm-openai \
+    --build-arg RUN_WHEEL_CHECK=false \
     --build-arg max_jobs="$VLLM_MAX_JOBS" \
     --build-arg nvcc_threads="$VLLM_NVCC_THREADS" \
     -t "$IMAGE" \
