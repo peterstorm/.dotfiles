@@ -56,9 +56,17 @@ else
     exit 1
   fi
 
-  echo "Building $IMAGE (stage runtime)..."
+  # Upstream's Dockerfile at c14312a6 force-reinstalls a pinned NCCL wheel
+  # (ARG NCCL_VERSION default 2.28.3-1) that is NOT published on PyPI — only
+  # 2.28.3 (and later) exist, so the stock build dies with
+  # "No matching distribution found for nvidia-nccl-cu13==2.28.3-1". Pin to an
+  # available release (same patch, minus the bogus -1 packaging suffix).
+  # Override with SGL_NCCL_VERSION if upstream fixes the default or bumps it.
+  SGL_NCCL_VERSION="${SGL_NCCL_VERSION:-2.28.3}"
+  echo "Building $IMAGE (stage runtime, NCCL_VERSION=$SGL_NCCL_VERSION)..."
   docker build \
     --target runtime \
+    --build-arg NCCL_VERSION="$SGL_NCCL_VERSION" \
     -t "$IMAGE" \
     -f "$BUILD_ROOT/src/docker/Dockerfile" \
     "$BUILD_ROOT/src"
