@@ -40,6 +40,9 @@ jobs:
     env:
       LOCAL_IMAGE: peterstorm/sglang:qwen38-dflash2-c14312a
       GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/sglang:qwen38-dflash2-c14312a
+      # Mapped from a secret so the step `if` can test it (secrets context is
+      # not allowed directly in `if`). Empty when the secret is unset.
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,7 +78,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Optional Docker Hub login (avoids base-image pull rate limits)
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
