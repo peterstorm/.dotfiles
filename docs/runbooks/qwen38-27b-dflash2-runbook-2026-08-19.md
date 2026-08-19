@@ -29,8 +29,11 @@ FlashAttention 3, Qwen3.8-recommended sampling, xhigh reasoning):
 | DSpark | 4.36 → 3.01 | 2.69× / 2.23× |
 | **DFlash 2** | **5.46 → 4.10** | **3.43× / 2.84×** |
 
-The expected acceptance range on this box (8-way concurrency profile) is therefore roughly
-**4.1–5.5**; an acceptance length near 1.0 means the draft is miswired, not merely weak.
+Those are the card's *benchmark-condition* numbers (H200/FA3, benchmark prompts). On this
+box's **pinned SGLang image** the expected acceptance is lower — see the surgery section:
+the image predates DFlash 2, so today's measured range is **~2.0–3.4** (verified 2026-08-19,
+`benchmarks/vllm-tps/2026-08-19-dflash2.md`). An acceptance length near 1.0 *within that*
+degrades further ⇒ miswired draft, not merely weak.
 
 ## Checkpoint
 
@@ -50,7 +53,7 @@ It is a draft model only; it never runs standalone.
 
 | engine | status | detail |
 |---|---|---|
-| SGLang | **usable now, on the pinned digest** | `lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124` is a custom build (`0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) that already carries the DFlash stack: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `parse_dflash_draft_config()` reads `block_size`/`mask_token_id`/`target_layer_ids`/`layer_types`/`sliding_window` from the checkpoint. Upstream PR [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371) is still **open** — the support reaches stable SGLang only on merge. |
+| SGLang | **ready, but a degraded draft on the pinned image** | `lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124` is a custom build (`0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) that carries the DFlash **v1** stack: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `DFlashDraftModel` (`models/dflash.py`, 589 lines). It does **not** carry DFlash 2's `DFlashGroupedConv` / `CandidateSelector` / `DFlash2DraftModel` — those land in upstream PR [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371), still **open**. Consequence: the surgery loads the DFlash 2 checkpoint into the v1 class (23 conv/selector tensors dropped, silently) — lossless and functional, but ~2.0–3.4 acceptance instead of the card's 4.1–5.5. See *Surgery reality* below and `benchmarks/vllm-tps/2026-08-19-dflash2.md`. |
 | vLLM | **PR-branch image (experimental, in build 2026-08-19)** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) is **open** (checked via GitHub API 2026-08-19) — no released or nightly vLLM image carries DFlash 2, and this box had no vLLM image at all. Rather than wait, we build vLLM's own Dockerfile (`--target vllm-openai`, the same image variant as `nightly-aa99034`) from the pinned PR head: see *vLLM via the PR branch* below. |
 
 Re-check before any re-pin:
@@ -69,7 +72,10 @@ What the PR code fixes about the serving flags (verified at the pinned SHA):
 - `vllm/config/vllm.py`: `_is_dflash2_draft()` selects v2 by the draft's `architectures` containing `DFlash2DraftModel` and "force[s] V2 as for dspark" when it does — the checkpoint's own config is the trigger.
 - Speculative config, per the card: `{"method":"dflash","model":"<draft>","num_speculative_tokens":7}` (seven draft tokens per verification step, block size 8).
 
-Status: build started 2026-08-19 on the desktop (log: `~/.local/state/qwen38/vllm-dflash2-build.log`); the manifest digest, the vLLM run script, and the `dflash2-vllm` switcher mode land here as soon as the build verifies. This remains an **experimental profile**: unmerged, unreviewed engine code with no upstream release to bisect against, and the card's benchmark numbers are SGLang-only.
+Status: first build attempt 2026-08-19 died (`buildx: Canceled: context canceled` — the
+buildx client died with the launching ssh session); **relaunched detached (setsid+nohup)
+2026-08-19**, buildkit cache warm. The manifest digest, the vLLM run script, and the
+`dflash2-vllm` switcher mode land here as soon as the build verifies. This remains an **experimental profile**: unmerged, unreviewed engine code with no upstream release to bisect against, and the card's benchmark numbers are SGLang-only.
 
 ## Draft-config surgery (why the launcher copies the draft)
 
@@ -82,6 +88,25 @@ DSpark classes. The launcher therefore prepares an **isolated copy** at
 downloaded canonical tree is never modified — same pattern as the DSpark-on-vLLM launcher. If
 upstream ever adds native `DFlash2DraftModel` registration, the surgery stays (it is
 image-agnostic and idempotent).
+
+**Surgery reality (verified 2026-08-19 — read before trusting this profile's speed):**
+the pinned image's `DFlashDraftModel` is the **DFlash v1** class. PR #35371's `dflash.py`
+(1000 lines) adds `DFlashGroupedConv`, `CandidateSelector`, and `DFlash2DraftModel`; the
+image's (589 lines) has none of them. The checkpoint carries **23 DFlash 2-specific
+tensors** the v1 class has no module for — `candidate_selector.{hidden_projection.weight,
+predecessor_codebook, successor_codebook}` plus `layers.{0..4}.{attention,mlp}_conv.
+{base_kernel, kernel_projection.weight}` — and the loader **silently drops all 23** (no
+warning in the boot log). Result: a *crippled* draft (backbone + target-hidden projection
+only, no dynamic convs, no candidate selector, v1 sampling). Measured 2026-08-19:
+`spec_accept_length` 2.0–3.4 across all windows (DSpark on the same box: 3.45–3.575),
+77.1 tok/s prose-decode and 19.2–19.9 s on the xhigh 1500-tok probe cell vs DSpark's
+84.2 / 16.8 s — the card claims the opposite. It is **lossless and correct**, just not the
+real DFlash 2. Do not use this profile as a DFlash 2 performance baseline; for real DFlash 2
+wait on the vLLM PR image (native, no surgery) or a SGLang image carrying PR #35371 (the PR
+is python-only: `models/dflash.py`, `speculative/dflash_worker_v2.py`,
+`speculative/dflash_utils.py`, `model_runner_components/spec_aux_hidden_state.py` — a thin
+overlay on the pinned image is the candidate build, pending a compatibility check against
+the PR's newer base).
 
 ## Prerequisites
 
@@ -159,14 +184,13 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
 - `status` must report `qwen38-27b-bf16-dflash2-sglang`, health OK, client authentication OK.
 - `sglang:spec_*` counters must move. `spec_accept_length` is a **windowed** gauge (8-token
   blocks = 1 bonus + 7 drafts) and reads low for the first moments after boot — not a fault.
-  The card's **4.1–5.5** is a *benchmark-condition* range (H200/FA3, benchmark prompts,
-  temp 1.0 / top-p 0.95 / top-k 20, `xhigh`, 4096 max tokens); on live Pi traffic (long
-  context, `xhigh` reasoning at temp 1.0) expect lower: measured 2026-08-19 — **~2.2–2.6**
-  on live traffic, **~3.4** after a greedy (temp 0) math probe; DSpark on the same box
-  measured 3.575 live. Persistent ~1.0 under sustained traffic ⇒ miswired draft — check the
-  log for `Initialized DFLASH draft runner ... block_size=8` and re-verify the surgery copy:
-  `jq -c .architectures` must be `["DFlashDraftModel"]`, `jq -c .dflash_config` must keep
-  `block_size: 8` + `mask_token_id: 248070`.
+  On **this image** expect **~2.0–3.4** (verified 2026-08-19: live Pi-traffic windows
+  2.2–3.4, probe-traffic window 2.05; DSpark on the same box 3.45–3.575) — the card's
+  **4.1–5.5** needs PR #35371's code, which the pinned image lacks (see *Surgery reality*).
+  If it sits near **1.0** under sustained traffic the draft is additionally miswired — check
+  the log for `Initialized DFLASH draft runner ... block_size=8` and re-verify the surgery
+  copy: `jq -c .architectures` must be `["DFlashDraftModel"]`, `jq -c .dflash_config` must
+  keep `block_size: 8` + `mask_token_id: 248070`.
 - Both GPUs within the 450 W cap; sustained load clean before benchmarking.
 - A/B against the DSpark v2 profile (same target, same flags, one drafter apart) before
   promoting DFlash 2 as the default: switch `sglang` ⇄ `dflash2` and compare acceptance +
