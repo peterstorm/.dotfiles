@@ -5,11 +5,19 @@ TL;DR — serve the DFlash 2 draft alongside the existing Qwen3.8-27B target:
 ```bash
 # 1. download the draft (desktop user's Desktop folder)
 bash scripts/inference/qwen38/download-qwen38-27b-dflash2.sh
-# 2. cut over (stops the current :8000 server, waits for health + auth)
+# 2a. cut over to the surgery profile (pinned fork image, degraded v1 draft)
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2
+# 2b. OR cut over to REAL DFlash 2 (full BF16, TP2, merge-commit image) once built
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native
 # 3. rollback if anything is off
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang
 ```
+
+The **`dflash2-native`** mode is the "make DFlash 2 actually work" profile:
+full BF16 (no FP8 anywhere — body, lm_head, KV cache, and draft are all
+BF16), TP2, running the genuine DFlash 2 engine (`DFlash2DraftModel` +
+`CandidateSelector` + `DFlashGroupedConv`) from the PR #35371 merge-commit
+image. See *Native DFlash 2 profile (full BF16, TP2)* below.
 
 ## What DFlash 2 is
 
@@ -107,6 +115,93 @@ bash scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh
 `~/.local/state/qwen38/sglang-dflash2-build.log`. On completion: record the digest in this section,
 flip the launcher defaults (`DFLASH2_IMAGE` / `DFLASH2_IMAGE_DIGEST` or the baked-in `IMAGE`/
 `DIGEST` lines), re-run the validation gate, then A/B against the DSpark v2 profile.
+
+## Native DFlash 2 profile (full BF16, TP2)
+
+`run-qwen38-27b-bf16-dflash2-sglang-native.sh` is the sibling of the surgery
+launcher for the case where you have the real engine built. It is **full
+BF16** — target body, `lm_head`, KV cache, and draft are all BF16, with **no
+FP8 anywhere** — and **TP2**, matching the validated quality profile flag for
+flag (262K context, eight running requests, FP32 GDN state, the 08-17 mamba
+cookbook pin `MAX_MAMBA_CACHE_SIZE = 8 × 5`, flashinfer, checkpoint-native
+template, secure entrypoint, power-cap gate). What differs is only the engine
+wiring:
+
+| | surgery launcher (`...-dflash2-sglang.sh`) | native launcher (`...-dflash2-sglang-native.sh`) |
+|---|---|---|
+| default image | pinned fork `lmsysorg/sglang:qwen38-27b` (DFlash **v1** class) | merge-commit `peterstorm/sglang:qwen38-dflash2-c14312a` (real DFlash 2) |
+| image reference | mandatory `IMAGE@DIGEST` | `IMAGE` **by tag**; `@DIGEST` only when `DFLASH2_NATIVE_IMAGE_DIGEST` is set |
+| draft weights | v1 class **drops 23 selector/conv tensors** (crippled, ~2.0–2.7 acceptance) | native `DFlash2DraftModel` — full selector + convs |
+| missing-support behaviour | falls through to isolated-copy surgery | **fails closed** (no surgery fallback) |
+| draft tree served | isolated `-sglang` surgery copy | **canonical** downloaded tree, mounted as-is |
+| container / cache / env | `qwen38-27b-bf16-dflash2-sglang` | `qwen38-27b-bf16-dflash2-sglang-native` (isolated: own cache dir + env file) |
+
+Why a tag, not a digest: the merge-commit image is built locally by
+`build-qwen38-dflash2-sglang-image.sh` and is **never pushed**, so it has no
+registry digest — the surgery launcher's mandatory `IMAGE@DIGEST` reference
+cannot address it at all. The native launcher references the image by tag and
+pins by digest only if you later push the image and export
+`DFLASH2_NATIVE_IMAGE_DIGEST=sha256:…`.
+
+Why fail closed: serving the DFlash 2 checkpoint through the v1 class is
+lossless but silently drops the selector/convs (see *Surgery reality*),
+which negates the entire point of this profile. Rather than degrade
+quietly, the launcher probes the image at boot and refuses to start unless
+`DFlash2DraftModel` is registered natively.
+
+Prerequisite: build the engine once —
+`bash scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh`
+(`peterstorm/sglang:qwen38-dflash2-c14312a`), **or** build it in CI and pull
+it (see *Building the engine images in CI* below). Contract:
+`tests/qwen38-dflash2-native-contract.sh`.
+
+## Building the engine images in CI (GitHub Actions)
+
+The from-source builds are heavy (1–2 h, tens of GB) and need no GPU — the
+compile is CPU-bound and both build scripts' verification probes are
+import-only. So they run in GitHub Actions and publish to GHCR, letting the
+desktop `docker pull` instead of compiling locally.
+
+| workflow | builds | publishes |
+|---|---|---|
+| `.github/workflows/build-dflash2-sglang-image.yml` | `build-qwen38-dflash2-sglang-image.sh` (SGLang merge commit `c14312a6`) | `ghcr.io/<owner>/sglang:qwen38-dflash2-c14312a` |
+| `.github/workflows/build-dflash2-vllm-image.yml` | `build-qwen38-dflash2-vllm-image.sh` (vLLM PR #52816 head) | `ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-19c9351` |
+
+Both are **manual** (`workflow_dispatch`, `push` input defaults true) — SHA-pinned
+heavy builds, not per-push. Each job reclaims disk (deletes preinstalled
+toolchains, moves Docker's data-root to the larger `/mnt` volume), reuses the
+checked-in build script verbatim (single source of truth for the pinned SHA,
+Dockerfile stage, and verification), then tags + pushes to GHCR with the
+run's `GITHUB_TOKEN` (`packages: write`). Optional Docker Hub login (secrets
+`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`) avoids base-image pull rate limits.
+
+Run them from the Actions tab (or `gh workflow run build-dflash2-sglang-image.yml`).
+Standard runners are 4 vCPU; the vLLM from-source build is the one most likely
+to approach the job time cap — bump `runs-on` to a larger runner if it times
+out. **Blackwell kernel coverage comes from the Dockerfiles, not the build
+host**, so a GPU-less CI build is fine; the live acceptance gate below still
+runs on the desktop after pull.
+
+**Pull onto the desktop** (re-tags GHCR → the canonical `peterstorm/…` names
+the launchers default to, so nothing else changes):
+
+```bash
+# GHCR needs auth unless the package is public:
+#   export GHCR_TOKEN=<PAT with read:packages>   # GHCR_USER defaults to the owner
+bash scripts/inference/qwen38/pull-qwen38-dflash2-images.sh          # both
+bash scripts/inference/qwen38/pull-qwen38-dflash2-images.sh sglang   # SGLang only
+```
+
+Or skip the re-tag and point a launcher straight at GHCR via
+`DFLASH2_NATIVE_IMAGE=ghcr.io/<owner>/sglang:qwen38-dflash2-c14312a` (SGLang) or
+`DFLASH2_VLLM_IMAGE=ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-19c9351` (vLLM).
+
+Serve once the image is local (both are hard-stop cutovers on :8000):
+
+```bash
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native  # SGLang, real DFlash 2, BF16 TP2
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-vllm    # vLLM, DFlash 2 (PR #52816), BF16 TP2
+```
 
 ## Draft-config surgery (why the launcher copies the draft)
 

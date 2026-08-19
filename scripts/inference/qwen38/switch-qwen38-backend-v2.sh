@@ -8,7 +8,9 @@
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status      # who owns :8000, is it healthy
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh vllm        # -> vLLM v2
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang      # -> SGLang v2 (DSpark draft)
-#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2     # -> SGLang v2 (DFlash 2 draft)
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2     # -> SGLang v2 (DFlash 2 draft, surgery/v1 fork image)
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native # -> SGLang (REAL DFlash 2, PR #35371 merge image, BF16 TP2)
+#   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-vllm   # -> vLLM (DFlash 2, PR #52816 image, BF16 TP2)
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-vllm     # -> vLLM 08-16 (rollback)
 #   bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh v1-sglang   # -> SGLang 08-16 (rollback)
 #
@@ -36,15 +38,19 @@ SGLANG_V1_NAME="qwen38-27b-bf16-dspark-sglang"
 SGLANG_V1_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dspark-sglang.sh"
 DFLASH2_SGLANG_NAME="qwen38-27b-bf16-dflash2-sglang"
 DFLASH2_SGLANG_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dflash2-sglang.sh"
-ALL_NAMES=("$VLLM_V2_NAME" "$SGLANG_V2_NAME" "$DFLASH2_SGLANG_NAME" "$VLLM_V1_NAME" "$SGLANG_V1_NAME")
+DFLASH2_NATIVE_NAME="qwen38-27b-bf16-dflash2-sglang-native"
+DFLASH2_NATIVE_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dflash2-sglang-native.sh"
+DFLASH2_VLLM_NAME="qwen38-27b-bf16-dflash2-vllm"
+DFLASH2_VLLM_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dflash2-vllm.sh"
+ALL_NAMES=("$VLLM_V2_NAME" "$SGLANG_V2_NAME" "$DFLASH2_SGLANG_NAME" "$DFLASH2_NATIVE_NAME" "$DFLASH2_VLLM_NAME" "$VLLM_V1_NAME" "$SGLANG_V1_NAME")
 
 HEALTH_URL="http://127.0.0.1:8000/health"
 MODELS_URL="http://127.0.0.1:8000/v1/models"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-1200}" # cold-start budget in seconds
 
 case "${1:-}" in
-  status|vllm|sglang|dflash2|v1-vllm|v1-sglang) ;;
-  *) echo "usage: $0 {status|vllm|sglang|dflash2|v1-vllm|v1-sglang}" >&2; exit 2 ;;
+  status|vllm|sglang|dflash2|v1-vllm|v1-sglang|dflash2-native|dflash2-vllm) ;;
+  *) echo "usage: $0 {status|vllm|sglang|dflash2|v1-vllm|v1-sglang|dflash2-native|dflash2-vllm}" >&2; exit 2 ;;
 esac
 MODE="${1:-status}"
 
@@ -127,6 +133,8 @@ case "$MODE" in
   vllm)     START_NAME="$VLLM_V2_NAME";   START_SCRIPT="$VLLM_V2_SCRIPT" ;;
   sglang)   START_NAME="$SGLANG_V2_NAME"; START_SCRIPT="$SGLANG_V2_SCRIPT" ;;
   dflash2)  START_NAME="$DFLASH2_SGLANG_NAME"; START_SCRIPT="$DFLASH2_SGLANG_SCRIPT" ;;
+  dflash2-native) START_NAME="$DFLASH2_NATIVE_NAME"; START_SCRIPT="$DFLASH2_NATIVE_SCRIPT" ;;
+  dflash2-vllm) START_NAME="$DFLASH2_VLLM_NAME"; START_SCRIPT="$DFLASH2_VLLM_SCRIPT" ;;
   v1-vllm)  START_NAME="$VLLM_V1_NAME";   START_SCRIPT="$VLLM_V1_SCRIPT" ;;
   v1-sglang) START_NAME="$SGLANG_V1_NAME"; START_SCRIPT="$SGLANG_V1_SCRIPT" ;;
 esac
@@ -138,6 +146,8 @@ case "$MODE" in
   vllm) FALLBACK="v1-vllm" ;;
   sglang) FALLBACK="v1-sglang" ;;
   dflash2) FALLBACK="sglang" ;;
+  dflash2-native) FALLBACK="dflash2" ;;
+  dflash2-vllm) FALLBACK="vllm" ;;
   v1-vllm) FALLBACK="vllm" ;;
   v1-sglang) FALLBACK="sglang" ;;
 esac

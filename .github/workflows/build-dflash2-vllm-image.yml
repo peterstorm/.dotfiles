@@ -1,0 +1,109 @@
+name: build-dflash2-vllm-image
+
+# Build the vLLM DFlash 2 image (from the OPEN PR vllm-project/vllm#52816) in
+# GitHub Actions and publish it to GHCR. No GPU needed: the build compiles the
+# CUDA/Rust extensions on CPU and the verification probe is import + registry
+# grep only.
+#
+# Source of truth for WHAT is built is the checked-in build script
+# scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh (it pins the PR
+# head 19c9351904df4c63042671bc67a866ca48dc7d6f, uses vLLM's own Dockerfile
+# stage `vllm-openai`, and verifies DFlash2DraftModel + DFlash2Speculator).
+# This workflow only adds disk reclaim + registry publish.
+#
+# WARNING: this builds from an UNMERGED PR. It is heavier than the SGLang build
+# (full from-source torch/CUDA/Rust) and may approach the job time cap on a
+# standard 4-vCPU runner — bump `runs-on` to a larger runner if it times out.
+# Manual trigger only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "Push the built image to GHCR"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-dflash2-vllm
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      LOCAL_IMAGE: peterstorm/vllm:qwen38-dflash2-pr52816-19c9351
+      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/vllm:qwen38-dflash2-pr52816-19c9351
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reclaim disk (CUDA images are tens of GB)
+        run: |
+          set -x
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /usr/share/swift || true
+          sudo systemctl stop docker docker.socket || true
+          sudo mkdir -p /mnt/docker
+          echo '{"data-root":"/mnt/docker"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl start docker
+          sudo docker image prune -af || true
+          echo "--- disk after reclaim ---"
+          df -h / /mnt
+
+      - name: Log in to GHCR
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Optional Docker Hub login (avoids base-image pull rate limits)
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build + verify (reuses the checked-in build script)
+        run: |
+          chmod +x scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh
+          bash scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh
+          df -h / /mnt
+
+      - name: Tag + push to GHCR
+        if: ${{ inputs.push }}
+        run: |
+          docker tag "$LOCAL_IMAGE" "$GHCR_IMAGE"
+          docker push "$GHCR_IMAGE"
+          echo "Published: $GHCR_IMAGE"
+          docker inspect --format 'RepoDigests: {{json .RepoDigests}}' "$GHCR_IMAGE"
+
+      - name: Summary
+        if: ${{ inputs.push }}
+        run: |
+          {
+            echo "## vLLM DFlash 2 image published"
+            echo ""
+            echo '```'
+            echo "$GHCR_IMAGE"
+            docker inspect --format 'digest: {{index .RepoDigests 0}}' "$GHCR_IMAGE" 2>/dev/null || true
+            echo '```'
+            echo ""
+            echo "Pull on the desktop:"
+            echo '```bash'
+            echo "bash scripts/inference/qwen38/pull-qwen38-dflash2-images.sh vllm"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
