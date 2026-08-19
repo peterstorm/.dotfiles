@@ -184,10 +184,13 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
 - `status` must report `qwen38-27b-bf16-dflash2-sglang`, health OK, client authentication OK.
 - `sglang:spec_*` counters must move. `spec_accept_length` is a **windowed** gauge (8-token
   blocks = 1 bonus + 7 drafts) and reads low for the first moments after boot — not a fault.
-  On **this image** expect **~2.0–3.4** (verified 2026-08-19: live Pi-traffic windows
-  2.2–3.4, probe-traffic window 2.05; DSpark on the same box 3.45–3.575) — the card's
-  **4.1–5.5** needs PR #35371's code, which the pinned image lacks (see *Surgery reality*).
-  If it sits near **1.0** under sustained traffic the draft is additionally miswired — check
+  On **this image** expect **~2.0–4.3** live / **~2.0–2.4** on the controlled
+  probe cells (verified 2026-08-19, two probe runs; DSpark on the same box:
+  3.45 cells / 3.575 live — see
+  `benchmarks/vllm-tps/2026-08-19-dflash2.md`). The card's **4.1–5.5** needs
+  PR #35371's code, which the pinned image lacks (see *Surgery reality*).
+  If it sits near **1.0** under sustained traffic the draft is additionally
+  miswired — check
   the log for `Initialized DFLASH draft runner ... block_size=8` and re-verify the surgery
   copy: `jq -c .architectures` must be `["DFlashDraftModel"]`, `jq -c .dflash_config` must
   keep `block_size: 8` + `mask_token_id: 248070`.
