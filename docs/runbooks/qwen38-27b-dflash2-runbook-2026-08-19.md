@@ -7,8 +7,10 @@ TL;DR — serve the DFlash 2 draft alongside the existing Qwen3.8-27B target:
 bash scripts/inference/qwen38/download-qwen38-27b-dflash2.sh
 # 2a. cut over to the surgery profile (pinned fork image, degraded v1 draft)
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2
-# 2b. OR cut over to REAL DFlash 2 (full BF16, TP2, merge-commit image) once built
+# 2b. OR cut over to REAL DFlash 2 on SGLang (full BF16, TP2) once its image is built
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native
+# 2c. OR cut over to the verified local vLLM PR image (full BF16, TP2)
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-vllm
 # 3. rollback if anything is off
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh sglang
 ```
@@ -62,7 +64,7 @@ It is a draft model only; it never runs standalone.
 | engine | status | detail |
 |---|---|---|
 | SGLang | **degraded on the pinned image; real support merged upstream 2026-08-19** | The pinned custom build (`lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124`, `0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) carries the DFlash **v1** stack only: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `DFlashDraftModel` (`models/dflash.py`, 589 lines). It does **not** carry DFlash 2's `DFlashGroupedConv` / `CandidateSelector` / `DFlash2DraftModel`. Consequence: the surgery loads the DFlash 2 checkpoint into the v1 class (23 conv/selector tensors dropped, silently) — lossless and functional, but ~2.0–2.7 acceptance instead of the card's 4.1–5.5. DFlash 2 proper is now **merged upstream**: [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371) → main at `c14312a66420b75ca9a11bf1817c4db1fa26b097` (merged 2026-08-19T00:07:28Z). Build it with `scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh`; the launcher auto-detects native support and skips the surgery. See *Surgery reality*, *SGLang at the merged commit*, and `benchmarks/vllm-tps/2026-08-19-dflash2.md`. |
-| vLLM | **PR-branch image (experimental, in build 2026-08-19)** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) is **open** (checked via GitHub API 2026-08-19) — no released or nightly vLLM image carries DFlash 2, and this box had no vLLM image at all. Rather than wait, we build vLLM's own Dockerfile (`--target vllm-openai`, the same image variant as `nightly-aa99034`) from the pinned PR head: see *vLLM via the PR branch* below. |
+| vLLM | **PR-branch image built and live-validated (experimental)** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) remains **open**, unmerged, and `mergeable_state: unstable` (checked via GitHub API 2026-08-20). No released or nightly vLLM image carries DFlash 2. The local image was built from the immutable PR head with vLLM's own `vllm-openai` Dockerfile, passed target/draft registry plus speculator probes, then completed the live TP2 GPU gate: healthy/authenticated, native target/draft routing, moving speculative counters, repeatable TPS, and no OOM/NCCL/Xid failure. See `benchmarks/vllm-tps/2026-08-20-dflash2-vllm.md`. |
 
 Re-check before any re-pin:
 
@@ -71,19 +73,35 @@ curl -s https://api.github.com/repos/vllm-project/vllm/pulls/52816 | grep -E '"(
 curl -s https://api.github.com/repos/sgl-project/sglang/pulls/35371 | grep -E '"(merged_at|merge_commit_sha)"'
 ```
 
-**vLLM via the PR branch (experimental).** `scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh` builds the pinned PR head — not the moving `refs/pull/52816/head`: head branch `subsir/upstream-dflash2` at commit `19c9351904df4c63042671bc67a866ca48dc7d6f` (base `main @ 9842d701`), commit check-runs **SUCCESS** at pin time, +755 lines across 11 files. The build reuses vLLM's own `docker/Dockerfile`, stage `vllm-openai` (`ENTRYPOINT ["vllm","serve"]`), with its own defaults: CUDA 13.0.3, Python 3.12, Ubuntu 24.04, NCCL 2.30.7, `torch==2.13.0` (the PR's pyproject pin), builder `pytorch/manylinux2_28-builder:cuda13.0`. Result: `peterstorm/vllm:qwen38-dflash2-pr52816-19c9351` — one-off pull + 1-2 h source build (Rust + C++/CUDA); idempotent, prints the manifest digest on completion. The post-build probe asserts the `DFlash2DraftModel` registry entry and imports `DFlash2Speculator`.
+**vLLM via the PR branch (experimental).** `scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh` builds the pinned PR head — not the moving `refs/pull/52816/head`: head branch `subsir/upstream-dflash2` at commit `66e5414c6d75a8529473d977f7458c140bbab8a0` (base `main @ 9842d701`), +885/-44 lines across 13 files. At pin time, check-runs were **not fully green** (`pre-run-check` failure and DCO `action_required`), so this remains explicitly experimental. The build reuses vLLM's own `docker/Dockerfile`, stage `vllm-openai` (`ENTRYPOINT ["vllm","serve"]`), with its own defaults: CUDA 13.0.3, Python 3.12, Ubuntu 24.04, NCCL 2.30.7, `torch==2.13.0` (the PR's pyproject pin), builder `pytorch/manylinux2_28-builder:cuda13.0`. Result: `peterstorm/vllm:qwen38-dflash2-pr52816-66e5414` — one-off pull + 1-2 h source build (Rust + C++/CUDA). On this 32-thread/91-GiB host the script's CPU/RAM budget selects `max_jobs=16` and `nvcc_threads=2`; vLLM's setup then runs up to eight concurrent CUDA units. Both are overridable. It prints an immutable local image ID and, once pushed, a repository digest. The post-build probe resolves the installed `dist-packages` path through `vllm.__file__`, asserts both the Qwen3.8 target and `DFlash2DraftModel` registry entries, and imports `DFlash2Speculator`.
 
 What the PR code fixes about the serving flags (verified at the pinned SHA):
 
 - `vllm/model_executor/models/registry.py`: `"DFlash2DraftModel": ("qwen3_dflash2", "DFlash2Qwen3ForCausalLM")` — **native registration, so no draft-config surgery on the vLLM side**; the canonical Desktop tree is mounted as-is.
 - `vllm/config/speculative.py`: `DFlashModelTypes = Literal["dflash"]` — the method string stays `"dflash"` for both generations.
 - `vllm/config/vllm.py`: `_is_dflash2_draft()` selects v2 by the draft's `architectures` containing `DFlash2DraftModel` and "force[s] V2 as for dspark" when it does — the checkpoint's own config is the trigger.
+- Follow-ups through `66e5414c`: greedy/probabilistic drafting now honors `draft_sample_method`; redundant token/logit buffers are removed; FP32 proposal logits and shared Gumbel-max preserve the proposal contract; unquantized linear LM heads are accepted; ROCm reduction typing is fixed; and the candidate selector has an isolated compile-cache namespace.
 - Speculative config, per the card: `{"method":"dflash","model":"<draft>","num_speculative_tokens":7}` (seven draft tokens per verification step, block size 8).
 
-Status: first build attempt 2026-08-19 died (`buildx: Canceled: context canceled` — the
-buildx client died with the launching ssh session); **relaunched detached (setsid+nohup)
-2026-08-19**, buildkit cache warm. The manifest digest, the vLLM run script, and the
-`dflash2-vllm` switcher mode land here as soon as the build verifies. This remains an **experimental profile**: unmerged, unreviewed engine code with no upstream release to bisect against, and the card's benchmark numbers are SGLang-only.
+**Built artifact (2026-08-20):** the older `19c9351` attempt was retired when the PR gained
+eight correctness and memory follow-ups. The `66e5414` build completed after bypassing only
+vLLM's generic CUDA-13 wheel-publication size gate: the local wheel is 642.13 MB because it
+contains FA2/FA3 and Blackwell kernels, over the 500-MB publication limit. The final image is
+20.4 GB, reports `vllm 0.26.1rc1.dev920+g66e5414c6`, and passed the no-GPU capability probes.
+
+- tag: `peterstorm/vllm:qwen38-dflash2-pr52816-66e5414`
+- immutable local image ID: `sha256:f07390e05b3bfccd4aa7494fa322a0077f72fbc8842f8b17dca96e57420218a6`
+- repository digest: none (local-only images do not have one; use the image ID as
+  `DFLASH2_VLLM_IMAGE` for a local immutable launch, or record the GHCR digest after push)
+
+The source commit is immutable, but upstream Docker base tags and package indexes are not all
+digest-pinned; the built image ID is the identity of the artifact actually verified here. The
+live gate completed on 2026-08-20 at the active 350-W cap: 120.3–120.4 tok/s sequential prose,
+144.2–144.4 blended xhigh decode TPS, 731.3 aggregate tok/s at concurrency 8, and effective
+acceptance length ~3.1. Full evidence: `benchmarks/vllm-tps/2026-08-20-dflash2-vllm.md`.
+This remains an **experimental profile** because the engine code is unmerged with no upstream
+release to bisect against, and the card numbers came from SGLang/H200 rather than this PCIe-only
+dual-Blackwell workstation.
 
 ## SGLang at the merged commit (real DFlash 2)
 
@@ -111,10 +129,10 @@ bash scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh
   84.2 tok/s prose cell. If it doesn't, the diagnosis is wrong — re-investigate before believing
   either engine.
 
-**Status 2026-08-19:** build queued behind the vLLM PR build (CPU contention); log at
-`~/.local/state/qwen38/sglang-dflash2-build.log`. On completion: record the digest in this section,
-flip the launcher defaults (`DFLASH2_IMAGE` / `DFLASH2_IMAGE_DIGEST` or the baked-in `IMAGE`/
-`DIGEST` lines), re-run the validation gate, then A/B against the DSpark v2 profile.
+**Status 2026-08-20:** not built and no build process is currently running. The last watcher
+line in `~/.local/state/qwen38/sglang-dflash2-build.log` was waiting for the vLLM build before
+the desktop rebooted. Start `build-qwen38-dflash2-sglang-image.sh` explicitly when this sibling
+is wanted; then record its image ID/digest, run the validation gate, and A/B against DSpark v2.
 
 ## Native DFlash 2 profile (full BF16, TP2)
 
@@ -165,7 +183,7 @@ desktop `docker pull` instead of compiling locally.
 | workflow | builds | publishes |
 |---|---|---|
 | `.github/workflows/build-dflash2-sglang-image.yml` | `build-qwen38-dflash2-sglang-image.sh` (SGLang merge commit `c14312a6`) | `ghcr.io/<owner>/sglang:qwen38-dflash2-c14312a` |
-| `.github/workflows/build-dflash2-vllm-image.yml` | `build-qwen38-dflash2-vllm-image.sh` (vLLM PR #52816 head) | `ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-19c9351` |
+| `.github/workflows/build-dflash2-vllm-image.yml` | `build-qwen38-dflash2-vllm-image.sh` (vLLM PR #52816 head) | `ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-66e5414` |
 
 Both are **manual** (`workflow_dispatch`, `push` input defaults true) — SHA-pinned
 heavy builds, not per-push. Each job reclaims disk (deletes preinstalled
@@ -194,7 +212,7 @@ bash scripts/inference/qwen38/pull-qwen38-dflash2-images.sh sglang   # SGLang on
 
 Or skip the re-tag and point a launcher straight at GHCR via
 `DFLASH2_NATIVE_IMAGE=ghcr.io/<owner>/sglang:qwen38-dflash2-c14312a` (SGLang) or
-`DFLASH2_VLLM_IMAGE=ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-19c9351` (vLLM).
+`DFLASH2_VLLM_IMAGE=ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-66e5414` (vLLM).
 
 Serve once the image is local (both are hard-stop cutovers on :8000):
 
@@ -238,7 +256,11 @@ overlay — see *SGLang at the merged commit*.
 ## Prerequisites
 
 - The Qwen3.8-27B target at `/models/Qwen3.8-27B` (`download-qwen38-27b.sh`).
-- Docker + two GPUs with power caps applied (the launcher fails closed above 450 W).
+- Docker + exactly two queryable GPUs with power caps applied (the launcher fails closed above
+  450 W). The checked-in NixOS configuration declares 450 W, but the desktop's current boot
+  generation applies **350 W**; that is safe for serving but does not reproduce the 450-W
+  benchmark rows. Check `nvidia-smi --query-gpu=index,power.limit --format=csv` before comparing
+  throughput.
 - `jq` (core-apps package set) for the config surgery.
 - The shared key helpers (`scripts/inference/shared/inference-api-key.sh`) — same as every other
   profile; the API key never appears in Docker args or `/proc` cmdline.
@@ -302,6 +324,8 @@ Notes:
 
 ## 3. Validation gate (first boot, and after any re-pin)
 
+For the pinned/degraded SGLang profile:
+
 ```bash
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status
 curl -fsS http://127.0.0.1:8000/metrics | grep -E '^sglang:spec_' | head
@@ -327,6 +351,27 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
 - A/B against the DSpark v2 profile (same target, same flags, one drafter apart) before
   promoting DFlash 2 as the default: switch `sglang` ⇄ `dflash2` and compare acceptance +
   throughput in the Grafana DSpark panels.
+
+For the vLLM PR image, use an immutable local reference for the first cutover and verify the
+engine-specific architecture and metrics (the generic switcher output now prints the same gate):
+
+```bash
+DFLASH2_VLLM_IMAGE=sha256:f07390e05b3bfccd4aa7494fa322a0077f72fbc8842f8b17dca96e57420218a6 \
+  bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-vllm
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status
+docker logs qwen38-27b-bf16-dflash2-vllm 2>&1 \
+  | grep 'Resolved architecture' | head -2
+curl -fsS http://127.0.0.1:8000/metrics \
+  | grep -E '^vllm:spec_decode_num_(drafts|accepted)' | head
+```
+
+The resolved target must be `Qwen3_5ForConditionalGeneration`; the draft must be
+`DFlash2Qwen3ForCausalLM` from `qwen3_dflash2`, not a DFlash v1 fallback. Health and client
+authentication must be OK, draft/accepted counters must move under traffic, both GPUs must stay
+free of Xid errors, and output must remain correct. Because these GPUs communicate through PCIe
+PHB rather than NVLink, do not transplant the H200 throughput claim. The first local
+concurrency-1 and concurrency-8 baseline passed at 350 W; preserve and compare against
+`benchmarks/vllm-tps/2026-08-20-dflash2-vllm.md` after every re-pin or tuning change.
 
 ## Rollback
 

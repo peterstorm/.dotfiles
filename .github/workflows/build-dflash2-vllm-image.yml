@@ -2,12 +2,12 @@ name: build-dflash2-vllm-image
 
 # Build the vLLM DFlash 2 image (from the OPEN PR vllm-project/vllm#52816) in
 # GitHub Actions and publish it to GHCR. No GPU needed: the build compiles the
-# CUDA/Rust extensions on CPU and the verification probe is import + registry
-# grep only.
+# CUDA/Rust extensions on CPU and the verification probe imports the target,
+# draft registry, and DFlash2 speculator without loading either model.
 #
 # Source of truth for WHAT is built is the checked-in build script
 # scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh (it pins the PR
-# head 19c9351904df4c63042671bc67a866ca48dc7d6f, uses vLLM's own Dockerfile
+# head 66e5414c6d75a8529473d977f7458c140bbab8a0, uses vLLM's own Dockerfile
 # stage `vllm-openai`, and verifies DFlash2DraftModel + DFlash2Speculator).
 # This workflow only adds disk reclaim + registry publish.
 #
@@ -37,8 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
-      LOCAL_IMAGE: peterstorm/vllm:qwen38-dflash2-pr52816-19c9351
-      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/vllm:qwen38-dflash2-pr52816-19c9351
+      LOCAL_IMAGE: peterstorm/vllm:qwen38-dflash2-pr52816-66e5414
+      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/vllm:qwen38-dflash2-pr52816-66e5414
       # Mapped from a secret so the step `if` can test it (secrets context is
       # not allowed directly in `if`). Empty when the secret is unset.
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}

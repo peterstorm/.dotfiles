@@ -124,7 +124,7 @@ if [ "$MODE" = "status" ]; then
     echo "health: DOWN (or still starting)"
   fi
   metrics="$(curl -fsS -m 3 http://127.0.0.1:8000/metrics 2>/dev/null || true)"
-  spec_line="$(grep -m1 -E '^vllm:spec_decode_num_drafts |^sglang:spec_accept_length' <<<"$metrics" || true)"
+  spec_line="$(grep -m1 -E '^vllm:spec_decode_num_drafts_total\{|^sglang:spec_accept_length' <<<"$metrics" || true)"
   [ -n "$spec_line" ] && echo "spec decode: $spec_line"
   exit 0
 fi
@@ -245,6 +245,13 @@ esac
 echo
 echo "HEALTHY + AUTHENTICATED: $START_NAME is serving qwen3.8-27b on :8000."
 case "$START_NAME" in
+  *dflash2*vllm*)
+    echo "Verify the target and draft resolved to native Qwen3.8/DFlash 2 implementations:"
+    echo "  docker logs $START_NAME 2>&1 | grep 'Resolved architecture' | head -2"
+    echo "  # expected: Qwen3_5ForConditionalGeneration, then DFlash2Qwen3ForCausalLM"
+    echo "Verify spec decode is actually drafting:"
+    echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^vllm:spec_decode_num_(drafts|accepted)' | head -4"
+    ;;
   *vllm*)
     echo "Verify the draft routed to the Qwen implementation (second line must read Qwen3DSparkModel):"
     echo "  docker logs $START_NAME 2>&1 | grep 'Resolved architecture' | head -2"

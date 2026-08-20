@@ -2,7 +2,7 @@
 # 2026-08-19: Qwen3.8-27B BF16 + Inco DFlash 2 draft on vLLM (TP2).
 #
 # Experimental profile: the image is built from vLLM PR #52816 (head
-# 19c93519, base main@9842d701) via build-qwen38-dflash2-vllm-image.sh —
+# 66e5414c, base main@9842d701) via build-qwen38-dflash2-vllm-image.sh —
 # the PR is unmerged, so this is unreviewed engine code. The card's
 # benchmark numbers are SGLang-only; treat first numbers as exploratory.
 #
@@ -45,7 +45,7 @@ inference_resolve_operator
 #     and pull it: pull-qwen38-dflash2-images.sh vllm (re-tags GHCR -> this tag).
 # Override DFLASH2_VLLM_IMAGE to point straight at GHCR without re-tagging;
 # pass DFLASH2_VLLM_IMAGE_DIGEST to pin by digest once the build verifies.
-IMAGE="${DFLASH2_VLLM_IMAGE:-peterstorm/vllm:qwen38-dflash2-pr52816-19c9351}"
+IMAGE="${DFLASH2_VLLM_IMAGE:-peterstorm/vllm:qwen38-dflash2-pr52816-66e5414}"
 DIGEST="${DFLASH2_VLLM_IMAGE_DIGEST:-}"
 IMAGE_REF="${IMAGE}${DIGEST:+@$DIGEST}"
 MODEL_HOST="/models/Qwen3.8-27B"
@@ -83,6 +83,19 @@ if ! docker image inspect "$IMAGE_REF" >/dev/null 2>&1; then
   echo "error: image $IMAGE_REF not found locally" >&2
   echo "build it:  bash $SCRIPT_DIR/build-qwen38-dflash2-vllm-image.sh" >&2
   echo "or pull it (built in CI): bash $SCRIPT_DIR/pull-qwen38-dflash2-images.sh vllm" >&2
+  exit 1
+fi
+# Overrides must satisfy the same native-engine contract as the pinned build.
+# Fail before allocating cache state or attempting the disruptive server boot.
+if ! docker run --rm --entrypoint python3 "$IMAGE_REF" -c '
+from vllm.model_executor.models.registry import ModelRegistry
+from vllm.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
+supported = ModelRegistry.get_supported_archs()
+assert "Qwen3_5ForConditionalGeneration" in supported
+assert "DFlash2DraftModel" in supported
+' >/dev/null 2>&1; then
+  echo "error: $IMAGE_REF lacks native Qwen3.8 + DFlash 2 support" >&2
+  echo "expected Qwen3_5ForConditionalGeneration, DFlash2DraftModel, and DFlash2Speculator" >&2
   exit 1
 fi
 if [ ! -e "$MODEL_HOST/config.json" ]; then

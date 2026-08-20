@@ -46,7 +46,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 .memory/
-.claude/cortex-memory.local.md
+**/.claude/cortex-memory.local.md
 
 # Claude machine-specific (absolute symlinks, local state)
 .claude/skills/

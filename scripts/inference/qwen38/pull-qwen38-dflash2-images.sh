@@ -5,8 +5,8 @@
 #
 #   ghcr.io/<owner>/sglang:qwen38-dflash2-c14312a
 #       -> peterstorm/sglang:qwen38-dflash2-c14312a
-#   ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-19c9351
-#       -> peterstorm/vllm:qwen38-dflash2-pr52816-19c9351
+#   ghcr.io/<owner>/vllm:qwen38-dflash2-pr52816-66e5414
+#       -> peterstorm/vllm:qwen38-dflash2-pr52816-66e5414
 #
 # Re-tagging means run-qwen38-27b-bf16-dflash2-sglang-native.sh (which defaults
 # to the peterstorm/... tag) works with no override. Alternatively, skip the
@@ -32,11 +32,11 @@ REGISTRY="ghcr.io"
 
 declare -A SRC=(
   [sglang]="$REGISTRY/$GHCR_OWNER/sglang:qwen38-dflash2-c14312a"
-  [vllm]="$REGISTRY/$GHCR_OWNER/vllm:qwen38-dflash2-pr52816-19c9351"
+  [vllm]="$REGISTRY/$GHCR_OWNER/vllm:qwen38-dflash2-pr52816-66e5414"
 )
 declare -A DST=(
   [sglang]="peterstorm/sglang:qwen38-dflash2-c14312a"
-  [vllm]="peterstorm/vllm:qwen38-dflash2-pr52816-19c9351"
+  [vllm]="peterstorm/vllm:qwen38-dflash2-pr52816-66e5414"
 )
 
 case "${1:-both}" in
@@ -85,5 +85,8 @@ echo
 echo "Done. The launchers now resolve their default image locally:"
 echo "  bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native   # SGLang, real DFlash 2, BF16 TP2"
 echo "  bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-vllm     # vLLM, DFlash 2 (PR #52816), BF16 TP2"
-echo "Validate spec decode after boot:"
+echo "Validate spec decode after boot (choose the active engine):"
+echo "  # SGLang"
 echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^sglang:spec_' | head -4"
+echo "  # vLLM"
+echo "  curl -fsS http://127.0.0.1:8000/metrics | grep -E '^vllm:spec_decode_num_(drafts|accepted)' | head -4"

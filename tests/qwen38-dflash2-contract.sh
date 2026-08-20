@@ -77,7 +77,7 @@ contains "$DFLASH2_SGLANG" 'DRAFT_CONTAINER="/models/z-lab/Qwen3.8-27B-DFlash2-s
 # The surgery copy must live in the user-writable Desktop (next to the
 # canonical tree), NOT under /models (root:root, unwritable unprivileged).
 contains "$DFLASH2_SGLANG" 'DFLASH2_DRAFT_SGLANG_HOST:-$DFLASH2_HOME/Desktop/Qwen3.8-27B-DFlash2-sglang'
-if grep -Eq 'DRAFT_SGLANG_HOST=\"\$\{?DFLASH2_DRAFT_SGLANG_HOST:-/models' "$DFLASH2_SGLANG"; then
+if grep -Fq 'DFLASH2_DRAFT_SGLANG_HOST:-/models' "$DFLASH2_SGLANG"; then
   fail "$DFLASH2_SGLANG defaults the surgery copy to /models, which the user cannot write"
 fi
 contains "$DFLASH2_SGLANG" 'DFLASH2_BLOCK_SIZE="${DFLASH2_BLOCK_SIZE:-8}"'
