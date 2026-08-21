@@ -58,7 +58,9 @@ wrapper environment around pinned CUDA binary wheels plus CUDA 13.2 bindings.
 Nix still realizes CUDA support libraries and Python wrappers, but it does **not**
 compile PyTorch or Triton from source. The module also disables NVSHMEM's
 non-installed test and example targets; Nixpkgs otherwise compiles their full
-all-architecture matrix despite disabling the package check phase.
+all-architecture matrix despite disabling the package check phase. Finally, it
+relaxes the cu130 wheel's stale `setuptools<82` metadata cap, matching Nixpkgs'
+source-Torch recipe; the packaged Torch import check remains enabled.
 
 ## Legal gates
 

@@ -28,10 +28,16 @@ let
       triton = prev.triton-bin.override {
         cudaPackages = binaryCudaPackages;
       };
-      torch = prev.torch-bin.override {
-        cudaPackages = binaryCudaPackages;
-        triton = final.triton;
-      };
+      torch =
+        (prev.torch-bin.override {
+          cudaPackages = binaryCudaPackages;
+          triton = final.triton;
+        }).overridePythonAttrs
+          (old: {
+            # The cu130 wheel still declares setuptools<82. Nixpkgs' source Torch
+            # recipe removes the same stale cap; Torch itself imports with 83.
+            pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "setuptools" ];
+          });
       torchvision = prev.torchvision-bin.override {
         cudaPackages = binaryCudaPackages;
         torch-bin = final.torch;

@@ -43,7 +43,8 @@ nix-instantiate --parse "$MODULE" >/dev/null
 # Nix owns a binary-CUDA ComfyUI runtime and an immutable custom-node path.
 contains "$DESKTOP" './comfyui.nix'
 contains "$MODULE" 'cuda-bindings = prev.cuda-bindings.override {'
-contains "$MODULE" 'torch = prev.torch-bin.override {'
+contains "$MODULE" 'torch = (prev.torch-bin.override {'
+contains "$MODULE" 'pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "setuptools" ];'
 contains "$MODULE" 'triton = prev.triton-bin.override {'
 contains "$MODULE" 'torchvision = prev.torchvision-bin.override {'
 contains "$MODULE" 'torchaudio = prev.torchaudio-bin.override {'
