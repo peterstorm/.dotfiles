@@ -72,8 +72,11 @@ let
       comfyui-workflow-templates
       einops
       filelock
+      imageio
+      imageio-ffmpeg
       kornia
       numpy
+      opencv4
       pillow
       psutil
       pydantic
@@ -88,6 +91,7 @@ let
       spandrel
       sqlalchemy
       tokenizers
+      toml
       torch
       torchaudio
       torchsde
@@ -134,6 +138,82 @@ let
       "$out/muse_glimmer_prompt/__init__.py"
   '';
 
+  krea2EditNode = pkgs.fetchFromGitHub {
+    owner = "lbouaraba";
+    repo = "comfyui-krea2edit";
+    rev = "bdfa8b267fdb13730868d435b277dcfe696ec083";
+    hash = "sha256-/uK+MV+x2W1Gpm3vo54154fjGcUebNRPhPByS5ms2Qk=";
+  };
+
+  krea2EnhancerNode = pkgs.fetchFromGitHub {
+    owner = "capitan01R";
+    repo = "ComfyUI-Krea2T-Enhancer";
+    rev = "cf8895005540680306cd46e1faaf75f8902db794";
+    hash = "sha256-KkUK27W/SnFhCjIV5czcm23eN8wptk1/wClv2TAJ99k=";
+  };
+
+  pixaromaNode = pkgs.fetchFromGitHub {
+    owner = "pixaroma";
+    repo = "ComfyUI-Pixaroma";
+    rev = "c1aaee4f6a41a69563eab50e51cd1ef7347f22e9";
+    hash = "sha256-cA+df6RO0z6i9urybxE9keftDhfh4o2Gxh/oSF8Blis=";
+  };
+
+  declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
+    mkdir -p "$out"
+    ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
+    ln -s ${krea2EditNode} "$out/comfyui-krea2edit"
+    ln -s ${krea2EnhancerNode} "$out/ComfyUI-Krea2T-Enhancer"
+    ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
+  '';
+
+  pixaromaEp30Archive = pkgs.fetchurl {
+    url = "https://workflows.pixaroma.com/workflows/Ep30%20Workflows.zip";
+    hash = "sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k=";
+  };
+
+  pixaromaEp30 =
+    pkgs.runCommand "pixaroma-ep30-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.jq
+          pkgs.unzip
+        ];
+      }
+      ''
+        unzip -q ${pixaromaEp30Archive} -d unpacked
+        mkdir -p "$out/workflows" "$out/media"
+        cp unpacked/EP30\ Workflows/Krea2\ Edit/*.json "$out/workflows/"
+        cp unpacked/EP30\ Workflows/H3\ Video\ Prompts/*.json "$out/workflows/"
+        cp unpacked/EP30\ Workflows/Media\ Inputs/* "$out/media/"
+
+        # Keep graph topology/settings intact while resolving three stale selectors
+        # against this workstation's pinned model names and the ZIP's actual media.
+        for workflow in "$out/workflows"/*.json; do
+          substituteInPlace "$workflow" \
+            --replace-warn 'krea2\\krea2_turbo_int8_convrot.safetensors' 'krea2_turbo_int8_convrot.safetensors' \
+            --replace-warn 'qwen3-vl-4b-heretic_int8.safetensors' 'qwen3vl_4b_fp8_scaled.safetensors' \
+            --replace-warn 'OutfitRock (1).jpeg' 'OutfitRock.jpeg'
+          jq -e . "$workflow" >/dev/null
+        done
+
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 7
+        test "$(find "$out/media" -type f | wc -l)" -eq 6
+      '';
+
+  installPixaromaEp30 = pkgs.writeShellScript "install-pixaroma-ep30" ''
+    set -eu
+    workflow_dir=/var/lib/comfyui/user/default/workflows/pixaroma-ep30
+    input_dir=/var/lib/comfyui/input
+    install -d -m 0700 "$workflow_dir" "$input_dir"
+    for source in ${pixaromaEp30}/workflows/*.json; do
+      install -m 0600 "$source" "$workflow_dir/$(basename "$source")"
+    done
+    for source in ${pixaromaEp30}/media/*; do
+      install -m 0600 "$source" "$input_dir/$(basename "$source")"
+    done
+  '';
+
   extraPaths = pkgs.writeText "comfyui-workstation-paths.yaml" ''
     workstation_models:
       base_path: /models/comfyui
@@ -148,7 +228,7 @@ let
       audio_encoders: audio_encoders
 
     declarative_nodes:
-      custom_nodes: ${musePromptNode}
+      custom_nodes: ${declarativeNodes}
   '';
 in
 {
@@ -216,7 +296,10 @@ in
       CacheDirectory = "comfyui";
       CacheDirectoryMode = "0750";
       UMask = "0077";
-      ExecStartPre = "${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user";
+      ExecStartPre = [
+        "${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user"
+        installPixaromaEp30
+      ];
       ExecStart = ''
         ${comfyui}/bin/comfyui \
           --listen 127.0.0.1 \
@@ -262,6 +345,6 @@ in
   };
 
   # Intentionally no firewall rule for 8188 and no ComfyUI-Manager package.
-  # Core 0.31.1 already contains Krea 2, local H3, hosted H3, and media nodes;
-  # mutable pip/git installs would make the Nix service non-reproducible.
+  # Core covers the native workflows; the three third-party Episode 30 packs
+  # above are immutable source pins required by the imported editing workflows.
 }

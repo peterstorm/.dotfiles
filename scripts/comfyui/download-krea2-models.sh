@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Download the production Krea 2 local profile for the Nix-managed ComfyUI.
 #
-# The profile contains highest-fidelity BF16 Turbo text-to-image weights plus
-# the official INT8 style-reference path and Krea's nine released style LoRAs.
-# Every artifact is pinned to one Hugging Face revision and verified by size +
-# SHA-256 before an atomic rename into /models/comfyui.
+# The profile contains highest-fidelity BF16 Turbo text-to-image weights, the
+# official INT8 style-reference path, Krea's style LoRAs, Episode 30 edit/outfit
+# LoRAs, and its local H3 prompt encoder. Every repository is revision-pinned;
+# every artifact is verified by size + SHA-256 before an atomic rename.
 set -euo pipefail
 
 REPO="Comfy-Org/Krea-2"
 REV="e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96"
+IDENTITY_REPO="conradlocke/krea2-identity-edit"
+IDENTITY_REV="89e9e7a09ee2e5c9331e952063d79b1b8a703280"
+OUTFIT_REPO="AliveAi/Krea-2-Edit-Outfit-Transfer"
+OUTFIT_REV="827dab8588b6cb261cf9ae580c417bc068740b7f"
+H3_PROMPT_REPO="DreamFast/Qwen3-VL-8B-Heretic-1.3.0"
+H3_PROMPT_REV="28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3"
 MODELS_ROOT="${COMFYUI_MODELS_ROOT:-/models/comfyui}"
 STAGING="$MODELS_ROOT/.staging-krea2-$REV"
 MARKER="$MODELS_ROOT/.krea2-production-complete"
@@ -59,8 +65,15 @@ ca42107783d9e517c5d62cb9a9db9ab2ba4887d90e9dad97a9d1a7fe6ff14c56 469291992 loras
 8cca96c56658fb3ac5269f9ef2245bd07cbf1b7a189f517c8763470bb1385f9f 469291992 loras/krea2_vintagetarot.safetensors
 EOF
 
+# sha256, exact bytes, repository, revision, source path, destination path
+read -r -d '' AUXILIARY_MANIFEST <<EOF || true
+6adf9a69cc9502d286db7b69964d37da7e9cfe4b05b4d004bc275f087d3fd3cf 1828256432 $IDENTITY_REPO $IDENTITY_REV krea2_identity_edit_v1_2.safetensors loras/krea2/krea2_identity_edit_v1_2.safetensors
+4d1033032a1a24bb9b09c44b44514c6791241ebc7b91ffe4f5edd70830a8804d 1142684152 $OUTFIT_REPO $OUTFIT_REV krea_outfittransfer.safetensors loras/krea2/krea_outfittransfer.safetensors
+7f8ec20de729e2d99f3a04852d4c4499c1677cda167f5ea63d21b0882a5c32b5 10017064632 $H3_PROMPT_REPO $H3_PROMPT_REV comfyui/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors text_encoders/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors
+EOF
+
 verify_manifest() {
-  local root="$1" expected_sha expected_size relative file actual_size actual_sha
+  local root="$1" manifest="$2" expected_sha expected_size relative file actual_size actual_sha
   while read -r expected_sha expected_size relative; do
     [ -n "$relative" ] || continue
     file="$root/$relative"
@@ -78,7 +91,41 @@ verify_manifest() {
       echo "checksum mismatch: $relative" >&2
       return 1
     fi
-  done <<<"$MANIFEST"
+  done <<<"$manifest"
+}
+
+verify_auxiliary_manifest() {
+  local root="$1" expected_sha expected_size _repo _revision _source relative file actual_size actual_sha
+  while read -r expected_sha expected_size _repo _revision _source relative; do
+    [ -n "$relative" ] || continue
+    file="$root/$relative"
+    if [ ! -f "$file" ]; then
+      echo "missing: $relative" >&2
+      return 1
+    fi
+    actual_size="$(stat -c %s "$file")"
+    if [ "$actual_size" != "$expected_size" ]; then
+      echo "size mismatch: $relative (expected $expected_size, got $actual_size)" >&2
+      return 1
+    fi
+    actual_sha="$(sha256sum "$file" | cut -d' ' -f1)"
+    if [ "$actual_sha" != "$expected_sha" ]; then
+      echo "checksum mismatch: $relative" >&2
+      return 1
+    fi
+  done <<<"$AUXILIARY_MANIFEST"
+}
+
+install_manifest() {
+  local manifest="$1" relative destination
+  while read -r _ _ relative; do
+    [ -n "$relative" ] || continue
+    destination="$MODELS_ROOT/$relative"
+    mkdir -p "$(dirname "$destination")"
+    mv -f "$STAGING/$relative" "$destination.new"
+    chmod 0640 "$destination.new"
+    mv -f "$destination.new" "$destination"
+  done <<<"$manifest"
 }
 
 exec 9>"$LOCK"
@@ -89,8 +136,9 @@ fi
 
 if [ -f "$MARKER" ] && grep -Fxq "$REPO@$REV" "$MARKER"; then
   echo "Verifying the existing Krea 2 production profile..."
-  if verify_manifest "$MODELS_ROOT"; then
-    echo "KREA2_MODELS_READY: $REPO@$REV"
+  if verify_manifest "$MODELS_ROOT" "$MANIFEST" \
+     && verify_auxiliary_manifest "$MODELS_ROOT"; then
+    echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
     exit 0
   fi
   echo "Existing profile is incomplete or corrupt; resuming the pinned download." >&2
@@ -101,26 +149,33 @@ mapfile -t files < <(awk 'NF == 3 { print $3 }' <<<"$MANIFEST")
 export HF_HUB_DISABLE_XET=1
 hf download "$REPO" "${files[@]}" --revision "$REV" --local-dir "$STAGING"
 
-printf 'Verifying %d pinned artifacts...\n' "${#files[@]}"
-verify_manifest "$STAGING"
-
-while read -r _ _ relative; do
+while read -r _ _ repo revision source relative; do
   [ -n "$relative" ] || continue
-  destination="$MODELS_ROOT/$relative"
-  mkdir -p "$(dirname "$destination")"
-  mv -f "$STAGING/$relative" "$destination.new"
-  chmod 0640 "$destination.new"
-  mv -f "$destination.new" "$destination"
-done <<<"$MANIFEST"
+  repo_staging="$STAGING/.repositories/${repo//\//--}"
+  hf download "$repo" "$source" --revision "$revision" --local-dir "$repo_staging"
+  mkdir -p "$(dirname "$STAGING/$relative")"
+  mv -f "$repo_staging/$source" "$STAGING/$relative"
+done <<<"$AUXILIARY_MANIFEST"
+
+printf 'Verifying %d pinned base artifacts and 3 Episode 30 dependencies...\n' "${#files[@]}"
+verify_manifest "$STAGING" "$MANIFEST"
+verify_auxiliary_manifest "$STAGING"
+
+install_manifest "$MANIFEST"
+while read -r _ _ _ _ _ relative; do
+  [ -n "$relative" ] || continue
+  install_manifest "0 0 $relative"
+done <<<"$AUXILIARY_MANIFEST"
 
 marker_tmp="$MARKER.new"
 {
   printf '%s@%s\n' "$REPO" "$REV"
   printf '%s\n' "$MANIFEST"
+  printf '%s\n' "$AUXILIARY_MANIFEST"
 } >"$marker_tmp"
 chmod 0640 "$marker_tmp"
 mv -f "$marker_tmp" "$MARKER"
 rm -rf "$STAGING"
 
-echo "KREA2_MODELS_READY: $REPO@$REV"
+echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
 echo "model root: $MODELS_ROOT"

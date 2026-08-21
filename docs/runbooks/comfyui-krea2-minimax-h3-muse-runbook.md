@@ -20,10 +20,12 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 - **Local H3 core nodes are present but local H3 weights must not be downloaded
   in Denmark without separate written MiniMax authorization.**
 
-This deliberately does **not** install ComfyUI-Manager or a broad third-party
-node bundle. ComfyUI core already contains every required Krea 2, H3, media,
-sampler, and save node. The only custom node is the small audited
-`Muse Glimmer Creative Prompt` adapter in this repository.
+This deliberately does **not** install ComfyUI-Manager or permit mutable node
+installs. Core supplies the standard generation nodes. The in-repo Muse adapter
+and the three packs required by Pixaroma Episode 30 are immutable source pins:
+Krea 2 Identity Edit, Krea2T Enhancer, and Pixaroma. The latter is a broad pack,
+but it is now a concrete workflow dependency rather than speculative tooling;
+ComfyUI remains loopback-only and systemd-confined.
 
 ## What is declarative and what is not
 
@@ -33,7 +35,9 @@ sampler, and save node. The only custom node is the small audited
 | CUDA PyTorch | Nixpkgs `torch-bin`, `triton-bin`, `torchvision-bin`, `torchaudio-bin` | Nix flake pin; no source build |
 | Core nodes and template library | ComfyUI/Nix package | Nix flake pin |
 | Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
-| Krea model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
+| Episode 30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
+| Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
+| Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
 | Comfy account/partner credits | Comfy account | external prepaid service |
 | Muse bearer key | `~/.config/muse-glimmer/api-key` | private file, never a node widget |
@@ -120,7 +124,11 @@ The switch installs:
 - `comfyui.service`, installed but intentionally not boot-started while the
   normal Qwen TP2 profile owns both GPUs;
 - `/models/comfyui/{diffusion_models,text_encoders,vae,loras,...}`;
-- the immutable Muse custom node via an extra-path YAML in the Nix store.
+- the immutable Muse, Krea edit, Krea enhancer, and Pixaroma nodes via an
+  extra-path YAML in the Nix store;
+- all seven Episode 30 workflows under
+  `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/` and all six supplied
+  sample inputs under `/var/lib/comfyui/input/`.
 
 Verify that the unit is installed, explicitly inactive, and pinned to GPU1:
 
@@ -135,8 +143,10 @@ Do not start it directly while Qwen owns both cards. Section 3 performs the
 transactional profile switch. After activation, acceptance requires:
 
 - the listener is exactly `127.0.0.1:8188`, not `0.0.0.0`;
-- logs list `Muse Glimmer Creative Prompt` without import or database errors;
+- logs list Muse, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
+  import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
+- exactly seven Episode 30 workflows and six source inputs are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -220,9 +230,15 @@ The downloader fetches only these pinned production artifacts from
   workflow;
 - Qwen Image VAE;
 - Krea style-reference LoRA;
-- nine official Krea style LoRAs.
+- nine official Krea style LoRAs;
+- Krea 2 Identity Edit v1.2 LoRA at
+  `conradlocke/krea2-identity-edit@89e9e7a...`;
+- outfit-transfer LoRA at
+  `AliveAi/Krea-2-Edit-Outfit-Transfer@827dab8...`;
+- the Episode 30 H3 prompt node's Qwen3-VL-8B Heretic FP8 encoder at
+  `DreamFast/Qwen3-VL-8B-Heretic-1.3.0@28dc012...` (Apache-2.0).
 
-Total download is about 58.8 GB. Every file has an exact expected byte count
+Total download is about 71.8 GB. Every file has an exact expected byte count
 and SHA-256. Files are downloaded to a same-filesystem staging tree, verified,
 and atomically renamed into `/models/comfyui`; partial or corrupt profiles do
 not become the completion marker.
@@ -268,6 +284,52 @@ For style reference, use the official dedicated combination:
 Krea's local prompting rules are simple: natural language, faithful detail,
 long prompts when useful, and exact visible text in double quotes. The Muse
 node embeds Krea's official expansion contract.
+
+### Pixaroma Episode 30 — complete imported bundle
+
+The source is [Episode 30](https://www.youtube.com/watch?v=rGVf3m19yM8),
+`Ep30 Workflows.zip`, 5,823,896 bytes, SHA-256
+`46fcbc0e630f5a4ee028bdd841d04f26ca97ca538c3c33d2923159d9b1f59799`.
+Nix installs all seven workflows and six included example images on every
+ComfyUI start:
+
+1. `Krea 2 + Edit Lora`
+2. `Krea 2 + Edit Lora - Custom Ratio`
+3. `Krea 2 + Edit Lora - Character and Background`
+4. `Krea 2 + One Image Outfit Lora`
+5. `Krea 2 + Outfit Transfer 2`
+6. `Minimax H3 Text 2 Video Prompt Generator`
+7. `Minimax H3 First Frame 2 Video Prompt Generator`
+
+The deployment normalizes three stale saved selectors without changing graph
+topology: nested Krea diffusion paths become this workstation's flat pinned
+path, the Krea editor uses the official pinned Qwen3-VL-4B FP8 encoder, and the
+archive's nonexistent `OutfitRock (1).jpeg` becomes its actual
+`OutfitRock.jpeg`.
+
+The transcript establishes that this is **not an official Krea edit model**. It
+combines Krea 2 Turbo, an edit LoRA, `Krea2EditGroundedEncode`,
+`Krea2EditModelPatch`, and the Krea2T enhancer. Baseline settings are LoRA 1.0,
+10 steps, CFG 1, `er_sde`/`simple`, and one-megapixel images snapped to multiples
+of 16. `ref_boost` is the preservation dial: 0 creates a variation, 1–4 is the
+useful identity range, and 10 can over-constrain limbs and requested changes.
+Use up to 2 MP only after a 1 MP result works; the video measured roughly
+16–17 seconds at 1 MP and 46 seconds at 2 MP on its host.
+
+The edit suite covers same-ratio instruction edits, custom portrait/landscape
+output, character-plus-background composition, one-reference outfit generation,
+and two-reference try-on. For outfit photos, crop away the original wearer's
+head/body when possible; the transcript shows two visible people confuse the
+LoRA. The exact Krea nodes are pinned to Identity Edit v1.2.5, enhancer commit
+`cf88950`, and Pixaroma `c1aaee4`; no Manager update is allowed.
+
+The two H3 workflows use Pixaroma's local Qwen3-VL-8B prompt generator. The
+transcript reports that its 4B experiment missed instructions, while 8B was more
+reliable; it switches among text, first-frame, and first+last-frame formulas and
+scales action count to duration. Enable its `release_model` setting before a
+larger downstream workflow. Muse Glimmer 30B remains the preferred prompt author
+for quality and reference mode, while these two workflows preserve the video's
+self-contained ComfyUI option.
 
 ### Hosted Krea partner nodes
 
@@ -420,11 +482,14 @@ TP2 qualification path. Full H3 BF16 diffusion is 66.3 GB per task family and
 the BF16 text encoder is 51.5 GB; ComfyUI is not a drop-in tensor-parallel
 replacement for the vLLM-Omni/SGLang TP2 recipes.
 
-## 9. Why the popular custom-node packs are not installed
+## 9. Custom-node policy
 
 | Node pack | Assessment |
 |---|---|
-| ComfyUI-Manager | Useful interactively, but mutates git/pip state outside Nix; intentionally absent |
+| Krea 2 Identity Edit | **Installed**, Apache-2.0, pinned v1.2.5 source; required for dual image/latent edit conditioning |
+| ComfyUI-Krea2T-Enhancer | **Installed**, MIT, pinned to the workflow's exact commit |
+| Pixaroma | **Installed**, pinned to Episode 30 commit; broad route/node surface accepted only because all seven requested workflows depend on it and the service is confined to loopback |
+| ComfyUI-Manager | Mutable git/pip state outside Nix; intentionally absent |
 | VideoHelperSuite | Established, but core `VIDEO`, `LoadVideo`, `CreateVideo`, and `SaveVideo` cover this stack |
 | KJNodes | Useful only if later qualifying Sage Attention or specialty video operations; broad dependency surface |
 | rgthree-comfy | Good UI ergonomics, no generation capability required here |
@@ -460,8 +525,12 @@ Do not call the stack qualified until:
 - [ ] Nix evaluation and build pass from the pinned flake.
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
-- [ ] Comfy logs load the Muse node with no failed imports.
+- [ ] Comfy logs load Muse plus all three pinned Episode 30 packs with no failed imports.
+- [ ] Seven Episode 30 workflows and six sample inputs are present.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
+- [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
+- [ ] Custom-ratio, character/background, and both outfit workflows complete.
+- [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] A Muse→Krea BF16 1K image completes, then a 2K image completes.
 - [ ] A local Krea style-reference generation completes with the dedicated
       INT8/FP8/style-reference files.
@@ -508,8 +577,15 @@ The Comfy state, Krea models, inputs, outputs, and workflows remain on disk.
 
 ## Sources
 
-Official sources accessed 2026-08-21:
+Sources accessed 2026-08-21:
 
+- [Pixaroma Episode 30 video and transcript](https://www.youtube.com/watch?v=rGVf3m19yM8)
+- [Pixaroma workflow index](https://workflows.pixaroma.com/)
+- [Krea 2 Identity Edit nodes](https://github.com/lbouaraba/comfyui-krea2edit)
+- [Krea 2 Identity Edit weights](https://huggingface.co/conradlocke/krea2-identity-edit)
+- [Krea2T Enhancer](https://github.com/capitan01R/ComfyUI-Krea2T-Enhancer)
+- [Pixaroma nodes](https://github.com/pixaroma/ComfyUI-Pixaroma)
+- [Outfit Transfer LoRA](https://huggingface.co/AliveAi/Krea-2-Edit-Outfit-Transfer)
 - [ComfyUI MiniMax H3 local workflows](https://docs.comfy.org/tutorials/video/minimax/minimax-h3)
 - [ComfyUI MiniMax H3 API workflows](https://docs.comfy.org/tutorials/partner-nodes/minimax/minimax-h3)
 - [ComfyUI Krea 2 local workflows](https://docs.comfy.org/tutorials/image/krea/krea-2)

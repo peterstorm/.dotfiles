@@ -58,10 +58,19 @@ contains "$MODULE" 'pkgs.comfyui.override'
 contains "$MODULE" 'CUDA_VISIBLE_DEVICES = "1";'
 contains "$MODULE" '--listen 127.0.0.1'
 contains "$MODULE" '--port 8188'
-contains "$MODULE" 'ExecStartPre = "${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user";'
+contains "$MODULE" '"${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user"'
+contains "$MODULE" 'installPixaromaEp30'
 contains "$MODULE" '--database-url sqlite:////var/lib/comfyui/user/comfyui.db'
 contains "$MODULE" '--reserve-vram 8'
-contains "$MODULE" 'custom_nodes: ${musePromptNode}'
+contains "$MODULE" 'custom_nodes: ${declarativeNodes}'
+contains "$MODULE" 'rev = "bdfa8b267fdb13730868d435b277dcfe696ec083";'
+contains "$MODULE" 'rev = "cf8895005540680306cd46e1faaf75f8902db794";'
+contains "$MODULE" 'rev = "c1aaee4f6a41a69563eab50e51cd1ef7347f22e9";'
+contains "$MODULE" 'Ep30%20Workflows.zip'
+contains "$MODULE" 'sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k='
+contains "$MODULE" 'test "$(find "$out/workflows" -type f -name '\''*.json'\'' | wc -l)" -eq 7'
+contains "$MODULE" 'test "$(find "$out/media" -type f | wc -l)" -eq 6'
+contains "$MODULE" 'workflow_dir=/var/lib/comfyui/user/default/workflows/pixaroma-ep30'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -90,11 +99,19 @@ contains "$DOWNLOAD" 'krea2_turbo_int8_convrot.safetensors'
 contains "$DOWNLOAD" 'qwen3vl_4b_bf16.safetensors'
 contains "$DOWNLOAD" 'qwen3vl_4b_fp8_scaled.safetensors'
 contains "$DOWNLOAD" 'krea2_style_reference.safetensors'
+contains "$DOWNLOAD" 'krea2_identity_edit_v1_2.safetensors'
+contains "$DOWNLOAD" 'krea_outfittransfer.safetensors'
+contains "$DOWNLOAD" 'qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors'
+contains "$DOWNLOAD" 'IDENTITY_REV="89e9e7a09ee2e5c9331e952063d79b1b8a703280"'
+contains "$DOWNLOAD" 'OUTFIT_REV="827dab8588b6cb261cf9ae580c417bc068740b7f"'
+contains "$DOWNLOAD" 'H3_PROMPT_REV="28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3"'
 contains "$DOWNLOAD" 'sha256sum "$file"'
 contains "$DOWNLOAD" 'stat -c %s "$file"'
 contains "$DOWNLOAD" 'mv -f "$destination.new" "$destination"'
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$DOWNLOAD")" -eq 15 ]] \
-  || fail "Krea manifest must contain exactly 15 pinned artifacts"
+  || fail "Krea base manifest must contain exactly 15 pinned artifacts"
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 3 ]] \
+  || fail "Episode 30 auxiliary manifest must contain exactly 3 pinned artifacts"
 
 # Activation is explicit and rollback-aware; Comfy stays on GPU1, Muse on GPU0.
 contains "$ACTIVATE" "mapfile -t prior_running"
