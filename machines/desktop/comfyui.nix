@@ -5,25 +5,39 @@ let
   # the wrapper environment explicitly from the matching pinned binary wheels.
   # CUDA bindings must move with CUDA 13.2; torch-bin rejects the default 12.9
   # bindings even when its CUDA library set is overridden.
+  # Nixpkgs enables NVSHMEM's exhaustive test/example compile even though its
+  # check phase is disabled. Neither output is installed or used by PyTorch;
+  # suppressing them avoids compiling every collective for every CUDA arch.
+  binaryCudaPackages = pkgs.cudaPackages_13.overrideScope (
+    _final: prev: {
+      libnvshmem = prev.libnvshmem.overrideAttrs (old: {
+        cmakeFlags = old.cmakeFlags ++ [
+          (pkgs.lib.cmakeBool "NVSHMEM_BUILD_TESTS" false)
+          (pkgs.lib.cmakeBool "NVSHMEM_BUILD_EXAMPLES" false)
+        ];
+      });
+    }
+  );
+
   binaryTorchPython = pkgs.python3.override {
     self = binaryTorchPython;
     packageOverrides = final: prev: {
       cuda-bindings = prev.cuda-bindings.override {
-        cudaPackages = pkgs.cudaPackages_13;
+        cudaPackages = binaryCudaPackages;
       };
       triton = prev.triton-bin.override {
-        cudaPackages = pkgs.cudaPackages_13;
+        cudaPackages = binaryCudaPackages;
       };
       torch = prev.torch-bin.override {
-        cudaPackages = pkgs.cudaPackages_13;
+        cudaPackages = binaryCudaPackages;
         triton = final.triton;
       };
       torchvision = prev.torchvision-bin.override {
-        cudaPackages = pkgs.cudaPackages_13;
+        cudaPackages = binaryCudaPackages;
         torch-bin = final.torch;
       };
       torchaudio = prev.torchaudio-bin.override {
-        cudaPackages = pkgs.cudaPackages_13;
+        cudaPackages = binaryCudaPackages;
         torch-bin = final.torch;
       };
     };

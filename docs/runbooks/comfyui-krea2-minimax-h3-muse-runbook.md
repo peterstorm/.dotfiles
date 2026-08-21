@@ -56,7 +56,9 @@ internal Python override discards a caller's package substitutions. The workstat
 module therefore retains Nixpkgs' pinned ComfyUI source but explicitly rebuilds the
 wrapper environment around pinned CUDA binary wheels plus CUDA 13.2 bindings.
 Nix still realizes CUDA support libraries and Python wrappers, but it does **not**
-compile PyTorch or Triton from source.
+compile PyTorch or Triton from source. The module also disables NVSHMEM's
+non-installed test and example targets; Nixpkgs otherwise compiles their full
+all-architecture matrix despite disabling the package check phase.
 
 ## Legal gates
 
