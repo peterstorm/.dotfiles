@@ -46,11 +46,13 @@ contains "$RUN" '-e SGLANG_RAGGED_VERIFY_MODE=static'
 if grep -Eq -- '^[[:space:]]*--api-key([=[:space:]]|$)' "$RUN"; then
   fail "$RUN exposes the SGLang API key through Docker command arguments"
 fi
-contains "$ENTRYPOINT" 'os.environ.pop("SGLANG_API_KEY", "")'
-contains "$ENTRYPOINT" 'prepare_server_args([*cli_args, "--api-key", api_key])'
+contains "$ENTRYPOINT" 'api_key = RedactedSecret(os.environ.pop("SGLANG_API_KEY", ""))'
+contains "$ENTRYPOINT" 'server_args = prepare_server_args(cli_args)'
+contains "$ENTRYPOINT" 'server_args = dataclasses.replace(server_args, api_key=api_key)'
 contains "$ENTRYPOINT" 'class RedactedSecret(str):'
-contains "$ENTRYPOINT" 'server_args = server_args.derive('
-contains "$ENTRYPOINT" 'api_key=RedactedSecret(server_args.api_key)'
+if grep -Eq -- 'server_args\.(derive|api_key[[:space:]]*=)' "$ENTRYPOINT"; then
+  fail "$ENTRYPOINT mutates resolved SGLang ServerArgs instead of replacing it immutably"
+fi
 contains "$RUN" '--dtype bfloat16'
 contains "$RUN" '--tp-size 2'
 contains "$RUN" '--kv-cache-dtype bfloat16'

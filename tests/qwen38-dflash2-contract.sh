@@ -176,6 +176,9 @@ contains "$SWITCHER" 'DFLASH2_SGLANG_NAME="qwen38-27b-bf16-dflash2-sglang"'
 contains "$SWITCHER" 'DFLASH2_SGLANG_SCRIPT="$SCRIPT_DIR/run-qwen38-27b-bf16-dflash2-sglang.sh"'
 contains "$SWITCHER" '"$DFLASH2_SGLANG_NAME"'
 contains "$SWITCHER" 'dflash2) FALLBACK="sglang"'
+contains "$SWITCHER" "{{.State.Status}} {{.RestartCount}}"
+contains "$SWITCHER" 'docker update --restart=no "$START_NAME"'
+contains "$SWITCHER" 'docker stop -t 10 "$START_NAME"'
 bash -n "$SWITCHER"
 
 # --- runbook: pins, PR gates, destination ----------------------------------

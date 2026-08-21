@@ -8,6 +8,7 @@ launcher supplies SGLANG_API_KEY through a mode-0600 Docker env file.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import sys
 
@@ -29,15 +30,13 @@ def main() -> None:
     if any(arg == "--api-key" or arg.startswith("--api-key=") for arg in cli_args):
         raise SystemExit("error: pass SGLANG_API_KEY via the private env file, not --api-key")
 
-    api_key = os.environ.pop("SGLANG_API_KEY", "")
+    api_key = RedactedSecret(os.environ.pop("SGLANG_API_KEY", ""))
     if not api_key:
         raise SystemExit("error: SGLANG_API_KEY is required")
 
     load_plugins()
-    server_args = prepare_server_args([*cli_args, "--api-key", api_key])
-    server_args = server_args.derive(
-        "secure-entrypoint-redaction", api_key=RedactedSecret(server_args.api_key)
-    )
+    server_args = prepare_server_args(cli_args)
+    server_args = dataclasses.replace(server_args, api_key=api_key)
     try:
         run_server(server_args)
     finally:

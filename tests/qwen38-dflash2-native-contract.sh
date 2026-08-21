@@ -15,7 +15,7 @@
 #     to the surgery 'dflash2' profile.
 #
 # No GPU, container, or network access is required.
-# shellcheck disable=SC2016 # Assertions intentionally match literal shell source.
+# shellcheck disable=SC2016,SC1003 # Assertions intentionally match literal shell source.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,6 +23,8 @@ NATIVE="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dflash2-sglang-native
 SURGERY="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dflash2-sglang.sh"
 SWITCHER="$ROOT/scripts/inference/qwen38/switch-qwen38-backend-v2.sh"
 BUILD="$ROOT/scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh"
+DOC="$ROOT/docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md"
+BENCH="$ROOT/benchmarks/vllm-tps/2026-08-20-dflash2-sglang-native.md"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -42,11 +44,13 @@ absent() {
   return 0
 }
 
-for file in "$NATIVE" "$SURGERY" "$SWITCHER" "$BUILD"; do
+for file in "$NATIVE" "$SURGERY" "$SWITCHER" "$BUILD" "$DOC" "$BENCH"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 [[ -x "$NATIVE" ]] || fail "$NATIVE is not executable"
+[[ -x "$BUILD" ]] || fail "$BUILD is not executable"
 bash -n "$NATIVE"
+bash -n "$BUILD"
 
 # --- full BF16: no FP8 anywhere --------------------------------------------
 contains "$NATIVE" '--dtype bfloat16'
@@ -132,8 +136,39 @@ contains "$SWITCHER" 'dflash2-native) FALLBACK="dflash2"'
 contains "$SWITCHER" 'status|vllm|sglang|dflash2|v1-vllm|v1-sglang|dflash2-native'
 bash -n "$SWITCHER"
 
-# --- image build target the native profile depends on ----------------------
+# --- immutable image build + verified dependency repairs -------------------
+contains "$BUILD" 'SGL_MERGE_SHA="c14312a66420b75ca9a11bf1817c4db1fa26b097"'
 contains "$BUILD" 'IMAGE="peterstorm/sglang:qwen38-dflash2-c14312a"'
-contains "$BUILD" 'DFlash2DraftModel'
+contains "$BUILD" 'checkout --detach "$SGL_MERGE_SHA"'
+contains "$BUILD" 'SGL_NCCL_VERSION="${SGL_NCCL_VERSION:-2.29.7}"'
+contains "$BUILD" '--build-arg BRANCH_TYPE=local'
+contains "$BUILD" '--build-arg NCCL_VERSION="$SGL_NCCL_VERSION"'
+contains "$BUILD" 'HPC_OPS_JOBS="${SGL_HPC_OPS_JOBS:-2}"'
+contains "$BUILD" 'DOCKERFILE="$BUILD_ROOT/Dockerfile.dflash2"'
+contains "$BUILD" 'cp "$UPSTREAM_DOCKERFILE" "$DOCKERFILE"'
+contains "$BUILD" "sed -i 's/-j16/-j\${HPC_OPS_JOBS}/' setup.py"
+contains "$BUILD" '--label "org.opencontainers.image.revision=$SGL_MERGE_SHA"'
+contains "$BUILD" 'IMAGE_SOURCE_SHA="$(docker run --rm --entrypoint git "$IMAGE" -C /sgl-workspace/sglang rev-parse HEAD)"'
+contains "$BUILD" '[[ "$IMAGE_SOURCE_SHA" != "$SGL_MERGE_SHA" ]]'
+contains "$BUILD" "'/sgl-workspace/sglang/' in sglang.__file__"
+contains "$BUILD" "hasattr(qwen3_5, 'Qwen3_5ForConditionalGeneration')"
+contains "$BUILD" "hasattr(dflash, 'DFlash2DraftModel')"
+contains "$BUILD" "hasattr(dflash, 'CandidateSelector')"
+contains "$BUILD" "hasattr(dflash, 'DFlashGroupedConv')"
+contains "$BUILD" "version('nvidia-nccl-cu13') == os.environ['EXPECTED_NCCL']"
+contains "$BUILD" 'repo digest: $REPO_DIGEST'
+# The source/copy assignments above pin the patch target contract.
+
+# --- runbook records the built, GPU-import-verified local artifact ----------
+contains "$DOC" 'sha256:af311253309cebbd021d4f7cc4da695d30434182e89407818200754f0d788880'
+contains "$DOC" 'sglang 0.5.18.dev761+gc14312a66'
+contains "$DOC" 'Build time was 25m57s'
+contains "$DOC" 'compute capability 12.0'
+contains "$DOC" 'DFLASH2_NATIVE_IMAGE=sha256:af311253309cebbd021d4f7cc4da695d30434182e89407818200754f0d788880'
+contains "$DOC" 'benchmarks/vllm-tps/2026-08-20-dflash2-sglang-native.md'
+contains "$BENCH" '124.8–125.0 tok/s'
+contains "$BENCH" '722.2 tok/s'
+contains "$BENCH" 'effective acceptance length 3.533'
+contains "$BENCH" 'zero restarts, no OOM, no NCCL failure, and no Xid'
 
 printf 'PASS: Qwen3.8 native DFlash 2 (full BF16, TP2) profile contract is internally consistent\n'

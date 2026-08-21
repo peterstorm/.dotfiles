@@ -59,11 +59,11 @@ degrades further ⇒ miswired draft, not merely weak.
 
 It is a draft model only; it never runs standalone.
 
-## Engine support status (verified 2026-08-19)
+## Engine support status (verified 2026-08-20)
 
 | engine | status | detail |
 |---|---|---|
-| SGLang | **degraded on the pinned image; real support merged upstream 2026-08-19** | The pinned custom build (`lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124`, `0.0.0.dev0+qwen38.27b.g561c8f3`, CUDA 13.0.3) carries the DFlash **v1** stack only: `SpeculativeAlgorithm.DFLASH` → `DFlashWorkerV2`, `DFlashDraftModel` (`models/dflash.py`, 589 lines). It does **not** carry DFlash 2's `DFlashGroupedConv` / `CandidateSelector` / `DFlash2DraftModel`. Consequence: the surgery loads the DFlash 2 checkpoint into the v1 class (23 conv/selector tensors dropped, silently) — lossless and functional, but ~2.0–2.7 acceptance instead of the card's 4.1–5.5. DFlash 2 proper is now **merged upstream**: [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371) → main at `c14312a66420b75ca9a11bf1817c4db1fa26b097` (merged 2026-08-19T00:07:28Z). Build it with `scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh`; the launcher auto-detects native support and skips the surgery. See *Surgery reality*, *SGLang at the merged commit*, and `benchmarks/vllm-tps/2026-08-19-dflash2.md`. |
+| SGLang | **native merge image built and live-validated** | PR [sgl-project/sglang#35371](https://github.com/sgl-project/sglang/pull/35371) merged as `c14312a66420b75ca9a11bf1817c4db1fa26b097`. The immutable local image passed BF16 TP2 model load, native `DFlash2DraftModel` routing, selector/conv graph capture, authentication, speculative metrics, sequential and concurrency-eight cells, and GPU/error gates. At 350 W it measured 124.8–125.0 tok/s plain decode, 147.8–150.5 tok/s xhigh decode, and 722.2 aggregate tok/s at concurrency eight. The older pinned custom image (`lmsysorg/sglang:qwen38-27b@sha256:506525a5907ea22c9d445afb7c03603959b912de034d86915cf17da814f1a124`) remains only for rollback and carries the degraded DFlash v1 class. See *SGLang at the merged commit* and `benchmarks/vllm-tps/2026-08-20-dflash2-sglang-native.md`. |
 | vLLM | **PR-branch image built and live-validated (experimental)** | Upstream PR [vllm-project/vllm#52816](https://github.com/vllm-project/vllm/pull/52816) remains **open**, unmerged, and `mergeable_state: unstable` (checked via GitHub API 2026-08-20). No released or nightly vLLM image carries DFlash 2. The local image was built from the immutable PR head with vLLM's own `vllm-openai` Dockerfile, passed target/draft registry plus speculator probes, then completed the live TP2 GPU gate: healthy/authenticated, native target/draft routing, moving speculative counters, repeatable TPS, and no OOM/NCCL/Xid failure. See `benchmarks/vllm-tps/2026-08-20-dflash2-vllm.md`. |
 
 Re-check before any re-pin:
@@ -105,10 +105,12 @@ dual-Blackwell workstation.
 
 ## SGLang at the merged commit (real DFlash 2)
 
-PR #35371 **merged to SGLang main 2026-08-19** (merge commit `c14312a66420b75ca9a11bf1817c4db1fa26b097`,
-base `87a09494fa3fbd685bd7c88d6a2dbdd3135de602`). No release or nightly carries it yet (v0.5.17 is
-2026-08-08; the newest nightly at pin time, `20260818-c0b6474b`, predates the merge), so the concrete
-pin is a build from the merge commit:
+PR #35371 **merged to SGLang main 2026-08-19** as signed commit
+`c14312a66420b75ca9a11bf1817c4db1fa26b097` (base
+`87a09494fa3fbd685bd7c88d6a2dbdd3135de602`). Re-checked 2026-08-20: the latest release is still
+v0.5.17 (2026-08-08), and the newest immutable Docker nightly,
+`20260818-c0b6474b`, predates the merge. The moving `dev` tag is not an acceptable pin. The
+concrete artifact is therefore built from the signed commit:
 
 ```bash
 bash scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh
@@ -124,15 +126,40 @@ bash scripts/inference/qwen38/build-qwen38-dflash2-sglang-image.sh
   profiles onto the merged-commit build is a later task, not a precondition.
 - The pinned fork's dflash files differ from the PR base (69–231 changed lines each), so this is a
   full from-source build, not a thin overlay on `qwen38-27b`.
-- Expectation check: if the 08-19 diagnosis holds (v1-class draft caps acceptance at ~2–2.7), the
-  `c14312a6` image should approach the card's 4.1–5.5 under the card's conditions and beat DSpark's
-  84.2 tok/s prose cell. If it doesn't, the diagnosis is wrong — re-investigate before believing
-  either engine.
+- Live result at 350 W: native SGLang reached 124.8–125.0 tok/s prose decode and 722.2
+  aggregate tok/s at concurrency eight. Its windowed acceptance length was 3.075 after the
+  sequential cells and 3.533 after concurrency eight: below the card's H200/FA3 range, but well
+  above the miswiring threshold and materially faster than the pre-merge v1-class profile.
 
-**Status 2026-08-20:** not built and no build process is currently running. The last watcher
-line in `~/.local/state/qwen38/sglang-dflash2-build.log` was waiting for the vLLM build before
-the desktop rebooted. Start `build-qwen38-dflash2-sglang-image.sh` explicitly when this sibling
-is wanted; then record its image ID/digest, run the validation gate, and A/B against DSpark v2.
+**Built artifact (2026-08-20):** upstream's own x86 image job for this commit failed because its
+Dockerfile requested unpublished `nvidia-nccl-cu13==2.28.3-1`. The local builder repairs that pin
+to **2.29.7**, exactly matching torch 2.13.0+cu130; passes `BRANCH_TYPE=local` so the final image
+contains the pinned checkout rather than a released package; and patches a copied Dockerfile to
+reduce hpc-ops' hardcoded `-j16` (the desktop build used `-j4`). The SHA-pinned source tree remains
+clean. Build time was 25m57s.
+
+- tag: `peterstorm/sglang:qwen38-dflash2-c14312a`
+- immutable local image ID: `sha256:af311253309cebbd021d4f7cc4da695d30434182e89407818200754f0d788880`
+- size: 26.7 GB
+- runtime: `sglang 0.5.18.dev761+gc14312a66`, torch `2.13.0+cu130`, CUDA 13.0,
+  NCCL package/runtime 2.29.7
+- source proof: `/sgl-workspace/sglang` reports exactly `c14312a66420b75ca9a11bf1817c4db1fa26b097`
+- capability probes: Qwen3.8 target class, `DFlash2DraftModel`, `CandidateSelector`,
+  `DFlashGroupedConv`, DFlash2 `EntryClass`, and DSpark import all pass
+- desktop GPU probe: RTX PRO 6000 Blackwell detected at compute capability 12.0;
+  `sgl_kernel` and DFlash2 import successfully with the GPU runtime active
+- repository digest: none (local-only image; use the image ID for an immutable local launch)
+
+The image completed its first live model-load and benchmark gate on 2026-08-20 and is now the
+active healthy/authenticated backend. It loaded native DFlash 2 on both TP ranks, captured the
+selector and draft graphs, completed every sequential and concurrency-eight request, and remained
+at zero restarts with no OOM, NCCL failure, or Xid. Full results:
+`benchmarks/vllm-tps/2026-08-20-dflash2-sglang-native.md`. Relaunch immutably with:
+
+```bash
+DFLASH2_NATIVE_IMAGE=sha256:af311253309cebbd021d4f7cc4da695d30434182e89407818200754f0d788880 \
+  bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native
+```
 
 ## Native DFlash 2 profile (full BF16, TP2)
 
@@ -351,6 +378,24 @@ nvidia-smi --query-gpu=index,power.draw,temperature.gpu --format=csv
 - A/B against the DSpark v2 profile (same target, same flags, one drafter apart) before
   promoting DFlash 2 as the default: switch `sglang` ⇄ `dflash2` and compare acceptance +
   throughput in the Grafana DSpark panels.
+
+For the native SGLang merge image, launch by immutable local image ID and verify the engine-specific
+startup evidence plus metrics:
+
+```bash
+DFLASH2_NATIVE_IMAGE=sha256:af311253309cebbd021d4f7cc4da695d30434182e89407818200754f0d788880 \
+  bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status
+docker logs qwen38-27b-bf16-dflash2-sglang-native 2>&1 \
+  | grep -E 'Load weight end.*DFlash2DraftModel|Initialized DFLASH|selector decode'
+curl -fsS http://127.0.0.1:8000/metrics | grep -E '^sglang:spec_'
+```
+
+The status must name `qwen38-27b-bf16-dflash2-sglang-native`; health and authentication must be
+OK. Logs must show `DFlash2DraftModel`, block size 8, fused KV materialization, and selector decode
+inside the draft graph. On the controlled local probes the windowed acceptance length was 3.075
+sequential and 3.533 at concurrency eight. Preserve and compare against
+`benchmarks/vllm-tps/2026-08-20-dflash2-sglang-native.md` after every re-pin or tuning change.
 
 For the vLLM PR image, use an immutable local reference for the first cutover and verify the
 engine-specific architecture and metrics (the generic switcher output now prints the same gate):

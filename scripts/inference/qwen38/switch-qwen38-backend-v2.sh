@@ -153,10 +153,23 @@ case "$MODE" in
 esac
 
 wait_until_healthy() {
-  local started_at now elapsed last_log
+  local started_at now elapsed last_log container_state container_status restart_count
   echo "Waiting for $HEALTH_URL (budget $((HEALTH_TIMEOUT / 60)) min) ..."
   started_at="$(date +%s)"
   while :; do
+    container_state="$(docker inspect --format='{{.State.Status}} {{.RestartCount}}' "$START_NAME" 2>/dev/null || true)"
+    read -r container_status restart_count <<< "$container_state"
+    if [ "$container_status" != running ] || ! [[ "$restart_count" =~ ^[0-9]+$ ]] || [ "$restart_count" -gt 0 ]; then
+      echo "error: $START_NAME failed during startup (status=${container_status:-missing}, restarts=${restart_count:-unknown})" >&2
+      echo "Last log lines:" >&2
+      docker logs --tail 30 "$START_NAME" 2>&1 | tail -30 >&2 || true
+      # Stop Docker from repeating a deterministic startup failure while the
+      # operator inspects the preserved container and logs.
+      docker update --restart=no "$START_NAME" >/dev/null 2>&1 || true
+      docker stop -t 10 "$START_NAME" >/dev/null 2>&1 || true
+      echo "Recovery: bash $0 $FALLBACK" >&2
+      return 1
+    fi
     if server_healthy; then
       return 0
     fi
