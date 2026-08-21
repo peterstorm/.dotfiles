@@ -76,6 +76,7 @@ contains "$MODULE" 'test "$(find "$out/workflows" -type f -name '\''*.json'\'' |
 contains "$MODULE" 'test "$(find "$out/media" -type f | wc -l)" -eq 6'
 contains "$MODULE" 'grep -RohF '\''krea2\\krea2_turbo_int8_convrot.safetensors'\'''
 contains "$MODULE" 'grep -RohF '\''qwen3-vl-4b-heretic_int8.safetensors'\'''
+contains "$MODULE" 'pythonPackages.hf-xet'
 contains "$MODULE" 'modelSubdirectories = ['
 contains "$MODULE" '++ map (directory: "d /models/comfyui/${directory} 0750 peterstorm users - -") modelSubdirectories;'
 contains "$MODULE" 'binaryTorchPython.pkgs.comfyui-workflow-templates-json'
@@ -136,8 +137,12 @@ contains "$H3_DOWNLOAD" 'REV="dc559027db79c174125df4d827db55cd11178860"'
 contains "$H3_DOWNLOAD" 'minimax_h3_fl2va_bf16.safetensors'
 contains "$H3_DOWNLOAD" 'minimax_h3_ref2va_bf16.safetensors'
 contains "$H3_DOWNLOAD" 'qwen3vl_32b_minimax_h3_bf16.safetensors'
+contains "$H3_DOWNLOAD" "python3 -c 'import hf_xet'"
+contains "$H3_DOWNLOAD" 'unset HF_HUB_DISABLE_XET'
 contains "$H3_DOWNLOAD" 'sha256sum "$file"'
 contains "$H3_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
+[[ "$(grep -Fc 'rm -rf "$STAGING"' "$H3_DOWNLOAD")" -eq 1 ]] \
+  || fail "MiniMax H3 staging may be removed only after successful installation"
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$H3_DOWNLOAD")" -eq 8 ]] \
   || fail "MiniMax H3 BF16 manifest must contain exactly 8 pinned artifacts"
 

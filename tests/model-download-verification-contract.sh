@@ -12,7 +12,7 @@ fail() {
 }
 
 sandbox="$(mktemp -d)"
-trap 'rm -rf "$sandbox" /tmp/muse-glimmer-abliterated-dl.sh' EXIT
+trap 'rm -rf "$sandbox" /tmp/muse-glimmer-abliterated-dl.sh /tmp/muse-glimmer-abliterated.sha256' EXIT
 mkdir -p "$sandbox/root"
 printf 'verified artifact\n' >"$sandbox/root/artifact.bin"
 expected_sha="$(sha256sum "$sandbox/root/artifact.bin" | cut -d' ' -f1)"
@@ -80,6 +80,15 @@ grep -Fq 'docker wait muse-glimmer-abliterated-model-dl' "$sandbox/docker-events
   || fail "blocking Muse downloader did not wait for its container"
 grep -Fq 'container log evidence' "$sandbox/wait-failure.log" \
   || fail "Muse downloader failure omitted container logs"
+grep -Fq 'sha256sum --check --strict /target.sha256' /tmp/muse-glimmer-abliterated-dl.sh \
+  || fail "Muse verifier does not consume the mounted manifest as data"
+if grep -Fq 'cd53270fef03dac41' /tmp/muse-glimmer-abliterated-dl.sh; then
+  fail "Muse generated script interpolated checksum data into shell source"
+fi
+grep -Fq 'cd53270fef03dac41' /tmp/muse-glimmer-abliterated.sha256 \
+  || fail "Muse checksum manifest was not materialized separately"
+grep -Fq -- '-v /tmp/muse-glimmer-abliterated.sha256:/target.sha256:ro' "$sandbox/docker-events" \
+  || fail "Muse checksum manifest was not mounted read-only"
 
 status="$(run_muse_download no 0 "$sandbox/wait-success.log")"
 [ "$status" -eq 0 ] || fail "successful blocking Muse download returned $status"

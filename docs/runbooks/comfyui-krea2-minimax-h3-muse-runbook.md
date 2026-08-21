@@ -120,7 +120,8 @@ sudo nixos-rebuild switch --flake .#desktop
 The switch installs:
 
 - `comfyui` with CUDA-capable Nix binary wheels;
-- `hf` for pinned model downloads;
+- `hf` plus `hf-xet` for pinned model downloads, including H3 artifacts too
+  large for regular Hub HTTPS;
 - FFmpeg;
 - `comfyui.service`, installed but intentionally not boot-started while the
   normal Qwen TP2 profile owns both GPUs;
@@ -542,9 +543,11 @@ MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
 
 The manifest downloads both original unpruned BF16 task families, the shared
 Qwen3-VL-32B BF16 encoder, video/audio VAEs, and all three optional Turbo LoRAs:
-eight artifacts, 195,748,912,288 bytes total. The maximum-quality baseline does
-not apply a Turbo LoRA and retains the original 50-step schedule. Start from the
-official Comfy templates:
+eight artifacts, 195,748,912,288 bytes total. H3 uses Nix-managed `hf-xet` for
+the three oversized BF16 artifacts and preserves its local staging metadata
+across retries, so interrupted transfers resume instead of restarting. The
+maximum-quality baseline does not apply a Turbo LoRA and retains the original
+50-step schedule. Start from the official Comfy templates:
 
 - `video_minimax_h3_t2v`;
 - `video_minimax_h3_i2v`;

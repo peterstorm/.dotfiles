@@ -69,7 +69,8 @@ contains "$DOWNLOAD" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
 contains "$DOWNLOAD" 'export HF_HUB_DISABLE_XET=1'
 contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_TARGET_REPO@\$MUSE_TARGET_REV' > '\$MUSE_TARGET_HOST/.download-complete'"
 contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_DRAFT_REPO@\$MUSE_DRAFT_REV' > '\$MUSE_DRAFT_HOST/.download-complete'"
-contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_TARGET_SHA256_MANIFEST' | sha256sum --check --strict"
+contains "$DOWNLOAD" 'sha256sum --check --strict /target.sha256'
+contains "$DOWNLOAD" '-v "$TARGET_MANIFEST":/target.sha256:ro'
 contains "$DOWNLOAD" '-v "$MUSE_TARGET_HOST":"$MUSE_TARGET_HOST"'
 contains "$DOWNLOAD" '-v "$MUSE_DRAFT_HOST":"$MUSE_DRAFT_HOST"'
 if grep -Fq -- '-v /models:/models' "$DOWNLOAD"; then

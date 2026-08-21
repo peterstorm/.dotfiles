@@ -129,6 +129,7 @@ let
   });
 
   modelTools = pkgs.python3.withPackages (pythonPackages: [
+    pythonPackages.hf-xet
     pythonPackages.huggingface-hub
   ]);
 

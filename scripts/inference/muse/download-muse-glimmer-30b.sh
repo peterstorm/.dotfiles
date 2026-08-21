@@ -20,6 +20,7 @@ inference_resolve_operator
 muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
 DOWNLOAD_SCRIPT="/tmp/muse-glimmer-$MUSE_VARIANT-dl.sh"
+TARGET_MANIFEST="/tmp/muse-glimmer-$MUSE_VARIANT.sha256"
 MUSE_DOWNLOAD_DETACH="${MUSE_DOWNLOAD_DETACH:-no}"
 case "$MUSE_DOWNLOAD_DETACH" in
   yes|no) ;;
@@ -49,27 +50,33 @@ if [ ! -w "$MUSE_TARGET_HOST" ] || [ ! -w "$MUSE_DRAFT_HOST" ]; then
   sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$MUSE_TARGET_HOST" "$MUSE_DRAFT_HOST"
 fi
 
+if [ -n "$MUSE_TARGET_SHA256_MANIFEST" ]; then
+  printf '%s\n' "$MUSE_TARGET_SHA256_MANIFEST" >"$TARGET_MANIFEST"
+else
+  : >"$TARGET_MANIFEST"
+fi
 cat >"$DOWNLOAD_SCRIPT" <<EOF
 set -euo pipefail
 pip install -q huggingface_hub
 export HF_HUB_DISABLE_XET=1
 hf download "$MUSE_TARGET_REPO" --revision "$MUSE_TARGET_REV" --local-dir "$MUSE_TARGET_HOST"
-if [ -n '$MUSE_TARGET_SHA256_MANIFEST' ]; then
+if [ -s /target.sha256 ]; then
   cd '$MUSE_TARGET_HOST'
-  printf '%s\n' '$MUSE_TARGET_SHA256_MANIFEST' | sha256sum --check --strict
+  sha256sum --check --strict /target.sha256
 fi
 printf '%s\n' '$MUSE_TARGET_REPO@$MUSE_TARGET_REV' > '$MUSE_TARGET_HOST/.download-complete'
 hf download "$MUSE_DRAFT_REPO" --revision "$MUSE_DRAFT_REV" --local-dir "$MUSE_DRAFT_HOST"
 printf '%s\n' '$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV' > '$MUSE_DRAFT_HOST/.download-complete'
 echo DOWNLOAD_COMPLETE
 EOF
-chmod 600 "$DOWNLOAD_SCRIPT"
+chmod 600 "$DOWNLOAD_SCRIPT" "$TARGET_MANIFEST"
 
 docker rm -f "$MUSE_DOWNLOAD_CONTAINER_NAME" 2>/dev/null || true
 docker run -d --name "$MUSE_DOWNLOAD_CONTAINER_NAME" --network host \
   -v "$MUSE_TARGET_HOST":"$MUSE_TARGET_HOST" \
   -v "$MUSE_DRAFT_HOST":"$MUSE_DRAFT_HOST" \
   -v "$DOWNLOAD_SCRIPT":/dl.sh:ro \
+  -v "$TARGET_MANIFEST":/target.sha256:ro \
   ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
   python:3.11-slim bash /dl.sh
 

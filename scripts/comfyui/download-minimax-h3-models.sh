@@ -26,6 +26,11 @@ if ! command -v hf >/dev/null 2>&1; then
   echo "error: the Hugging Face 'hf' CLI is required" >&2
   exit 1
 fi
+if ! python3 -c 'import hf_xet' >/dev/null 2>&1; then
+  echo "error: hf_xet is required for MiniMax H3 files larger than regular Hub downloads support" >&2
+  echo "apply the desktop NixOS configuration before downloading" >&2
+  exit 1
+fi
 for command in flock sha256sum stat; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "error: required command is missing: $command" >&2
@@ -80,10 +85,11 @@ if [ -f "$MARKER" ] && grep -Fxq "$REPO@$REV" "$MARKER"; then
   echo "Existing profile is incomplete or corrupt; resuming." >&2
 fi
 
-rm -rf "$STAGING"
+# Preserve the local-dir metadata and completed artifacts across retries. The
+# pinned manifest remains the authority before anything reaches MODELS_ROOT.
 mkdir -p "$STAGING"
 mapfile -t files < <(awk 'NF == 3 { print $3 }' <<<"$MANIFEST")
-export HF_HUB_DISABLE_XET=1
+unset HF_HUB_DISABLE_XET
 hf download "$REPO" "${files[@]}" --revision "$REV" --local-dir "$STAGING"
 
 printf 'Verifying %d pinned MiniMax H3 BF16 artifacts...\n' "${#files[@]}"
