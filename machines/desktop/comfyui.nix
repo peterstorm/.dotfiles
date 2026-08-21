@@ -42,10 +42,19 @@ let
         cudaPackages = binaryCudaPackages;
         torch-bin = final.torch;
       };
-      torchaudio = prev.torchaudio-bin.override {
-        cudaPackages = binaryCudaPackages;
-        torch-bin = final.torch;
-      };
+      torchaudio =
+        (prev.torchaudio-bin.override {
+          cudaPackages = binaryCudaPackages;
+          torch-bin = final.torch;
+        }).overrideAttrs
+          {
+            # Nixpkgs' 2.11 wheel hash resolves to CUDA 12 regardless of the
+            # package-set override. Pin upstream's matching cu130 wheel instead.
+            src = pkgs.fetchurl {
+              url = "https://download.pytorch.org/whl/cu130/torchaudio-2.11.0%2Bcu130-cp314-cp314-manylinux_2_28_x86_64.whl";
+              hash = "sha256-N4tJZxtYERSi0l1Ako8SoVCHL+rfEWaaY/Vz6Bx4AZo=";
+            };
+          };
     };
   };
 

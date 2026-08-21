@@ -60,7 +60,10 @@ compile PyTorch or Triton from source. The module also disables NVSHMEM's
 non-installed test and example targets; Nixpkgs otherwise compiles their full
 all-architecture matrix despite disabling the package check phase. Finally, it
 relaxes the cu130 wheel's stale `setuptools<82` metadata cap, matching Nixpkgs'
-source-Torch recipe; the packaged Torch import check remains enabled.
+source-Torch recipe. Nixpkgs' torchaudio 2.11 binary source resolves to a CUDA
+12 wheel independently of the CUDA package override, so the module pins the
+same release's official cu130/cp314 wheel by SHA-256. Torch and torchaudio
+import checks remain enabled.
 
 ## Legal gates
 
