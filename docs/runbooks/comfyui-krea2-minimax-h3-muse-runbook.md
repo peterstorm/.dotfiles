@@ -17,8 +17,9 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 - **MiniMax H3 API partner nodes** are the immediately usable H3 path in Denmark:
   text-to-video, first/last-frame, multimodal reference-to-video, Context IR
   prompt refinement, and 2K regeneration.
-- **Local H3 core nodes are present but local H3 weights must not be downloaded
-  in Denmark without separate written MiniMax authorization.**
+- **Local H3 core nodes use the separately authorized original unpruned BF16
+  reference profile; downloads remain dual-gated by license acceptance and
+  territorial authorization attestation.**
 
 This deliberately does **not** install ComfyUI-Manager or permit mutable node
 installs. Core supplies the standard generation nodes. The in-repo Muse adapter
@@ -73,16 +74,14 @@ import checks remain enabled.
 
 ## Legal gates
 
-### MiniMax H3 local weights: blocked in Denmark
+### MiniMax H3 local weights: separate authorization required
 
 The MiniMax H3 Community License defines the EU, UK, South Korea, and US as
-**Excluded Territories**. Denmark is in the EU. It forbids running, displaying,
-or using the weights or outputs there without a separate license.
-
-Do not download anything from `MiniMaxAI/MiniMax-H3` or
-`Comfy-Org/MiniMax-H3` onto this workstation until MiniMax grants written
-permission through <https://platform.minimax.io/h3-license>. Archive the grant
-with the deployment record.
+**Excluded Territories**. Denmark is in the EU, so the community license alone
+does not authorize local use. The operator reported obtaining separate MiniMax
+permission on 2026-08-21. Archive the grant with the deployment record before
+activation. The downloader requires both `MINIMAX_H3_ACCEPT_LICENSE=yes` and
+`MINIMAX_H3_AUTHORIZED=yes`; neither defaults open.
 
 MiniMax's own license Q&A separately states that the **MiniMax H3 API is
 available globally** because MiniMax operates moderation and compliance
@@ -528,8 +527,18 @@ ComfyUI core already includes:
 - `MiniMaxH3SigmaShift` with baseline video shift 12 and audio shift 3;
 - core model/CLIP/VAE loaders, sampler, `CreateVideo`, and `SaveVideo`.
 
-Do not download their weights in Denmark without authorization. If permission
-is granted, start from the official Comfy templates:
+With separate authorization in force, install the pinned maximum-quality BF16 profile:
+
+```bash
+MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
+  bash scripts/comfyui/download-minimax-h3-models.sh
+```
+
+The manifest downloads both original unpruned BF16 task families, the shared
+Qwen3-VL-32B BF16 encoder, video/audio VAEs, and all three optional Turbo LoRAs:
+eight artifacts, 195,748,912,288 bytes total. The maximum-quality baseline does
+not apply a Turbo LoRA and retains the original 50-step schedule. Start from the
+official Comfy templates:
 
 - `video_minimax_h3_t2v`;
 - `video_minimax_h3_i2v`;
@@ -608,7 +617,8 @@ Do not call the stack qualified until:
 - [ ] H3 2K regeneration accepts the unmodified 768p source.
 - [ ] No Xid, OOM, service restart, or unexpected GPU owner occurs.
 - [ ] Partner usage/cost and remote-data handling are recorded.
-- [ ] Local H3 remains weightless unless written authorization is archived.
+- [ ] The separate H3 authorization is archived and the eight-artifact marker
+      matches the pinned repository revision.
 
 Commands:
 

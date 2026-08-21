@@ -9,6 +9,7 @@ DESKTOP="$ROOT/machines/desktop/default.nix"
 NODE="$ROOT/comfyui/custom_nodes/muse_glimmer_prompt/__init__.py"
 NODE_TEST="$ROOT/tests/test_muse_glimmer_prompt.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
+H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
 H3_RUNBOOK="$ROOT/docs/runbooks/local-ai-video-script-runbook.md"
@@ -30,13 +31,14 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$ACTIVATE"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
+bash -n "$H3_DOWNLOAD"
 bash -n "$ACTIVATE"
 nix-instantiate --parse "$MODULE" >/dev/null
 
@@ -118,6 +120,18 @@ contains "$DOWNLOAD" 'mv -f "$destination.new" "$destination"'
   || fail "Krea base manifest must contain exactly 15 pinned artifacts"
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 3 ]] \
   || fail "Episode 30 auxiliary manifest must contain exactly 3 pinned artifacts"
+
+# MiniMax H3 is separately authorized, revision-pinned, complete, and atomic.
+contains "$H3_DOWNLOAD" 'MINIMAX_H3_ACCEPT_LICENSE'
+contains "$H3_DOWNLOAD" 'MINIMAX_H3_AUTHORIZED'
+contains "$H3_DOWNLOAD" 'REV="dc559027db79c174125df4d827db55cd11178860"'
+contains "$H3_DOWNLOAD" 'minimax_h3_fl2va_bf16.safetensors'
+contains "$H3_DOWNLOAD" 'minimax_h3_ref2va_bf16.safetensors'
+contains "$H3_DOWNLOAD" 'qwen3vl_32b_minimax_h3_bf16.safetensors'
+contains "$H3_DOWNLOAD" 'sha256sum "$file"'
+contains "$H3_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$H3_DOWNLOAD")" -eq 8 ]] \
+  || fail "MiniMax H3 BF16 manifest must contain exactly 8 pinned artifacts"
 
 # Activation is explicit and rollback-aware; Comfy stays on GPU1, Muse on GPU0.
 contains "$ACTIVATE" "mapfile -t prior_running"

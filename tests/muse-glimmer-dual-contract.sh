@@ -56,6 +56,10 @@ muse_resolve_variant standard
 muse_resolve_variant abliterated
 [[ "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" == "mlasli/Muse-Glimmer-30B-Abliterated-BF16@daf5fab76a0351a583714a92d88ebdb6eb48af35" ]] \
   || fail "abliterated Muse variant resolves incorrectly"
+MUSE_MODELS_ROOT=/tmp/muse-staging muse_resolve_variant abliterated
+[[ "$MUSE_TARGET_HOST" == /tmp/muse-staging/Muse-Glimmer-30B-Abliterated-BF16 ]] \
+  || fail "abliterated Muse staging root resolves incorrectly"
+unset MUSE_MODELS_ROOT
 unknown_status=0
 muse_resolve_variant unknown >/dev/null 2>&1 || unknown_status=$?
 [[ "$unknown_status" -eq 2 ]] || fail "variant resolver must reject unknown variants"

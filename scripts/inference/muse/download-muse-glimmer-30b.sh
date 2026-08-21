@@ -34,8 +34,12 @@ else
   echo "note: no HF token at $TOKEN_FILE - downloading unauthenticated (lower rate limits)" >&2
 fi
 
-sudo mkdir -p "$MUSE_TARGET_HOST" "$MUSE_DRAFT_HOST"
-sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$MUSE_TARGET_HOST" "$MUSE_DRAFT_HOST"
+if ! mkdir -p "$MUSE_TARGET_HOST" "$MUSE_DRAFT_HOST" 2>/dev/null; then
+  sudo mkdir -p "$MUSE_TARGET_HOST" "$MUSE_DRAFT_HOST"
+fi
+if [ ! -w "$MUSE_TARGET_HOST" ] || [ ! -w "$MUSE_DRAFT_HOST" ]; then
+  sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$MUSE_TARGET_HOST" "$MUSE_DRAFT_HOST"
+fi
 
 cat >"$DOWNLOAD_SCRIPT" <<EOF
 set -euo pipefail
