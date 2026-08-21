@@ -7,9 +7,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../inference/shared/inference-api-key.sh"
+# shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
+source "$SCRIPT_DIR/../inference/muse/muse-glimmer-variant.sh"
+muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
 MUSE_LAUNCHER="$SCRIPT_DIR/../inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
-MUSE_NAME="muse-glimmer-30b-bf16-dflash"
+MUSE_NAME="$MUSE_CONTAINER_NAME"
+OTHER_MUSE_NAME="$MUSE_OTHER_CONTAINER_NAME"
+MUSE_TARGET="$MUSE_TARGET_HOST"
 MUSE_URL="http://127.0.0.1:8001"
 COMFY_URL="http://127.0.0.1:8188"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-1800}"
@@ -30,9 +35,9 @@ if ! systemctl show comfyui.service -p Environment --value | grep -q 'CUDA_VISIB
   echo "error: comfyui.service is not pinned to physical GPU1" >&2
   exit 1
 fi
-if [ ! -e /models/Muse-Glimmer-30B/config.json ] ||
+if [ ! -e "$MUSE_TARGET/config.json" ] ||
    [ ! -e /models/Muse-Glimmer-30B-assistant/config.json ]; then
-  echo "error: Muse checkpoints are incomplete; run the Muse downloader first" >&2
+  echo "error: Muse '$MUSE_VARIANT' checkpoints are incomplete; run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh first" >&2
   exit 1
 fi
 
@@ -47,6 +52,7 @@ KNOWN_INFERENCE_CONTAINERS=(
   qwen38-27b-bf16-dflash2-sglang
   qwen38-27b-bf16-dflash2-sglang-native
   qwen38-27b-bf16-dflash2-vllm
+  "$OTHER_MUSE_NAME"
 )
 
 is_running() {
@@ -113,7 +119,7 @@ done
 sudo systemctl start comfyui.service
 
 if [ "$muse_was_running" -eq 0 ]; then
-  GPU_DEVICE=0 PORT=8001 bash "$MUSE_LAUNCHER"
+  MUSE_VARIANT="$MUSE_VARIANT" GPU_DEVICE=0 PORT=8001 bash "$MUSE_LAUNCHER"
 else
   echo "$MUSE_NAME is already running on physical GPU0; preserving it."
 fi
@@ -152,7 +158,7 @@ done
 trap - ERR INT TERM
 cat <<EOF
 CREATIVE_STACK_READY
-Muse prompt author: $MUSE_URL/v1 (physical GPU0)
+Muse prompt author: $MUSE_URL/v1 (physical GPU0, $MUSE_VARIANT BF16)
 ComfyUI:           $COMFY_URL (physical GPU1, loopback only)
 From another machine:
   ssh -N -L 8188:127.0.0.1:8188 desktop

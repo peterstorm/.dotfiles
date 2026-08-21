@@ -13,11 +13,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
+# shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
+source "$SCRIPT_DIR/../muse/muse-glimmer-variant.sh"
+muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
 QWEN_RUN="$SCRIPT_DIR/../qwen38/run-qwen38-27b-bf16.sh"
 MUSE_RUN="$SCRIPT_DIR/../muse/run-muse-glimmer-30b-bf16-dflash.sh"
 QWEN_NAME="qwen38-27b-bf16"
-MUSE_NAME="muse-glimmer-30b-bf16-dflash"
+MUSE_NAME="$MUSE_CONTAINER_NAME"
 QWEN_PORT=8000
 MUSE_PORT=8001
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-1800}"
@@ -46,8 +49,8 @@ if [ ! -e /models/Qwen3.8-27B/config.json ]; then
   exit 1
 fi
 MUSE_CHECKPOINTS=(
-  "/models/Muse-Glimmer-30B|meta-models/Muse-Glimmer-30B@a4e59da52a7bc87ae7251dd5545c0dd437c44b68"
-  "/models/Muse-Glimmer-30B-assistant|meta-models/Muse-Glimmer-30B-assistant@e8192f3a8f617f74be2ce220360c89ef4789f39f"
+  "$MUSE_TARGET_HOST|$MUSE_TARGET_REPO@$MUSE_TARGET_REV"
+  "$MUSE_DRAFT_HOST|$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"
 )
 for checkpoint in "${MUSE_CHECKPOINTS[@]}"; do
   IFS='|' read -r muse_path expected_marker <<<"$checkpoint"
@@ -55,7 +58,7 @@ for checkpoint in "${MUSE_CHECKPOINTS[@]}"; do
      [ ! -e "$muse_path/.download-complete" ] ||
      ! grep -Fxq "$expected_marker" "$muse_path/.download-complete"; then
     echo "error: Muse checkpoint is incomplete or not pinned at $muse_path" >&2
-    echo "       run scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE" >&2
+    echo "       run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE" >&2
     exit 1
   fi
 done
@@ -95,6 +98,7 @@ CONFLICTING_CONTAINERS=(
   qwen38-27b-bf16-dspark-sglang
   qwen38-27b-bf16-dspark-vllm
   muse-glimmer-30b-bf16-dflash
+  muse-glimmer-30b-abliterated-bf16-dflash
 )
 for container in "${CONFLICTING_CONTAINERS[@]}"; do
   docker stop "$container" >/dev/null 2>&1 || true
@@ -137,6 +141,7 @@ GPU_MEMORY_UTILIZATION="$QWEN_GPU_MEMORY_UTILIZATION" \
 SPEC_MTP=0 \
   bash "$QWEN_RUN"
 
+MUSE_VARIANT="$MUSE_VARIANT" \
 GPU_DEVICE=0 \
 PORT="$MUSE_PORT" \
 MAX_RUNNING_REQUESTS="$MUSE_MAX_RUNNING_REQUESTS" \
@@ -189,5 +194,5 @@ done
 trap - ERR INT TERM
 echo "Dual inference profile is healthy:"
 echo "  Qwen: http://127.0.0.1:$QWEN_PORT/v1  (physical GPU1, BF16 TP1)"
-echo "  Muse: http://127.0.0.1:$MUSE_PORT/v1  (physical GPU0, BF16 + DFlash TP1)"
+echo "  Muse: http://127.0.0.1:$MUSE_PORT/v1  (physical GPU0, $MUSE_VARIANT BF16 + DFlash TP1)"
 echo "Use Pi models desktop-vllm/qwen3.8-27b and desktop-muse/muse-glimmer-30b."

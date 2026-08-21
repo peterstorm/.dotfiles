@@ -37,6 +37,8 @@ ComfyUI remains loopback-only and systemd-confined.
 | Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
 | Episode 30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
+| Curated creative suite | 51 official Comfy workflows under six task folders | pinned template package; exact file manifest + JSON gate |
+| Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
 | Comfy account/partner credits | Comfy account | external prepaid service |
@@ -128,7 +130,10 @@ The switch installs:
   extra-path YAML in the Nix store;
 - all seven Episode 30 workflows under
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/` and all six supplied
-  sample inputs under `/var/lib/comfyui/input/`.
+  sample inputs under `/var/lib/comfyui/input/`;
+- 51 curated official workflows under
+  `/var/lib/comfyui/user/default/workflows/creative-suite/`, grouped into image,
+  video, audio, 3D, enhancement, and hosted-frontier folders.
 
 Verify that the unit is installed, explicitly inactive, and pinned to GPU1:
 
@@ -331,6 +336,37 @@ larger downstream workflow. Muse Glimmer 30B remains the preferred prompt author
 for quality and reference mode, while these two workflows preserve the video's
 self-contained ComfyUI option.
 
+### Curated creative suite
+
+There are three distinct workflow inventories; do not conflate them:
+
+- **58 user workflows:** seven pinned Pixaroma Episode 30 graphs plus 51 curated
+  official graphs installed into the workflow browser.
+- **506 official templates:** the complete pinned Comfy Template Library remains
+  available through **Templates** without duplicating every graph into user state.
+- **Models:** only Krea/Edit dependencies are covered by the production downloader.
+  Other local graphs are discoverable but remain weightless until their own model
+  profile is licensed, pinned, downloaded, and qualified.
+
+The curated 51 are selected from Comfy's official immutable template package,
+not community workflow aggregators. They provide:
+
+| Folder | Count | Production capabilities |
+|---|---:|---|
+| `image` | 11 | Krea 2 BF16/INT8/style; Qwen Image 2512; Qwen Edit 2511/INT8/relight/layers; Flux.2 Klein 9B generation/edit; Z-Image Turbo INT8 |
+| `video` | 9 | LTX-2.3 T2V/I2V/FLF/IA2V; HunyuanVideo 1.5 T2V/I2V; Wan 2.2 T2V/I2V/FLF |
+| `audio` | 3 | ACE-Step 1.5 music and Stable Audio 3 Medium |
+| `3d` | 2 | Hunyuan3D single-view and turbo multiview reconstruction |
+| `enhance` | 4 | SeedVR2 image/video restoration, interpolation upscale, and GAN upscale |
+| `cloud` | 22 | MiniMax H3; Seedream 5 Pro; Nano Banana 2; Flux; Runway; Veo 3; Wan 2.7; Topaz; ElevenLabs; Seed Audio |
+
+This is deliberately a curated production surface rather than "install every
+community JSON." It prioritizes first-party workflows, current model families,
+multiple generation/edit/reference modes, audio and 3D coverage, and core/API
+nodes that do not require ComfyUI-Manager. Hosted graphs require a Comfy account,
+credits, and remote upload. Local non-Krea graphs require separate model storage
+and validation; their presence does not claim that their weights are installed.
+
 ### Hosted Krea partner nodes
 
 Use these only when hosted Medium/Large is desired and remote upload is
@@ -346,6 +382,34 @@ photorealism. Partner references are uploaded to Comfy API storage. This is
 not the private local path.
 
 ## 6. Use Muse Glimmer as the prompt author
+
+### Standard and abliterated BF16 variants
+
+The default remains the qualified upstream `meta-models/Muse-Glimmer-30B`.
+The stack also supports the requested
+[`mlasli/Muse-Glimmer-30B-Abliterated-BF16`](https://huggingface.co/mlasli/Muse-Glimmer-30B-Abliterated-BF16)
+at immutable revision `daf5fab76a0351a583714a92d88ebdb6eb48af35`.
+Despite the request describing it as a quant, that repository is **full BF16**:
+its two model shards total 59,553,433,736 bytes. The three large artifacts are
+SHA-256 checked after download. Its model card reports weight-level refusal
+suppression at alpha 0.15 but no formal capability benchmark, so it is an
+experimental creative variant—not a replacement for the standard baseline.
+
+Download and activate it explicitly:
+
+```bash
+MUSE_VARIANT=abliterated bash scripts/inference/muse/download-muse-glimmer-30b.sh
+# Wait for DOWNLOAD_COMPLETE, then:
+MUSE_VARIANT=abliterated bash scripts/comfyui/activate-creative-stack.sh
+```
+
+Both variants use distinct model directories, caches, download containers, and
+runtime container names. They share the official BF16 DFlash assistant. DFlash
+sampling remains output-exact because the target verifies candidates, but the
+modified target may accept fewer draft tokens; benchmark acceptance and speed
+before declaring the variant qualified. The repository's Q8/Q6/Q4 GGUF releases
+are actual quantizations, but they are not installed because this SGLang DFlash
+profile does not provide a qualified Muse GGUF path.
 
 Add **creative → Muse Glimmer → Muse Glimmer Creative Prompt**.
 
@@ -526,12 +590,16 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all three pinned Episode 30 packs with no failed imports.
-- [ ] Seven Episode 30 workflows and six sample inputs are present.
+- [ ] Seven Episode 30 workflows, 51 curated workflows, and six sample inputs are present.
+- [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
-- [ ] A Muse→Krea BF16 1K image completes, then a 2K image completes.
+- [ ] Standard Muse→Krea BF16 1K and 2K images complete.
+- [ ] Abliterated Muse starts from its pinned marker, completes the same fixed
+      prompt corpus, and records quality, refusal behavior, throughput, and
+      effective DFlash acceptance versus standard.
 - [ ] A local Krea style-reference generation completes with the dedicated
       INT8/FP8/style-reference files.
 - [ ] Fixed seed/prompt Krea reruns are compared for determinism.
@@ -581,6 +649,7 @@ Sources accessed 2026-08-21:
 
 - [Pixaroma Episode 30 video and transcript](https://www.youtube.com/watch?v=rGVf3m19yM8)
 - [Pixaroma workflow index](https://workflows.pixaroma.com/)
+- [Muse Glimmer 30B Abliterated BF16](https://huggingface.co/mlasli/Muse-Glimmer-30B-Abliterated-BF16)
 - [Krea 2 Identity Edit nodes](https://github.com/lbouaraba/comfyui-krea2edit)
 - [Krea 2 Identity Edit weights](https://huggingface.co/conradlocke/krea2-identity-edit)
 - [Krea2T Enhancer](https://github.com/capitan01R/ComfyUI-Krea2T-Enhancer)

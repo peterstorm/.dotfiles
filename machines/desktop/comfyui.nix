@@ -172,6 +172,75 @@ let
     hash = "sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k=";
   };
 
+  eliteWorkflowManifest = pkgs.writeText "comfyui-elite-workflows.manifest" ''
+    image/image_krea2_turbo_t2i.json
+    image/image_krea2_turbo_t2i_int8.json
+    image/image_krea2_turbo_int8_image_style_reference.json
+    image/image_qwen_Image_2512.json
+    image/image_qwen_image_edit_2511.json
+    image/image_qwen_image_edit_2511_int8.json
+    image/image_qwen_image_edit_2509_relight.json
+    image/image_qwen_image_layered.json
+    image/image_flux2_klein_text_to_image.json
+    image/image_flux2_klein_image_edit_9b_distilled.json
+    image/image_z_image_turbo_int8.json
+    video/video_ltx2_3_t2v.json
+    video/video_ltx2_3_i2v.json
+    video/video_ltx2_3_flf2v.json
+    video/video_ltx2_3_ia2v.json
+    video/video_hunyuan_video_1.5_720p_t2v.json
+    video/video_hunyuan_video_1.5_720p_i2v.json
+    video/video_wan2_2_14B_t2v.json
+    video/video_wan2_2_14B_i2v.json
+    video/video_wan2_2_14B_flf2v.json
+    audio/audio_ace_step_1_5_split_4b.json
+    audio/audio_ace_step1_5_xl_turbo.json
+    audio/audio_stable_audio_3_medium.json
+    3d/3d_hunyuan3d_image_to_model.json
+    3d/3d_hunyuan3d_multiview_to_model_turbo.json
+    enhance/utility_seedvr2_7b_int8_upscale_image.json
+    enhance/utility_seedvr2_3b_int8_upscale_video.json
+    enhance/utility_interpolation_image_upscale.json
+    enhance/utility-gan_upscaler.json
+    cloud/api_minimax_h3_t2v.json
+    cloud/api_minimax_h3_flf2v.json
+    cloud/api_minimax_h3_r2v.json
+    cloud/api_bytedance_seedream_5_0_pro_t2i.json
+    cloud/api_bytedance_seedream_5_0_pro_image_edit.json
+    cloud/api_bytedance_seedream_5_0_layer_separation.json
+    cloud/api_google_nano_banana2_text_to_image.json
+    cloud/api_google_nano_banana2_image_edit.json
+    cloud/api_flux2.json
+    cloud/api_bfl_flux_1_kontext_max_image.json
+    cloud/api_runway_aleph2_video_edit.json
+    cloud/api_runway_reference_to_image.json
+    cloud/api_veo3.json
+    cloud/api_wan2_7_t2v.json
+    cloud/api_wan2_7_i2v.json
+    cloud/api_wan2_7_r2v.json
+    cloud/api_wan2_7_video_edit.json
+    cloud/api_topaz_image_enhance_wonder3_5.json
+    cloud/api_elevenlabs_text_to_dialogue.json
+    cloud/api_elevenlabs_text_to_sound_effects.json
+    cloud/api_elevenlabs_voice_isolation.json
+    cloud/api_bytedance_seed_audio1_0_t2a.json
+  '';
+
+  eliteWorkflows = pkgs.runCommand "comfyui-elite-workflows" { nativeBuildInputs = [ pkgs.jq ]; } ''
+    source_root="$(${pkgs.findutils}/bin/find ${binaryTorchPython.pkgs.comfyui-workflow-templates-json}/lib \
+      -type d -path '*/comfyui_workflow_templates_json/templates' -print -quit)"
+    test -n "$source_root"
+    while IFS=/ read -r category filename; do
+      test -n "$category" && test -n "$filename"
+      source="$source_root/$filename"
+      test -f "$source"
+      mkdir -p "$out/$category"
+      cp "$source" "$out/$category/$filename"
+      jq -e . "$out/$category/$filename" >/dev/null
+    done < ${eliteWorkflowManifest}
+    test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 51
+  '';
+
   pixaromaEp30 =
     pkgs.runCommand "pixaroma-ep30-workflows"
       {
@@ -201,17 +270,32 @@ let
         test "$(find "$out/media" -type f | wc -l)" -eq 6
       '';
 
-  installPixaromaEp30 = pkgs.writeShellScript "install-pixaroma-ep30" ''
+  installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
-    workflow_dir=/var/lib/comfyui/user/default/workflows/pixaroma-ep30
+    user_workflows=/var/lib/comfyui/user/default/workflows
+    ep30_dir="$user_workflows/pixaroma-ep30"
+    elite_dir="$user_workflows/creative-suite"
+    ep30_staging="$user_workflows/.pixaroma-ep30.new"
+    elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
-    install -d -m 0700 "$workflow_dir" "$input_dir"
+    rm -rf "$ep30_staging" "$elite_staging"
+    install -d -m 0700 "$ep30_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp30}/workflows/*.json; do
-      install -m 0600 "$source" "$workflow_dir/$(basename "$source")"
+      install -m 0600 "$source" "$ep30_staging/$(basename "$source")"
     done
     for source in ${pixaromaEp30}/media/*; do
       install -m 0600 "$source" "$input_dir/$(basename "$source")"
     done
+    for category in ${eliteWorkflows}/*; do
+      destination="$elite_staging/$(basename "$category")"
+      install -d -m 0700 "$destination"
+      for source in "$category"/*.json; do
+        install -m 0600 "$source" "$destination/$(basename "$source")"
+      done
+    done
+    rm -rf "$ep30_dir" "$elite_dir"
+    mv "$ep30_staging" "$ep30_dir"
+    mv "$elite_staging" "$elite_dir"
   '';
 
   extraPaths = pkgs.writeText "comfyui-workstation-paths.yaml" ''
@@ -298,7 +382,7 @@ in
       UMask = "0077";
       ExecStartPre = [
         "${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user"
-        installPixaromaEp30
+        installCreativeWorkflows
       ];
       ExecStart = ''
         ${comfyui}/bin/comfyui \

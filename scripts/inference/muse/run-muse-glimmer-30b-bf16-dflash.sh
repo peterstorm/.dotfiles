@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Launch Muse Glimmer 30B BF16 with its lossless DFlash draft on one RTX PRO 6000.
+# Launch a Muse Glimmer 30B BF16 variant with lossless DFlash on one RTX PRO 6000.
 #
-# This is the text-only half of the concurrent Qwen + Muse profile. It keeps the
-# reference BF16 target and draft, disables only the perception encoder, and
+# MUSE_VARIANT=standard selects upstream; abliterated selects the pinned mlasli
+# BF16 derivative. DFlash remains output-exact, although draft acceptance and
+# therefore speed must be qualified independently for the modified target. This
+# is the text-only half of the creative profile. It disables perception and
 # exposes an authenticated OpenAI-compatible endpoint on :8001 by default.
 #
 # Prerequisite: scripts/inference/muse/download-muse-glimmer-30b.sh
@@ -13,23 +15,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
+# shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
+source "$SCRIPT_DIR/muse-glimmer-variant.sh"
 inference_resolve_operator
+muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
 IMAGE="lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
 DIGEST="sha256:0d73f8dd82c8adbbe481d8520cb6d62d80828f1e62267ee41a3c67cf3dd77528"
-TARGET_REPO="meta-models/Muse-Glimmer-30B"
-TARGET_REV="a4e59da52a7bc87ae7251dd5545c0dd437c44b68"
-TARGET_HOST="/models/Muse-Glimmer-30B"
-TARGET_CONTAINER="/models/meta-models/Muse-Glimmer-30B"
-DRAFT_REPO="meta-models/Muse-Glimmer-30B-assistant"
-DRAFT_REV="e8192f3a8f617f74be2ce220360c89ef4789f39f"
-DRAFT_HOST="/models/Muse-Glimmer-30B-assistant"
-DRAFT_CONTAINER="/models/meta-models/Muse-Glimmer-30B-assistant"
-CACHE_HOST="/models/sglang-cache/muse-glimmer-bf16-dflash"
 ENTRYPOINT_HOST="$SCRIPT_DIR/../shared/sglang-secure-entrypoint.py"
 ENTRYPOINT_CONTAINER="/opt/reclaw/sglang-secure-entrypoint.py"
-NAME="muse-glimmer-30b-bf16-dflash"
-
 GPU_DEVICE="${GPU_DEVICE:-0}"
 PORT="${PORT:-8001}"
 CONTEXT_LENGTH="${CONTEXT_LENGTH:-131072}"
@@ -59,7 +53,7 @@ require_download() {
   local directory="$1" expected="$2"
   if [ ! -e "$directory/config.json" ] || [ ! -e "$directory/.download-complete" ]; then
     echo "error: pinned checkpoint is incomplete at $directory" >&2
-    echo "       run scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE" >&2
+    echo "       run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE" >&2
     return 1
   fi
   if ! grep -Fxq "$expected" "$directory/.download-complete"; then
@@ -68,8 +62,8 @@ require_download() {
   fi
 }
 
-require_download "$TARGET_HOST" "$TARGET_REPO@$TARGET_REV"
-require_download "$DRAFT_HOST" "$DRAFT_REPO@$DRAFT_REV"
+require_download "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV"
+require_download "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"
 if [ ! -f "$ENTRYPOINT_HOST" ]; then
   echo "error: secure SGLang entrypoint not found at $ENTRYPOINT_HOST" >&2
   exit 1
@@ -78,7 +72,7 @@ fi
 # Remove this profile's previous instance before checking whether another model
 # still owns the selected card. This preserves idempotent relaunches while
 # refusing an accidental launch beside a TP2 server.
-docker rm -f "$NAME" 2>/dev/null || true
+docker rm -f "$MUSE_CONTAINER_NAME" 2>/dev/null || true
 gpu_state="$(nvidia-smi --id="$GPU_DEVICE" --query-gpu=power.limit,memory.used --format=csv,noheader,nounits 2>/dev/null)" || {
   echo "error: physical GPU $GPU_DEVICE is not queryable" >&2
   exit 3
@@ -112,11 +106,11 @@ inference_write_private_file "$ENVFILE" <<EOF
 SGLANG_API_KEY=$SGLANG_API_KEY
 EOF
 
-if [ ! -d "$CACHE_HOST" ]; then
-  sudo mkdir -p "$CACHE_HOST"
-  sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$CACHE_HOST"
+if [ ! -d "$MUSE_CACHE_HOST" ]; then
+  sudo mkdir -p "$MUSE_CACHE_HOST"
+  sudo chown "$INFERENCE_OPERATOR_USER:$INFERENCE_OPERATOR_GROUP" "$MUSE_CACHE_HOST"
 fi
-inference_require_cache_access "$CACHE_HOST"
+inference_require_cache_access "$MUSE_CACHE_HOST"
 
 if command -v ss >/dev/null 2>&1 && ss -H -ltn "sport = :$PORT" | grep -q .; then
   echo "error: TCP port $PORT is already in use" >&2
@@ -125,8 +119,9 @@ fi
 
 docker run -d --init \
   --restart unless-stopped \
-  --name "$NAME" \
+  --name "$MUSE_CONTAINER_NAME" \
   --label io.peterstorm.inference.physical-gpu="$GPU_DEVICE" \
+  --label io.peterstorm.inference.muse-variant="$MUSE_VARIANT" \
   --gpus "\"device=$GPU_DEVICE\"" \
   --ipc=host \
   --network host \
@@ -134,15 +129,15 @@ docker run -d --init \
   --ulimit nofile=1048576 \
   --ulimit stack=67108864 \
   --env-file "$ENVFILE" \
-  -v "$TARGET_HOST":"$TARGET_CONTAINER":ro \
-  -v "$DRAFT_HOST":"$DRAFT_CONTAINER":ro \
-  -v "$CACHE_HOST":/root/.cache \
+  -v "$MUSE_TARGET_HOST":"$MUSE_TARGET_CONTAINER":ro \
+  -v "$MUSE_DRAFT_HOST":"$MUSE_DRAFT_CONTAINER":ro \
+  -v "$MUSE_CACHE_HOST":/root/.cache \
   -v "$ENTRYPOINT_HOST":"$ENTRYPOINT_CONTAINER":ro \
   -e CUDA_VISIBLE_DEVICES=0 \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   "$IMAGE@$DIGEST" \
   python3 "$ENTRYPOINT_CONTAINER" \
-  --model-path "$TARGET_CONTAINER" \
+  --model-path "$MUSE_TARGET_CONTAINER" \
   --served-model-name muse-glimmer-30b \
   --dtype bfloat16 \
   --tp-size 1 \
@@ -152,7 +147,7 @@ docker run -d --init \
   --mem-fraction-static "$MEM_FRACTION_STATIC" \
   --language-model-only \
   --speculative-algorithm DFLASH \
-  --speculative-draft-model-path "$DRAFT_CONTAINER" \
+  --speculative-draft-model-path "$MUSE_DRAFT_CONTAINER" \
   --reasoning-parser muse \
   --tool-call-parser muse \
   --sampling-defaults model \
@@ -161,8 +156,8 @@ docker run -d --init \
   --host 0.0.0.0 \
   --port "$PORT"
 
-echo "Started '$NAME' on physical GPU $GPU_DEVICE at :$PORT."
+echo "Started '$MUSE_CONTAINER_NAME' on physical GPU $GPU_DEVICE at :$PORT."
 echo "First start pulls the pinned image and compiles kernels/CUDA graphs."
-echo "Follow:  docker logs -f $NAME"
+echo "Follow:  docker logs -f $MUSE_CONTAINER_NAME"
 echo "Health:  curl -fsS http://127.0.0.1:$PORT/health"
 echo "API key: $KEYFILE  (send as 'Authorization: Bearer <key>')"

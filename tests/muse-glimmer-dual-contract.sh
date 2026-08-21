@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOWNLOAD="$ROOT/scripts/inference/muse/download-muse-glimmer-30b.sh"
+VARIANTS="$ROOT/scripts/inference/muse/muse-glimmer-variant.sh"
 MUSE_RUN="$ROOT/scripts/inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
 QWEN_RUN="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
 DUAL_RUN="$ROOT/scripts/inference/profiles/run-qwen38-muse-glimmer-dual.sh"
@@ -35,16 +36,38 @@ for script in "$DOWNLOAD" "$MUSE_RUN" "$QWEN_RUN" "$DUAL_RUN"; do
   [[ -x "$script" ]] || fail "$script is not executable"
   bash -n "$script"
 done
+[[ -f "$VARIANTS" ]] || fail "$VARIANTS is missing"
+bash -n "$VARIANTS"
 
-contains "$DOWNLOAD" 'TARGET_REPO="meta-models/Muse-Glimmer-30B"'
-contains "$DOWNLOAD" "TARGET_REV=\"$TARGET_REV\""
-contains "$DOWNLOAD" 'DRAFT_REPO="meta-models/Muse-Glimmer-30B-assistant"'
-contains "$DOWNLOAD" "DRAFT_REV=\"$DRAFT_REV\""
+contains "$VARIANTS" 'MUSE_TARGET_REPO="meta-models/Muse-Glimmer-30B"'
+contains "$VARIANTS" "MUSE_TARGET_REV=\"$TARGET_REV\""
+contains "$VARIANTS" 'MUSE_DRAFT_REPO="meta-models/Muse-Glimmer-30B-assistant"'
+contains "$VARIANTS" "MUSE_DRAFT_REV=\"$DRAFT_REV\""
+contains "$VARIANTS" 'MUSE_TARGET_REPO="mlasli/Muse-Glimmer-30B-Abliterated-BF16"'
+contains "$VARIANTS" 'MUSE_TARGET_REV="daf5fab76a0351a583714a92d88ebdb6eb48af35"'
+contains "$VARIANTS" 'MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"'
+[[ "$(grep -Ec '^[0-9a-f]{64}  (model-.*\.safetensors|tokenizer\.json)$' "$VARIANTS")" -eq 3 ]] \
+  || fail "$VARIANTS must pin all three large Abliterated-BF16 artifacts"
+# shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
+source "$VARIANTS"
+muse_resolve_variant standard
+[[ "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" == "meta-models/Muse-Glimmer-30B@$TARGET_REV" ]] \
+  || fail "standard Muse variant resolves incorrectly"
+muse_resolve_variant abliterated
+[[ "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" == "mlasli/Muse-Glimmer-30B-Abliterated-BF16@daf5fab76a0351a583714a92d88ebdb6eb48af35" ]] \
+  || fail "abliterated Muse variant resolves incorrectly"
+unknown_status=0
+muse_resolve_variant unknown >/dev/null 2>&1 || unknown_status=$?
+[[ "$unknown_status" -eq 2 ]] || fail "variant resolver must reject unknown variants"
+
+contains "$DOWNLOAD" 'source "$SCRIPT_DIR/muse-glimmer-variant.sh"'
+contains "$DOWNLOAD" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
 contains "$DOWNLOAD" 'export HF_HUB_DISABLE_XET=1'
-contains "$DOWNLOAD" "printf '%s\\n' '\$TARGET_REPO@\$TARGET_REV' > '\$TARGET_DEST/.download-complete'"
-contains "$DOWNLOAD" "printf '%s\\n' '\$DRAFT_REPO@\$DRAFT_REV' > '\$DRAFT_DEST/.download-complete'"
-contains "$DOWNLOAD" '-v "$TARGET_DEST":"$TARGET_DEST"'
-contains "$DOWNLOAD" '-v "$DRAFT_DEST":"$DRAFT_DEST"'
+contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_TARGET_REPO@\$MUSE_TARGET_REV' > '\$MUSE_TARGET_HOST/.download-complete'"
+contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_DRAFT_REPO@\$MUSE_DRAFT_REV' > '\$MUSE_DRAFT_HOST/.download-complete'"
+contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_TARGET_SHA256_MANIFEST' | sha256sum --check --strict"
+contains "$DOWNLOAD" '-v "$MUSE_TARGET_HOST":"$MUSE_TARGET_HOST"'
+contains "$DOWNLOAD" '-v "$MUSE_DRAFT_HOST":"$MUSE_DRAFT_HOST"'
 if grep -Fq -- '-v /models:/models' "$DOWNLOAD"; then
   fail "$DOWNLOAD grants its throwaway container write access to unrelated checkpoints"
 fi
@@ -54,9 +77,9 @@ fi
 
 contains "$MUSE_RUN" "IMAGE=\"$IMAGE\""
 contains "$MUSE_RUN" "DIGEST=\"$DIGEST\""
-contains "$MUSE_RUN" "TARGET_REV=\"$TARGET_REV\""
-contains "$MUSE_RUN" "DRAFT_REV=\"$DRAFT_REV\""
-contains "$MUSE_RUN" 'NAME="muse-glimmer-30b-bf16-dflash"'
+contains "$MUSE_RUN" 'source "$SCRIPT_DIR/muse-glimmer-variant.sh"'
+contains "$MUSE_RUN" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
+contains "$MUSE_RUN" '--name "$MUSE_CONTAINER_NAME"'
 contains "$MUSE_RUN" '--gpus "\"device=$GPU_DEVICE\""'
 contains "$MUSE_RUN" '-e CUDA_VISIBLE_DEVICES=0'
 contains "$MUSE_RUN" '--dtype bfloat16'
@@ -69,7 +92,7 @@ contains "$MUSE_RUN" '--query-gpu=power.limit,memory.used'
 contains "$MUSE_RUN" 'if ((memory_used > MAX_EXISTING_GPU_MEMORY_MIB)); then'
 contains "$MUSE_RUN" '--language-model-only'
 contains "$MUSE_RUN" '--speculative-algorithm DFLASH'
-contains "$MUSE_RUN" '--speculative-draft-model-path "$DRAFT_CONTAINER"'
+contains "$MUSE_RUN" '--speculative-draft-model-path "$MUSE_DRAFT_CONTAINER"'
 contains "$MUSE_RUN" '--reasoning-parser muse'
 contains "$MUSE_RUN" '--tool-call-parser muse'
 contains "$MUSE_RUN" '--sampling-defaults model'
@@ -82,6 +105,9 @@ if grep -Eq -- '^[[:space:]]*--api-key([=[:space:]]|$)' "$MUSE_RUN"; then
   fail "$MUSE_RUN exposes the API key through Docker command arguments"
 fi
 
+invalid_variant_status=0
+MUSE_VARIANT=unknown bash "$MUSE_RUN" >/dev/null 2>&1 || invalid_variant_status=$?
+[[ "$invalid_variant_status" -eq 2 ]] || fail "$MUSE_RUN must reject an unknown Muse variant"
 invalid_gpu_status=0
 GPU_DEVICE=2 bash "$MUSE_RUN" >/dev/null 2>&1 || invalid_gpu_status=$?
 [[ "$invalid_gpu_status" -eq 2 ]] || fail "$MUSE_RUN must reject an invalid GPU before filesystem access"
@@ -102,8 +128,9 @@ contains "$DUAL_RUN" 'SPEC_MTP=0'
 contains "$DUAL_RUN" 'GPU_DEVICE=0'
 contains "$DUAL_RUN" 'PORT="$MUSE_PORT"'
 contains "$DUAL_RUN" 'systemctl is-active --quiet display-manager'
-contains "$DUAL_RUN" 'meta-models/Muse-Glimmer-30B@a4e59da52a7bc87ae7251dd5545c0dd437c44b68'
-contains "$DUAL_RUN" 'meta-models/Muse-Glimmer-30B-assistant@e8192f3a8f617f74be2ce220360c89ef4789f39f'
+contains "$DUAL_RUN" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
+contains "$DUAL_RUN" '"$MUSE_TARGET_HOST|$MUSE_TARGET_REPO@$MUSE_TARGET_REV"'
+contains "$DUAL_RUN" '"$MUSE_DRAFT_HOST|$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"'
 contains "$DUAL_RUN" '! grep -Fxq "$expected_marker" "$muse_path/.download-complete"'
 contains "$DUAL_RUN" 'MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"'
 contains "$DUAL_RUN" 'MAX_EXISTING_GPU_MEMORY_MIB="${MAX_EXISTING_GPU_MEMORY_MIB:-2048}"'
