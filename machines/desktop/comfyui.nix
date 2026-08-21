@@ -216,12 +216,14 @@ in
       CacheDirectory = "comfyui";
       CacheDirectoryMode = "0750";
       UMask = "0077";
+      ExecStartPre = "${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user";
       ExecStart = ''
         ${comfyui}/bin/comfyui \
           --listen 127.0.0.1 \
           --port 8188 \
           --disable-auto-launch \
           --base-directory /var/lib/comfyui \
+          --database-url sqlite:////var/lib/comfyui/user/comfyui.db \
           --extra-model-paths-config ${extraPaths} \
           --reserve-vram 8 \
           --preview-method auto \

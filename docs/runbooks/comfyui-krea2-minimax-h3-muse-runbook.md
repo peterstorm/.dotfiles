@@ -135,7 +135,8 @@ Do not start it directly while Qwen owns both cards. Section 3 performs the
 transactional profile switch. After activation, acceptance requires:
 
 - the listener is exactly `127.0.0.1:8188`, not `0.0.0.0`;
-- logs list `Muse Glimmer Creative Prompt` without import errors;
+- logs list `Muse Glimmer Creative Prompt` without import or database errors;
+- `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
