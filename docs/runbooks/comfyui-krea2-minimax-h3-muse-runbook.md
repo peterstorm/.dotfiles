@@ -840,7 +840,435 @@ would have to stop. It is not part of the current single-GPU ComfyUI profile.
 | FL2VA + REF2VA in one active graph | Unsupported and unnecessary |
 | Full BF16 H3 TP2 over both GPUs | Separate future profile; Muse and ComfyUI generation must stop |
 
-## 9. Custom-node policy
+## 9. Make a character-driven short film, one scene at a time
+
+### Are all the starting workflows present?
+
+**The workflow definitions needed for this production loop are declaratively
+present, but that does not by itself mean every local generation path is ready
+to run.** There are four separate readiness gates:
+
+1. **Definition present:** the JSON or native node exists in the pinned Nix
+   closure.
+2. **Installed generation active:** that closure has been switched and ComfyUI
+   has started once to install the user workflows.
+3. **Weights ready:** the checksum marker and artifacts are in `/models`, not
+   merely in the user-owned download staging tree.
+4. **Runtime qualified:** the exact graph has completed on this hardware with
+   acceptable RAM, VRAM, quality, and stability.
+
+The starting surface is:
+
+| Production job | Open this | Where it appears | Additional readiness requirement |
+|---|---|---|---|
+| Canonical character image | `image_krea2_turbo_t2i` | User workflows → `creative-suite/image`, and Templates → Image | Krea production marker in `/models/comfyui` |
+| Style-led character image | `image_krea2_turbo_int8_image_style_reference` | User workflows → `creative-suite/image`, and Templates → Image | Krea INT8/FP8/style artifacts |
+| Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
+| Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
+| Wardrobe variants | `Krea 2 + One Image Outfit Lora` or `Krea 2 + Outfit Transfer 2` | User workflows → `pixaroma-ep30` | Outfit-transfer weights and clean clothing references |
+| Story, screenplay, and scene cards | Muse Glimmer in Pi | Select `desktop-muse/muse-glimmer-30b` | Muse target and DFlash draft markers; Muse endpoint healthy |
+| Per-scene H3 prompt compilation | `Muse Glimmer Creative Prompt` | Add node → creative → Muse Glimmer | Muse endpoint healthy; accepted scene card already written |
+| Text-only local H3 scene | `video_minimax_h3_t2v` | Templates → Video | Local H3 marker; save a BF16 FL2VA copy as described above |
+| First/last-frame local H3 scene | `video_minimax_h3_i2v` | Templates → Video | Local H3 marker; save a BF16 FL2VA copy |
+| Character/reference-led local H3 scene | `video_minimax_h3_r2v` | Templates → Video | Local H3 marker; save a BF16 REF2VA copy |
+| Hosted H3 scene | `api_minimax_h3_t2v`, `api_minimax_h3_flf2v`, or `api_minimax_h3_r2v` | User workflows → `creative-suite/cloud` | Comfy account, credits, and acceptance of remote upload |
+
+The complete pinned Template Library also remains available through the
+**Templates** button. The three local H3 templates are not duplicated into the
+51-workflow user-curated folder; search the official Template Library for
+`MiniMax H3`, then save the BF16 copies under the names from Section 8.
+
+After switching the NixOS generation and starting ComfyUI once, verify the user
+workflow inventory:
+
+```bash
+test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
+  -type f -name '*.json' | wc -l)" -eq 7
+test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
+  -type f -name '*.json' | wc -l)" -eq 51
+```
+
+Verify local model publication separately:
+
+```bash
+test -f /models/comfyui/.krea2-production-complete
+test -f /models/comfyui/.minimax-h3-bf16-complete
+test -f /models/Muse-Glimmer-30B-Abliterated-BF16/.download-complete
+test -f /models/Muse-Glimmer-30B-assistant/.download-complete
+```
+
+A marker under `~/.local/state/creative-model-staging/` means the download is
+staged; it does **not** satisfy these runtime checks until the artifacts are
+promoted into `/models`. Likewise, a present H3 workflow is not a claim that the
+full BF16 profile has passed the qualification in Section 8.
+
+### The recommended production shape
+
+Do not ask one generation to invent a character, tell a complete story, preserve
+continuity, perform several camera setups, and deliver a finished film. Treat the
+project as a sequence of approved artifacts:
+
+```text
+story brief
+  → character and visual bibles
+  → separate canonical character reference images
+  → screenplay
+  → one scene card per clip
+  → Krea storyboard/keyframe for that scene
+  → one H3 clip
+  → accept or regenerate that clip
+  → continuity handoff to the next scene
+  → edit accepted clips together
+```
+
+The unit of progress is an **accepted scene**, not a long prompt. For initial
+qualification, make each H3 scene one coherent shot or beat of approximately
+five seconds. A later edit can join those clips into a sequence. This gives you a
+stable point at which to reject drift before it contaminates every later scene.
+
+### Step 1 — create a small project bible
+
+Create a mutable project directory outside the Nix store. For example:
+
+```text
+~/creative-projects/clockwork-city/
+├── project.md
+├── characters/
+│   └── mara/
+│       ├── character-bible.md
+│       └── references/
+│           ├── mara-face-front.png
+│           ├── mara-face-three-quarter.png
+│           ├── mara-profile.png
+│           ├── mara-full-front.png
+│           ├── mara-full-back.png
+│           └── mara-expression-determined.png
+├── locations/
+│   ├── rooftop-dusk.md
+│   └── references/
+├── scenes/
+│   ├── 010-rooftop-arrival/
+│   │   ├── scene.md
+│   │   ├── first-frame.png
+│   │   ├── generation-record.md
+│   │   └── accepted.mp4
+│   └── 020-clocktower-entry/
+└── edit/
+    ├── concat.txt
+    └── final.mp4
+```
+
+`project.md` should fix the facts that must not drift:
+
+- logline, genre, audience, emotional arc, and target duration;
+- aspect ratio, frame rate, color language, lens language, and rendering style;
+- character names and relationships;
+- locations and time-of-day progression;
+- prohibited changes—for example no wardrobe changes, no age drift, no extra
+  jewelry, no animated/cartoon rendering;
+- dialogue spelling and pronunciation;
+- continuity facts that survive scene boundaries.
+
+The project bible is human-reviewed source material. Do not let a later model
+silently rewrite it because a generated frame happened to look interesting.
+
+### Step 2 — build an operational character sheet with Krea
+
+For generation, a useful “character sheet” is primarily a **folder of separate,
+high-resolution reference images**, optionally accompanied by a contact sheet
+for human review. H3 gets stronger evidence from separate face, profile, and
+full-body references than from one crowded grid containing many tiny views.
+
+#### 2.1 Write the immutable character anchors
+
+In `character-bible.md`, separate invariants from variables:
+
+```text
+Invariant identity:
+- Mara Venn, 32, angular oval face, high cheekbones, narrow hazel eyes.
+- Short asymmetrical black bob; one silver streak over the right temple.
+- Small healed diagonal scar through the left eyebrow.
+- Lean 170 cm silhouette; deliberate upright posture.
+
+Canonical wardrobe:
+- Charcoal wool flight coat ending above the knee.
+- Oxidized brass clasps; dark teal lining; no logos.
+- Black boots, thin burgundy gloves, brass mechanical wristwatch.
+
+Style anchors:
+- Live-action practical photography, restrained teal/amber grade.
+- Fine 35 mm grain, soft halation, realistic skin texture.
+
+Allowed variables:
+- Pose, facial expression, camera angle, and dirt/wetness required by a scene.
+
+Forbidden drift:
+- No hair-length change, no missing scar, no blue eyes, no costume redesign,
+  no extra people in a single-character reference.
+```
+
+Use concrete geometry, materials, colors, and asymmetrical details. Avoid vague
+labels such as “beautiful cyberpunk woman”; they do not provide enough identity
+constraints to detect drift.
+
+#### 2.2 Generate and approve one canonical anchor
+
+Open `image_krea2_turbo_t2i` and generate a neutral, well-lit, single-character
+image before attempting action poses. Start at 1K. Ask for a full body or
+three-quarter body, visible face, simple neutral background, realistic lens, and
+no props obscuring the silhouette.
+
+Generate a small candidate set, then choose **one** canonical anchor manually.
+Record its exact prompt, seed, model selectors, dimensions, and output filename.
+Do not average several almost-matching faces into the identity definition.
+
+#### 2.3 Derive one clean view at a time
+
+Open `Krea 2 + Edit Lora` or its custom-ratio variant. Feed the canonical anchor
+and request one controlled change per output:
+
+1. face front, neutral expression;
+2. face three-quarter, neutral expression;
+3. clean left or right profile;
+4. full body front;
+5. full body back;
+6. one story-relevant expression;
+7. optional hands, signature prop, or wardrobe-material detail.
+
+Keep identity language and wardrobe language identical across prompts. Change
+only the requested view or expression. Begin with `ref_boost=4`; lower it if the
+edit refuses a necessary pose and raise it cautiously if identity drifts.
+
+Reject any candidate that changes face geometry, eye color, scar side, hair
+parting, age, body silhouette, or canonical materials. A polished inconsistent
+image is not a useful reference.
+
+#### 2.4 Add style, wardrobe, and location references separately
+
+- Use the official Krea style-reference workflow for palette, texture, lighting,
+  and rendering language—not as the sole identity reference.
+- Use `One Image Outfit` or `Outfit Transfer 2` only when the story requires a
+  wardrobe variant. Crop away the source model's face/body when possible.
+- Use `Character and Background` to create a scene keyframe containing the
+  approved character and an approved location.
+- Keep identity, wardrobe, style, location, and prop images as separate files so
+  each can be assigned one explicit job in an H3 R2V manifest.
+
+Create a contact sheet for yourself if useful, but pass the original individual
+images to H3. Mark only approved images as canonical; move rejected experiments
+out of the reference directory.
+
+### Step 3 — write the story and scene cards with Muse
+
+Use Muse in two distinct roles:
+
+1. **Free-form writer/director in Pi:** select
+   `desktop-muse/muse-glimmer-30b` to develop the story, screenplay, and scene
+   breakdown interactively.
+2. **Per-scene prompt compiler in ComfyUI:** use `Muse Glimmer Creative Prompt`
+   only after a scene card is approved, with task `MiniMax H3 base` or
+   `MiniMax H3 reference`.
+
+The ComfyUI node is deliberately task-shaped; it is not the best interface for
+an open-ended writers' room. Start the Pi conversation by pasting the approved
+project and character bibles, then use a request like:
+
+```text
+Act as a screenwriter and visual director. The project and character bibles
+below are binding continuity constraints; do not silently alter them.
+
+Write a 35–45 second short film as 7–9 separately generatable scene cards.
+Each card must be one coherent visual beat lasting about 4–6 seconds. Across the
+cards, create a clear setup, escalation, turn, climax, and final image.
+
+For each scene output:
+- scene ID and dramatic purpose;
+- exact duration;
+- continuity entering the scene;
+- opening frame composition;
+- one primary subject action;
+- camera position and one camera movement;
+- environment movement;
+- exact dialogue, sound effects, ambience, and music cue;
+- closing frame composition;
+- continuity passed to the next scene;
+- required character/location/prop references;
+- recommended H3 mode: T2V, I2V/FL2VA, or R2V/REF2VA;
+- objective acceptance checks.
+
+Keep each card independently generatable. Do not hide several locations or major
+time jumps inside one card. Return the screenplay first, then the numbered scene
+cards. Do not write final H3 prompts until I approve the cards.
+
+[PASTE PROJECT BIBLE]
+[PASTE CHARACTER BIBLE]
+```
+
+Review the screenplay yourself. Check motivation, pacing, continuity, feasible
+shot count, and whether every dialogue line can fit its clip. Ask Muse to revise
+specific cards rather than regenerating the entire story after every note.
+
+Save each accepted card in `scenes/<id>-<slug>/scene.md`. A useful card looks
+like:
+
+```text
+Scene: 020-clocktower-entry
+Purpose: Mara chooses to enter despite hearing the mechanism wake.
+Duration: 5 seconds / 124 frames
+Mode: R2V / REF2VA
+Continuity in: coat and hair wet; brass watch in left hand; dusk exterior.
+Opening frame: medium rear three-quarter at the clocktower threshold.
+Action: she raises the watch; inner gears answer and the door opens once.
+Camera: 40 mm, slow shoulder-height push of less than one meter.
+Audio: rain on stone, watch ticking, one deep gear engagement, no dialogue.
+Closing frame: Mara in silhouette against warm machinery inside the doorway.
+Continuity out: door open; warm light on right side of coat; watch still raised.
+References: Picture 1 Mara full body; Picture 2 coat material; Picture 3 doorway.
+Acceptance: face and hair match; scar side correct if visible; one door only;
+no wardrobe change; watch remains in left hand; no text or watermark.
+```
+
+### Step 4 — make a storyboard or first frame for each scene
+
+Before spending H3 sampling time, establish composition cheaply with Krea:
+
+- use Krea T2I for location-only establishing frames;
+- use `Character and Background` for a canonical character in the scene;
+- use Identity Edit for a new pose while preserving the accepted face/outfit;
+- use style reference to carry the project's visual language.
+
+Save the accepted frame as `first-frame.png` in that scene directory. Record the
+Krea prompt and seed. The frame is a composition contract, not merely
+inspiration: compare the generated H3 opening against it.
+
+A useful production order is to finish the script and character references,
+then make **all scene keyframes with Krea in one pass**. After they are approved,
+clear Krea from ComfyUI and render H3 scenes. This minimizes repeated Krea ↔ H3
+model swaps. If a scene needs a revised keyframe later, finish the active H3 job,
+wait for an idle queue, clear memory, return to Krea, and clear again before H3.
+
+### Step 5 — choose the H3 mode for one scene
+
+| Need | Mode | Family | Guidance |
+|---|---|---|---|
+| Establishing shot with no recurring identity | T2V | FL2VA | Text only; simplest qualification path |
+| Exact opening composition or previous scene's final frame | I2V | FL2VA | Supply first frame; optional last frame for a required endpoint |
+| Character identity, wardrobe, voice, motion, or several references | R2V | REF2VA | Start with one or two images and `ref_image_size=match` |
+
+Prefer I2V when one approved frame carries enough continuity. Prefer R2V when
+identity must survive a large pose/camera change or when audio/video references
+have explicit roles. More references are not automatically better; conflicting
+images make the target ambiguous and increase token and memory pressure.
+
+If most scenes use the same family, render them consecutively to reuse the model
+cache. Still queue only one scene at a time. Use the Section 8 `/free` operation
+when changing FL2VA ↔ REF2VA, Krea ↔ H3, or after any OOM.
+
+### Step 6 — compile and render exactly one scene
+
+For each accepted scene card:
+
+1. Open only the corresponding saved BF16 H3 workflow.
+2. Confirm no unrelated output branch is active and the queue is empty.
+3. Load the approved first/last frame or references in the exact documented
+   order.
+4. Add `Muse Glimmer Creative Prompt` before the H3 prompt input.
+5. Select `MiniMax H3 base` for T2V/I2V or `MiniMax H3 reference` for R2V.
+6. For R2V, provide an explicit manifest such as:
+
+   ```text
+   <Picture 1>: Mara identity and face geometry only.
+   <Picture 2>: canonical coat materials and colors only.
+   <Picture 3>: clocktower doorway architecture and lighting only.
+   ```
+
+7. Paste the scene card as the brief. Inspect Muse's returned prompt; it must not
+   contradict the scene card or renumber references.
+8. Queue one 768p, approximately five-second, batch-1 generation.
+9. Monitor RAM/VRAM as described in Section 8.
+10. Do not queue the next scene until this scene is accepted or deliberately
+    abandoned.
+
+A fixed seed makes technical comparisons easier, but changing the prompt or
+reference set changes the experiment. Preserve every attempted prompt and seed
+in `generation-record.md` rather than overwriting the evidence.
+
+### Step 7 — review continuity before moving on
+
+Review a scene in isolation and immediately after the previously accepted scene.
+Use objective checks:
+
+- identity: face geometry, age, hair parting, scar side, body silhouette;
+- wardrobe: cut, fasteners, material, color, dirt/wetness, carried props;
+- space: screen direction, doorway/window positions, time of day, weather;
+- action: correct hand, prop state, start pose, end pose, no duplicated limbs;
+- camera: one intended move, stable horizon, no accidental cut or zoom;
+- audio: exact dialogue, voice identity, sync, ambience, no unwanted music;
+- output: no text, subtitle, logo, watermark, or unexplained extra person.
+
+If it fails, regenerate **that scene only**. Change one cause at a time: prompt,
+reference, seed, or mode. Do not repair identity drift by redefining the character
+bible after the fact.
+
+When a scene passes:
+
+1. copy or link the exact MP4 to `accepted.mp4`;
+2. save the final prompt, seed, model family, selector names, dimensions, frame
+   count, references in order, and observed RAM/VRAM peaks;
+3. update the next scene's `Continuity in` from what actually appears in the
+   accepted closing frame;
+4. extract the final frame if it should anchor the next I2V scene.
+
+For example:
+
+```bash
+ffmpeg -sseof -0.1 -i accepted.mp4 -frames:v 1 -update 1 next-first-frame.png
+```
+
+Do not feed a degraded contact sheet or social-media transcode forward; use the
+original accepted output or source reference.
+
+### Step 8 — assemble only accepted scenes
+
+Keep resolution, frame rate, codec, and audio layout consistent if you want a
+stream-copy concat. Create `edit/concat.txt`:
+
+```text
+file '../scenes/010-rooftop-arrival/accepted.mp4'
+file '../scenes/020-clocktower-entry/accepted.mp4'
+file '../scenes/030-mechanism-wakes/accepted.mp4'
+```
+
+Then try lossless concatenation:
+
+```bash
+cd ~/creative-projects/clockwork-city/edit
+ffmpeg -f concat -safe 0 -i concat.txt -c copy final.mp4
+```
+
+If stream copy rejects mismatched formats, normalize once in the final edit
+rather than repeatedly transcoding scene references. Watch the assembled film
+for audio discontinuities, pacing, color drift, and continuity mistakes that
+were not obvious clip by clip.
+
+### Recommended first exercise
+
+Do not begin with a nine-scene epic. Prove the pipeline with one character and
+three clips:
+
+1. **Scene 010 — arrival:** I2V/FL2VA from a Krea rooftop keyframe; character
+   walks to a locked door.
+2. **Scene 020 — decision:** R2V/REF2VA with the canonical face and coat; close
+   shot of the character choosing to use the watch.
+3. **Scene 030 — consequence:** I2V/FL2VA from Scene 020's accepted final frame;
+   the door opens and warm machinery is revealed.
+
+Accept each scene before creating the next continuity handoff. This small test
+exercises Krea identity editing, Muse scene compilation, both H3 families,
+`/free` family transitions, native audio, and final assembly without hiding
+problems inside a long generation.
+
+## 10. Custom-node policy
 
 | Node pack | Assessment |
 |---|---|
@@ -860,7 +1288,7 @@ speed potential with minimal quality loss, but it requires a wheel matched to
 Torch/CUDA and introduces fallback paths for non-BF16/FP16 layers. Package and
 benchmark it separately; do not silently fold it into the reference profile.
 
-## 10. Security and privacy
+## 11. Security and privacy
 
 - Port 8188 is loopback-only. Use SSH forwarding; never add a firewall rule.
 - Muse's key stays in a mode-0600 file and is read at execution time.
@@ -876,7 +1304,7 @@ benchmark it separately; do not silently fold it into the reference profile.
   deployment's content-filter control.
 - Add AI disclosure/provenance where law or platform policy requires it.
 
-## 11. Validation gate
+## 12. Validation gate
 
 Do not call the stack qualified until:
 
@@ -925,7 +1353,7 @@ docker inspect muse-glimmer-30b-bf16-dflash \
   --format 'status={{.State.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}'
 ```
 
-## 12. Stop or switch away
+## 13. Stop or switch away
 
 Stop only the creative components:
 
