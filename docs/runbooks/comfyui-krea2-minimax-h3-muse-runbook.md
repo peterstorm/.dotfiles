@@ -559,55 +559,286 @@ NVFP4-AWQ Qwen3-VL-32B, FP16 video VAE, and FP32 audio VAE. It occupies roughly
 headroom on one 96 GB card. This is the official practical Comfy profile, not
 the maximum-fidelity original BF16 baseline.
 
-### How full BF16 H3 fits on one 96 GB ComfyUI GPU
+### How the full BF16 profile is intended to run on one 96 GB GPU
 
-**Disk inventory is not simultaneous VRAM residency.** Both task-family files
-are downloaded so every workflow is available, but a workflow selects only one:
+#### The short version
 
-- `minimax_h3_fl2va_bf16.safetensors` handles text/image/first-last-frame modes;
-- `minimax_h3_ref2va_bf16.safetensors` handles multimodal reference mode.
+**You do not manually unload the encoder, DiT, and VAEs between nodes in one
+queued H3 job.** Queue one correctly constructed graph. ComfyUI requests each
+component when that phase executes and its model manager evicts or partially
+offloads the previous component to make room.
 
-They are never required in VRAM together. The shared text encoder and VAEs also
-run in different phases from diffusion. Physical GPU1 reports 97,887 MiB =
-95.59 GiB. Comfy reserves 8 GiB, leaving about 87.59 GiB under its management:
+The operator has only three memory-management responsibilities:
 
-| Phase | BF16 resident weights | Size | Raw margin inside Comfy budget |
+1. before an H3 job, clear any **previous Krea or other H3 job** from ComfyUI;
+2. build the graph with **exactly one H3 diffusion family**—FL2VA or REF2VA,
+   never both;
+3. between FL2VA and REF2VA jobs, clear ComfyUI again, or restart the service for
+   a guaranteed clean GPU1 and process cache.
+
+Do **not** split prompt encoding, diffusion, and decode into separate queue
+submissions. Conditioning and the packed audio/video latent are in-memory graph
+values. The phase hand-off belongs inside one ComfyUI execution.
+
+#### Three different meanings of “loaded”
+
+**Disk inventory is not simultaneous VRAM residency.** Confusion usually comes
+from treating disk, host RAM, and VRAM as one pool:
+
+| Location/state | Meaning | What the operator does |
+|---|---|---|
+| On disk under `/models/comfyui` | The file is available to a loader selector. It consumes no RAM or VRAM. | Both DiT families may remain on disk permanently. |
+| Materialized/offloaded in host RAM | ComfyUI has created a model object or moved weights off GPU1. This still consumes the workstation's 91 GiB RAM. | Let the RAM-pressure cache evict unused outputs; use `/free` or restart between model families. |
+| Resident or partially resident in GPU1 VRAM | The component is available for the current compute phase. In normal-VRAM mode ComfyUI may keep only part of a model resident. | Do not force residency or add third-party unload nodes. Watch the measured peak. |
+
+A loader node appearing earlier in the graph does **not** mean every selected
+file is simultaneously resident in VRAM. Loader nodes produce ComfyUI model
+objects. Prompt encoding, sampling, and VAE encode/decode then ask the model
+manager to make their particular model resident. Conversely, “unloaded from
+VRAM” does not necessarily mean “deleted from RAM”; it can mean moved to CPU,
+partially offloaded, or retained in the execution cache.
+
+The complete 195.75 GB download therefore does not need to fit in VRAM or RAM at
+once. Host RAM is still a real constraint during hand-offs, so the raw weight
+arithmetic below is a **qualification hypothesis, not proof that the full BF16
+workflow fits**.
+
+#### Pick exactly one task family per saved workflow
+
+Create separate saved copies of the official templates instead of one graph with
+both DiTs and a switch:
+
+| Saved workflow | Start from | Diffusion selector | Purpose |
+|---|---|---|---|
+| `MiniMax H3 BF16 — T2V` | `video_minimax_h3_t2v` | `minimax_h3_fl2va_bf16.safetensors` | Text-to-video/audio |
+| `MiniMax H3 BF16 — I2V` | `video_minimax_h3_i2v` | `minimax_h3_fl2va_bf16.safetensors` | First frame, last frame, or both |
+| `MiniMax H3 BF16 — R2V` | `video_minimax_h3_r2v` | `minimax_h3_ref2va_bf16.safetensors` | Image/video/audio references |
+
+In the official T2V/I2V templates, the four model selectors are exposed on the
+large MiniMax H3 subgraph node. The R2V template shows individual `UNETLoader`,
+`CLIPLoader`, and `VAELoader` nodes. Save a copy before changing selectors.
+
+All three use:
+
+- text encoder: `qwen3vl_32b_minimax_h3_bf16.safetensors`;
+- video VAE: `minimax_h3_video_vae_fp16.safetensors`;
+- audio VAE: `minimax_h3_audio_vae_fp32.safetensors`;
+- `UNETLoader` weight dtype: `default`—the file itself is BF16;
+- `CLIPLoader` type: `minimax`, device: `default`;
+- batch size 1;
+- no Turbo LoRA for the maximum-quality 50-step baseline.
+
+Delete, disconnect, or mute unrelated output branches before queueing. ComfyUI
+executes every active output branch needed by the prompt; merely moving an
+unused Krea or second H3 branch to the side does not make it inert.
+
+#### What happens automatically inside one queued job
+
+The exact phase order differs slightly by task because the native H3
+conditioning nodes perform their own preprocessing.
+
+**T2V / FL2VA without keyframes**
+
+1. The loaders expose the BF16 Qwen encoder, FL2VA DiT, and two VAEs as model
+   objects.
+2. `MiniMaxH3ImageToVideo` asks Qwen3-VL-32B to encode the prompt.
+3. `SamplerCustomAdvanced` requests the FL2VA DiT. Before loading it, ComfyUI's
+   `load_models_gpu()` calls its memory-release path and can evict or partially
+   offload Qwen from GPU1.
+4. The sampler produces one packed latent containing video and audio streams.
+5. `VAEDecode` requests the video VAE; `VAEDecodeAudio` requests the audio VAE.
+   Each request can evict the DiT or the other VAE as necessary.
+6. `CreateVideo` muxes decoded frames and audio; `SaveVideo` writes the result.
+
+**I2V / FL2VA with first or last frames**
+
+1. `MiniMaxH3ImageToVideo` first encodes the prompt with Qwen.
+2. It then requests the video VAE to encode the supplied keyframe or keyframes.
+   This is already a Qwen → VAE phase transition before sampling.
+3. The sampler requests only the FL2VA DiT and produces the packed latent.
+4. Video and audio decode proceed through their respective VAEs.
+
+**R2V / REF2VA**
+
+1. `MiniMaxH3ReferenceToVideo` requests the video and/or audio VAEs to encode the
+   supplied references.
+2. It then requests Qwen to encode the prompt plus reference presentation.
+3. The sampler requests only the REF2VA DiT. Reference latents remain graph data
+   and are supplied at each sampling step; the FL2VA DiT is not involved.
+4. Video and audio VAEs decode the packed result, then `CreateVideo` muxes it.
+
+These are automatic transitions. Do not press `/free`, restart ComfyUI, or stop
+the service while a prompt is running; doing so invalidates the in-memory job.
+
+#### Why the arithmetic is plausible—but not yet a qualification result
+
+Physical GPU1 reports 97,887 MiB = 95.59 GiB. The service starts with
+`--reserve-vram 8`, so ComfyUI targets roughly 87.59 GiB for managed weights and
+workspace:
+
+| Compute phase | Principal resident weights | File size | Raw margin inside the 87.59 GiB budget |
 |---|---|---:|---:|
-| Prompt encoding | Qwen3-VL-32B encoder | 47.97 GiB | 39.62 GiB |
-| Diffusion | one of FL2VA or REF2VA | 61.73 GiB | 25.86 GiB |
-| Diffusion + optional Turbo LoRA | one DiT + LoRA | 63.55 GiB | 24.04 GiB |
-| Decode | video VAE + audio VAE | 5.41 GiB | 82.18 GiB |
+| Prompt encoding | Qwen3-VL-32B BF16 | 47.97 GiB | 39.62 GiB |
+| Diffusion | one BF16 DiT | 61.73 GiB | 25.86 GiB |
+| Diffusion with optional Turbo | one DiT + one LoRA | 63.55 GiB | 24.04 GiB |
+| Decode | video + audio VAEs | 5.41 GiB | 82.18 GiB |
 
-The intended execution sequence is:
+The margin must also cover conditioning, packed video/audio latents, reference
+latents, attention workspace, temporary copies, decoded frames, and allocator
+fragmentation. REF2VA with `ref_image_size=max`, several videos, or long audio
+can consume much more than the weight-only table suggests. During a GPU phase,
+offloaded weights and cached node outputs also consume host RAM.
 
-1. unload Krea from GPU1;
-2. load the BF16 encoder and produce conditioning;
-3. let ComfyUI evict/offload the encoder;
-4. load exactly one H3 DiT and sample;
-5. evict the DiT;
-6. decode video and audio with the VAEs.
+ComfyUI 0.31.1 runs its RAM-pressure cache by default. On this 91 GiB host it
+tries to retain roughly 9 GiB of free RAM and evicts cached node outputs as
+pressure rises. Its model manager also supports partial GPU residency. Those are
+safety mechanisms, not a guarantee: the full BF16 profile remains unqualified
+until both FL2VA and REF2VA complete while measured VRAM and RAM stay healthy.
 
-ComfyUI's model manager calls its memory-eviction path before loading the next
-phase. Do not queue Krea and H3 generation concurrently on GPU1. If stale model
-residency is ever uncertain, stop and restart `comfyui.service`; that clears the
-process and all GPU1 allocations. Keeping both FL2VA and REF2VA on disk has zero
-VRAM cost until one is selected.
+#### Exact operator workflow for the first BF16 qualification
 
-| Concurrent work | Supported reference topology |
+1. Activate the creative profile normally. This stops the normal TP2 Qwen
+   backend, leaves Muse on physical GPU0, and gives physical GPU1 to ComfyUI:
+
+   ```bash
+   cd ~/.dotfiles
+   bash scripts/comfyui/activate-creative-stack.sh
+   ```
+
+2. Confirm the queue is empty **before** clearing memory:
+
+   ```bash
+   curl -fsS http://127.0.0.1:8188/queue |
+     jq -e '(.queue_running | length) == 0 and (.queue_pending | length) == 0'
+   ```
+
+3. Clear models and execution cache left by Krea or an earlier H3 family:
+
+   ```bash
+   curl -fsS \
+     -H 'Content-Type: application/json' \
+     --data '{"unload_models":true,"free_memory":true}' \
+     http://127.0.0.1:8188/free >/dev/null
+   sleep 2
+   ```
+
+   `unload_models` releases registered GPU models. `free_memory` also resets the
+   execution cache and triggers garbage collection. The endpoint asks the
+   ComfyUI worker to perform the cleanup; call it only with an idle queue.
+
+4. Verify the clean baseline:
+
+   ```bash
+   nvidia-smi --id=1 \
+     --query-gpu=index,memory.used,memory.free \
+     --format=csv,noheader,nounits
+   free -h
+   curl -fsS http://127.0.0.1:8188/system_stats | jq '{
+     ram_free_gib: (.system.ram_free / 1073741824),
+     gpu: [.devices[] | {
+       name,
+       vram_free_gib: (.vram_free / 1073741824),
+       torch_vram_free_gib: (.torch_vram_free / 1073741824)
+     }]
+   }'
+   ```
+
+   `nvidia-smi --id=1` means physical GPU1. Because the service sets
+   `CUDA_VISIBLE_DEVICES=1`, ComfyUI logs call that same card `cuda:0`; this is
+   renumbering inside the process, not use of physical GPU0.
+
+5. Open only `MiniMax H3 BF16 — T2V`. Start with:
+
+   - 1344×768 or 768×1344;
+   - approximately 5 seconds / 124 frames;
+   - batch size 1;
+   - 50 steps;
+   - no Turbo LoRA;
+   - fixed seed;
+   - one queued prompt, no parallel Krea job.
+
+6. In another terminal, record both GPU1 and host memory while the graph runs:
+
+   ```bash
+   watch -n 1 'nvidia-smi --id=1 \
+     --query-gpu=timestamp,memory.used,memory.free,utilization.gpu \
+     --format=csv,noheader,nounits; free -h | sed -n "1,2p"'
+   ```
+
+   Follow model transitions separately:
+
+   ```bash
+   journalctl -fu comfyui | grep --line-buffered -E \
+     'Requested to load|loaded completely|loaded partially|Unloading|OOM|out of memory'
+   ```
+
+7. After T2V succeeds, save the output and peak measurements. Clear memory again
+   with `/free`, then qualify I2V with one keyframe.
+
+8. Before R2V, use `/free` again—or use the stronger clean-slate operation:
+
+   ```bash
+   sudo systemctl restart comfyui.service
+   ```
+
+   Restarting ComfyUI releases all process-owned GPU1 VRAM and host RAM. It does
+   not stop Muse on GPU0. Wait for `http://127.0.0.1:8188/system_stats` before
+   queueing `MiniMax H3 BF16 — R2V`.
+
+9. Qualify R2V conservatively: one image, `ref_image_size=match`, 124 frames,
+   batch 1, no Turbo. Add references, use `max`, or increase duration only after
+   the baseline succeeds.
+
+Repeated jobs using the **same** family may keep the cache for faster reloads if
+RAM remains healthy. Always clear between Krea and H3, between FL2VA and REF2VA,
+after an OOM, or whenever selector changes make residency uncertain.
+
+#### What not to do
+
+- Do not connect FL2VA and REF2VA loaders to one active output graph.
+- Do not queue T2V/I2V and R2V simultaneously.
+- Do not queue Krea and H3 simultaneously on GPU1.
+- Do not set the 48 GiB Qwen `CLIPLoader` to `cpu` as a first workaround; that
+  moves compute and pressure to the 91 GiB host rather than solving residency.
+- Do not add mutable “model unload” custom nodes. Native model management and the
+  loopback `/free` endpoint are the supported controls.
+- Do not call `/free` between nodes of a running graph.
+- Do not interpret a low post-phase `nvidia-smi` value as proof that RAM is free;
+  inspect both `/system_stats` and `free -h`.
+- Do not call the profile qualified from file-size arithmetic alone.
+
+#### Failure and recovery decision tree
+
+| Symptom | Meaning | Recovery |
+|---|---|---|
+| GPU OOM during Qwen | Prompt/reference tokens or transient workspace exceeded the phase margin. | Restart ComfyUI; retry T2V with no references, 124 frames, batch 1. |
+| GPU OOM during sampling | DiT plus latent/attention workspace exceeded GPU1. | Restart; keep 768 short edge, reduce duration/references; do not add Turbo. |
+| GPU OOM during decode | Decoded-frame or VAE workspace peak exceeded the remaining memory. | Restart; reduce duration first, then resolution; use tiled decode only after validating H3 compatibility. |
+| Host RAM approaches zero or swap thrashes | Offloaded weights plus cached graph values exceed practical host memory. | Restart; use one output branch and fewer references. If it recurs, use the practical quantized profile. |
+| FL2VA works but REF2VA fails | Reference latents/tokens make REF2VA materially heavier. | Use `match`, one short reference, and 124 frames; otherwise use the practical profile or a future TP2 profile. |
+| Memory remains allocated after `/free` | Worker cleanup has not run yet, or a graph/cache still owns references. | Confirm queue idle; wait; if still retained, restart `comfyui.service`. |
+
+The official practical artifacts are the known lower-memory fallback, but the
+maximum-BF16 downloader does **not** install them. They require their own pinned,
+checksum-verified profile before these selectors can be used:
+
+- `minimax_h3_fl2va_pruned_int8_convrot.safetensors` or
+  `minimax_h3_ref2va_pruned_int8_convrot.safetensors`;
+- `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`;
+- the same video/audio VAEs.
+
+That practical profile is not the requested maximum-fidelity baseline, but it is
+preferable to an unstable BF16 run. A future full-BF16 TP2 profile could provide
+more aggregate VRAM, but it would own both GPUs: Muse and ComfyUI GPU generation
+would have to stop. It is not part of the current single-GPU ComfyUI profile.
+
+| Concurrent work | Current status |
 |---|---|
-| Muse on GPU0 + Krea on GPU1 | Yes |
-| Muse on GPU0 + one full BF16 H3 family on GPU1 | Expected to fit; qualify at 768p/short duration first |
-| Krea + H3 generating on GPU1 | No; serialize them |
-| FL2VA + REF2VA resident together | No need; select one |
-| Full BF16 H3 TP2 over both GPUs | Separate maximum-headroom profile; Muse and Krea must stop |
-
-A single BF16 DiT leaves roughly 24–26 GiB for activations depending on whether
-a Turbo LoRA is applied. Resolution, frame count, duration, attention workspace,
-and transient loading still affect peak memory. First qualification must use
-768p and short duration while recording `nvidia-smi`; increase one dimension at
-a time. The original 50-step/no-Turbo workflow is the quality baseline. TP2 via
-the separate vLLM-Omni/SGLang recipe remains the higher-headroom fallback, not a
-requirement merely because all downloaded files sum beyond one card.
+| Muse on GPU0 + Krea on GPU1 | Supported |
+| Muse on GPU0 + one full BF16 H3 family on GPU1 | Candidate topology; must pass the qualification above |
+| Krea + H3 generating on GPU1 | Unsupported; serialize and clear between them |
+| FL2VA + REF2VA in one active graph | Unsupported and unnecessary |
+| Full BF16 H3 TP2 over both GPUs | Separate future profile; Muse and ComfyUI generation must stop |
 
 ## 9. Custom-node policy
 
@@ -659,9 +890,12 @@ Do not call the stack qualified until:
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
-- [ ] H3 BF16 FL2VA completes at 768p/short duration with Muse active on GPU0.
-- [ ] After unloading FL2VA, H3 BF16 REF2VA completes without either DiT
-      co-residing or an OOM; record phase peaks from `nvidia-smi`.
+- [ ] H3 BF16 FL2VA T2V and one-keyframe I2V each complete at 768p/124 frames
+      with Muse active on GPU0; record both GPU1 VRAM and host RAM peaks.
+- [ ] After the FL2VA job finishes, the idle-queue `/free` operation or a
+      ComfyUI restart clears its model/cache state.
+- [ ] H3 BF16 REF2VA then completes with one matched-size image at 768p/124
+      frames, without either DiT co-residing, host swapping, or a GPU OOM.
 - [ ] Standard Muse→Krea BF16 1K and 2K images complete.
 - [ ] Abliterated Muse starts from its pinned marker, completes the same fixed
       prompt corpus, and records quality, refusal behavior, throughput, and
