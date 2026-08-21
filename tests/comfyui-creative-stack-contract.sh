@@ -145,7 +145,7 @@ contains "$ACTIVATE" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
 contains "$ACTIVATE" 'ssh -N -L 8188:127.0.0.1:8188 desktop'
 
 # The runbook distinguishes globally available API use from blocked EU weights.
-contains "$RUNBOOK" 'local H3 weights must not be downloaded'
+contains "$RUNBOOK" 'MINIMAX_H3_AUTHORIZED=yes'
 contains "$RUNBOOK" 'MiniMax H3 API is'
 contains "$RUNBOOK" 'Krea2ImageNode'
 contains "$RUNBOOK" 'Krea2StyleReferenceNode'
