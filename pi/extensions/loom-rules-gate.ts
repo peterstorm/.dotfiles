@@ -45,6 +45,7 @@
  *   LOOM_GATE=off          disable the gate entirely
  *   LOOM_GATE_MODES=tui    gate only the listed comma-separated modes
  *                          (overrides the default subagent exemption)
+ *   LOOM_RULES_DIR=/path   rules directory (default: $HOME/dev/claude-plugins/loom/rules)
  *
  * Known limits (documented, not silent):
  *   - bash is gated only via path heuristics (redirects, tee, cp, mv,
@@ -73,7 +74,8 @@ import { extname, isAbsolute, join, resolve } from "node:path";
 // Configuration
 // ---------------------------------------------------------------------------
 
-const LOOM_RULES_DIR = "/home/peterstorm/dev/claude-plugins/loom/rules";
+/** Rules dir: env override (LOOM_RULES_DIR), else the canonical layout under $HOME. */
+const LOOM_RULES_DIR = process.env.LOOM_RULES_DIR ?? join(homedir(), "dev", "claude-plugins", "loom", "rules");
 
 /** Rules required before ANY code write/edit (CLAUDE.md: "architecture.md always"). */
 const ALWAYS_REQUIRED_RULES = ["architecture.md"];

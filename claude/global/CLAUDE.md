@@ -31,7 +31,7 @@ Time. Fatigue. Complexity. Backwards compatibility for code that hasn't shipped.
 
 Before the first code edit of a session:
 
-1. **Load, don't skim.** Read `/home/peterstorm/dev/claude-plugins/loom/rules/architecture.md` in FULL — a read with a `limit:` argument does not count as loaded (the gate counts it; that is a loophole, not a contract). Same for the language rule in scope (`typescript-patterns.md`, `java-patterns.md`, `rust-patterns.md`; add `property-testing.md` when adding business-rule tests).
+1. **Load, don't skim.** Read `/Users/hansen142/dev/claude-plugins/loom/rules/architecture.md` in FULL — a read with a `limit:` argument does not count as loaded (the gate counts it; that is a loophole, not a contract). Same for the language rule in scope (`typescript-patterns.md`, `java-patterns.md`, `rust-patterns.md`; add `property-testing.md` when adding business-rule tests).
 2. **Load the applicable skills.** `deepen` when the change touches module interfaces, structure, or coupling (depth, seams, leverage, locality). `distill` after every implementation, run in apply mode as the final pass: green baseline first, one move at a time, then report moves applied and opportunities skipped.
 3. **State adherence before the first gated edit.** In the message that makes the edit, one line naming the rule/skill applied and the specific principle this change honors — e.g. `LOOM: applying architecture.md — FC/IS: extraction stays pure, Either at the boundary`. The gate enforces this marker; the substance of it is part of the work product, not commentary.
 
