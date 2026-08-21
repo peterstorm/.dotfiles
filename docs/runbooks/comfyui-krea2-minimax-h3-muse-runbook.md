@@ -550,10 +550,55 @@ NVFP4-AWQ Qwen3-VL-32B, FP16 video VAE, and FP32 audio VAE. It occupies roughly
 headroom on one 96 GB card. This is the official practical Comfy profile, not
 the maximum-fidelity original BF16 baseline.
 
-For maximum fidelity, preserve the separate runbook's original BF16/50-step
-TP2 qualification path. Full H3 BF16 diffusion is 66.3 GB per task family and
-the BF16 text encoder is 51.5 GB; ComfyUI is not a drop-in tensor-parallel
-replacement for the vLLM-Omni/SGLang TP2 recipes.
+### How full BF16 H3 fits on one 96 GB ComfyUI GPU
+
+**Disk inventory is not simultaneous VRAM residency.** Both task-family files
+are downloaded so every workflow is available, but a workflow selects only one:
+
+- `minimax_h3_fl2va_bf16.safetensors` handles text/image/first-last-frame modes;
+- `minimax_h3_ref2va_bf16.safetensors` handles multimodal reference mode.
+
+They are never required in VRAM together. The shared text encoder and VAEs also
+run in different phases from diffusion. Physical GPU1 reports 97,887 MiB =
+95.59 GiB. Comfy reserves 8 GiB, leaving about 87.59 GiB under its management:
+
+| Phase | BF16 resident weights | Size | Raw margin inside Comfy budget |
+|---|---|---:|---:|
+| Prompt encoding | Qwen3-VL-32B encoder | 47.97 GiB | 39.62 GiB |
+| Diffusion | one of FL2VA or REF2VA | 61.73 GiB | 25.86 GiB |
+| Diffusion + optional Turbo LoRA | one DiT + LoRA | 63.55 GiB | 24.04 GiB |
+| Decode | video VAE + audio VAE | 5.41 GiB | 82.18 GiB |
+
+The intended execution sequence is:
+
+1. unload Krea from GPU1;
+2. load the BF16 encoder and produce conditioning;
+3. let ComfyUI evict/offload the encoder;
+4. load exactly one H3 DiT and sample;
+5. evict the DiT;
+6. decode video and audio with the VAEs.
+
+ComfyUI's model manager calls its memory-eviction path before loading the next
+phase. Do not queue Krea and H3 generation concurrently on GPU1. If stale model
+residency is ever uncertain, stop and restart `comfyui.service`; that clears the
+process and all GPU1 allocations. Keeping both FL2VA and REF2VA on disk has zero
+VRAM cost until one is selected.
+
+| Concurrent work | Supported reference topology |
+|---|---|
+| Muse on GPU0 + Krea on GPU1 | Yes |
+| Muse on GPU0 + one full BF16 H3 family on GPU1 | Expected to fit; qualify at 768p/short duration first |
+| Krea + H3 generating on GPU1 | No; serialize them |
+| FL2VA + REF2VA resident together | No need; select one |
+| Full BF16 H3 TP2 over both GPUs | Separate maximum-headroom profile; Muse and Krea must stop |
+
+A single BF16 DiT leaves roughly 24–26 GiB for activations depending on whether
+a Turbo LoRA is applied. Resolution, frame count, duration, attention workspace,
+and transient loading still affect peak memory. First qualification must use
+768p and short duration while recording `nvidia-smi`; increase one dimension at
+a time. The original 50-step/no-Turbo workflow is the quality baseline. TP2 via
+the separate vLLM-Omni/SGLang recipe remains the higher-headroom fallback, not a
+requirement merely because all downloaded files sum beyond one card.
 
 ## 9. Custom-node policy
 
@@ -605,6 +650,9 @@ Do not call the stack qualified until:
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
+- [ ] H3 BF16 FL2VA completes at 768p/short duration with Muse active on GPU0.
+- [ ] After unloading FL2VA, H3 BF16 REF2VA completes without either DiT
+      co-residing or an OOM; record phase peaks from `nvidia-smi`.
 - [ ] Standard Muse→Krea BF16 1K and 2K images complete.
 - [ ] Abliterated Muse starts from its pinned marker, completes the same fixed
       prompt corpus, and records quality, refusal behavior, throughput, and

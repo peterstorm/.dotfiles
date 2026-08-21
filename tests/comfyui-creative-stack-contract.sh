@@ -146,6 +146,11 @@ contains "$ACTIVATE" 'ssh -N -L 8188:127.0.0.1:8188 desktop'
 
 # The runbook distinguishes globally available API use from blocked EU weights.
 contains "$RUNBOOK" 'MINIMAX_H3_AUTHORIZED=yes'
+contains "$RUNBOOK" 'Disk inventory is not simultaneous VRAM residency'
+contains "$RUNBOOK" 'minimax_h3_fl2va_bf16.safetensors'
+contains "$RUNBOOK" 'minimax_h3_ref2va_bf16.safetensors'
+contains "$RUNBOOK" '61.73 GiB'
+contains "$RUNBOOK" 'Do not queue Krea and H3 generation concurrently on GPU1'
 contains "$RUNBOOK" 'MiniMax H3 API is'
 contains "$RUNBOOK" 'Krea2ImageNode'
 contains "$RUNBOOK" 'Krea2StyleReferenceNode'
