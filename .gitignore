@@ -64,3 +64,4 @@ claude/global/settings.local.json
 
 # Impeccable installer symlinks node_modules into the npx cache on this host
 /pi/skills/impeccable/node_modules
+.claude/cortex-memory.local.md

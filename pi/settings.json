@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.83.0",
   "defaultProvider": "desktop-vllm",
-  "defaultModel": "deepseek-v4-flash",
+  "defaultModel": "qwen3.8-27b",
   "packages": [
     "../../dev/claude-plugins/loom",
     "../../dev/claude-plugins/cortex",
