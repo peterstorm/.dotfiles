@@ -37,7 +37,7 @@
       CF_ACCESS_CLIENT_SECRET = "cf-access-vllm-secret";
     })
     # OpenAI-compatible client env: with `vllm-forward` running, any client
-    # (claude, opencode, curl, ...) works with zero flags.
+    # (claude, curl, ...) works with zero flags.
     (util.sops.configTemplate "vllm-env" ''
       export OPENAI_API_KEY='${config.sops.placeholder."vllm-api-key"}'
       export OPENAI_BASE_URL='http://localhost:8000/v1'
@@ -56,7 +56,6 @@
       discord
       ripgrep
       inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.claude-code
-      inputs.llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.opencode
       gh
       git
       podman-compose

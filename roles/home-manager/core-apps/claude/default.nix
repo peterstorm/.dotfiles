@@ -208,7 +208,7 @@ in
   # the one that owes it a runtime.
   home.packages = [ pkgs.nodejs_22 ];
 
-  # 1. Provision the plugin/workspace repos that pi, opencode and reclaw read
+  # 1. Provision the plugin/workspace repos that pi and reclaw read
   #    directly off disk. Idempotent — only clones a repo that isn't present.
   home.activation.claudePluginsWorkspace =
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -221,7 +221,7 @@ in
           git clone "https://github.com/peterstorm/${r}.git" "$d/${r}" \
             || echo "claude: clone of ${r} failed (continuing)"
         fi
-        # pi/opencode run these repos straight off disk. pi only runs an install
+        # pi runs these repos straight off disk. It only runs an install
         # for packages IT installs; we clone manually, so provision JS deps here.
         # Reinstall when the manifest or lockfile is newer than node_modules: a
         # pull that adds a dependency must not leave a stale tree, or pi fails at

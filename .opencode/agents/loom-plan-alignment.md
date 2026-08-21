@@ -1,1 +1,0 @@
-/Users/hansen142/dev/opencode/loom/agents/loom-plan-alignment.md

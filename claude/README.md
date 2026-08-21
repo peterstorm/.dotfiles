@@ -81,7 +81,7 @@ Each Claude Code plugin is its **own git repo** that doubles as a one-plugin
 `roles/home-manager/core-apps/claude/default.nix`:
 
 1. **Provisions the workspace** — clones `loom`, `cortex`, `feynman`, `reclaw`
-   into `~/dev/claude-plugins/` (idempotent). Other tools (pi, opencode, reclaw)
+   into `~/dev/claude-plugins/` (idempotent). Other tools (pi, reclaw)
    read these repos directly off disk.
 2. **Manages `~/.claude/settings.json`** — deep-merges `enabledPlugins`
    (`loom@loom`, `cortex@cortex`, `feynman@feynman`) and `extraKnownMarketplaces`

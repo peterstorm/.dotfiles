@@ -11,7 +11,7 @@ Creates structured CrossFit workouts (EMOM, AMRAP, For Time, Tabata) and schedul
 ## Garmin Workout Constraints
 
 - **Sport type:** HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }` (full sportTypeId table in vault note)
-- **Schedule script:** `bun /home/peterstorm/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts YYYY-MM-DD`
+- **Schedule script:** `bun ~/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts YYYY-MM-DD`
 - **Input:** Workout JSON on stdin
 - **Max steps per workout:** 50 (Garmin limit)
 

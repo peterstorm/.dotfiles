@@ -130,8 +130,8 @@ When using `--deep`, you MUST:
 
 If `--save` flag is present:
 
-1. Create the directory if it doesn't exist: `mkdir -p /home/peterstorm/dev/notes/remotevault/business/idea-analysis/`
-2. Create file at `/home/peterstorm/dev/notes/remotevault/business/idea-analysis/YYYY-MM-DD-[slugified-idea-title].md`
+1. Create the directory if it doesn't exist: `mkdir -p ~/dev/notes/remotevault/business/idea-analysis/`
+2. Create file at `~/dev/notes/remotevault/business/idea-analysis/YYYY-MM-DD-[slugified-idea-title].md`
 3. Add frontmatter:
    ```yaml
    ---
