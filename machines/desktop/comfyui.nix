@@ -144,6 +144,12 @@ let
     "upscale_models"
     "audio_encoders"
   ];
+  modelPathEntries = builtins.listToAttrs (
+    map (directory: {
+      name = directory;
+      value = directory;
+    }) modelSubdirectories
+  );
 
   musePromptNode = pkgs.runCommand "comfyui-muse-glimmer-prompt" { } ''
     install -Dm444 \
@@ -316,22 +322,13 @@ let
     mv "$elite_staging" "$elite_dir"
   '';
 
-  extraPaths = pkgs.writeText "comfyui-workstation-paths.yaml" ''
-    workstation_models:
-      base_path: /models/comfyui
-      checkpoints: checkpoints
-      diffusion_models: diffusion_models
-      text_encoders: text_encoders
-      clip_vision: clip_vision
-      vae: vae
-      loras: loras
-      controlnet: controlnet
-      upscale_models: upscale_models
-      audio_encoders: audio_encoders
-
-    declarative_nodes:
-      custom_nodes: ${declarativeNodes}
-  '';
+  extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {
+    workstation_models = {
+      base_path = "/models/comfyui";
+    }
+    // modelPathEntries;
+    declarative_nodes.custom_nodes = toString declarativeNodes;
+  };
 in
 {
   environment.systemPackages = [

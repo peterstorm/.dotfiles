@@ -46,8 +46,11 @@ contains "$VARIANTS" "MUSE_DRAFT_REV=\"$DRAFT_REV\""
 contains "$VARIANTS" 'MUSE_TARGET_REPO="mlasli/Muse-Glimmer-30B-Abliterated-BF16"'
 contains "$VARIANTS" 'MUSE_TARGET_REV="daf5fab76a0351a583714a92d88ebdb6eb48af35"'
 contains "$VARIANTS" 'MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"'
-[[ "$(grep -Ec '^[0-9a-f]{64}  (model-.*\.safetensors|tokenizer\.json)$' "$VARIANTS")" -eq 3 ]] \
-  || fail "$VARIANTS must pin all three large Abliterated-BF16 artifacts"
+contains "$VARIANTS" '8eef61530e1283642c77ce2e6721feb5c6f348fa055c00e90f2844a136372694 49950112952 model-00001-of-00002.safetensors'
+contains "$VARIANTS" 'cd53270fef03dac41c34a7cafd64cdc400cff149f59d3aff17e248892f328b5b 49902303112 model-00001-of-00002.safetensors'
+contains "$VARIANTS" 'fd88d337eb84f8d0e6ba33a7684d7efa6722d4460ba4d6badca9699418392a84 5111976608 model.safetensors'
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ [^ ]+$' "$VARIANTS")" -eq 20 ]] \
+  || fail "$VARIANTS must pin all required standard, abliterated, and draft artifacts"
 # shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
 source "$VARIANTS"
 muse_resolve_variant standard
@@ -67,14 +70,13 @@ muse_resolve_variant unknown >/dev/null 2>&1 || unknown_status=$?
 contains "$DOWNLOAD" 'source "$SCRIPT_DIR/muse-glimmer-variant.sh"'
 contains "$DOWNLOAD" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
 contains "$DOWNLOAD" 'export HF_HUB_DISABLE_XET=1'
-contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_TARGET_REPO@\$MUSE_TARGET_REV' > '\$MUSE_TARGET_HOST/.download-complete'"
-contains "$DOWNLOAD" "printf '%s\\n' '\$MUSE_DRAFT_REPO@\$MUSE_DRAFT_REV' > '\$MUSE_DRAFT_HOST/.download-complete'"
-contains "$DOWNLOAD" 'sha256sum --check --strict /target.sha256'
-contains "$DOWNLOAD" '-v "$TARGET_MANIFEST":/target.sha256:ro'
-contains "$DOWNLOAD" '-v "$MUSE_TARGET_HOST":"$MUSE_TARGET_HOST"'
-contains "$DOWNLOAD" '-v "$MUSE_DRAFT_HOST":"$MUSE_DRAFT_HOST"'
-if grep -Fq -- '-v /models:/models' "$DOWNLOAD"; then
-  fail "$DOWNLOAD grants its throwaway container write access to unrelated checkpoints"
+contains "$DOWNLOAD" 'inference_verify_checkpoint_manifest "$directory" "$manifest"'
+contains "$DOWNLOAD" 'write_completion_marker "$directory" "$repo@$revision"'
+contains "$DOWNLOAD" 'MUSE_DOWNLOAD_WORKER=yes'
+contains "$DOWNLOAD" 'HF_TOKEN_PATH="$token_file"'
+contains "$DOWNLOAD" 'DOWNLOAD_COMPLETE:'
+if grep -Eq 'python:3\.11|pip install|docker run' "$DOWNLOAD"; then
+  fail "$DOWNLOAD must use only the Nix-managed host Hugging Face client"
 fi
 if grep -Fq 'HF_XET_HIGH_PERFORMANCE' "$DOWNLOAD"; then
   fail "$DOWNLOAD re-enables the Xet backend that hangs on this workstation"
@@ -85,6 +87,10 @@ contains "$MUSE_RUN" "DIGEST=\"$DIGEST\""
 contains "$MUSE_RUN" 'source "$SCRIPT_DIR/muse-glimmer-variant.sh"'
 contains "$MUSE_RUN" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
 contains "$MUSE_RUN" '--name "$MUSE_CONTAINER_NAME"'
+contains "$MUSE_RUN" '--label io.peterstorm.inference.profile=muse-glimmer'
+contains "$MUSE_RUN" '--label io.peterstorm.inference.port="$PORT"'
+contains "$MUSE_RUN" '--label io.peterstorm.inference.target-revision="$MUSE_TARGET_REV"'
+contains "$MUSE_RUN" '--label io.peterstorm.inference.draft-revision="$MUSE_DRAFT_REV"'
 contains "$MUSE_RUN" '--gpus "\"device=$GPU_DEVICE\""'
 contains "$MUSE_RUN" '-e CUDA_VISIBLE_DEVICES=0'
 contains "$MUSE_RUN" '--dtype bfloat16'
@@ -132,11 +138,11 @@ contains "$DUAL_RUN" 'PORT="$QWEN_PORT"'
 contains "$DUAL_RUN" 'SPEC_MTP=0'
 contains "$DUAL_RUN" 'GPU_DEVICE=0'
 contains "$DUAL_RUN" 'PORT="$MUSE_PORT"'
-contains "$DUAL_RUN" 'systemctl is-active --quiet display-manager'
+contains "$DUAL_RUN" 'display_state="$(systemctl is-active display-manager 2>&1)"'
+contains "$DUAL_RUN" 'could not prove display-manager is inactive'
 contains "$DUAL_RUN" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
-contains "$DUAL_RUN" '"$MUSE_TARGET_HOST|$MUSE_TARGET_REPO@$MUSE_TARGET_REV"'
-contains "$DUAL_RUN" '"$MUSE_DRAFT_HOST|$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"'
-contains "$DUAL_RUN" 'inference_require_pinned_checkpoint "$muse_path" "$expected_marker" "$download_hint"'
+contains "$DUAL_RUN" '"$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$MUSE_TARGET_MANIFEST" "$download_hint"'
+contains "$DUAL_RUN" '"$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$MUSE_DRAFT_MANIFEST" "$download_hint"'
 contains "$DUAL_RUN" 'MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"'
 contains "$DUAL_RUN" 'MAX_EXISTING_GPU_MEMORY_MIB="${MAX_EXISTING_GPU_MEMORY_MIB:-2048}"'
 contains "$DUAL_RUN" '--query-gpu=index,memory.used'

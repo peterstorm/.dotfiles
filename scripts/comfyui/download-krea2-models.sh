@@ -119,53 +119,53 @@ EOF
   fi
 
   exec 9>"$LOCK"
-if ! flock -n 9; then
-  echo "error: another Krea 2 download or verification owns $LOCK" >&2
-  exit 1
-fi
-
-if [ -f "$MARKER" ] && grep -Fxq "$REPO@$REV" "$MARKER"; then
-  echo "Verifying the existing Krea 2 production profile..."
-  if verify_manifest "$MODELS_ROOT" "$MANIFEST" \
-     && verify_manifest "$MODELS_ROOT" "$(auxiliary_verification_manifest)"; then
-    echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
-    exit 0
+  if ! flock -n 9; then
+    echo "error: another Krea 2 download or verification owns $LOCK" >&2
+    exit 1
   fi
-  echo "Existing profile is incomplete or corrupt; resuming the pinned download." >&2
-fi
 
-mkdir -p "$STAGING"
-mapfile -t files < <(awk 'NF == 3 { print $3 }' <<<"$MANIFEST")
-export HF_HUB_DISABLE_XET=1
-hf download "$REPO" "${files[@]}" --revision "$REV" --local-dir "$STAGING"
+  if [ -f "$MARKER" ] && grep -Fxq "$REPO@$REV" "$MARKER"; then
+    echo "Verifying the existing Krea 2 production profile..."
+    if verify_manifest "$MODELS_ROOT" "$MANIFEST" \
+       && verify_manifest "$MODELS_ROOT" "$(auxiliary_verification_manifest)"; then
+      echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
+      exit 0
+    fi
+    echo "Existing profile is incomplete or corrupt; resuming the pinned download." >&2
+  fi
 
-while read -r _ _ repo revision source relative; do
-  [ -n "$relative" ] || continue
-  repo_staging="$STAGING/.repositories/${repo//\//--}"
-  hf download "$repo" "$source" --revision "$revision" --local-dir "$repo_staging"
-  mkdir -p "$(dirname "$STAGING/$relative")"
-  mv -f "$repo_staging/$source" "$STAGING/$relative"
-done <<<"$AUXILIARY_MANIFEST"
+  mkdir -p "$STAGING"
+  mapfile -t files < <(awk 'NF == 3 { print $3 }' <<<"$MANIFEST")
+  export HF_HUB_DISABLE_XET=1
+  hf download "$REPO" "${files[@]}" --revision "$REV" --local-dir "$STAGING"
 
-printf 'Verifying %d pinned base artifacts and 3 Episode 30 dependencies...\n' "${#files[@]}"
-verify_manifest "$STAGING" "$MANIFEST"
-verify_manifest "$STAGING" "$(auxiliary_verification_manifest)"
+  while read -r _ _ repo revision source relative; do
+    [ -n "$relative" ] || continue
+    repo_staging="$STAGING/.repositories/${repo//\//--}"
+    hf download "$repo" "$source" --revision "$revision" --local-dir "$repo_staging"
+    mkdir -p "$(dirname "$STAGING/$relative")"
+    mv -f "$repo_staging/$source" "$STAGING/$relative"
+  done <<<"$AUXILIARY_MANIFEST"
 
-install_manifest "$MANIFEST"
-while read -r _ _ _ _ _ relative; do
-  [ -n "$relative" ] || continue
-  install_file "$relative"
-done <<<"$AUXILIARY_MANIFEST"
+  printf 'Verifying %d pinned base artifacts and 3 Episode 30 dependencies...\n' "${#files[@]}"
+  verify_manifest "$STAGING" "$MANIFEST"
+  verify_manifest "$STAGING" "$(auxiliary_verification_manifest)"
 
-marker_tmp="$MARKER.new"
-{
-  printf '%s@%s\n' "$REPO" "$REV"
-  printf '%s\n' "$MANIFEST"
-  printf '%s\n' "$AUXILIARY_MANIFEST"
-} >"$marker_tmp"
-chmod 0640 "$marker_tmp"
-mv -f "$marker_tmp" "$MARKER"
-rm -rf "$STAGING"
+  install_manifest "$MANIFEST"
+  while read -r _ _ _ _ _ relative; do
+    [ -n "$relative" ] || continue
+    install_file "$relative"
+  done <<<"$AUXILIARY_MANIFEST"
+
+  marker_tmp="$MARKER.new"
+  {
+    printf '%s@%s\n' "$REPO" "$REV"
+    printf '%s\n' "$MANIFEST"
+    printf '%s\n' "$AUXILIARY_MANIFEST"
+  } >"$marker_tmp"
+  chmod 0640 "$marker_tmp"
+  mv -f "$marker_tmp" "$MARKER"
+  rm -rf "$STAGING"
 
   echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
   echo "model root: $MODELS_ROOT"

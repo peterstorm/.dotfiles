@@ -181,7 +181,13 @@ def sanitize_http_error_body(raw_body: bytes) -> str:
     detail = raw_body.decode("utf-8", errors="replace")
     detail = " ".join(detail.split())
     detail = re.sub(
-        r"(?i)\b(api[_ -]?key|authorization|bearer|token)\b\s*[:=]?\s*\S+",
+        r"(?i)\bauthorization\s*:\s*bearer\s+\S+",
+        "Authorization: Bearer [redacted]",
+        detail,
+    )
+    detail = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", detail)
+    detail = re.sub(
+        r"(?i)\b(api[_ -]?key|token)\b\s*[:=]?\s*\S+",
         r"\1 [redacted]",
         detail,
     )

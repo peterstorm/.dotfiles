@@ -41,6 +41,7 @@ ComfyUI remains loopback-only and systemd-confined.
 | Curated creative suite | 51 official Comfy workflows under six task folders | pinned template package; exact file manifest + JSON gate |
 | Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
+| Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
 | Comfy account/partner credits | Comfy account | external prepaid service |
 | Muse bearer key | `~/.config/muse-glimmer/api-key` | private file, never a node widget |
@@ -390,8 +391,9 @@ The stack also supports the requested
 [`mlasli/Muse-Glimmer-30B-Abliterated-BF16`](https://huggingface.co/mlasli/Muse-Glimmer-30B-Abliterated-BF16)
 at immutable revision `daf5fab76a0351a583714a92d88ebdb6eb48af35`.
 Despite the request describing it as a quant, that repository is **full BF16**:
-its two model shards total 59,553,433,736 bytes. The three large artifacts are
-SHA-256 checked after download. Its model card reports weight-level refusal
+its two model shards total 59,553,433,736 bytes. Every runtime-required target
+and DFlash draft artifact is checked by exact size and SHA-256 after download
+and again before launch. Its model card reports weight-level refusal
 suppression at alpha 0.15 but no formal capability benchmark, so it is an
 experimental creative variant—not a replacement for the standard baseline.
 
@@ -404,10 +406,12 @@ MUSE_VARIANT=abliterated bash scripts/comfyui/activate-creative-stack.sh
 ```
 
 For an explicitly asynchronous transfer, add `MUSE_DOWNLOAD_DETACH=yes`; that
-mode reports `DOWNLOAD_STARTED`, never completion, and requires following the
-container logs until its marker is written.
+mode reports `DOWNLOAD_STARTED`, never completion. Follow the reported
+Nix-managed host-worker log under
+`~/.local/state/creative-model-downloads/` until it reports
+`DOWNLOAD_COMPLETE`. No mutable Python image or runtime `pip install` is used.
 
-Both variants use distinct model directories, caches, download containers, and
+Both variants use distinct model directories, caches, download locks/logs, and
 runtime container names. They share the official BF16 DFlash assistant. DFlash
 sampling remains output-exact because the target verifies candidates, but the
 modified target may accept fewer draft tokens; benchmark acceptance and speed
@@ -893,13 +897,20 @@ Verify local model publication separately:
 ```bash
 test -f /models/comfyui/.krea2-production-complete
 test -f /models/comfyui/.minimax-h3-bf16-complete
-test -f /models/Muse-Glimmer-30B-Abliterated-BF16/.download-complete
-test -f /models/Muse-Glimmer-30B-assistant/.download-complete
+
+MUSE_VARIANT="${MUSE_VARIANT:-standard}"
+source scripts/inference/muse/muse-glimmer-variant.sh
+muse_resolve_variant "$MUSE_VARIANT"
+test -f "$MUSE_TARGET_HOST/.download-complete"
+test -f "$MUSE_DRAFT_HOST/.download-complete"
 ```
 
-A marker under `~/.local/state/creative-model-staging/` means the download is
-staged; it does **not** satisfy these runtime checks until the artifacts are
-promoted into `/models`. Likewise, a present H3 workflow is not a claim that the
+The downloaders default directly to `/models` and `/models/comfyui`. During the
+unprivileged initial transfer documented for this workstation, they were
+explicitly redirected with `MUSE_MODELS_ROOT` and `COMFYUI_MODELS_ROOT` into
+`~/.local/state/creative-model-staging/`. Markers there mean only that the
+redirected staging profile is complete; they do **not** satisfy these default
+runtime checks until the artifacts are promoted into `/models`. Likewise, a present H3 workflow is not a claim that the
 full BF16 profile has passed the qualification in Section 8.
 
 ### The recommended production shape

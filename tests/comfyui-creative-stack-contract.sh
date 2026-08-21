@@ -66,7 +66,7 @@ contains "$MODULE" '"${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/u
 contains "$MODULE" 'installCreativeWorkflows'
 contains "$MODULE" '--database-url sqlite:////var/lib/comfyui/user/comfyui.db'
 contains "$MODULE" '--reserve-vram 8'
-contains "$MODULE" 'custom_nodes: ${declarativeNodes}'
+contains "$MODULE" 'declarative_nodes.custom_nodes = toString declarativeNodes;'
 contains "$MODULE" 'rev = "bdfa8b267fdb13730868d435b277dcfe696ec083";'
 contains "$MODULE" 'rev = "cf8895005540680306cd46e1faaf75f8902db794";'
 contains "$MODULE" 'rev = "c1aaee4f6a41a69563eab50e51cd1ef7347f22e9";'
@@ -78,6 +78,8 @@ contains "$MODULE" 'grep -RohF '\''krea2\\krea2_turbo_int8_convrot.safetensors'\
 contains "$MODULE" 'grep -RohF '\''qwen3-vl-4b-heretic_int8.safetensors'\'''
 contains "$MODULE" 'pythonPackages.hf-xet'
 contains "$MODULE" 'modelSubdirectories = ['
+contains "$MODULE" 'modelPathEntries = builtins.listToAttrs ('
+contains "$MODULE" '// modelPathEntries;'
 contains "$MODULE" '++ map (directory: "d /models/comfyui/${directory} 0750 peterstorm users - -") modelSubdirectories;'
 contains "$MODULE" 'binaryTorchPython.pkgs.comfyui-workflow-templates-json'
 contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out" -type f -name '\''*.json'\'' | wc -l)" -eq 51'
@@ -147,7 +149,8 @@ contains "$H3_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
   || fail "MiniMax H3 BF16 manifest must contain exactly 8 pinned artifacts"
 
 # Activation is explicit and rollback-aware; Comfy stays on GPU1, Muse on GPU0.
-contains "$ACTIVATE" "mapfile -t prior_running"
+contains "$ACTIVATE" 'prior_running=()'
+contains "$ACTIVATE" 'inference_container_running "$container"'
 contains "$ACTIVATE" 'comfy_was_active=0'
 contains "$ACTIVATE" 'trap rollback ERR INT TERM'
 contains "$ACTIVATE" 'sudo systemctl stop comfyui.service'

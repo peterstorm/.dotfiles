@@ -53,8 +53,10 @@ for numeric in CONTEXT_LENGTH MAX_RUNNING_REQUESTS CHUNKED_PREFILL_SIZE MAX_GPU_
 done
 
 download_hint="run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE"
-inference_require_pinned_checkpoint "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$download_hint"
-inference_require_pinned_checkpoint "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$download_hint"
+inference_require_pinned_checkpoint \
+  "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$MUSE_TARGET_MANIFEST" "$download_hint"
+inference_require_pinned_checkpoint \
+  "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$MUSE_DRAFT_MANIFEST" "$download_hint"
 if [ ! -f "$ENTRYPOINT_HOST" ]; then
   echo "error: secure SGLang entrypoint not found at $ENTRYPOINT_HOST" >&2
   exit 1
@@ -111,8 +113,12 @@ fi
 docker run -d --init \
   --restart unless-stopped \
   --name "$MUSE_CONTAINER_NAME" \
+  --label io.peterstorm.inference.profile=muse-glimmer \
   --label io.peterstorm.inference.physical-gpu="$GPU_DEVICE" \
+  --label io.peterstorm.inference.port="$PORT" \
   --label io.peterstorm.inference.muse-variant="$MUSE_VARIANT" \
+  --label io.peterstorm.inference.target-revision="$MUSE_TARGET_REV" \
+  --label io.peterstorm.inference.draft-revision="$MUSE_DRAFT_REV" \
   --gpus "\"device=$GPU_DEVICE\"" \
   --ipc=host \
   --network host \
@@ -152,20 +158,27 @@ muse_healthy() {
     "$PORT" "$SGLANG_API_KEY" | curl --config -
 }
 
+cleanup_failed_start() {
+  local original_status="$1"
+  inference_quiesce_failed_container "$MUSE_CONTAINER_NAME" || return $?
+  return "$original_status"
+}
+
 started_at="$(date +%s)"
 while ! muse_healthy; do
-  if [ "$(docker inspect --format '{{.State.Running}}' "$MUSE_CONTAINER_NAME" 2>/dev/null || true)" != true ]; then
-    echo "error: $MUSE_CONTAINER_NAME exited during startup" >&2
+  running_status=0
+  inference_container_running "$MUSE_CONTAINER_NAME" || running_status=$?
+  if [ "$running_status" -ne 0 ]; then
+    if [ "$running_status" -eq 1 ]; then
+      echo "error: $MUSE_CONTAINER_NAME exited during startup" >&2
+    fi
     docker logs --tail 100 "$MUSE_CONTAINER_NAME" >&2 2>/dev/null || true
-    docker update --restart=no "$MUSE_CONTAINER_NAME" >/dev/null 2>&1 || true
-    exit 1
+    cleanup_failed_start 1 || exit $?
   fi
   if (( $(date +%s) - started_at >= STARTUP_TIMEOUT_SECONDS )); then
     echo "error: Muse did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s" >&2
     docker logs --tail 100 "$MUSE_CONTAINER_NAME" >&2 2>/dev/null || true
-    docker update --restart=no "$MUSE_CONTAINER_NAME" >/dev/null 2>&1 || true
-    docker stop -t 30 "$MUSE_CONTAINER_NAME" >/dev/null 2>&1 || true
-    exit 1
+    cleanup_failed_start 1 || exit $?
   fi
   sleep 5
 done

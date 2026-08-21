@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KREA_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 MUSE_DOWNLOAD="$ROOT/scripts/inference/muse/download-muse-glimmer-30b.sh"
+H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
+PROFILE_CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -12,7 +14,7 @@ fail() {
 }
 
 sandbox="$(mktemp -d)"
-trap 'rm -rf "$sandbox" /tmp/muse-glimmer-abliterated-dl.sh /tmp/muse-glimmer-abliterated.sha256' EXIT
+trap 'rm -rf "$sandbox"' EXIT
 mkdir -p "$sandbox/root"
 printf 'verified artifact\n' >"$sandbox/root/artifact.bin"
 expected_sha="$(sha256sum "$sandbox/root/artifact.bin" | cut -d' ' -f1)"
@@ -45,62 +47,92 @@ install_file nested/model.bin
 [ "$(stat -c %a "$MODELS_ROOT/nested/model.bin")" = 640 ] \
   || fail "installed artifact mode is not 0640"
 
-mkdir -p "$sandbox/bin" "$sandbox/home" "$sandbox/muse-models"
+# shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
+source "$PROFILE_CATALOG"
+shared_root="$sandbox/shared-checkpoint"
+mkdir -p "$shared_root"
+printf 'shared artifact\n' >"$shared_root/model.bin"
+shared_sha="$(sha256sum "$shared_root/model.bin" | cut -d' ' -f1)"
+shared_size="$(stat -c %s "$shared_root/model.bin")"
+shared_manifest="$shared_sha $shared_size model.bin"
+inference_verify_checkpoint_manifest "$shared_root" "$shared_manifest" \
+  || fail "shared checkpoint verifier rejected a valid artifact"
+printf 'corrupt\n' >"$shared_root/model.bin"
+if inference_verify_checkpoint_manifest "$shared_root" "$shared_manifest" 2>/dev/null; then
+  fail "shared checkpoint verifier accepted corruption"
+fi
+
+# Source the Muse downloader and exercise its checkpoint boundary with a fake hf
+# adapter and a tiny immutable manifest.
+# shellcheck source=scripts/inference/muse/download-muse-glimmer-30b.sh
+source "$MUSE_DOWNLOAD"
+mkdir -p "$sandbox/bin" "$sandbox/muse-target"
+printf 'muse artifact\n' >"$sandbox/muse-target/model.bin"
+muse_sha="$(sha256sum "$sandbox/muse-target/model.bin" | cut -d' ' -f1)"
+muse_size="$(stat -c %s "$sandbox/muse-target/model.bin")"
+muse_manifest="$muse_sha $muse_size model.bin"
+cat >"$sandbox/bin/hf" <<'EOF'
+#!/usr/bin/env bash
+exit "${HF_FAKE_STATUS:-0}"
+EOF
+chmod +x "$sandbox/bin/hf"
+PATH="$sandbox/bin:$PATH" download_checkpoint \
+  fixture/repo fixture-revision "$sandbox/muse-target" "$muse_manifest"
+grep -Fxq 'fixture/repo@fixture-revision' "$sandbox/muse-target/.download-complete" \
+  || fail "Muse checkpoint completion marker was not written after verification"
+rm -f "$sandbox/muse-target/.download-complete"
+export HF_FAKE_STATUS=7
+if PATH="$sandbox/bin:$PATH" \
+  download_checkpoint fixture/repo fixture-revision "$sandbox/muse-target" "$muse_manifest" \
+  >/dev/null 2>&1; then
+  fail "Muse checkpoint download failure was not propagated"
+fi
+unset HF_FAKE_STATUS
+test ! -e "$sandbox/muse-target/.download-complete" \
+  || fail "Muse marker was written after download failure"
+
 cat >"$sandbox/bin/docker" <<'EOF'
 #!/usr/bin/env bash
-command="$1"; shift
-printf 'docker %s %s\n' "$command" "$*" >>"$DOCKER_EVENTS"
-case "$command" in
-  rm|run) echo container-id; exit 0 ;;
-  wait) echo "${DOCKER_WAIT_STATUS:-0}"; exit 0 ;;
-  logs) echo 'container log evidence'; exit 0 ;;
-  *) exit 0 ;;
-esac
+printf 'docker %s\n' "$*" >>"$DOCKER_EVENTS"
+if [ "$1" = update ]; then exit "${DOCKER_UPDATE_STATUS:-0}"; fi
+if [ "$1" = stop ]; then exit "${DOCKER_STOP_STATUS:-0}"; fi
+exit 0
 EOF
-cat >"$sandbox/bin/sudo" <<'EOF'
+chmod +x "$sandbox/bin/docker"
+: >"$sandbox/docker-events"
+DOCKER_EVENTS="$sandbox/docker-events"
+export DOCKER_EVENTS
+PATH="$sandbox/bin:$PATH" inference_quiesce_failed_container muse-fixture
+export DOCKER_UPDATE_STATUS=1
+cleanup_status=0
+PATH="$sandbox/bin:$PATH" \
+  inference_quiesce_failed_container muse-fixture >/dev/null 2>&1 || cleanup_status=$?
+unset DOCKER_UPDATE_STATUS
+[ "$cleanup_status" -eq 70 ] \
+  || fail "incomplete failed-start cleanup must return status 70"
+grep -Fq 'docker stop -t 30 muse-fixture' "$sandbox/docker-events" \
+  || fail "failed-start cleanup did not attempt container stop after update failure"
+
+# Both MiniMax legal gates must reject before the hf boundary is reached.
+cat >"$sandbox/bin/hf" <<'EOF'
 #!/usr/bin/env bash
-exec "$@"
+printf 'hf-called\n' >>"$H3_EVENTS"
+exit 0
 EOF
-chmod +x "$sandbox/bin"/*
+chmod +x "$sandbox/bin/hf"
+: >"$sandbox/h3-events"
+h3_status=0
+H3_EVENTS="$sandbox/h3-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/h3" bash "$H3_DOWNLOAD" \
+  >/dev/null 2>&1 || h3_status=$?
+[ "$h3_status" -eq 2 ] || fail "MiniMax missing-license gate returned $h3_status"
+[ ! -s "$sandbox/h3-events" ] || fail "MiniMax called hf before license acceptance"
 
-run_muse_download() {
-  local detach="$1" wait_status="$2" output="$3" status=0
-  : >"$sandbox/docker-events"
-  HOME="$sandbox/home" PATH="$sandbox/bin:$PATH" \
-    DOCKER_EVENTS="$sandbox/docker-events" DOCKER_WAIT_STATUS="$wait_status" \
-    MUSE_MODELS_ROOT="$sandbox/muse-models" MUSE_VARIANT=abliterated \
-    MUSE_DOWNLOAD_DETACH="$detach" bash "$MUSE_DOWNLOAD" \
-    >"$output" 2>&1 || status=$?
-  printf '%s' "$status"
-}
+h3_status=0
+H3_EVENTS="$sandbox/h3-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/h3" MINIMAX_H3_ACCEPT_LICENSE=yes \
+  bash "$H3_DOWNLOAD" >/dev/null 2>&1 || h3_status=$?
+[ "$h3_status" -eq 2 ] || fail "MiniMax missing-authorization gate returned $h3_status"
+[ ! -s "$sandbox/h3-events" ] || fail "MiniMax called hf before authorization attestation"
 
-status="$(run_muse_download no 7 "$sandbox/wait-failure.log")"
-[ "$status" -eq 1 ] || fail "Muse downloader did not propagate container failure"
-grep -Fq 'docker wait muse-glimmer-abliterated-model-dl' "$sandbox/docker-events" \
-  || fail "blocking Muse downloader did not wait for its container"
-grep -Fq 'container log evidence' "$sandbox/wait-failure.log" \
-  || fail "Muse downloader failure omitted container logs"
-grep -Fq 'sha256sum --check --strict /target.sha256' /tmp/muse-glimmer-abliterated-dl.sh \
-  || fail "Muse verifier does not consume the mounted manifest as data"
-if grep -Fq 'cd53270fef03dac41' /tmp/muse-glimmer-abliterated-dl.sh; then
-  fail "Muse generated script interpolated checksum data into shell source"
-fi
-grep -Fq 'cd53270fef03dac41' /tmp/muse-glimmer-abliterated.sha256 \
-  || fail "Muse checksum manifest was not materialized separately"
-grep -Fq -- '-v /tmp/muse-glimmer-abliterated.sha256:/target.sha256:ro' "$sandbox/docker-events" \
-  || fail "Muse checksum manifest was not mounted read-only"
-
-status="$(run_muse_download no 0 "$sandbox/wait-success.log")"
-[ "$status" -eq 0 ] || fail "successful blocking Muse download returned $status"
-grep -Fq 'DOWNLOAD_COMPLETE:' "$sandbox/wait-success.log" \
-  || fail "blocking Muse success omitted completion evidence"
-
-status="$(run_muse_download yes 7 "$sandbox/detached.log")"
-[ "$status" -eq 0 ] || fail "explicit detached Muse start returned $status"
-if grep -Fq 'docker wait' "$sandbox/docker-events"; then
-  fail "explicit detached Muse start unexpectedly waited"
-fi
-grep -Fq 'DOWNLOAD_STARTED:' "$sandbox/detached.log" \
-  || fail "detached Muse mode did not distinguish start from completion"
-
-printf 'PASS: model downloads verify corruption and propagate completion state\n'
+printf 'PASS: model downloads verify corruption, legal gates, and completion state\n'

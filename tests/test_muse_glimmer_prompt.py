@@ -11,6 +11,8 @@ import sys
 import tempfile
 import threading
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -47,6 +49,24 @@ class MuseTestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, _format: str, *args: object) -> None:
         pass
+
+
+@contextmanager
+def muse_server(status: int, response_body: bytes) -> Iterator[str]:
+    MuseTestHandler.status = status
+    MuseTestHandler.response_body = response_body
+    MuseTestHandler.observed_path = ""
+    MuseTestHandler.observed_authorization = ""
+    MuseTestHandler.observed_body = {}
+    server = ThreadingHTTPServer(("127.0.0.1", 0), MuseTestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/v1"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
 
 class MusePromptContractTest(unittest.TestCase):
@@ -133,24 +153,16 @@ class MusePromptContractTest(unittest.TestCase):
         self.assertEqual(reasoning, "internal plan")
 
     def test_http_boundary_posts_auth_and_parses_response(self) -> None:
-        MuseTestHandler.status = 200
-        MuseTestHandler.response_body = json.dumps(
+        response = json.dumps(
             {"choices": [{"message": {"content": "server prompt"}}]}
         ).encode()
-        server = ThreadingHTTPServer(("127.0.0.1", 0), MuseTestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
+        with muse_server(200, response) as endpoint:
             prompt, reasoning = module.request_prompt(
-                f"http://127.0.0.1:{server.server_port}/v1",
+                endpoint,
                 "private-test-key",
                 {"model": "muse-glimmer-30b", "messages": []},
                 5,
             )
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join()
         self.assertEqual(prompt, "server prompt")
         self.assertEqual(reasoning, "")
         self.assertEqual(MuseTestHandler.observed_path, "/v1/chat/completions")
@@ -161,25 +173,44 @@ class MusePromptContractTest(unittest.TestCase):
             MuseTestHandler.observed_body["model"], "muse-glimmer-30b"
         )
 
-    def test_http_error_preserves_status_and_redacts_body(self) -> None:
-        MuseTestHandler.status = 401
-        MuseTestHandler.response_body = b"token=provider-secret denied"
-        server = ThreadingHTTPServer(("127.0.0.1", 0), MuseTestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            with self.assertRaisesRegex(RuntimeError, r"Muse HTTP 401.*redacted") as raised:
+    def test_http_error_preserves_status_and_redacts_credentials(self) -> None:
+        response = (
+            b"Authorization: Bearer private-test-key "
+            b"token=provider-secret denied"
+        )
+        with (
+            muse_server(401, response) as endpoint,
+            self.assertRaisesRegex(RuntimeError, r"Muse HTTP 401.*redacted") as raised,
+        ):
+            module.request_prompt(
+                endpoint,
+                "private-test-key",
+                {"model": "muse-glimmer-30b", "messages": []},
+                5,
+            )
+        error = str(raised.exception)
+        self.assertNotIn("private-test-key", error)
+        self.assertNotIn("provider-secret", error)
+
+    def test_http_boundary_reports_malformed_and_unusable_responses(self) -> None:
+        cases = (
+            (b"not-json", "malformed JSON"),
+            (b"{}", "no usable prompt"),
+            (b'{"choices": []}', "no usable prompt"),
+            (b'{"choices": [{"message": {"content": ""}}]}', "empty prompt"),
+        )
+        for response, expected in cases:
+            with (
+                self.subTest(expected=expected),
+                muse_server(200, response) as endpoint,
+                self.assertRaisesRegex(RuntimeError, expected),
+            ):
                 module.request_prompt(
-                    f"http://127.0.0.1:{server.server_port}/v1",
+                    endpoint,
                     "private-test-key",
                     {"model": "muse-glimmer-30b", "messages": []},
                     5,
                 )
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join()
-        self.assertNotIn("provider-secret", str(raised.exception))
 
     def test_invalid_task_duration_reasoning_and_token_budget_fail_closed(self) -> None:
         with self.assertRaises(ValueError):

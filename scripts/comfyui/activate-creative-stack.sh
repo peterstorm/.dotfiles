@@ -13,9 +13,10 @@ source "$SCRIPT_DIR/../inference/muse/muse-glimmer-variant.sh"
 source "$SCRIPT_DIR/../inference/shared/inference-profile-catalog.sh"
 muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
-MUSE_LAUNCHER="$SCRIPT_DIR/../inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
+MUSE_LAUNCHER="${MUSE_LAUNCHER:-$SCRIPT_DIR/../inference/muse/run-muse-glimmer-30b-bf16-dflash.sh}"
 MUSE_NAME="$MUSE_CONTAINER_NAME"
-MUSE_URL="http://127.0.0.1:8001"
+MUSE_PORT=8001
+MUSE_URL="http://127.0.0.1:$MUSE_PORT"
 COMFY_URL="http://127.0.0.1:8188"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-1800}"
 
@@ -36,25 +37,69 @@ if ! systemctl show comfyui.service -p Environment --value | grep -q 'CUDA_VISIB
   exit 1
 fi
 download_hint="run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE"
-inference_require_pinned_checkpoint "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$download_hint"
-inference_require_pinned_checkpoint "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$download_hint"
+inference_require_pinned_checkpoint \
+  "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$MUSE_TARGET_MANIFEST" "$download_hint"
+inference_require_pinned_checkpoint \
+  "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$MUSE_DRAFT_MANIFEST" "$download_hint"
+
+inference_resolve_client_keyfile || {
+  echo "error: no readable Muse/inference API key exists" >&2
+  exit 1
+}
+api_key="$(<"$INFERENCE_CLIENT_KEYFILE")"
+inference_validate_api_key "$api_key"
+
+muse_healthy() {
+  printf 'silent\nshow-error\nfail\noutput = "/dev/null"\nurl = "%s/health"\nheader = "Authorization: Bearer %s"\n' \
+    "$MUSE_URL" "$api_key" | curl --config -
+}
 
 docker info >/dev/null
 mapfile -t KNOWN_INFERENCE_CONTAINERS < <(inference_profile_containers_except "$MUSE_NAME")
 
-is_running() {
-  docker inspect --format '{{.State.Running}}' "$1" 2>/dev/null | grep -q true
-}
+prior_running=()
+for container in "${KNOWN_INFERENCE_CONTAINERS[@]}"; do
+  running_status=0
+  inference_container_running "$container" || running_status=$?
+  case "$running_status" in
+    0) prior_running+=("$container") ;;
+    1) ;;
+    *) exit "$running_status" ;;
+  esac
+done
 
-mapfile -t prior_running < <(
-  for container in "${KNOWN_INFERENCE_CONTAINERS[@]}"; do
-    is_running "$container" && printf '%s\n' "$container"
-  done
-)
 muse_was_running=0
-is_running "$MUSE_NAME" && muse_was_running=1
+running_status=0
+inference_container_running "$MUSE_NAME" || running_status=$?
+case "$running_status" in
+  0)
+    muse_was_running=1
+    inference_require_container_label "$MUSE_NAME" io.peterstorm.inference.profile muse-glimmer
+    inference_require_container_label "$MUSE_NAME" io.peterstorm.inference.physical-gpu 0
+    inference_require_container_label "$MUSE_NAME" io.peterstorm.inference.port "$MUSE_PORT"
+    inference_require_container_label "$MUSE_NAME" io.peterstorm.inference.muse-variant "$MUSE_VARIANT"
+    inference_require_container_label "$MUSE_NAME" io.peterstorm.inference.target-revision "$MUSE_TARGET_REV"
+    inference_require_container_label "$MUSE_NAME" io.peterstorm.inference.draft-revision "$MUSE_DRAFT_REV"
+    if ! muse_healthy; then
+      echo "error: existing $MUSE_NAME does not pass authenticated health" >&2
+      exit 1
+    fi
+    ;;
+  1) ;;
+  *) exit "$running_status" ;;
+esac
+
 comfy_was_active=0
-systemctl is-active --quiet comfyui.service && comfy_was_active=1
+comfy_state_status=0
+comfy_state="$(systemctl is-active comfyui.service 2>&1)" || comfy_state_status=$?
+case "$comfy_state" in
+  active) comfy_was_active=1 ;;
+  inactive|failed) ;;
+  *)
+    echo "error: could not determine comfyui.service state (status $comfy_state_status): $comfy_state" >&2
+    exit 1
+    ;;
+esac
 
 rollback_step() {
   local description="$1" output step_status
@@ -127,23 +172,15 @@ else
   echo "$MUSE_NAME is already running on physical GPU0; preserving it."
 fi
 
-inference_resolve_client_keyfile || {
-  echo "error: no readable Muse/inference API key exists" >&2
-  false
-}
-api_key="$(<"$INFERENCE_CLIENT_KEYFILE")"
-inference_validate_api_key "$api_key"
-
-muse_healthy() {
-  printf 'silent\nshow-error\nfail\noutput = "/dev/null"\nurl = "%s/health"\nheader = "Authorization: Bearer %s"\n' \
-    "$MUSE_URL" "$api_key" | curl --config -
-}
-
 started_at="$(date +%s)"
 while ! curl -fsS -m 3 "$COMFY_URL/system_stats" >/dev/null 2>&1 || ! muse_healthy; do
-  if ! is_running "$MUSE_NAME"; then
-    echo "error: $MUSE_NAME exited during startup" >&2
-    docker logs --tail 100 "$MUSE_NAME" >&2 2>/dev/null || true
+  running_status=0
+  inference_container_running "$MUSE_NAME" || running_status=$?
+  if [ "$running_status" -ne 0 ]; then
+    if [ "$running_status" -eq 1 ]; then
+      echo "error: $MUSE_NAME exited during startup" >&2
+      docker logs --tail 100 "$MUSE_NAME" >&2 2>/dev/null || true
+    fi
     false
   fi
   if ! systemctl is-active --quiet comfyui.service; then

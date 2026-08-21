@@ -51,20 +51,26 @@ if [ ! -e "$QWEN_MODEL_ROOT/config.json" ]; then
   echo "error: Qwen checkpoint is missing; run scripts/inference/qwen38/download-qwen38-27b.sh" >&2
   exit 1
 fi
-MUSE_CHECKPOINTS=(
-  "$MUSE_TARGET_HOST|$MUSE_TARGET_REPO@$MUSE_TARGET_REV"
-  "$MUSE_DRAFT_HOST|$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"
-)
 download_hint="run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE"
-for checkpoint in "${MUSE_CHECKPOINTS[@]}"; do
-  IFS='|' read -r muse_path expected_marker <<<"$checkpoint"
-  inference_require_pinned_checkpoint "$muse_path" "$expected_marker" "$download_hint"
-done
-if systemctl is-active --quiet display-manager; then
-  echo "error: display-manager is active and retains memory on physical GPU0" >&2
-  echo "       run: sudo systemctl stop display-manager" >&2
-  exit 3
-fi
+inference_require_pinned_checkpoint \
+  "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$MUSE_TARGET_MANIFEST" "$download_hint"
+inference_require_pinned_checkpoint \
+  "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$MUSE_DRAFT_MANIFEST" "$download_hint"
+
+display_state_status=0
+display_state="$(systemctl is-active display-manager 2>&1)" || display_state_status=$?
+case "$display_state" in
+  inactive) ;;
+  active)
+    echo "error: display-manager is active and retains memory on physical GPU0" >&2
+    echo "       run: sudo systemctl stop display-manager" >&2
+    exit 3
+    ;;
+  *)
+    echo "error: could not prove display-manager is inactive (status $display_state_status): $display_state" >&2
+    exit 3
+    ;;
+esac
 
 mapfile -t gpu_caps < <(nvidia-smi --query-gpu=index,power.limit --format=csv,noheader,nounits 2>/dev/null)
 if [ "${#gpu_caps[@]}" -ne 2 ]; then
@@ -164,10 +170,13 @@ endpoint_is_healthy() {
 started_at="$(date +%s)"
 while true; do
   for container in "$QWEN_NAME" "$MUSE_NAME"; do
-    running="$(docker inspect --format '{{.State.Running}}' "$container" 2>/dev/null || true)"
-    if [ "$running" != true ]; then
-      echo "error: $container exited during startup" >&2
-      docker logs --tail 100 "$container" >&2 2>/dev/null || true
+    running_status=0
+    inference_container_running "$container" || running_status=$?
+    if [ "$running_status" -ne 0 ]; then
+      if [ "$running_status" -eq 1 ]; then
+        echo "error: $container exited during startup" >&2
+        docker logs --tail 100 "$container" >&2 2>/dev/null || true
+      fi
       false
     fi
   done
