@@ -17,6 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
 source "$SCRIPT_DIR/muse-glimmer-variant.sh"
+# shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
+source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 inference_resolve_operator
 muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
@@ -32,6 +34,7 @@ CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-2048}"
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.85}"
 MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"
 MAX_EXISTING_GPU_MEMORY_MIB="${MAX_EXISTING_GPU_MEMORY_MIB:-2048}"
+STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-1800}"
 
 case "$GPU_DEVICE" in
   0|1) ;;
@@ -41,7 +44,7 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1024 || PORT > 65535)); then
   echo "error: PORT must be an integer from 1024 through 65535 (got: $PORT)" >&2
   exit 2
 fi
-for numeric in CONTEXT_LENGTH MAX_RUNNING_REQUESTS CHUNKED_PREFILL_SIZE MAX_GPU_POWER_LIMIT MAX_EXISTING_GPU_MEMORY_MIB; do
+for numeric in CONTEXT_LENGTH MAX_RUNNING_REQUESTS CHUNKED_PREFILL_SIZE MAX_GPU_POWER_LIMIT MAX_EXISTING_GPU_MEMORY_MIB STARTUP_TIMEOUT_SECONDS; do
   value="${!numeric}"
   if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
     echo "error: $numeric must be a positive integer (got: $value)" >&2
@@ -49,21 +52,9 @@ for numeric in CONTEXT_LENGTH MAX_RUNNING_REQUESTS CHUNKED_PREFILL_SIZE MAX_GPU_
   fi
 done
 
-require_download() {
-  local directory="$1" expected="$2"
-  if [ ! -e "$directory/config.json" ] || [ ! -e "$directory/.download-complete" ]; then
-    echo "error: pinned checkpoint is incomplete at $directory" >&2
-    echo "       run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE" >&2
-    return 1
-  fi
-  if ! grep -Fxq "$expected" "$directory/.download-complete"; then
-    echo "error: checkpoint marker at $directory does not match $expected" >&2
-    return 1
-  fi
-}
-
-require_download "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV"
-require_download "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"
+download_hint="run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE"
+inference_require_pinned_checkpoint "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$download_hint"
+inference_require_pinned_checkpoint "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$download_hint"
 if [ ! -f "$ENTRYPOINT_HOST" ]; then
   echo "error: secure SGLang entrypoint not found at $ENTRYPOINT_HOST" >&2
   exit 1
@@ -72,7 +63,7 @@ fi
 # Remove this profile's previous instance before checking whether another model
 # still owns the selected card. This preserves idempotent relaunches while
 # refusing an accidental launch beside a TP2 server.
-docker rm -f "$MUSE_CONTAINER_NAME" 2>/dev/null || true
+inference_remove_container_if_present "$MUSE_CONTAINER_NAME"
 gpu_state="$(nvidia-smi --id="$GPU_DEVICE" --query-gpu=power.limit,memory.used --format=csv,noheader,nounits 2>/dev/null)" || {
   echo "error: physical GPU $GPU_DEVICE is not queryable" >&2
   exit 3
@@ -156,8 +147,28 @@ docker run -d --init \
   --host 0.0.0.0 \
   --port "$PORT"
 
-echo "Started '$MUSE_CONTAINER_NAME' on physical GPU $GPU_DEVICE at :$PORT."
-echo "First start pulls the pinned image and compiles kernels/CUDA graphs."
-echo "Follow:  docker logs -f $MUSE_CONTAINER_NAME"
-echo "Health:  curl -fsS http://127.0.0.1:$PORT/health"
+muse_healthy() {
+  printf 'silent\nshow-error\nfail\noutput = "/dev/null"\nurl = "http://127.0.0.1:%s/health"\nheader = "Authorization: Bearer %s"\n' \
+    "$PORT" "$SGLANG_API_KEY" | curl --config -
+}
+
+started_at="$(date +%s)"
+while ! muse_healthy; do
+  if [ "$(docker inspect --format '{{.State.Running}}' "$MUSE_CONTAINER_NAME" 2>/dev/null || true)" != true ]; then
+    echo "error: $MUSE_CONTAINER_NAME exited during startup" >&2
+    docker logs --tail 100 "$MUSE_CONTAINER_NAME" >&2 2>/dev/null || true
+    docker update --restart=no "$MUSE_CONTAINER_NAME" >/dev/null 2>&1 || true
+    exit 1
+  fi
+  if (( $(date +%s) - started_at >= STARTUP_TIMEOUT_SECONDS )); then
+    echo "error: Muse did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s" >&2
+    docker logs --tail 100 "$MUSE_CONTAINER_NAME" >&2 2>/dev/null || true
+    docker update --restart=no "$MUSE_CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker stop -t 30 "$MUSE_CONTAINER_NAME" >/dev/null 2>&1 || true
+    exit 1
+  fi
+  sleep 5
+done
+
+echo "MUSE_READY: '$MUSE_CONTAINER_NAME' on physical GPU $GPU_DEVICE at :$PORT."
 echo "API key: $KEYFILE  (send as 'Authorization: Bearer <key>')"

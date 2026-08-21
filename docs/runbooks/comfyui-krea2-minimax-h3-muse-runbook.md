@@ -398,9 +398,13 @@ Download and activate it explicitly:
 
 ```bash
 MUSE_VARIANT=abliterated bash scripts/inference/muse/download-muse-glimmer-30b.sh
-# Wait for DOWNLOAD_COMPLETE, then:
+# The command returns only after checksum verification and DOWNLOAD_COMPLETE.
 MUSE_VARIANT=abliterated bash scripts/comfyui/activate-creative-stack.sh
 ```
+
+For an explicitly asynchronous transfer, add `MUSE_DOWNLOAD_DETACH=yes`; that
+mode reports `DOWNLOAD_STARTED`, never completion, and requires following the
+container logs until its marker is written.
 
 Both variants use distinct model directories, caches, download containers, and
 runtime container names. They share the official BF16 DFlash assistant. DFlash
@@ -429,7 +433,9 @@ Outputs:
 
 The node:
 
-- calls only `http://127.0.0.1:8001/v1/chat/completions`;
+- defaults to the Nix-configured loopback endpoint
+  `http://127.0.0.1:8001/v1/chat/completions`; an operator can deliberately
+  override the base with `MUSE_GLIMMER_BASE_URL`;
 - reads the bearer key from the mode-0600 Muse key file on each request;
 - never stores the key in workflow JSON or a UI widget;
 - uses Muse's model-card sampling defaults (`temperature=1`, `top_p=.95`,

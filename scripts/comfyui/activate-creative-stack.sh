@@ -9,12 +9,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../inference/shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
 source "$SCRIPT_DIR/../inference/muse/muse-glimmer-variant.sh"
+# shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
+source "$SCRIPT_DIR/../inference/shared/inference-profile-catalog.sh"
 muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
 MUSE_LAUNCHER="$SCRIPT_DIR/../inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
 MUSE_NAME="$MUSE_CONTAINER_NAME"
-OTHER_MUSE_NAME="$MUSE_OTHER_CONTAINER_NAME"
-MUSE_TARGET="$MUSE_TARGET_HOST"
 MUSE_URL="http://127.0.0.1:8001"
 COMFY_URL="http://127.0.0.1:8188"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-1800}"
@@ -35,25 +35,12 @@ if ! systemctl show comfyui.service -p Environment --value | grep -q 'CUDA_VISIB
   echo "error: comfyui.service is not pinned to physical GPU1" >&2
   exit 1
 fi
-if [ ! -e "$MUSE_TARGET/config.json" ] ||
-   [ ! -e /models/Muse-Glimmer-30B-assistant/config.json ]; then
-  echo "error: Muse '$MUSE_VARIANT' checkpoints are incomplete; run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh first" >&2
-  exit 1
-fi
+download_hint="run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE"
+inference_require_pinned_checkpoint "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$download_hint"
+inference_require_pinned_checkpoint "$MUSE_DRAFT_HOST" "$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV" "$download_hint"
 
-KNOWN_INFERENCE_CONTAINERS=(
-  ds4-0731-r31
-  ds4-0731-r33
-  qwen38-27b-bf16
-  qwen38-27b-bf16-dspark-vllm-v2
-  qwen38-27b-bf16-dspark-sglang-v2
-  qwen38-27b-bf16-dspark-vllm
-  qwen38-27b-bf16-dspark-sglang
-  qwen38-27b-bf16-dflash2-sglang
-  qwen38-27b-bf16-dflash2-sglang-native
-  qwen38-27b-bf16-dflash2-vllm
-  "$OTHER_MUSE_NAME"
-)
+docker info >/dev/null
+mapfile -t KNOWN_INFERENCE_CONTAINERS < <(inference_profile_containers_except "$MUSE_NAME")
 
 is_running() {
   docker inspect --format '{{.State.Running}}' "$1" 2>/dev/null | grep -q true
@@ -69,26 +56,42 @@ is_running "$MUSE_NAME" && muse_was_running=1
 comfy_was_active=0
 systemctl is-active --quiet comfyui.service && comfy_was_active=1
 
+rollback_step() {
+  local description="$1" output step_status
+  shift
+  if output="$("$@" 2>&1)"; then
+    return 0
+  else
+    step_status=$?
+  fi
+  echo "rollback error: $description failed (status $step_status): $output" >&2
+  return 1
+}
+
 rollback() {
-  local status=$?
+  local status=$? rollback_failed=0 container
   trap - ERR INT TERM
   echo "Creative-stack activation failed; restoring the previous GPU profile." >&2
-  sudo systemctl stop comfyui.service >/dev/null 2>&1 || true
+  rollback_step "stop ComfyUI" sudo systemctl stop comfyui.service || rollback_failed=1
   if [ "$muse_was_running" -eq 0 ]; then
-    docker stop -t 30 "$MUSE_NAME" >/dev/null 2>&1 || true
+    rollback_step "stop newly started Muse" inference_stop_container_if_present "$MUSE_NAME" || rollback_failed=1
   fi
   for container in "${prior_running[@]}"; do
-    docker start "$container" >/dev/null 2>&1 || true
+    rollback_step "restart prior container $container" docker start "$container" || rollback_failed=1
   done
   if [ "$comfy_was_active" -eq 1 ]; then
-    sudo systemctl start comfyui.service >/dev/null 2>&1 || true
+    rollback_step "restart prior ComfyUI service" sudo systemctl start comfyui.service || rollback_failed=1
+  fi
+  if [ "$rollback_failed" -ne 0 ]; then
+    echo "error: creative-stack rollback was incomplete" >&2
+    exit 70
   fi
   exit "$status"
 }
 trap rollback ERR INT TERM
 
 for container in "${prior_running[@]}"; do
-  docker stop -t 30 "$container" >/dev/null
+  inference_stop_container_if_present "$container"
   echo "Stopped conflicting inference container: $container"
 done
 if [ "$comfy_was_active" -eq 1 ]; then

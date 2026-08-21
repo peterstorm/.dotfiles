@@ -132,6 +132,18 @@ let
     pythonPackages.huggingface-hub
   ]);
 
+  modelSubdirectories = [
+    "checkpoints"
+    "diffusion_models"
+    "text_encoders"
+    "clip_vision"
+    "vae"
+    "loras"
+    "controlnet"
+    "upscale_models"
+    "audio_encoders"
+  ];
+
   musePromptNode = pkgs.runCommand "comfyui-muse-glimmer-prompt" { } ''
     install -Dm444 \
       ${../../comfyui/custom_nodes/muse_glimmer_prompt/__init__.py} \
@@ -256,7 +268,12 @@ let
         cp unpacked/EP30\ Workflows/H3\ Video\ Prompts/*.json "$out/workflows/"
         cp unpacked/EP30\ Workflows/Media\ Inputs/* "$out/media/"
 
-        # Keep graph topology/settings intact while resolving three stale selectors
+        # Fail closed if the pinned archive's three known stale selectors drift.
+        test "$(grep -RohF 'krea2\\krea2_turbo_int8_convrot.safetensors' "$out/workflows" | wc -l)" -eq 5
+        test "$(grep -RohF 'qwen3-vl-4b-heretic_int8.safetensors' "$out/workflows" | wc -l)" -eq 10
+        test "$(grep -RohF 'OutfitRock (1).jpeg' "$out/workflows" | wc -l)" -eq 1
+
+        # Keep graph topology/settings intact while resolving the selectors
         # against this workstation's pinned model names and the ZIP's actual media.
         for workflow in "$out/workflows"/*.json; do
           substituteInPlace "$workflow" \
@@ -326,16 +343,8 @@ in
   # The downloader writes only SHA-pinned, checksum-verified files here.
   systemd.tmpfiles.rules = [
     "d /models/comfyui 0750 peterstorm users - -"
-    "d /models/comfyui/checkpoints 0750 peterstorm users - -"
-    "d /models/comfyui/diffusion_models 0750 peterstorm users - -"
-    "d /models/comfyui/text_encoders 0750 peterstorm users - -"
-    "d /models/comfyui/clip_vision 0750 peterstorm users - -"
-    "d /models/comfyui/vae 0750 peterstorm users - -"
-    "d /models/comfyui/loras 0750 peterstorm users - -"
-    "d /models/comfyui/controlnet 0750 peterstorm users - -"
-    "d /models/comfyui/upscale_models 0750 peterstorm users - -"
-    "d /models/comfyui/audio_encoders 0750 peterstorm users - -"
-  ];
+  ]
+  ++ map (directory: "d /models/comfyui/${directory} 0750 peterstorm users - -") modelSubdirectories;
 
   systemd.services.comfyui = {
     description = "Nix-managed ComfyUI creative workstation";
@@ -357,8 +366,8 @@ in
       XDG_CACHE_HOME = "/var/cache/comfyui";
       HF_HOME = "/var/cache/comfyui/huggingface";
       CUDA_DEVICE_ORDER = "PCI_BUS_ID";
-      # Keep physical GPU0 available for Muse Glimmer. Inside ComfyUI this card
-      # becomes logical cuda:0; do not also pass --cuda-device 1.
+      # Keep physical GPU0 available for Muse Glimmer. CUDA_VISIBLE_DEVICES=1
+      # makes physical GPU1 ComfyUI's only visible device, renumbered to cuda:0.
       CUDA_VISIBLE_DEVICES = "1";
       LD_LIBRARY_PATH = "/run/opengl-driver/lib";
       PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True";

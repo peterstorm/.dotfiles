@@ -15,10 +15,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
 source "$SCRIPT_DIR/../muse/muse-glimmer-variant.sh"
+# shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
+source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
-QWEN_RUN="$SCRIPT_DIR/../qwen38/run-qwen38-27b-bf16.sh"
-MUSE_RUN="$SCRIPT_DIR/../muse/run-muse-glimmer-30b-bf16-dflash.sh"
+QWEN_RUN="${QWEN_RUN:-$SCRIPT_DIR/../qwen38/run-qwen38-27b-bf16.sh}"
+MUSE_RUN="${MUSE_RUN:-$SCRIPT_DIR/../muse/run-muse-glimmer-30b-bf16-dflash.sh}"
+QWEN_MODEL_ROOT="${QWEN_MODEL_ROOT:-/models/Qwen3.8-27B}"
 QWEN_NAME="qwen38-27b-bf16"
 MUSE_NAME="$MUSE_CONTAINER_NAME"
 QWEN_PORT=8000
@@ -44,7 +47,7 @@ for launcher in "$QWEN_RUN" "$MUSE_RUN"; do
     exit 1
   fi
 done
-if [ ! -e /models/Qwen3.8-27B/config.json ]; then
+if [ ! -e "$QWEN_MODEL_ROOT/config.json" ]; then
   echo "error: Qwen checkpoint is missing; run scripts/inference/qwen38/download-qwen38-27b.sh" >&2
   exit 1
 fi
@@ -52,15 +55,10 @@ MUSE_CHECKPOINTS=(
   "$MUSE_TARGET_HOST|$MUSE_TARGET_REPO@$MUSE_TARGET_REV"
   "$MUSE_DRAFT_HOST|$MUSE_DRAFT_REPO@$MUSE_DRAFT_REV"
 )
+download_hint="run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE"
 for checkpoint in "${MUSE_CHECKPOINTS[@]}"; do
   IFS='|' read -r muse_path expected_marker <<<"$checkpoint"
-  if [ ! -e "$muse_path/config.json" ] ||
-     [ ! -e "$muse_path/.download-complete" ] ||
-     ! grep -Fxq "$expected_marker" "$muse_path/.download-complete"; then
-    echo "error: Muse checkpoint is incomplete or not pinned at $muse_path" >&2
-    echo "       run MUSE_VARIANT=$MUSE_VARIANT scripts/inference/muse/download-muse-glimmer-30b.sh and wait for DOWNLOAD_COMPLETE" >&2
-    exit 1
-  fi
+  inference_require_pinned_checkpoint "$muse_path" "$expected_marker" "$download_hint"
 done
 if systemctl is-active --quiet display-manager; then
   echo "error: display-manager is active and retains memory on physical GPU0" >&2
@@ -91,17 +89,10 @@ echo "Preflight passed: both GPUs are queryable and capped at <= ${MAX_GPU_POWER
 # Stop every repository-owned inference profile that can conflict for a port or
 # GPU. Keep stopped containers until their own launcher archives/replaces them;
 # deleting here would destroy the Qwen crash evidence. Unrelated containers stay untouched.
-CONFLICTING_CONTAINERS=(
-  ds4-0731-r31
-  ds4-0731-r33
-  qwen38-27b-bf16
-  qwen38-27b-bf16-dspark-sglang
-  qwen38-27b-bf16-dspark-vllm
-  muse-glimmer-30b-bf16-dflash
-  muse-glimmer-30b-abliterated-bf16-dflash
-)
+docker info >/dev/null
+mapfile -t CONFLICTING_CONTAINERS < <(inference_profile_containers_except "")
 for container in "${CONFLICTING_CONTAINERS[@]}"; do
-  docker stop "$container" >/dev/null 2>&1 || true
+  inference_stop_container_if_present "$container"
 done
 
 mapfile -t gpu_memory < <(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits 2>/dev/null)
@@ -125,10 +116,16 @@ for record in "${gpu_memory[@]}"; do
 done
 
 cleanup_failed_transition() {
-  status=$?
+  local status=$? cleanup_failed=0 container
   trap - ERR INT TERM
   echo "Dual-profile transition failed; removing both new containers." >&2
-  docker rm -f "$QWEN_NAME" "$MUSE_NAME" >/dev/null 2>&1 || true
+  for container in "$QWEN_NAME" "$MUSE_NAME"; do
+    inference_remove_container_if_present "$container" || cleanup_failed=1
+  done
+  if [ "$cleanup_failed" -ne 0 ]; then
+    echo "error: dual-profile cleanup was incomplete" >&2
+    exit 70
+  fi
   exit "$status"
 }
 trap cleanup_failed_transition ERR INT TERM

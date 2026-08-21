@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,32 +42,85 @@ TASK_INSTRUCTIONS = {
 }
 
 
-def compile_messages(
+@dataclass(frozen=True)
+class KreaImageRequest:
+    brief: str
+    aspect_ratio: str
+
+
+@dataclass(frozen=True)
+class H3BaseRequest:
+    brief: str
+    duration_seconds: int
+    aspect_ratio: str
+
+
+@dataclass(frozen=True)
+class H3ReferenceRequest:
+    brief: str
+    reference_manifest: str
+    duration_seconds: int
+    aspect_ratio: str
+
+
+CreativePromptRequest = KreaImageRequest | H3BaseRequest | H3ReferenceRequest
+
+
+def parse_prompt_request(
     task: str,
     brief: str,
     reference_manifest: str,
     duration_seconds: int,
     aspect_ratio: str,
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Compile validated UI values into an immutable two-message Muse request."""
-    if task not in TASK_INSTRUCTIONS:
-        raise ValueError(f"unsupported creative task: {task}")
+) -> CreativePromptRequest:
+    """Parse UI values into one task-specific validated prompt request."""
     normalized_brief = brief.strip()
     if not normalized_brief:
         raise ValueError("creative brief must not be empty")
-    normalized_references = reference_manifest.strip()
-    if task == TASK_H3_REFERENCE and not normalized_references:
-        raise ValueError("MiniMax H3 reference prompting requires a reference manifest")
+    if task == TASK_KREA2:
+        return KreaImageRequest(normalized_brief, aspect_ratio)
+    if task not in (TASK_H3_BASE, TASK_H3_REFERENCE):
+        raise ValueError(f"unsupported creative task: {task}")
     if not 4 <= duration_seconds <= 15:
         raise ValueError("MiniMax H3 duration must be between 4 and 15 seconds")
-
-    user_sections = (
-        f"task: {task}",
-        f"duration_seconds: {duration_seconds}",
-        f"aspect_ratio: {aspect_ratio}",
-        f"reference_manifest:\n{normalized_references or '(none)'}",
-        f"creative_brief:\n{normalized_brief}",
+    if task == TASK_H3_BASE:
+        return H3BaseRequest(normalized_brief, duration_seconds, aspect_ratio)
+    normalized_references = reference_manifest.strip()
+    if not normalized_references:
+        raise ValueError("MiniMax H3 reference prompting requires a reference manifest")
+    return H3ReferenceRequest(
+        normalized_brief, normalized_references, duration_seconds, aspect_ratio
     )
+
+
+def compile_messages(
+    request: CreativePromptRequest,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Compile a validated request into system and user Muse chat messages."""
+    if isinstance(request, KreaImageRequest):
+        task = TASK_KREA2
+        user_sections = (
+            f"task: {task}",
+            f"aspect_ratio: {request.aspect_ratio}",
+            f"creative_brief:\n{request.brief}",
+        )
+    elif isinstance(request, H3BaseRequest):
+        task = TASK_H3_BASE
+        user_sections = (
+            f"task: {task}",
+            f"duration_seconds: {request.duration_seconds}",
+            f"aspect_ratio: {request.aspect_ratio}",
+            f"creative_brief:\n{request.brief}",
+        )
+    else:
+        task = TASK_H3_REFERENCE
+        user_sections = (
+            f"task: {task}",
+            f"duration_seconds: {request.duration_seconds}",
+            f"aspect_ratio: {request.aspect_ratio}",
+            f"reference_manifest:\n{request.reference_manifest}",
+            f"creative_brief:\n{request.brief}",
+        )
     return (
         {"role": "system", "content": TASK_INSTRUCTIONS[task]},
         {"role": "user", "content": "\n\n".join(user_sections)},
@@ -121,6 +176,18 @@ def parse_response(payload: dict[str, Any]) -> tuple[str, str]:
     return prompt, str(reasoning).strip()
 
 
+def sanitize_http_error_body(raw_body: bytes) -> str:
+    """Return a bounded printable error detail with common credentials redacted."""
+    detail = raw_body.decode("utf-8", errors="replace")
+    detail = " ".join(detail.split())
+    detail = re.sub(
+        r"(?i)\b(api[_ -]?key|authorization|bearer|token)\b\s*[:=]?\s*\S+",
+        r"\1 [redacted]",
+        detail,
+    )
+    return detail[:256]
+
+
 def request_prompt(
     endpoint: str,
     api_key: str,
@@ -140,10 +207,18 @@ def request_prompt(
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             payload = json.load(response)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+    except urllib.error.HTTPError as error:
+        detail = sanitize_http_error_body(error.read(1024))
+        suffix = f": {detail}" if detail else ""
         raise RuntimeError(
-            "Muse prompt generation failed; verify the creative Muse profile on port 8001"
+            f"Muse HTTP {error.code} {error.reason}{suffix}"
         ) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"Muse connection failed: {error.reason}") from error
+    except TimeoutError as error:
+        raise RuntimeError("Muse request timed out") from error
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Muse returned malformed JSON") from error
     return parse_response(payload)
 
 
@@ -193,9 +268,10 @@ class MuseGlimmerPrompt:
         max_tokens: int,
         reference_manifest: str = "",
     ) -> tuple[str, str]:
-        messages = compile_messages(
+        request = parse_prompt_request(
             task, brief, reference_manifest, duration_seconds, aspect_ratio
         )
+        messages = compile_messages(request)
         body = build_request_body(messages, reasoning_strength, max_tokens)
         key_path = Path(
             os.environ.get(

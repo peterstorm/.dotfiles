@@ -21,31 +21,6 @@ MARKER="$MODELS_ROOT/.krea2-production-complete"
 LOCK="$MODELS_ROOT/.krea2-download.lock"
 LICENSE_URL="https://www.krea.ai/krea-2-licensing"
 
-if [ "${KREA2_ACCEPT_LICENSE:-}" != yes ]; then
-  cat >&2 <<EOF
-error: Krea 2 uses the Krea 2 Community License, not an open-source weight license.
-Read $LICENSE_URL, including the commercial revenue threshold, content-filter duty,
-and acceptable-use terms. Re-run with KREA2_ACCEPT_LICENSE=yes only after accepting it.
-EOF
-  exit 2
-fi
-
-for command in hf sha256sum flock stat; do
-  command -v "$command" >/dev/null 2>&1 || {
-    echo "error: required command is unavailable: $command" >&2
-    echo "apply the desktop NixOS configuration before downloading" >&2
-    exit 1
-  }
-done
-
-if [ ! -d "$MODELS_ROOT" ]; then
-  sudo install -d -m 0750 -o "$USER" -g users "$MODELS_ROOT"
-fi
-if [ ! -w "$MODELS_ROOT" ]; then
-  echo "error: model root is not writable by $USER: $MODELS_ROOT" >&2
-  exit 1
-fi
-
 # sha256, exact bytes, repository-relative path
 read -r -d '' MANIFEST <<'EOF' || true
 78bbf8f4165eda19cea3cb06c78089221932a39e2eed8af9da741f942c47ffb3 26283332608 diffusion_models/krea2_turbo_bf16.safetensors
@@ -94,41 +69,56 @@ verify_manifest() {
   done <<<"$manifest"
 }
 
-verify_auxiliary_manifest() {
-  local root="$1" expected_sha expected_size _repo _revision _source relative file actual_size actual_sha
-  while read -r expected_sha expected_size _repo _revision _source relative; do
-    [ -n "$relative" ] || continue
-    file="$root/$relative"
-    if [ ! -f "$file" ]; then
-      echo "missing: $relative" >&2
-      return 1
-    fi
-    actual_size="$(stat -c %s "$file")"
-    if [ "$actual_size" != "$expected_size" ]; then
-      echo "size mismatch: $relative (expected $expected_size, got $actual_size)" >&2
-      return 1
-    fi
-    actual_sha="$(sha256sum "$file" | cut -d' ' -f1)"
-    if [ "$actual_sha" != "$expected_sha" ]; then
-      echo "checksum mismatch: $relative" >&2
-      return 1
-    fi
-  done <<<"$AUXILIARY_MANIFEST"
+auxiliary_verification_manifest() {
+  awk 'NF == 6 { print $1, $2, $6 }' <<<"$AUXILIARY_MANIFEST"
+}
+
+install_file() {
+  local relative="$1" destination
+  destination="$MODELS_ROOT/$relative"
+  mkdir -p "$(dirname "$destination")"
+  mv -f "$STAGING/$relative" "$destination.new"
+  chmod 0640 "$destination.new"
+  mv -f "$destination.new" "$destination"
 }
 
 install_manifest() {
-  local manifest="$1" relative destination
+  local manifest="$1" relative
   while read -r _ _ relative; do
     [ -n "$relative" ] || continue
-    destination="$MODELS_ROOT/$relative"
-    mkdir -p "$(dirname "$destination")"
-    mv -f "$STAGING/$relative" "$destination.new"
-    chmod 0640 "$destination.new"
-    mv -f "$destination.new" "$destination"
+    install_file "$relative"
   done <<<"$manifest"
 }
 
-exec 9>"$LOCK"
+main() {
+  local command repo_staging repo revision source relative marker_tmp
+  local -a files
+  if [ "${KREA2_ACCEPT_LICENSE:-}" != yes ]; then
+    cat >&2 <<EOF
+error: Krea 2 uses the Krea 2 Community License, not an open-source weight license.
+Read $LICENSE_URL, including the commercial revenue threshold, content-filter duty,
+and acceptable-use terms. Re-run with KREA2_ACCEPT_LICENSE=yes only after accepting it.
+EOF
+    return 2
+  fi
+
+  for command in hf sha256sum flock stat; do
+    command -v "$command" >/dev/null 2>&1 || {
+      echo "error: required command is unavailable: $command" >&2
+      echo "apply the desktop NixOS configuration before downloading" >&2
+      return 1
+    }
+  done
+
+  if [ ! -d "$MODELS_ROOT" ]; then
+    sudo install -d -m 0750 -o "$USER" -g users "$MODELS_ROOT"
+  fi
+  if [ ! -w "$MODELS_ROOT" ]; then
+    echo "error: model root is not writable by $USER: $MODELS_ROOT" >&2
+    return 1
+  fi
+
+  exec 9>"$LOCK"
 if ! flock -n 9; then
   echo "error: another Krea 2 download or verification owns $LOCK" >&2
   exit 1
@@ -137,7 +127,7 @@ fi
 if [ -f "$MARKER" ] && grep -Fxq "$REPO@$REV" "$MARKER"; then
   echo "Verifying the existing Krea 2 production profile..."
   if verify_manifest "$MODELS_ROOT" "$MANIFEST" \
-     && verify_auxiliary_manifest "$MODELS_ROOT"; then
+     && verify_manifest "$MODELS_ROOT" "$(auxiliary_verification_manifest)"; then
     echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
     exit 0
   fi
@@ -159,12 +149,12 @@ done <<<"$AUXILIARY_MANIFEST"
 
 printf 'Verifying %d pinned base artifacts and 3 Episode 30 dependencies...\n' "${#files[@]}"
 verify_manifest "$STAGING" "$MANIFEST"
-verify_auxiliary_manifest "$STAGING"
+verify_manifest "$STAGING" "$(auxiliary_verification_manifest)"
 
 install_manifest "$MANIFEST"
 while read -r _ _ _ _ _ relative; do
   [ -n "$relative" ] || continue
-  install_manifest "0 0 $relative"
+  install_file "$relative"
 done <<<"$AUXILIARY_MANIFEST"
 
 marker_tmp="$MARKER.new"
@@ -177,5 +167,10 @@ chmod 0640 "$marker_tmp"
 mv -f "$marker_tmp" "$MARKER"
 rm -rf "$STAGING"
 
-echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
-echo "model root: $MODELS_ROOT"
+  echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
+  echo "model root: $MODELS_ROOT"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

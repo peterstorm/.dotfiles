@@ -20,6 +20,14 @@ inference_resolve_operator
 muse_resolve_variant "${MUSE_VARIANT:-standard}"
 
 DOWNLOAD_SCRIPT="/tmp/muse-glimmer-$MUSE_VARIANT-dl.sh"
+MUSE_DOWNLOAD_DETACH="${MUSE_DOWNLOAD_DETACH:-no}"
+case "$MUSE_DOWNLOAD_DETACH" in
+  yes|no) ;;
+  *)
+    echo "error: MUSE_DOWNLOAD_DETACH must be yes or no" >&2
+    exit 2
+    ;;
+esac
 
 # Optional HF auth: if a token exists at the standard hf CLI location, mount
 # it into the container at huggingface_hub's default token path so the
@@ -65,5 +73,18 @@ docker run -d --name "$MUSE_DOWNLOAD_CONTAINER_NAME" --network host \
   ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
   python:3.11-slim bash /dl.sh
 
-echo "Downloading Muse '$MUSE_VARIANT' BF16 target and DFlash draft in container '$MUSE_DOWNLOAD_CONTAINER_NAME'."
-echo "Follow: docker logs -f $MUSE_DOWNLOAD_CONTAINER_NAME"
+if [ "$MUSE_DOWNLOAD_DETACH" = yes ]; then
+  echo "DOWNLOAD_STARTED: Muse '$MUSE_VARIANT' in container '$MUSE_DOWNLOAD_CONTAINER_NAME'."
+  echo "Follow: docker logs -f $MUSE_DOWNLOAD_CONTAINER_NAME"
+  exit 0
+fi
+
+echo "Waiting for Muse '$MUSE_VARIANT' download and verification to complete..."
+container_status="$(docker wait "$MUSE_DOWNLOAD_CONTAINER_NAME")"
+if [ "$container_status" != 0 ]; then
+  echo "error: Muse download container exited with status $container_status" >&2
+  docker logs "$MUSE_DOWNLOAD_CONTAINER_NAME" >&2 2>/dev/null || true
+  exit 1
+fi
+docker logs --tail 20 "$MUSE_DOWNLOAD_CONTAINER_NAME"
+echo "DOWNLOAD_COMPLETE: Muse '$MUSE_VARIANT' target and DFlash draft verified."

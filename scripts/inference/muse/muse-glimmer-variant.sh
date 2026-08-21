@@ -28,7 +28,6 @@ muse_resolve_variant() {
       MUSE_TARGET_SHA256_MANIFEST=""
       MUSE_CACHE_HOST="$model_root/sglang-cache/muse-glimmer-bf16-dflash"
       MUSE_CONTAINER_NAME="muse-glimmer-30b-bf16-dflash"
-      MUSE_OTHER_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"
       MUSE_DOWNLOAD_CONTAINER_NAME="muse-glimmer-model-dl"
       ;;
     abliterated)
@@ -43,7 +42,6 @@ c459da918abc4caf363e7d47e0fddaa68e3dd8c54cd2d47c6170fde5d8308230  model-00002-of
 EOF
       MUSE_CACHE_HOST="$model_root/sglang-cache/muse-glimmer-abliterated-bf16-dflash"
       MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"
-      MUSE_OTHER_CONTAINER_NAME="muse-glimmer-30b-bf16-dflash"
       MUSE_DOWNLOAD_CONTAINER_NAME="muse-glimmer-abliterated-model-dl"
       ;;
     *)

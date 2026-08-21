@@ -13,6 +13,8 @@ H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
 H3_RUNBOOK="$ROOT/docs/runbooks/local-ai-video-script-runbook.md"
+TRANSITION_TEST="$ROOT/tests/creative-stack-transitions-contract.sh"
+DOWNLOAD_TEST="$ROOT/tests/model-download-verification-contract.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -31,10 +33,10 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
@@ -72,6 +74,10 @@ contains "$MODULE" 'Ep30%20Workflows.zip'
 contains "$MODULE" 'sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k='
 contains "$MODULE" 'test "$(find "$out/workflows" -type f -name '\''*.json'\'' | wc -l)" -eq 7'
 contains "$MODULE" 'test "$(find "$out/media" -type f | wc -l)" -eq 6'
+contains "$MODULE" 'grep -RohF '\''krea2\\krea2_turbo_int8_convrot.safetensors'\'''
+contains "$MODULE" 'grep -RohF '\''qwen3-vl-4b-heretic_int8.safetensors'\'''
+contains "$MODULE" 'modelSubdirectories = ['
+contains "$MODULE" '++ map (directory: "d /models/comfyui/${directory} 0750 peterstorm users - -") modelSubdirectories;'
 contains "$MODULE" 'binaryTorchPython.pkgs.comfyui-workflow-templates-json'
 contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out" -type f -name '\''*.json'\'' | wc -l)" -eq 51'
 contains "$MODULE" 'ep30_dir="$user_workflows/pixaroma-ep30"'
@@ -96,7 +102,9 @@ contains "$NODE" 'temperature": 1.0'
 contains "$NODE" 'top_p": 0.95'
 contains "$NODE" 'top_k": 64'
 contains "$NODE" 'NODE_CLASS_MAPPINGS = {"MuseGlimmerPrompt": MuseGlimmerPrompt}'
-absent "$NODE" 'sk-'
+if grep -Eq '"sk-[[:alnum:]]{8,}' "$NODE"; then
+  fail "$NODE contains a literal API-key-shaped value"
+fi
 "$NODE_TEST"
 
 # Krea artifacts are license-gated, revision-pinned, and checksum-verified.
@@ -165,5 +173,8 @@ contains "$RUNBOOK" 'full BF16'
 contains "$RUNBOOK" 'ComfyUI-Manager'
 contains "$RUNBOOK" 'manual human review'
 contains "$H3_RUNBOOK" 'comfyui-krea2-minimax-h3-muse-runbook.md'
+
+"$TRANSITION_TEST"
+"$DOWNLOAD_TEST"
 
 printf 'PASS: Nix-managed ComfyUI + Krea 2 + MiniMax H3 + Muse contract is internally consistent\n'
