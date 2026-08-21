@@ -1,0 +1,524 @@
+# ComfyUI creative stack — Krea 2 + MiniMax H3 + Muse Glimmer
+
+Research snapshot: **2026-08-21**. Target: `desktop`, headless NixOS, Ryzen 9
+9950X, 91 GiB RAM, 2× RTX PRO 6000 Blackwell 96 GiB over PCIe PHB.
+
+## Decision
+
+Use one Nix-managed ComfyUI service and keep the workflow native-first:
+
+- **Muse Glimmer 30B BF16 + DFlash** on physical GPU0 writes and compiles
+  creative briefs into model-ready prompts.
+- **ComfyUI 0.31.1** on physical GPU1 runs local Krea 2 and exposes MiniMax H3
+  workflows. The UI listens only on `127.0.0.1:8188` and is reached through an
+  SSH tunnel.
+- **Krea 2 Turbo BF16** is the default local image model. The official INT8
+  ConvRot style-reference path and official style LoRAs are installed beside it.
+- **MiniMax H3 API partner nodes** are the immediately usable H3 path in Denmark:
+  text-to-video, first/last-frame, multimodal reference-to-video, Context IR
+  prompt refinement, and 2K regeneration.
+- **Local H3 core nodes are present but local H3 weights must not be downloaded
+  in Denmark without separate written MiniMax authorization.**
+
+This deliberately does **not** install ComfyUI-Manager or a broad third-party
+node bundle. ComfyUI core already contains every required Krea 2, H3, media,
+sampler, and save node. The only custom node is the small audited
+`Muse Glimmer Creative Prompt` adapter in this repository.
+
+## What is declarative and what is not
+
+| Concern | Owner | Reproducibility |
+|---|---|---|
+| ComfyUI runtime | `machines/desktop/comfyui.nix` | Nix flake pin |
+| CUDA PyTorch | Nixpkgs `torch-bin`, `triton-bin`, `torchvision-bin`, `torchaudio-bin` | Nix flake pin; no source build |
+| Core nodes and template library | ComfyUI/Nix package | Nix flake pin |
+| Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
+| Krea model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
+| User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
+| Comfy account/partner credits | Comfy account | external prepaid service |
+| Muse bearer key | `~/.config/muse-glimmer/api-key` | private file, never a node widget |
+
+The current flake resolves ComfyUI 0.31.1, frontend 1.48.7, workflow templates
+0.11.37, and PyTorch 2.12.0 with CUDA 13.2 libraries. ComfyUI 0.31.1 exceeds
+both upstream minimums: Krea 2 landed in 0.26 and MiniMax H3 requires 0.30+.
+
+## Why this architecture
+
+| Approach | Result |
+|---|---|
+| **Nix package + binary CUDA wheels + core nodes** | Chosen: immutable, fast to realize, no pip environment drift |
+| Nix `cudaSupport=true` source build | Rejected: dry-run requires 119 local derivations including PyTorch, Triton, CUDA, NCCL, and OpenMPI |
+| Docker/community ComfyUI image | Rejected: no official ComfyUI image and a second mutable supply chain |
+| Python venv + ComfyUI-Manager | Rejected: mutable git/pip installs and weak rollback/reviewability |
+
+Nixpkgs' default ComfyUI package evaluates with source-built CPU PyTorch, and its
+internal Python override discards a caller's package substitutions. The workstation
+module therefore retains Nixpkgs' pinned ComfyUI source but explicitly rebuilds the
+wrapper environment around pinned CUDA binary wheels plus CUDA 13.2 bindings.
+Nix still realizes CUDA support libraries and Python wrappers, but it does **not**
+compile PyTorch or Triton from source.
+
+## Legal gates
+
+### MiniMax H3 local weights: blocked in Denmark
+
+The MiniMax H3 Community License defines the EU, UK, South Korea, and US as
+**Excluded Territories**. Denmark is in the EU. It forbids running, displaying,
+or using the weights or outputs there without a separate license.
+
+Do not download anything from `MiniMaxAI/MiniMax-H3` or
+`Comfy-Org/MiniMax-H3` onto this workstation until MiniMax grants written
+permission through <https://platform.minimax.io/h3-license>. Archive the grant
+with the deployment record.
+
+MiniMax's own license Q&A separately states that the **MiniMax H3 API is
+available globally** because MiniMax operates moderation and compliance
+controls. The ComfyUI H3 partner nodes use hosted generation and are the legal
+initial path, subject to Comfy/MiniMax service terms and account availability.
+
+### Krea 2 weights: usable, but not open source
+
+Krea 2 uses the Krea 2 Community License:
+
+- local and commercial use is permitted below **$1,000,000 USD trailing
+  twelve-month company-wide revenue**;
+- commercial use at or above that threshold requires an enterprise license;
+- the deployment must implement reasonable content-filter measures;
+- outputs are owned by the user, subject to compliance;
+- acceptable-use, attribution, distribution, and AI-disclosure duties still
+  apply.
+
+For this private, loopback-only single-user deployment, manual human review
+before publishing or distributing an output is the initial content-filter
+control explicitly contemplated by the license. Do not expose generation to
+other users without adding technical moderation, reporting, and audit controls.
+This is a license reading, not legal advice.
+
+## 1. Apply the NixOS configuration
+
+Build the pinned configuration before switching:
+
+```bash
+cd ~/.dotfiles
+sudo nixos-rebuild build --flake .#desktop
+nix-store --query --references result | grep -E 'comfyui|torch' | sort
+sudo nixos-rebuild switch --flake .#desktop
+```
+
+The switch installs:
+
+- `comfyui` with CUDA-capable Nix binary wheels;
+- `hf` for pinned model downloads;
+- FFmpeg;
+- `comfyui.service`, installed but intentionally not boot-started while the
+  normal Qwen TP2 profile owns both GPUs;
+- `/models/comfyui/{diffusion_models,text_encoders,vae,loras,...}`;
+- the immutable Muse custom node via an extra-path YAML in the Nix store.
+
+Verify that the unit is installed, explicitly inactive, and pinned to GPU1:
+
+```bash
+systemctl cat comfyui.service
+! systemctl is-active --quiet comfyui.service
+systemctl show comfyui -p Environment --value | grep CUDA_VISIBLE_DEVICES=1
+! ss -H -ltn 'sport = :8188' | grep -q .
+```
+
+Do not start it directly while Qwen owns both cards. Section 3 performs the
+transactional profile switch. After activation, acceptance requires:
+
+- the listener is exactly `127.0.0.1:8188`, not `0.0.0.0`;
+- logs list `Muse Glimmer Creative Prompt` without import errors;
+- Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
+- no firewall rule exposes 8188;
+- ComfyUI-Manager is absent.
+
+## 2. Open the UI safely
+
+ComfyUI has no production-grade authentication. Never open port 8188 on the
+LAN. From the client machine:
+
+```bash
+ssh -N -L 8188:127.0.0.1:8188 desktop
+```
+
+Open <http://127.0.0.1:8188>. The browser sees a localhost secure context,
+which is also required for Comfy partner-node login.
+
+For H3 or Krea partner nodes:
+
+1. Open **Settings → User** and log into a Comfy account.
+2. Open **Settings → Credits** and add only a controlled prepaid balance.
+3. Confirm a partner workflow shows its price before queuing.
+4. Do not use a LAN URL; partner login is restricted to localhost/HTTPS unless
+   using a Comfy API-key integration.
+
+Comfy partner nodes do not currently accept a provider API key directly. They
+use a Comfy account and credits. Inputs and references are uploaded through
+Comfy to the provider and are subject to both services' policies.
+
+## 3. Activate the creative GPU profile
+
+The transactional activator stops known Qwen/DeepSeek containers, keeps them
+available for rollback, starts Nix-managed ComfyUI, and starts Muse on GPU0:
+
+```bash
+cd ~/.dotfiles
+bash scripts/comfyui/activate-creative-stack.sh
+```
+
+Expected topology:
+
+| Physical card | Process | Purpose |
+|---|---|---|
+| GPU0 | `muse-glimmer-30b-bf16-dflash` | prompt/script author, `:8001` |
+| GPU1 | `comfyui.service` | Krea 2/local media generation |
+
+The activator records which known inference containers were running and
+whether ComfyUI was active, checks that the target GPUs were released, and
+restores the complete prior profile if activation fails. It preserves an
+already healthy Muse container rather than replacing it.
+
+Check:
+
+```bash
+curl -fsS http://127.0.0.1:8188/system_stats | jq .
+bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status
+key="$(< ~/.config/muse-glimmer/api-key)"
+curl -fsS -H "Authorization: Bearer $key" http://127.0.0.1:8001/v1/models | jq .
+nvidia-smi --query-compute-apps=gpu_uuid,pid,used_memory --format=csv
+```
+
+ComfyUI itself uses little VRAM while idle, but Qwen must not remain on GPU1
+when a local diffusion workflow loads. Partner-only H3 workflows do not need
+local GPU inference, but preserving the same topology keeps Muse prompting
+available.
+
+## 4. Install the local Krea 2 production profile
+
+Read <https://www.krea.ai/krea-2-licensing>, then deliberately acknowledge it:
+
+```bash
+cd ~/.dotfiles
+KREA2_ACCEPT_LICENSE=yes bash scripts/comfyui/download-krea2-models.sh
+```
+
+The downloader fetches only these pinned production artifacts from
+`Comfy-Org/Krea-2@e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96`:
+
+- Turbo diffusion model BF16 and Qwen3-VL-4B encoder BF16 for highest-fidelity
+  local text-to-image;
+- Turbo INT8 ConvRot and Qwen3-VL-4B FP8 for the official style-reference
+  workflow;
+- Qwen Image VAE;
+- Krea style-reference LoRA;
+- nine official Krea style LoRAs.
+
+Total download is about 58.8 GB. Every file has an exact expected byte count
+and SHA-256. Files are downloaded to a same-filesystem staging tree, verified,
+and atomically renamed into `/models/comfyui`; partial or corrupt profiles do
+not become the completion marker.
+
+Re-running the script verifies the complete profile and is idempotent:
+
+```bash
+KREA2_ACCEPT_LICENSE=yes bash scripts/comfyui/download-krea2-models.sh
+# KREA2_MODELS_READY: Comfy-Org/Krea-2@e5ea8b...
+```
+
+Krea 2 RAW is intentionally omitted. RAW takes 52 steps and is the model to
+fine-tune LoRAs against; Turbo is the 8-step production model and accepts RAW
+LoRAs. Add RAW only when a real LoRA-training or diversity experiment justifies
+another 26.3 GB artifact and a separate benchmark.
+
+## 5. Best Krea 2 nodes and workflows
+
+### Local, private, default
+
+Open **Template Library → Image**:
+
+1. **Krea-2: Text to Image** (`image_krea2_turbo_t2i`)
+2. **Krea-2 Style Reference**
+   (`image_krea2_turbo_int8_image_style_reference`)
+
+These are official Comfy templates using core nodes. No custom package is
+needed. For the normal image workflow, select:
+
+- `krea2_turbo_bf16.safetensors`;
+- `qwen3vl_4b_bf16.safetensors`;
+- `qwen_image_vae.safetensors`;
+- 8 steps;
+- 1K for iteration, then 2.0 megapixels for the selected final.
+
+For style reference, use the official dedicated combination:
+
+- `krea2_turbo_int8_convrot.safetensors`;
+- `qwen3vl_4b_fp8_scaled.safetensors`;
+- `qwen_image_vae.safetensors`;
+- `krea2_style_reference.safetensors`.
+
+Krea's local prompting rules are simple: natural language, faithful detail,
+long prompts when useful, and exact visible text in double quotes. The Muse
+node embeds Krea's official expansion contract.
+
+### Hosted Krea partner nodes
+
+Use these only when hosted Medium/Large is desired and remote upload is
+acceptable:
+
+- **Krea2ImageNode**: Medium Turbo, Medium, or Large; prompt, ratio,
+  resolution, creativity, seed, optional moodboard UUID.
+- **Krea2StyleReferenceNode**: chain up to ten uploaded style images with
+  strength from -2 to 2, then connect to `Krea2ImageNode`.
+
+Medium is positioned for expressive illustration; Large for expressive
+photorealism. Partner references are uploaded to Comfy API storage. This is
+not the private local path.
+
+## 6. Use Muse Glimmer as the prompt author
+
+Add **creative → Muse Glimmer → Muse Glimmer Creative Prompt**.
+
+Inputs:
+
+- `task`: `Krea 2 image`, `MiniMax H3 base`, or `MiniMax H3 reference`;
+- `brief`: the human creative brief;
+- `duration_seconds`: 4–15 for H3 planning;
+- `aspect_ratio`;
+- `reasoning_strength`: default `xhigh`;
+- `max_tokens`: default 4096;
+- `reference_manifest`: required for H3 reference mode.
+
+Outputs:
+
+- `prompt`: connect this directly to the generation node's prompt input;
+- `reasoning`: optional inspection/debug output; never feed it to generation.
+
+The node:
+
+- calls only `http://127.0.0.1:8001/v1/chat/completions`;
+- reads the bearer key from the mode-0600 Muse key file on each request;
+- never stores the key in workflow JSON or a UI widget;
+- uses Muse's model-card sampling defaults (`temperature=1`, `top_p=.95`,
+  `top_k=64`) and maps reasoning through
+  `chat_template_kwargs.reasoning_strength`;
+- fails closed if the key is missing, permissive, empty, or Muse is down.
+
+### Krea recipe
+
+```text
+Muse Glimmer Creative Prompt [task=Krea 2 image]
+  prompt → Krea-2 local subgraph “Text String (User Prompt)”
+          → sampler → VAE Decode → SaveImage
+```
+
+If the template prompt is a widget, right-click it and choose **Convert widget
+to input**, then connect Muse's `prompt` output.
+
+### H3 API recipe
+
+```text
+creative brief
+  → Muse Glimmer Creative Prompt [MiniMax H3 base/reference]
+  → optional MinimaxHailuo03ContextIRNode
+  → H3 Text / First-Last-Frame / Reference node
+  → optional MinimaxHailuo03RegenerateNode (2K)
+  → SaveVideo
+```
+
+Muse supplies story, shot, and sound judgment. Context IR is the provider's
+multimodal rewrite and is useful when the same references can be supplied in
+the same order. Do not assume they are equivalent; save both prompts in the
+workflow record.
+
+## 7. Best MiniMax H3 API nodes — usable now
+
+Search `MiniMax H3` in the node menu or load the official API templates:
+
+- `api_minimax_h3_t2v`: text-to-video with native stereo audio;
+- `api_minimax_h3_flf2v`: required first frame, optional last frame;
+- `api_minimax_h3_r2v`: references for identity, style, motion, camera, voice;
+- `MinimaxHailuo03ContextIRNode`: hosted multimodal prompt enhancement;
+- `MinimaxHailuo03RegenerateNode`: re-render an unmodified 768p H3 output at
+  2K with the exact original prompt and references.
+
+The class names retain `Hailuo03`, but their model selector is **MiniMax H3**.
+They are the current built-in H3 partner nodes, not old Hailuo 02 nodes.
+
+### Reference constraints
+
+- up to 9 images;
+- up to 3 videos, each 2–15 seconds, no more than 15 seconds total;
+- videos at approximately 23.976–60 FPS;
+- up to 3 audio clips, each 2–15 seconds, no more than 15 seconds total;
+- audio references require at least one image or video anchor;
+- images at least 256×256 and aspect ratio 0.4–2.5;
+- use the same media in the same order for Muse manifest, Context IR,
+  generation, and 2K regeneration.
+
+Assign every reference one job:
+
+```text
+Image 1: subject identity and face proportions.
+Image 2: wardrobe materials and palette only.
+Video 1: camera orbit and pacing only.
+Audio 1: voice timbre and cadence only.
+```
+
+For local H3 syntax after licensing, labels become `<Picture 1>`, `<Video 1>`,
+and `<Audio 1>`. The Muse node's manifest is passed through verbatim, so use
+labels appropriate to the target node.
+
+### Best hosted production chain
+
+1. Generate Krea 2 concept frames locally.
+2. Choose and manually review the exact references.
+3. Ask Muse for four micro-film concepts; select one yourself.
+4. Ask Muse to compile the selected concept as H3 reference mode.
+5. Run Context IR with the same media order.
+6. Generate a 5-second preview.
+7. Check identity, motion, dialogue timing, audio sync, and disclosure needs.
+8. Generate the final 4–15-second 768p source.
+9. Pass the **unmodified** source, exact prompt, and same references to
+   Regenerate for 2K.
+10. Archive prompts, references, seed, node versions, cost, and output paths.
+
+## 8. Local H3 nodes — ready only after authorization
+
+ComfyUI core already includes:
+
+- `EmptyMiniMaxH3LatentAV`;
+- `MiniMaxH3ImageToVideo` for T2V/I2V/first-last-frame;
+- `MiniMaxH3ReferenceToVideo` for image/video/audio references;
+- `MiniMaxH3AddGuide` for image, clip, or audio anchors at arbitrary frames;
+- `MiniMaxH3SigmaShift` with baseline video shift 12 and audio shift 3;
+- core model/CLIP/VAE loaders, sampler, `CreateVideo`, and `SaveVideo`.
+
+Do not download their weights in Denmark without authorization. If permission
+is granted, start from the official Comfy templates:
+
+- `video_minimax_h3_t2v`;
+- `video_minimax_h3_i2v`;
+- `video_minimax_h3_r2v`.
+
+The practical single-GPU Comfy profile uses pruned INT8 ConvRot diffusion,
+NVFP4-AWQ Qwen3-VL-32B, FP16 video VAE, and FP32 audio VAE. It occupies roughly
+42.5 GB of weight files before optional LoRAs and leaves useful activation
+headroom on one 96 GB card. This is the official practical Comfy profile, not
+the maximum-fidelity original BF16 baseline.
+
+For maximum fidelity, preserve the separate runbook's original BF16/50-step
+TP2 qualification path. Full H3 BF16 diffusion is 66.3 GB per task family and
+the BF16 text encoder is 51.5 GB; ComfyUI is not a drop-in tensor-parallel
+replacement for the vLLM-Omni/SGLang TP2 recipes.
+
+## 9. Why the popular custom-node packs are not installed
+
+| Node pack | Assessment |
+|---|---|
+| ComfyUI-Manager | Useful interactively, but mutates git/pip state outside Nix; intentionally absent |
+| VideoHelperSuite | Established, but core `VIDEO`, `LoadVideo`, `CreateVideo`, and `SaveVideo` cover this stack |
+| KJNodes | Useful only if later qualifying Sage Attention or specialty video operations; broad dependency surface |
+| rgthree-comfy | Good UI ergonomics, no generation capability required here |
+| IF AI Tools | Archived and dependency-heavy; the in-repo Muse node is narrower and uses the existing endpoint |
+| New H3 “director/turbo/cache” nodes | Too new and overlapping with native H3; no baseline evidence yet |
+
+After a clean native baseline, KJNodes plus Sage Attention is the first optional
+performance experiment worth considering. Comfy's H3 guide reports roughly 2×
+speed potential with minimal quality loss, but it requires a wheel matched to
+Torch/CUDA and introduces fallback paths for non-BF16/FP16 layers. Package and
+benchmark it separately; do not silently fold it into the reference profile.
+
+## 10. Security and privacy
+
+- Port 8188 is loopback-only. Use SSH forwarding; never add a firewall rule.
+- Muse's key stays in a mode-0600 file and is read at execution time.
+- Local Muse + local Krea prompts/references stay on the workstation.
+- Partner nodes upload prompts and media to Comfy/provider infrastructure.
+  Treat faces, voices, customer assets, unreleased products, and location data
+  as external disclosure.
+- Comfy's proxy path does not establish Krea API Zero Data Retention. If ZDR is
+  mandatory, design a direct Krea API adapter and verify the workspace policy
+  instead of assuming partner-node behavior.
+- Keep prepaid partner credits low; inspect usage after every production batch.
+- Manually review Krea outputs before publication to satisfy the initial private
+  deployment's content-filter control.
+- Add AI disclosure/provenance where law or platform policy requires it.
+
+## 11. Validation gate
+
+Do not call the stack qualified until:
+
+- [ ] Nix evaluation and build pass from the pinned flake.
+- [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
+      activation starts it on loopback only.
+- [ ] Comfy logs load the Muse node with no failed imports.
+- [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
+- [ ] A Muse→Krea BF16 1K image completes, then a 2K image completes.
+- [ ] A local Krea style-reference generation completes with the dedicated
+      INT8/FP8/style-reference files.
+- [ ] Fixed seed/prompt Krea reruns are compared for determinism.
+- [ ] H3 API T2V, first/last-frame, and reference workflows each complete.
+- [ ] Context IR output preserves the same reference ordering.
+- [ ] H3 2K regeneration accepts the unmodified 768p source.
+- [ ] No Xid, OOM, service restart, or unexpected GPU owner occurs.
+- [ ] Partner usage/cost and remote-data handling are recorded.
+- [ ] Local H3 remains weightless unless written authorization is archived.
+
+Commands:
+
+```bash
+bash tests/comfyui-creative-stack-contract.sh
+./tests/test_muse_glimmer_prompt.py
+nix eval .#nixosConfigurations.desktop.config.systemd.services.comfyui.serviceConfig.ExecStart
+nix build .#nixosConfigurations.desktop.config.system.build.toplevel --dry-run
+
+journalctl -k -b | grep -Ei 'NVRM|Xid|fallen off|AER'
+journalctl -u comfyui -b --no-pager
+docker inspect muse-glimmer-30b-bf16-dflash \
+  --format 'status={{.State.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}'
+```
+
+## 12. Stop or switch away
+
+Stop only the creative components:
+
+```bash
+sudo systemctl stop comfyui
+
+docker stop -t 30 muse-glimmer-30b-bf16-dflash
+```
+
+Restore the desired inference backend explicitly, for example:
+
+```bash
+DFLASH2_NATIVE_IMAGE=sha256:af311253309cebbd021d4f7cc4da695d30434182e89407818200754f0d788880 \
+  bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh dflash2-native
+```
+
+The Comfy state, Krea models, inputs, outputs, and workflows remain on disk.
+
+## Sources
+
+Official sources accessed 2026-08-21:
+
+- [ComfyUI MiniMax H3 local workflows](https://docs.comfy.org/tutorials/video/minimax/minimax-h3)
+- [ComfyUI MiniMax H3 API workflows](https://docs.comfy.org/tutorials/partner-nodes/minimax/minimax-h3)
+- [ComfyUI Krea 2 local workflows](https://docs.comfy.org/tutorials/image/krea/krea-2)
+- [ComfyUI Krea 2 partner nodes](https://docs.comfy.org/tutorials/partner-nodes/krea2/krea2-t2i)
+- [ComfyUI partner-node security/account model](https://docs.comfy.org/tutorials/partner-nodes/overview)
+- [ComfyUI 0.31.1 source](https://github.com/Comfy-Org/ComfyUI/tree/v0.31.1)
+- [ComfyUI workflow templates](https://github.com/Comfy-Org/workflow_templates)
+- [Krea 2 official repository](https://github.com/krea-ai/krea-2)
+- [Krea 2 prompting guide](https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md)
+- [Krea 2 LLM expansion prompt](https://github.com/krea-ai/krea-2/blob/main/docs/expansion.txt)
+- [Krea 2 Community License](https://www.krea.ai/krea-2-licensing)
+- [Comfy-Org Krea 2 artifacts](https://huggingface.co/Comfy-Org/Krea-2)
+- [MiniMax H3 model card](https://huggingface.co/MiniMaxAI/MiniMax-H3)
+- [MiniMax H3 license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
+- [MiniMax H3 license Q&A](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/QA-about-License.md)
+- [MiniMax H3 prompt-writing skill](https://github.com/MiniMax-AI/MiniMax-H3/tree/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing)
+- [Krea API Zero Data Retention](https://www.krea.ai/docs/developers/zdr)
+
+For full-fidelity H3 architecture, memory, and licensing analysis, also read
+`docs/runbooks/local-ai-video-script-runbook.md`.

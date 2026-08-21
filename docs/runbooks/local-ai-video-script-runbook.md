@@ -3,6 +3,11 @@
 Research snapshot: **2026-08-18**. Target workstation: 2× RTX PRO 6000 Blackwell
 Workstation Edition (97,887 MiB each), 96 GiB host RAM, headless NixOS.
 
+This document remains the maximum-fidelity H3 architecture and licensing analysis.
+For the Nix-managed ComfyUI deployment, Krea 2 image workflows, Muse prompt node,
+and immediately usable hosted H3 reference/video workflows, use
+[`comfyui-krea2-minimax-h3-muse-runbook.md`](comfyui-krea2-minimax-h3-muse-runbook.md).
+
 ## Decision
 
 Use **Muse Glimmer 30B BF16** as the scriptwriter and H3 prompt author.

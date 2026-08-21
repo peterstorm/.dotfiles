@@ -101,6 +101,7 @@ in
   imports = [
     inputs.disko.nixosModules.disko
     ./disks.nix
+    ./comfyui.nix
   ];
 
   # MT7927 WiFi + Bluetooth. Deliberately not importing

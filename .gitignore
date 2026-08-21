@@ -2,6 +2,8 @@ result/
 result
 result-*
 .DS_Store
+__pycache__/
+*.py[cod]
 
 # Claude state and review evidence (runtime, not persisted)
 .claude/state/*
