@@ -772,7 +772,7 @@ let
 
         prompt_enhancer="$out/workflows/3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16.json"
         prompt_enhancer_refinement="$out/workflows/3d. Krea 2 Text to Image + Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16.json"
-        python3 ${../../scripts/comfyui/build-krea2-identity-realism-workflow.py} \
+        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --prompt-enhancer "$prompt_enhancer" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --output "$prompt_enhancer_refinement"
@@ -1107,8 +1107,8 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
       '';
 
-  kreaIdentityRealismWorkflow =
-    pkgs.runCommand "krea2-identity-realism-klein9b-bf16-workflow"
+  kreaSingleViewCharacterWorkflow =
+    pkgs.runCommand "krea2-single-view-character-bf16-workflow"
       {
         nativeBuildInputs = [
           pkgs.python3
@@ -1123,8 +1123,8 @@ let
         cp ${pixaromaEp30Archive} episode30.zip
         unzip -q episode30.zip -d unpacked
         identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
-        destination="$out/workflows/Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16.json"
-        python3 ${../../scripts/comfyui/build-krea2-identity-realism-workflow.py} \
+        destination="$out/workflows/Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16.json"
+        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --identity "$identity" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --output "$destination"
@@ -1162,7 +1162,7 @@ let
               (([.nodes[] | select(.type == "LoraLoaderModelOnly")
                 | { name: .widgets_values[0], mode: .mode }] | sort_by(.name))
                 == ([
-                  { name: "famegrid_standard_krea2_bf16.safetensors", mode: 0 },
+                  { name: "famegrid_standard_krea2_bf16.safetensors", mode: 4 },
                   { name: "ultra_real_krea2_v2_bf16.safetensors", mode: 4 }
                 ] | sort_by(.name))),
               (([.nodes[] | select(.type == "PixaromaLoraLoader")
@@ -1175,18 +1175,37 @@ let
                   strength_clip: 1
                 }]),
               ([.nodes[] | select(.type == "DetailDaemonSamplerNode")] | length == 1),
-              (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]]) == [4]),
+              (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]]) == [0]),
+              (([.nodes[] | select(.type == "PixaromaSliders")
+                | .properties.slidersState.sliders[0].value]) == [0]),
+              (([.nodes[] | select(.type == "PixaromaLoadImageMini")
+                | .properties.loadImagePixState | fromjson
+                | { ratio: .ratio_preset, w: .fit_w, h: .fit_h }])
+                == [{ ratio: "1:1", w: 1024, h: 1024 }]),
+              (([.nodes[] | select(.type == "PixaromaResolution")
+                | .widgets_values[0] | { ratio, w, h }])
+                == [{ ratio: "1:1", w: 1024, h: 1024 }]),
+              any(.links[]; .[1] == 162 and .[3] == 232),
               (([.nodes[] | select(.type == "BasicScheduler") | .widgets_values])
                 == [["simple", 10, 1]]),
               (([.nodes[] | select(.type == "Flux2Scheduler") | .widgets_values[0]]) == [2]),
               (([.nodes[] | select(.type == "ImageScaleToTotalPixels") | .widgets_values[1]]) == [4]),
               ([.nodes[] | select(.type == "ReferenceLatent")] | length == 2),
-              ([.nodes[] | select(.type == "SaveImage" and .mode == 0)] | length == 1),
+              (([.nodes[] | select(.type == "PixaromaPreview")
+                | { mode, prefix: .widgets_values[0], save_mode: .widgets_values[1] }])
+                == [{ mode: 0, prefix: "CharacterSheet_Krea2_SingleView", save_mode: "save" }]),
+              (([.nodes[] | select(.id == 46 or .id == 96) | { id, mode }] | sort_by(.id))
+                == ([{ id: 46, mode: 2 }, { id: 96, mode: 2 }] | sort_by(.id))),
+              any(.links[]; .[1] == 65 and .[3] == 96),
+              (([.nodes[] | select(.id == 221) | .properties.promptState.text
+                | contains("No front view")]) == [true]),
+              (([.nodes[] | select(.id == 54) | .widgets_values[0]
+                | contains("Do not photorealize")]) == [true]),
               (([.groups[].title] | sort) == ([
                 "Canonical reference and BF16 Krea loaders",
-                "Choose exactly one Krea realism LoRA",
+                "OPTIONAL realism — both LoRAs bypassed by default",
                 "Detail Daemon identity pass",
-                "FLUX.2 Klein 9B BF16 photoreal refinement",
+                "OPTIONAL FLUX.2 Klein 9B BF16 — outputs muted by default",
                 "Identity Edit v1.2 — change one view at a time",
                 "Identity QA — reject drift before approving"
               ] | sort))
@@ -1243,7 +1262,7 @@ let
     for source in ${kreaFluxKleinWorkflow}/workflows/*.json; do
       install -m 0600 "$source" "$klein_staging/$(basename "$source")"
     done
-    for source in ${kreaIdentityRealismWorkflow}/workflows/*.json; do
+    for source in ${kreaSingleViewCharacterWorkflow}/workflows/*.json; do
       install -m 0600 "$source" "$character_staging/$(basename "$source")"
     done
     for source in ${h3ProductionWorkflows}/workflows/*.json; do

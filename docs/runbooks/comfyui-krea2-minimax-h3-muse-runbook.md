@@ -162,8 +162,8 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
 - one BF16 Krea 2 → FLUX.2 Klein 9B refinement workflow under
   `/var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16/`;
-- one BF16 Identity Edit v1.2 → selectable Krea realism → FLUX.2 Klein 9B
-  character-reference workflow under
+- one BF16 Identity Edit v1.2 single-view character workflow, with optional
+  realism and FLUX.2 Klein stages disabled by default, under
   `/var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16/`;
 - two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
   in separate graphs—under
@@ -192,9 +192,9 @@ transactional profile switch. After activation, acceptance requires:
 - logs list Muse, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
-- exactly eleven BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
-  one Krea/FLUX Klein workflow, one identity-realism character workflow, and two
-  maximum-quality H3 production workflows are installed;
+- exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
+  one Krea/FLUX Klein workflow, one style-preserving single-view character
+  workflow, and two maximum-quality H3 production workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -474,40 +474,61 @@ then full BF16 FLUX Klein plus a 16.38 GB encoder and works at four megapixels.
 Queue one job on GPU1, keep H3 idle, and record peak RAM/VRAM on the first run.
 Do not use the FLUX output commercially unless a different license authorizes it.
 
-### Identity-preserving photoreal character references
+### Style-preserving single-view character derivation
 
-Open **User workflows → `krea2-character-sheet-bf16` → Krea 2 Identity v1.2 +
-Realism + FLUX.2 Klein 9B BF16**. This declarative graph merges the pinned
-Episode 30 custom-ratio Identity Edit topology with the pinned AI Blueprint
-refinement topology. It is intended to derive one approved view at a time from
-one canonical identity image—not to ask a generator for a crowded multi-view
-sheet.
+Open **User workflows → `krea2-character-sheet-bf16` → Krea 2 Single-View
+Character + Optional Realism and FLUX.2 Klein 9B BF16**. The graph derives one
+new camera angle or pose from one canonical subject image. A “character sheet”
+is the folder of accepted single-view outputs; assemble a contact sheet only
+afterward.
 
-The default path is:
+The safe default path is:
 
-1. full-rank Krea 2 Identity Edit v1.2 at LoRA strength 1.0 and `ref_boost=4`;
-2. FameGrid Standard active at a conservative 0.65, with UltraReal Krea 2 v2
-   retained but bypassed at 0.6;
-3. a 10-step, CFG-1, `er_sde`/`simple` Krea pass wrapped by Detail Daemon;
-4. explicit inspection of the Krea identity result against the canonical input;
-5. a four-megapixel handoff to full-BF16 FLUX.2 Klein 9B using an
-   identity-locked refinement instruction;
-6. color matching back to the Krea result, conservative sharpening, preview,
-   and persistent save.
+1. full-rank Krea 2 Identity Edit v1.2 at LoRA strength 1.0 and `ref_boost=0`;
+2. source preprocessing and output canvas both fixed to 1:1 at 1024×1024;
+3. the sampler's empty target latent also connected to the model patch;
+4. FameGrid and UltraReal both bypassed so illustrations, creatures, and 3D
+   characters retain their original medium;
+5. a 10-step, CFG-1, `er_sde`/`simple` Krea pass wrapped by Detail Daemon;
+6. `PRIMARY OUTPUT — clean Krea single view` saved with the
+   `CharacterSheet_Krea2_SingleView` prefix.
 
-Enable **exactly one** realism LoRA. To try UltraReal, bypass FameGrid and enable
-UltraReal; never enable both for baseline qualification. Reject the Krea result
-before relying on the final preview if face geometry, age, hairline, asymmetric
-features, body silhouette, or wardrobe materials drift. FLUX receives the Krea
-result through reference latents, but it is a refiner rather than an identity
-model and therefore does not replace this review gate.
+These defaults correct three independently observed failure modes. A 1:1 source
+fitted into a 16:9 output caused source-panel outpainting on both sides. A
+reference boost of 1 or more reproduced the original pose instead of obeying a
+new viewpoint; `ref_boost=0` produced the requested clean profile while the
+Identity Edit LoRA retained the character design. Active realism and the old
+human-specific FLUX prompt could convert a stylized creature into a person or
+change its medium.
 
-For a production character sheet, repeat the graph for front face,
-three-quarter face, clean profile, full-body front, full-body back, and selected
-expressions. Keep the same canonical image and invariant identity/wardrobe
-language; change only the requested view. Assemble accepted full-resolution
-files into a contact sheet afterward. The build rejects malformed links,
-non-BF16 selectors, stale download URLs, embedded credentials, rgthree,
+Keep the output ratio equal to the source preprocessing ratio. If another ratio
+is required, change both together; changing only the output canvas reintroduces
+source-panel outpainting. Start pose changes at `ref_boost=0`, then raise it only
+in small increments if identity drift is worse than pose adherence. The QA
+comparison node deliberately displays source and result together but is never
+connected to either saved output.
+
+The prompt should request one concrete view without using “character sheet,”
+“turnaround,” “triptych,” or similar layout language. For example:
+
+```text
+Generate exactly one new full-body left-facing side profile of the same subject,
+with the face and body viewed from the side. Preserve identity, species, anatomy,
+facial design, proportions, clothing, accessories, colors, and the original
+visual medium. Replace the original pose, camera angle, framing, and background
+with one centered subject on a plain neutral studio background. No front view,
+three-quarter view, additional subjects, duplicate views, panels, triptych,
+contact sheet, inset, frame, poster, or displayed source image.
+```
+
+FLUX.2 Klein remains available only as an optional finishing experiment. Its
+Preview and Save nodes are muted by default because qualification showed that
+it can alter framing even with a preservation prompt. To test it, enable both
+muted FLUX output nodes, inspect against the accepted Krea output, and reject any
+crop or identity/style drift. To test photorealism, enable exactly one realism
+LoRA; both realism LoRAs bypassed is the style-preserving baseline. The build
+rejects malformed links, mismatched defaults, active optional stages,
+non-BF16 selectors, stale URLs, embedded credentials, rgthree,
 FaceDetailer/SAM/YOLO, and video-helper metadata.
 
 ### Pixaroma Episode 30 — complete imported bundle
@@ -607,7 +628,7 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 There are three distinct workflow inventories; do not conflate them:
 
 - **84 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
-  Krea/FLUX Klein BF16 graph, one identity-realism character-reference graph,
+  Krea/FLUX Klein BF16 graph, one style-preserving single-view character graph,
   two image-led maximum-quality H3 production graphs, eight Episode 29 graphs,
   seven pinned Episode 30 graphs, and 53 curated official graphs installed into
   the workflow browser.
@@ -1210,7 +1231,7 @@ The starting surface is:
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
 | 8B-authored Krea image with realistic finish | `3d. ... Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16` | User workflows → `pixaroma-ep24-krea2-bf16` | BF16 8B Heretic is prompt-only; BF16 4B conditions Krea; Klein license and marker required |
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
-| Identity-preserving photoreal character view | `Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | Krea and Klein markers; one canonical identity input; enable exactly one realism LoRA |
+| Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; `ref_boost=0`; both realism LoRAs bypassed; FLUX outputs muted |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
 | Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
@@ -1396,8 +1417,8 @@ Do not average several almost-matching faces into the identity definition.
 
 #### 2.3 Derive one clean view at a time
 
-Open `Krea 2 + Edit Lora` or its custom-ratio variant. Feed the canonical anchor
-and request one controlled change per output:
+Open `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B
+BF16`. Feed the canonical anchor and request one controlled change per output:
 
 1. face front, neutral expression;
 2. face three-quarter, neutral expression;
@@ -1408,12 +1429,15 @@ and request one controlled change per output:
 7. optional hands, signature prop, or wardrobe-material detail.
 
 Keep identity language and wardrobe language identical across prompts. Change
-only the requested view or expression. Begin with `ref_boost=4`; lower it if the
-edit refuses a necessary pose and raise it cautiously if identity drifts.
+only the requested view or expression. Keep source preprocessing and output at
+1:1, begin with `ref_boost=0`, and raise it cautiously only if identity drifts.
+Do not use “character sheet” or “turnaround” in a single-view prompt. Keep both
+realism LoRAs bypassed unless photoreal conversion is explicitly intended, and
+use the primary Krea output before considering the muted FLUX stage.
 
 Reject any candidate that changes face geometry, eye color, scar side, hair
-parting, age, body silhouette, or canonical materials. A polished inconsistent
-image is not a useful reference.
+parting, age, body silhouette, canonical materials, species, or visual medium.
+A polished inconsistent image is not a useful reference.
 
 #### 2.4 Add style, wardrobe, and location references separately
 
@@ -1691,7 +1715,10 @@ Do not call the stack qualified until:
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
-- [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
+- [ ] `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B
+      BF16` completes at 1:1/1 MP with `ref_boost=0`, exactly one generated
+      subject, no source-panel outpainting, both realism LoRAs bypassed, and
+      both FLUX output nodes muted.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.

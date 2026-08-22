@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose validated BF16 Krea workflows with FLUX.2 Klein realism stages."""
+"""Compose validated BF16 Krea production workflows with optional FLUX stages."""
 
 from __future__ import annotations
 
@@ -10,11 +10,27 @@ from pathlib import Path
 from typing import Any
 
 Graph = dict[str, Any]
-Link = list[Any]
 
 IDENTITY_REMOVE_NODES = {163, 223}
 DETAIL_NODE_IDS = {136, 137, 139, 141}
 PROMPT_AUTHOR_ENCODER = "qwen3-vl-8b-heretic-1.3.0_bf16.safetensors"
+SINGLE_VIEW_PROMPT = (
+    "Generate exactly one new full-body left-facing side profile of the same subject, "
+    "with the face and body viewed from the side. Preserve the subject's identity, "
+    "species, anatomy, facial design, proportions, clothing, accessories, colors, and "
+    "original visual medium. Replace the original pose, camera angle, framing, and "
+    "background with one centered subject on a plain neutral studio background. No "
+    "front view, three-quarter view, additional subjects, duplicate views, panels, "
+    "triptych, contact sheet, inset, frame, poster, or displayed source image."
+)
+STYLE_PRESERVING_REFINEMENT_PROMPT = (
+    "Refine this single image in high definition while preserving the exact subject "
+    "identity, species, anatomy, facial design, proportions, pose, clothing, "
+    "accessories, composition, colors, and original visual medium. Preserve native "
+    "fur, hair, skin, fabric, material, line, and surface detail as appropriate. Keep "
+    "exactly one subject. Do not photorealize, stylize, redesign, beautify, duplicate, "
+    "add panels, or display the source image."
+)
 
 FLUX_NODE_IDS = {
     46,
@@ -67,6 +83,16 @@ def replace_title(label_node: Graph, title: str) -> None:
     label = json.loads(label_node["widgets_values"][0])
     label["text"] = title
     label_node["widgets_values"][0] = json.dumps(label, separators=(",", ":"))
+
+
+def ensure_optional_input(node: Graph, name: str, value_type: str) -> int:
+    for slot, node_input in enumerate(node.get("inputs", [])):
+        if node_input["name"] == name:
+            return slot
+    node.setdefault("inputs", []).append(
+        {"name": name, "shape": 7, "type": value_type, "link": None}
+    )
+    return len(node["inputs"]) - 1
 
 
 def next_link_id(graph: Graph) -> int:
@@ -136,7 +162,9 @@ def normalize_orders(graph: Graph) -> None:
         node["order"] = order
 
 
-def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
+def build_single_view_character_workflow(
+    identity_source: Graph, realism_source: Graph
+) -> Graph:
     graph = copy.deepcopy(identity_source)
     graph["nodes"] = [
         node for node in graph["nodes"] if node["id"] not in IDENTITY_REMOVE_NODES
@@ -150,28 +178,57 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
         "krea2/krea2_identity_edit_v1_2.safetensors"
     )
     identity_nodes[231]["title"] = "Identity Edit v1.2 — strength 1.0"
-    identity_nodes[232]["title"] = "Identity preservation — ref_boost 4"
-    identity_nodes[221]["title"] = "Describe one controlled view or expression change"
-    identity_nodes[226]["title"] = "Canonical identity reference"
-    identity_nodes[199]["title"] = (
-        "Krea identity result — inspect before final refinement"
+    identity_nodes[232]["widgets_values"][0] = 0
+    identity_nodes[232]["title"] = "Pose-changing identity pass — ref_boost 0"
+    identity_nodes[221]["properties"]["promptState"]["text"] = SINGLE_VIEW_PROMPT
+    identity_nodes[221]["title"] = "Request exactly one new view — edit angle as needed"
+    identity_nodes[226]["title"] = "Canonical subject reference — identity only"
+    source_state = json.loads(identity_nodes[226]["properties"]["loadImagePixState"])
+    source_state.update(
+        {
+            "fit_w": 1024,
+            "fit_h": 1024,
+            "ratio_preset": "1:1",
+            "ratio_w": 1,
+            "ratio_h": 1,
+            "ratio_action": "crop",
+        }
     )
-    identity_nodes[230]["title"] = "Identity QA — canonical reference vs Krea result"
+    identity_nodes[226]["properties"]["loadImagePixState"] = json.dumps(
+        source_state, separators=(",", ":")
+    )
+    slider_state = identity_nodes[234]["properties"]["slidersState"]
+    slider_state["sliders"][0]["value"] = 0
+    identity_nodes[234]["title"] = (
+        "Reference Boost — 0 for pose changes; raise only if identity drifts"
+    )
+    resolution_state = copy.deepcopy(identity_nodes[235]["widgets_values"][0])
+    resolution_state.update({"mode": "preset", "ratio": "1:1", "w": 1024, "h": 1024})
+    identity_nodes[235]["properties"]["resolutionState"] = json.dumps(
+        resolution_state, separators=(",", ":")
+    )
+    identity_nodes[235]["widgets_values"][0] = resolution_state
+    identity_nodes[235]["title"] = (
+        "Output canvas — keep 1:1 to prevent source-panel outpainting"
+    )
+    identity_nodes[199]["widgets_values"][0] = "CharacterSheet_Krea2_SingleView"
+    identity_nodes[199]["title"] = "PRIMARY OUTPUT — clean Krea single view"
+    identity_nodes[230]["title"] = "QA COMPARISON ONLY — not part of saved output"
     replace_title(
         identity_nodes[198],
-        "Krea 2 Identity v1.2 + Selectable Realism + FLUX.2 Klein 9B BF16",
+        "Krea 2 Single-View Character + Optional Realism/FLUX.2 Klein 9B BF16",
     )
 
     ultra_real = copy_node(realism_source, 142, 240)
     ultra_real["widgets_values"] = ["ultra_real_krea2_v2_bf16.safetensors", 0.6]
     ultra_real["mode"] = 4
-    ultra_real["title"] = "BYPASSED — UltraReal Krea 2 v2 (enable instead of FameGrid)"
+    ultra_real["title"] = "BYPASSED — optional UltraReal Krea 2 v2"
     set_position(ultra_real, 35, 25)
 
     famegrid = copy_node(realism_source, 142, 241)
     famegrid["widgets_values"] = ["famegrid_standard_krea2_bf16.safetensors", 0.65]
-    famegrid["mode"] = 0
-    famegrid["title"] = "ACTIVE — FameGrid Standard realism"
+    famegrid["mode"] = 4
+    famegrid["title"] = "BYPASSED — optional FameGrid Standard realism"
     set_position(famegrid, 35, 135)
 
     detail_nodes = [
@@ -197,21 +254,17 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
     flux = {node["id"]: node for node in flux_nodes}
     flux[62]["widgets_values"][0] = "qwen_3_8b_bf16.safetensors"
     flux[63]["widgets_values"][0] = "flux-2-klein-9b-bf16.safetensors"
-    flux[54]["widgets_values"][0] = (
-        "Refine to high-definition photorealism. Preserve the person's exact identity, "
-        "facial geometry, age, expression, hairstyle, body proportions, pose, wardrobe, "
-        "framing, background, and all image content. Restore natural skin pores, fine hair, "
-        "fabric texture, and optical detail. Do not redesign or beautify the subject."
-    )
-    flux[54]["title"] = "Identity-locked FLUX refinement instruction"
+    flux[54]["widgets_values"][0] = STYLE_PRESERVING_REFINEMENT_PROMPT
+    flux[54]["title"] = "Style- and composition-locked FLUX refinement instruction"
     flux[56]["widgets_values"][1] = 4
-    flux[56]["title"] = "Four-megapixel handoff"
-    flux[64]["title"] = "Match refined color to Krea identity result"
-    flux[65]["title"] = "Final conservative sharpen"
-    flux[46]["title"] = "Final photoreal character reference"
-    flux[96]["mode"] = 0
-    flux[96]["widgets_values"][0] = "CharacterSheet_Krea2_Identity_Klein9B"
-    flux[96]["title"] = "Save approved character reference"
+    flux[56]["title"] = "Optional four-megapixel handoff"
+    flux[64]["title"] = "Match refined color to Krea single view"
+    flux[65]["title"] = "Optional conservative sharpen"
+    flux[46]["mode"] = 2
+    flux[46]["title"] = "MUTED — optional FLUX preview (enable with Save node)"
+    flux[96]["mode"] = 2
+    flux[96]["widgets_values"][0] = "CharacterSheet_Krea2_SingleView_Klein9B"
+    flux[96]["title"] = "MUTED — optional FLUX save (enable with Preview node)"
     set_position(flux[46], 4360, 40)
     set_position(flux[96], 4360, 500)
 
@@ -228,10 +281,17 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
         link for link in graph["links"] if not (link[1] == 231 and link[3] == 232)
     ]
 
-    # Identity LoRA -> one realism LoRA -> Krea Identity model patch.
+    # Identity LoRA -> two bypassed optional realism LoRAs -> model patch.
     add_link(graph, 231, 0, 240, 0, "MODEL")
     add_link(graph, 240, 0, 241, 0, "MODEL")
     add_link(graph, 241, 0, 232, 0, "MODEL")
+
+    # Pre-encode against the same target canvas used by the sampler. This keeps the
+    # source reference out of the generated canvas and avoids mid-sampling VAE moves.
+    target_latent_slot = ensure_optional_input(
+        identity_nodes[232], "target_latent", "LATENT"
+    )
+    add_link(graph, 162, 0, 232, target_latent_slot, "LATENT")
 
     # Replace KSampler with Detail Daemon's custom sampler at the proven Identity settings.
     add_link(graph, 137, 0, 136, 0, "SAMPLER")
@@ -249,6 +309,7 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
         if link[1] in FLUX_NODE_IDS and link[3] in FLUX_NODE_IDS:
             add_link(graph, link[1], link[2], link[3], link[4], link[5])
     add_link(graph, 164, 0, 56, 0, "IMAGE")
+    add_link(graph, 65, 0, 96, 0, "IMAGE")
 
     graph["groups"] = [
         {
@@ -269,7 +330,7 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
         },
         {
             "id": 3,
-            "title": "Choose exactly one Krea realism LoRA",
+            "title": "OPTIONAL realism — both LoRAs bypassed by default",
             "bounding": [-10, -20, 410, 275],
             "color": "#8f6c3d",
             "font_size": 20,
@@ -293,7 +354,7 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
         },
         {
             "id": 6,
-            "title": "FLUX.2 Klein 9B BF16 photoreal refinement",
+            "title": "OPTIONAL FLUX.2 Klein 9B BF16 — outputs muted by default",
             "bounding": [2375, 300, 2700, 1080],
             "color": "#3f789e",
             "font_size": 24,
@@ -388,6 +449,7 @@ def build_prompt_enhancer_refinement_workflow(
         if link[1] in FLUX_NODE_IDS and link[3] in FLUX_NODE_IDS:
             add_link(graph, link[1], link[2], link[3], link[4], link[5])
     add_link(graph, 164, 0, 56, 0, "IMAGE")
+    add_link(graph, 65, 0, 96, 0, "IMAGE")
 
     graph["groups"] = [
         *graph.get("groups", []),
@@ -418,7 +480,7 @@ def build_prompt_enhancer_refinement_workflow(
     return graph
 
 
-def validate_graph(graph: Graph) -> None:
+def validate_single_view_character_graph(graph: Graph) -> None:
     node_ids = [node["id"] for node in graph["nodes"]]
     link_ids = [link[0] for link in graph["links"]]
     if len(node_ids) != len(set(node_ids)):
@@ -441,8 +503,41 @@ def validate_graph(graph: Graph) -> None:
     missing_types = required_types - present_types
     if missing_types:
         raise ValueError(f"missing required node types: {sorted(missing_types)}")
-    if index[240]["mode"] != 4 or index[241]["mode"] != 0:
-        raise ValueError("exactly FameGrid must be active by default")
+    if index[240]["mode"] != 4 or index[241]["mode"] != 4:
+        raise ValueError("all optional realism LoRAs must be bypassed by default")
+    if index[232]["widgets_values"][0] != 0:
+        raise ValueError("single-view pose changes must default to ref_boost 0")
+    if index[234]["properties"]["slidersState"]["sliders"][0]["value"] != 0:
+        raise ValueError("the connected reference-boost slider must default to 0")
+    source_resolution = json.loads(index[226]["properties"]["loadImagePixState"])
+    if (
+        source_resolution["ratio_preset"],
+        source_resolution["fit_w"],
+        source_resolution["fit_h"],
+    ) != ("1:1", 1024, 1024):
+        raise ValueError("the canonical source must be preprocessed to a 1:1 canvas")
+    output_resolution = index[235]["widgets_values"][0]
+    if (output_resolution["ratio"], output_resolution["w"], output_resolution["h"]) != (
+        "1:1",
+        1024,
+        1024,
+    ):
+        raise ValueError(
+            "single-view output must default to a 1:1 source-matched canvas"
+        )
+    target_latent_slot = next(
+        slot
+        for slot, node_input in enumerate(index[232]["inputs"])
+        if node_input["name"] == "target_latent"
+    )
+    if not any(
+        link[1:5] == [162, 0, 232, target_latent_slot] for link in graph["links"]
+    ):
+        raise ValueError("the Krea model patch must receive the sampler target latent")
+    if index[46]["mode"] != 2 or index[96]["mode"] != 2:
+        raise ValueError("optional FLUX outputs must be muted by default")
+    if not any(link[1:5] == [65, 0, 96, 0] for link in graph["links"]):
+        raise ValueError("optional FLUX output must be connected to its save node")
 
 
 def validate_prompt_enhancer_refinement_graph(graph: Graph) -> None:
@@ -481,6 +576,8 @@ def validate_prompt_enhancer_refinement_graph(graph: Graph) -> None:
         raise ValueError("the final FLUX result must be saved")
     if not any(link[1:5] == [164, 0, 56, 0] for link in graph["links"]):
         raise ValueError("Krea output is not connected to the FLUX refinement stage")
+    if not any(link[1:5] == [65, 0, 96, 0] for link in graph["links"]):
+        raise ValueError("FLUX refinement output is not connected to its save node")
 
 
 def parse_args() -> argparse.Namespace:
@@ -497,8 +594,10 @@ def main() -> None:
     args = parse_args()
     realism = json.loads(args.realism.read_text())
     if args.identity is not None:
-        workflow = build_workflow(json.loads(args.identity.read_text()), realism)
-        validate_graph(workflow)
+        workflow = build_single_view_character_workflow(
+            json.loads(args.identity.read_text()), realism
+        )
+        validate_single_view_character_graph(workflow)
     else:
         workflow = build_prompt_enhancer_refinement_workflow(
             json.loads(args.prompt_enhancer.read_text()), realism
