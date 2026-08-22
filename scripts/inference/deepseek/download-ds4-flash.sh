@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Download the DeepSeek-V4-Flash-0731 checkpoint used by the r33 server.
+# Download the DeepSeek-V4-Flash-0731 checkpoint used by Infernal Invocation r18.
 #
 # ~155 GiB, pinned to the exact revision the runbook validates. Writes to
 # /models/DeepSeek-V4-Flash-0731 (a dedicated ZFS dataset, 1M records, no
 # compression). Runs in a throwaway python container because the host has no
 # python/hf CLI on purpose. Idempotent + resumable: re-run to continue.
 #
-# See docs/runbooks/new-desktop-install.md — "Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)".
+# See docs/runbooks/new-desktop-install.md — "Running DeepSeek-V4-Flash (Infernal Invocation r18, K5)".
 set -euo pipefail
 
 REPO="deepseek-ai/DeepSeek-V4-Flash-0731"

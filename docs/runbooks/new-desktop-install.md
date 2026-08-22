@@ -35,8 +35,8 @@ driver (VRAM, power limit). See
 Worth stating plainly, because it is less than the 192 GB of VRAM across the two cards:
 
 - **`/dev/shm` is 48 GB** (`boot.devShmSize` defaults to 50%). Under `--ipc=host` that is
-  the hard ceiling on `KV_OFFLOADING_SIZE` — comfortably above the 16 GiB example retained by r33 and
-  r24's offload gate of 5.5, but not a place to be careless.
+  the hard ceiling on `KV_OFFLOADING_SIZE` — comfortably above the local r18 launcher's
+  16 GiB native-offload example and r24's offload gate of 5.5, but not a place to be careless.
 - **The 155 GiB checkpoint cannot be cached in RAM.** It does not fit, and it is read once
   per server start. That is precisely why the ARC is capped at 16 GiB rather than left at
   the OpenZFS default of half of RAM — 48 GB of ARC here would be evicting live pages to
@@ -202,8 +202,8 @@ changes PSU sizing, case airflow, and sustained clocks — worth recording here.
   - `models/vllm-cache` → `/models/vllm-cache` (recordsize=128K, **zstd**) — the JIT cache
     is compilable text and objects, the opposite of what the parent is tuned for
   - `models/native-l2` → `/models/native-l2` (recordsize=1M, compression=off,
-    **quota=512G**) — the filesystem L2 KV tier introduced in r31 and retained by r33. The
-    quota is the point: `NATIVE_L2_GB`
+    **quota=512G**) — the filesystem L2 KV tier introduced in r31 and restart-qualified
+    again by Infernal Invocation r18. The quota is the point: `NATIVE_L2_GB`
     is a promise the runtime makes about a directory, with nothing else stopping it from
     filling the pool underneath the checkpoint. Raise both together or neither.
 - `machines/desktop/default.nix`
@@ -656,7 +656,7 @@ only provides driver + P2P plumbing. The guide's own launch example is `GPUS=0,1
 exactly our 2-card single-node case, so TP2 is a first-class supported mode.
 
 For the image actually being run on this box, see
-[Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)](#running-deepseek-v4-flash-gilded-gnosis-r33-k5)
+[Running DeepSeek-V4-Flash (Infernal Invocation r18, K5)](#running-deepseek-v4-flash-infernal-invocation-r18-k5)
 below — same host prep, different container.
 
 ### Host prep (already baked into the flake)
@@ -759,7 +759,7 @@ native L2 tier get their own child datasets with their own tuning — see
 directly on `/models`, where it inherits 1M records and no compression.
 
 The rest of this subsection is about the **DS4 v8 helper script**, which is not what the
-r33 command below uses — that one passes absolute `/models/...` paths and needs none of
+current r18 launcher uses — that one passes absolute `/models/...` paths and needs none of
 these symlinks. Keep it for running the v8 guide verbatim; skip it otherwise.
 
 `scripts/run-ds4-v8-server.sh` mounts two things, and neither path is what you'd guess:
@@ -876,8 +876,9 @@ settings across — the ARC cap in
 allreduce** — expandable allocator segments break the IPC memory-handle exchange the
 kernel relies on. Do not set it in the container's environment.
 
-r33 retains the native-L2 behavior introduced in r31: its helper *itself* disables
-expandable segments, "because the shared host region requires stable registrations".
+Infernal Invocation r18 retains and restart-qualifies the native-L2 behavior introduced
+in r31; its helper disables expandable segments because the shared host region requires
+stable registrations.
 So if you enable native KV offload and something else in your environment
 has turned expandable segments on, the two are fighting over the same allocator.
 
@@ -929,10 +930,10 @@ docker logs -f qwen38-model-dl
 ```
 
 Wait for `DOWNLOAD_COMPLETE`, then stop whichever model currently owns port 8000. For the
-DeepSeek deployment documented below:
+current DeepSeek deployment:
 
 ```bash
-docker stop ds4-0731-r33
+docker stop ds4-infernal-invocation-cu133-r18
 ```
 
 Go headless before launch so X does not retain GPU memory:
@@ -989,7 +990,7 @@ own container and reclaims port 8000:
 
 ```bash
 docker stop qwen38-27b-bf16
-bash scripts/inference/deepseek/run-ds4-v20-r33.sh
+bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
 ```
 
 ### Why BF16 TP2
@@ -1215,7 +1216,7 @@ that protocol into ordinary OpenAI `reasoning_content` and `tool_calls` fields.
 
 The current Qwen SGLang DSpark profile is TP2 and occupies both cards, so it cannot coexist
 with Muse. The dual switcher replaces it with the existing vLLM BF16 Qwen target at TP1;
-DeepSeek r33 remains an exclusive two-card profile.
+DeepSeek Infernal Invocation r18 remains an exclusive two-card profile.
 
 Primary references:
 
@@ -1454,7 +1455,7 @@ Wait for `DOWNLOAD_COMPLETE` from both containers. Stop whichever model owns por
 then go headless and launch:
 
 ```bash
-docker stop ds4-0731-r33 2>/dev/null || true
+docker stop ds4-infernal-invocation-cu133-r18 2>/dev/null || true
 docker stop qwen38-27b-bf16 2>/dev/null || true
 sudo systemctl stop display-manager
 nvidia-smi --query-gpu=index,memory.used --format=csv
@@ -1739,7 +1740,46 @@ bash tests/inference-api-key-contract.sh
 bash tests/qwen38-dspark-vllm-contract.sh
 ```
 
-## Running DeepSeek-V4-Flash (Gilded Gnosis r33, K5)
+## Running DeepSeek-V4-Flash (Infernal Invocation r18, K5)
+
+Current workstation runbook: [`ds4-infernal-invocation-r18-runbook-2026-08-22.md`](ds4-infernal-invocation-r18-runbook-2026-08-22.md)
+
+Upstream release contract:
+<https://github.com/local-inference-lab/rtx6kpro/blob/9cfa57adc77a60f8ec800c976b831356f32d8190/models/ds4dspark-infernal-invocation-r18.md>
+
+Infernal Invocation r18 replaces Gilded Gnosis r33 as the active DS4 release. It keeps the
+same `DeepSeek-V4-Flash-0731` checkpoint revision and TP2/DCP1 fixed probabilistic K5
+shape while moving to CUDA 13.3, PyTorch 2.13.0, the new vLLM/B12X integration trees,
+and the LMCache multiprocess wrapper. The qualified serving path now uses FULL CUDA graphs
+for target decode, DSpark proposal, and DFlash context-KV execution.
+
+| Item | Value |
+|---|---|
+| Image | `voipmonitor/vllm:infernal-invocation-vllmf0fa1ce-b12x75787c7-fi1ac6942-cu133-torch213-20260818-r18` |
+| Registry digest | `sha256:414ec7d0d28358cfd8af0697f330f5c8acbb80e4dc4e5ba69c9fd5b5855ea804` |
+| Image ID | `sha256:955e088a85b5378b00275842bc839eea8cb04ca0782ed79eaa3a967d11fd22e5` |
+| Model revision | `9e165c30e2704aec5d9d593cce3eebd58bbef1cb` |
+| Runtime | CUDA 13.3, PyTorch 2.13.0, NCCL 2.31.2, CUTLASS DSL 4.6.2, FlashInfer 0.6.18, LMCache 0.5.2+glm52dcp.5, XGrammar 0.2.5 |
+| Default profile | TP2/DCP1, B12X W4A8, fixed probabilistic K5, FP8 compressed MLA KV |
+| Validation | [remote GPU receipt](https://github.com/local-inference-lab/blackwell-llm-docker/blob/main/validation/infernal-invocation-r18-remote-gpu.json), [source merge contract](https://github.com/local-inference-lab/rtx6kpro/issues/67) |
+
+The checkpoint does not need to be re-downloaded. The new runtime gets its own persistent
+cache and removes stale r33/r31 containers before reclaiming port 8000:
+
+```bash
+sudo systemctl stop display-manager
+bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
+docker logs -f ds4-infernal-invocation-cu133-r18
+curl -fsS http://127.0.0.1:8000/health
+```
+
+The launcher preserves the local eight-agent 1M scheduler envelope, but upstream lists
+full 1,048,576-token execution as implemented rather than qualified. The dedicated runbook
+separates that local profile from the upstream 262K receipt and covers digest pinning,
+authenticated probes, CUDA graph sizing, K7/target-only modes, native offload, LMCache,
+commit-pinned Compose, migration, and the first local validation gate.
+
+## Historical: DeepSeek-V4-Flash (Gilded Gnosis r33, K5)
 
 Runbook: <https://github.com/local-inference-lab/rtx6kpro/blob/master/models/ds4dspark-v20-r33.md>
 
@@ -2371,9 +2411,9 @@ expect proportionally less KV cache.
   firewall entry becomes irrelevant.
 - **`--ulimit memlock=-1 / nofile=1048576 / stack=67108864`** — NixOS leaves dockerd at
   systemd's defaults and containers inherit them, so these have to be asked for
-  explicitly. See [the reference Compose profile](#the-reference-compose-profile-r33).
+  explicitly. See the [current r18 runbook](ds4-infernal-invocation-r18-runbook-2026-08-22.md#commit-pinned-compose-reference).
 - **No `--privileged`** — dropped upstream in r31, and native L2 was validated without it.
-  See the [r33 launch section](#running-deepseek-v4-flash-gilded-gnosis-r33-k5).
+  See the [current r18 launch section](#running-deepseek-v4-flash-infernal-invocation-r18-k5).
 - **Storage** — 155 GiB checkpoint on `/models`, a `/cache` on `models/vllm-cache` that
   grows to several GiB of compiled kernels and CUDA graphs, and a quota'd
   `models/native-l2` if you enable the L2 tier. Keep `/cache` persistent: a cold cache
@@ -2381,7 +2421,7 @@ expect proportionally less KV cache.
 - **`ALLREDUCE_MODE`** — `auto` gives TP2 the new FlashInfer PCIe IPC path. B12X wins at
   C1 and prefill, which is where a single-user workstation lives. Benchmark before
   settling. See [All-reduce backend selection](#all-reduce-backend-selection-is-new-allreduce_mode).
-- **Driver** — the image is `cu132`; `production` is 595.84, which is new enough.
+- **Driver** — the active r18 image is `cu133`; `production` is 595.84, which is new enough.
   Confirm with `nvidia-smi` before blaming the container.
 
 ## Notes

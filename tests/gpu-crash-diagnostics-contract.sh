@@ -18,7 +18,7 @@ PYTHON="$(nix build --no-link --print-out-paths nixpkgs#python3)/bin/python3"
 "$PYTHON" -m py_compile "$RECORDER"
 
 for marker in \
-  'GPU_ORDER="${GPU_ORDER:-0,1}"' \
+  'GPU_ORDER="${GPU_ORDER:-1,0}"' \
   '0,1|1,0' \
   '--label io.peterstorm.inference.gpu-order="$GPU_ORDER"' \
   '-e CUDA_VISIBLE_DEVICES="$GPU_ORDER"' \

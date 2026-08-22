@@ -4,6 +4,7 @@
 INFERENCE_PROFILE_CONTAINERS=(
   ds4-0731-r31
   ds4-0731-r33
+  ds4-infernal-invocation-cu133-r18
   qwen38-27b-bf16
   qwen38-27b-bf16-dspark-vllm-v2
   qwen38-27b-bf16-dspark-sglang-v2
@@ -11,6 +12,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   qwen38-27b-bf16-dspark-sglang
   qwen38-27b-bf16-dflash2-sglang
   qwen38-27b-bf16-dflash2-sglang-native
+  qwen38-27b-bf16-dflash2-sglang-v2
   qwen38-27b-bf16-dflash2-vllm
   muse-glimmer-30b-bf16-dflash
   muse-glimmer-30b-abliterated-bf16-dflash

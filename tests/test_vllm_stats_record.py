@@ -20,8 +20,9 @@ def load_module(name, path):
     return module
 
 
-record = load_module("vllm_stats_record", ROOT / "scripts" / "vllm-stats-record.py")
-heatmap = load_module("vllm_stats_heatmap", ROOT / "scripts" / "vllm-stats-heatmap.py")
+INFERENCE_SHARED = ROOT / "scripts" / "inference" / "shared"
+record = load_module("vllm_stats_record", INFERENCE_SHARED / "vllm-stats-record.py")
+heatmap = load_module("vllm_stats_heatmap", INFERENCE_SHARED / "vllm-stats-heatmap.py")
 
 
 class ParseCountersTest(unittest.TestCase):

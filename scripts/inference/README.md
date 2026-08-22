@@ -8,13 +8,13 @@ in `docs/runbooks/` are the source of truth for rationale; the contract tests in
 Layout (by model, then by role):
 
 ```
-qwen38/    Qwen3.8-27B profiles: downloaders, the vLLM BF16 launcher, the two
-           experimental DSpark launchers (SGLang and vLLM), and the
-           SGLang<->vLLM backend switcher for :8000.
+qwen38/    Qwen3.8-27B profiles: downloaders, the vLLM BF16 launcher, DSpark
+           launchers, locally validated DFlash2 launchers, and the digest-pinned
+           official SGLang DFlash2 v2 profile plus versioned :8000 switchers.
            -v2 files in this folder are the 2026-08-18 upstream-updated
            versions (see docs/research/2026-08-18-qwen38-upstream-update-research.md);
            the un-suffixed files remain the validated 2026-08-16 pins.
-deepseek/  DeepSeek-V4-Flash-0731 (Gilded Gnosis r33) downloader + launcher.
+deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
 muse/      Muse Glimmer 30B (BF16 + DFlash) downloader + launcher.
 profiles/  Cross-model profiles (the concurrent Qwen + Muse dual switcher).
 shared/    Components more than one profile uses: the credential helper every

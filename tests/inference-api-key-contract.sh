@@ -6,11 +6,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$ROOT/scripts/inference/shared/inference-api-key.sh"
 SWITCH="$ROOT/scripts/inference/qwen38/switch-qwen38-backend.sh"
+BENCHMARK_ARM="$ROOT/benchmarks/loom-model-ab/scripts/run-arm.sh"
 LAUNCHERS=(
-  "$ROOT/scripts/inference/deepseek/run-ds4-v20-r33.sh"
+  "$ROOT/scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh"
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh"
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
+  "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dflash2-sglang-v2.sh"
   "$ROOT/scripts/inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
 )
 
@@ -30,6 +32,7 @@ trap 'rm -rf "$sandbox"' EXIT
 [[ -r "$HELPER" ]] || fail "$HELPER is not readable"
 bash -n "$HELPER"
 bash -n "$SWITCH"
+bash -n "$BENCHMARK_ARM"
 contains "$HELPER" 'SUDO_USER'
 contains "$HELPER" 'getent passwd "$INFERENCE_OPERATOR_USER"'
 contains "$HELPER" 'INFERENCE_DS4_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/ds4-flash/api-key"'
@@ -50,6 +53,10 @@ contains "$SWITCH" 'HEALTHY + AUTHENTICATED:'
 contains "$SWITCH" 'curl --config -'
 if grep -Eq -- 'curl .*Authorization: Bearer' "$SWITCH"; then
   fail "$SWITCH puts the API key in curl argv"
+fi
+contains "$BENCHMARK_ARM" 'curl --config -'
+if grep -Eq -- 'curl .*Authorization: Bearer' "$BENCHMARK_ARM"; then
+  fail "$BENCHMARK_ARM puts the API key in curl argv"
 fi
 
 # A pre-existing Qwen-only installation migrates to every model-specific path.

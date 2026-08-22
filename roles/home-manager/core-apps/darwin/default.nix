@@ -89,7 +89,7 @@
       # not sit in the process table for the life of the forward. Command-line
       # arguments are world-readable via ps; on an EDR-monitored machine they are
       # also collected telemetry. Same reasoning as the private env file in
-      # scripts/inference/deepseek/run-ds4-v20-r33.sh.
+      # scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh.
       (writeShellScriptBin "vllm-forward" ''
         set -euo pipefail
         port="''${1:-8000}"

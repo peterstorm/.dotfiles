@@ -47,8 +47,13 @@ resolve_key() {
 
 API_KEY="$(resolve_key)"
 [[ -n "$API_KEY" ]] || { echo "could not resolve an inference api-key locally or from the desktop" >&2; exit 1; }
+ESCAPED_API_KEY="${API_KEY//\\/\\\\}"
+ESCAPED_API_KEY="${ESCAPED_API_KEY//\"/\\\"}"
 
-SERVED="$(curl -fsS -m 15 -H "Authorization: Bearer $API_KEY" \
+# Read the credential through curl's stdin config so it never appears in argv.
+SERVED="$({
+  printf 'header = "Authorization: Bearer %s"\n' "$ESCAPED_API_KEY"
+} | curl --config - -fsS -m 15 \
   "${INFERENCE_URL:-http://192.168.0.80:8000}/v1/models" 2>/dev/null \
   | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed -E 's/.*"([^"]+)"$/\1/')" || true
 
@@ -57,8 +62,8 @@ if [[ "$SERVED" != "$EXPECTED" ]]; then
   cat >&2 <<EOF
 Backend mismatch: :8000 is serving '${SERVED:-<nothing>}', arm '$ARM' needs '$EXPECTED'.
 
-  → DS4 : docker rm -f qwen38-27b-bf16-dspark-sglang qwen38-27b-bf16-dspark-vllm; bash ~/.dotfiles/scripts/inference/deepseek/run-ds4-v20-r33.sh
-  → Qwen: docker rm -f ds4-0731-r33; bash ~/.dotfiles/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
+  → DS4 : docker rm -f qwen38-27b-bf16-dspark-sglang qwen38-27b-bf16-dspark-vllm; bash ~/.dotfiles/scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
+  → Qwen: docker rm -f ds4-infernal-invocation-cu133-r18; bash ~/.dotfiles/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 
 Wait for an authenticated /v1/models before retrying — a cold start takes minutes.
 EOF

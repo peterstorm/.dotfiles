@@ -1,5 +1,11 @@
 # Qwen3.8-27B DFlash 2 runbook — 2026-08-19
 
+> **Historical profile.** SGLang now publishes an official Qwen3.8 DFlash2 cookbook
+> and image. For new deployments use
+> [`qwen38-27b-dflash2-official-runbook-2026-08-22.md`](qwen38-27b-dflash2-official-runbook-2026-08-22.md)
+> and the versioned `...dflash2-sglang-v2.sh` / `switch-qwen38-backend-v3.sh`
+> scripts. This document remains the local TP2 and degraded-surgery receipt.
+
 TL;DR — serve the DFlash 2 draft alongside the existing Qwen3.8-27B target:
 
 ```bash

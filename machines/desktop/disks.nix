@@ -94,10 +94,9 @@ in
           };
         };
 
-        # Native filesystem L2 KV offload tier introduced in r31 and retained
-        # by r33 (NATIVE_L2_PATH / NATIVE_L2_GB). FP8 KV blocks:
-        # incompressible, written and read in large
-        # chunks. The quota is the point — NATIVE_L2_GB is a promise the runtime
+        # Native filesystem L2 KV offload tier introduced in r31 and restart-qualified
+        # again by Infernal Invocation r18 (NATIVE_L2_PATH / NATIVE_L2_GB). FP8 KV blocks
+        # are incompressible and written and read in large chunks. The quota is the point — NATIVE_L2_GB is a promise the runtime
         # makes about a directory, with nothing stopping it from filling the pool
         # underneath the 155 GiB checkpoint and /nix. Keep the two in step:
         # raising NATIVE_L2_GB past 512 means raising this quota first.

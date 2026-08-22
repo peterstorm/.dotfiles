@@ -30,7 +30,7 @@ hand-waving.
 |---|---|---|
 | Launch | `pi --model desktop-vllm/deepseek-v4-flash:max` | `pi --model desktop-vllm/qwen3.8-27b:xhigh` |
 | Context window | 1,048,576 | 262,144 |
-| Backend | vLLM, `ds4-0731-r33` | SGLang DSpark, `qwen38-27b-bf16-dspark-sglang` |
+| Backend | vLLM, `ds4-infernal-invocation-cu133-r18` | SGLang DSpark, `qwen38-27b-bf16-dspark-sglang` |
 
 ### Two asymmetries that must be stated, not hidden
 
@@ -86,10 +86,10 @@ the Qwen container stopped first, or the launcher dies on a port bind:
 ```bash
 # → DS4
 docker rm -f qwen38-27b-bf16-dspark-sglang qwen38-27b-bf16-dspark-vllm 2>/dev/null || true
-bash scripts/inference/deepseek/run-ds4-v20-r33.sh
+bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
 
 # → Qwen
-docker rm -f ds4-0731-r33 2>/dev/null || true
+docker rm -f ds4-infernal-invocation-cu133-r18 2>/dev/null || true
 bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
 ```
 

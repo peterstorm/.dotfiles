@@ -86,8 +86,8 @@ never committed: Pi reads it locally on `desktop`, or retrieves it through the h
 
 ### DeepSeek V4 Flash
 
-The r33 runtime supports exactly three reasoning-effort contracts. They are one model
-with a per-request Pi setting, not separate models:
+The Infernal Invocation r18 runtime supports exactly three reasoning-effort contracts.
+They are one model with a per-request Pi setting, not separate models:
 
 | Pi level | DeepSeek behavior |
 |---|---|
