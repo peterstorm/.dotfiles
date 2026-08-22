@@ -46,14 +46,19 @@ contains "$VARIANTS" "MUSE_DRAFT_REV=\"$DRAFT_REV\""
 contains "$VARIANTS" 'MUSE_TARGET_REPO="mlasli/Muse-Glimmer-30B-Abliterated-BF16"'
 contains "$VARIANTS" 'MUSE_TARGET_REV="daf5fab76a0351a583714a92d88ebdb6eb48af35"'
 contains "$VARIANTS" 'MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"'
+contains "$VARIANTS" 'MUSE_TARGET_REPO="Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16"'
+contains "$VARIANTS" 'MUSE_TARGET_REV="1b489c23b583d609b6c17b00e1a877d1faac1ee2"'
+contains "$VARIANTS" 'MUSE_CONTAINER_NAME="muse-glimmer-30b-blackfrost-bf16-dflash"'
 contains "$VARIANTS" 'MUSE_TARGET_AUXILIARY_REPO="meta-models/Muse-Glimmer-30B"'
 contains "$VARIANTS" 'MUSE_TARGET_AUXILIARY_REV="a4e59da52a7bc87ae7251dd5545c0dd437c44b68"'
 contains "$VARIANTS" '97e2a486dd9866b81f40cf4b8bc0c9ced9a7cd8a5bc65aa4cc2f4de0712dae77 1084 processor_config.json'
 contains "$VARIANTS" '8eef61530e1283642c77ce2e6721feb5c6f348fa055c00e90f2844a136372694 49950112952 model-00001-of-00002.safetensors'
 contains "$VARIANTS" 'cd53270fef03dac41c34a7cafd64cdc400cff149f59d3aff17e248892f328b5b 49902303112 model-00001-of-00002.safetensors'
+contains "$VARIANTS" '042152d9344018814d835ccc87ba9a9a8a392a9eb63fdb47eca914fb1c8dfcab 49950112952 model-00001-of-00002.safetensors'
+contains "$VARIANTS" 'e18797b13e1c0a283b34696eee900377c21767e928311401196b398acceb5d05 9603322320 model-00002-of-00002.safetensors'
 contains "$VARIANTS" 'fd88d337eb84f8d0e6ba33a7684d7efa6722d4460ba4d6badca9699418392a84 5111976608 model.safetensors'
-[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ [^ ]+$' "$VARIANTS")" -eq 22 ]] \
-  || fail "$VARIANTS must pin all required standard, abliterated, and draft artifacts"
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ [^ ]+$' "$VARIANTS")" -eq 31 ]] \
+  || fail "$VARIANTS must pin all required standard, mlasli, Blackfrost, and draft artifacts"
 # shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
 source "$VARIANTS"
 muse_resolve_variant standard
@@ -65,6 +70,13 @@ muse_resolve_variant abliterated
 MUSE_MODELS_ROOT=/tmp/muse-staging muse_resolve_variant abliterated
 [[ "$MUSE_TARGET_HOST" == /tmp/muse-staging/Muse-Glimmer-30B-Abliterated-BF16 ]] \
   || fail "abliterated Muse staging root resolves incorrectly"
+MUSE_MODELS_ROOT=/tmp/muse-staging muse_resolve_variant blackfrost
+[[ "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" == "Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16@1b489c23b583d609b6c17b00e1a877d1faac1ee2" ]] \
+  || fail "Blackfrost Muse variant resolves incorrectly"
+[[ "$MUSE_TARGET_HOST" == /tmp/muse-staging/Muse-Glimmer-30B-Blackfrost-Abliterated-BF16 ]] \
+  || fail "Blackfrost Muse staging root resolves incorrectly"
+[[ -z "$MUSE_TARGET_AUXILIARY_REPO$MUSE_TARGET_AUXILIARY_REV$MUSE_TARGET_AUXILIARY_MANIFEST" ]] \
+  || fail "Blackfrost Muse must use its repository's verified processor metadata"
 unset MUSE_MODELS_ROOT
 unknown_status=0
 muse_resolve_variant unknown >/dev/null 2>&1 || unknown_status=$?

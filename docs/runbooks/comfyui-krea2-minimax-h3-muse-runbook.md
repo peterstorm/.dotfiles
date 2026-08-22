@@ -44,7 +44,7 @@ ComfyUI remains loopback-only and systemd-confined.
 | Core nodes and template library | ComfyUI/Nix package | Nix flake pin |
 | Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
 | Episode 24/29/30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
-| Episode 24 Krea workflows | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 11/11 BF16/model/node/link gate |
+| Episode 24 Krea workflows | Pixaroma ZIP plus one deterministic Krea→Klein composition, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 12/12 BF16/model/node/link gate |
 | Krea 2 + FLUX.2 Klein 9B workflow | The AI Blueprint/Google Drive, installed under `/var/lib/comfyui/` | exact SHA-256; BF16/model/node/link/credential gate |
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
@@ -377,7 +377,7 @@ Krea's local prompting rules are simple: natural language, faithful detail,
 long prompts when useful, and exact visible text in double quotes. The Muse
 node embeds Krea's official expansion contract.
 
-### Pixaroma Episode 24 — eleven Krea workflows, adapted to BF16
+### Pixaroma Episode 24 — twelve Krea workflows, adapted to BF16
 
 The source is [Episode 24](https://www.youtube.com/watch?v=r1D_6pcDbV8),
 `Ep24 Workflows.zip`, 62,784 bytes, SHA-256
@@ -398,10 +398,12 @@ non-misleading names:
 
 9. `3a. Krea 2 Text to Image - 2K - Abliterated BF16`;
 10. `3b. Krea 2 Text to Image + Extra Pass + Prompt Enhancer - Abliterated BF16`;
-11. `3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16`.
+11. `3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16`;
+12. `3d. Krea 2 Text to Image + Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16`.
 
-Every graph is rewritten to `krea2_turbo_bf16.safetensors`,
-`qwen3vl_4b_bf16.safetensors`, and `qwen_image_vae.safetensors`. The initial
+The first eleven graphs are rewritten to `krea2_turbo_bf16.safetensors`, the
+expected standard or abliterated BF16 4B encoder, and
+`qwen_image_vae.safetensors`. The initial
 sampler remains the video's 8-step, CFG-1, `er_sde`/`simple` baseline. Extra-pass
 and 2K graphs retain the 1.5× latent upscale followed by four Euler steps at
 0.4 denoise. The low-VRAM graph retains tiled VAE decode, but it is a diagnostic
@@ -420,12 +422,23 @@ third-party VAE. The workstation copies instead use
 `qwen_image_vae.safetensors`. The BF16 encoder is a single-file ComfyUI package
 of `huihui-ai/Huihui-Qwen3-VL-4B-Instruct-abliterated`; its repository revision,
 byte count, and SHA-256 are immutable downloader inputs. The standard eight
-workflows remain the quality baseline. The three variants are lower-refusal
-experiments, not a guarantee about Krea output behavior.
+workflows remain the quality baseline. The three source variants are
+lower-refusal experiments, not a guarantee about Krea output behavior.
 
-Build-time checks require all eleven JSON files, exact BF16 loaders, valid graph
-links, known node types, the original sampler counts, and no INT8/FP8, rgthree,
-mutable model links, misleading source labels, or alternate VAE references.
+The twelfth graph is a deterministic composition of `3c` and the pinned
+FLUX.2 Klein refinement stage. It deliberately uses **two separate prompt
+encoders**: full-BF16 Qwen3-VL-8B Heretic feeds only `TextGenerate`, while the
+abliterated BF16 Qwen3-VL-4B remains the sole input to `CLIPTextEncode` and Krea
+conditioning. Krea requires twelve 2560-wide hidden-layer outputs; Qwen3-VL-8B
+produces 4096-wide conditioning and is architecturally incompatible with that
+input even when `CLIPLoader` says `krea2`. The Krea decode then enters a
+four-megapixel, content-locked FLUX.2 Klein 9B BF16 reference-latent pass,
+followed by color matching, conservative sharpening, preview, and save.
+
+Build-time checks require all twelve JSON files, exact BF16 loaders, valid graph
+links, isolated 8B prompt authorship, the required 4B Krea conditioning path,
+known node types, the original sampler counts, and no INT8/FP8, rgthree, mutable
+model links, misleading source labels, or alternate VAE references.
 
 ### The AI Blueprint — Krea 2 + FLUX.2 Klein 9B photoreal refinement
 
@@ -593,7 +606,7 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **83 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, one
+- **84 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, one identity-realism character-reference graph,
   two image-led maximum-quality H3 production graphs, eight Episode 29 graphs,
   seven pinned Episode 30 graphs, and 53 curated official graphs installed into
@@ -651,7 +664,7 @@ not the private local path.
 
 ## 6. Use Muse Glimmer as the prompt author
 
-### Standard and abliterated BF16 variants
+### Standard and refusal-suppressed BF16 variants
 
 The default remains the qualified upstream `meta-models/Muse-Glimmer-30B`.
 The stack also supports the requested
@@ -665,16 +678,25 @@ and again before launch. Because the derivative omits SGLang's required
 1,084-byte file from upstream Muse revision
 `a4e59da52a7bc87ae7251dd5545c0dd437c44b68`, pinned by SHA-256
 `97e2a486...0712dae77`; it does not borrow or alter model weights. Its model
-card reports weight-level refusal
-suppression at alpha 0.15 but no formal capability benchmark, so it is an
-experimental creative variant—not a replacement for the standard baseline.
+card reports weight-level refusal suppression at alpha 0.15 but no formal
+capability benchmark. Direct workstation testing confirmed that it still
+refuses consensual adult-only prompt-authoring requests.
 
-Download and activate it explicitly:
+The stronger candidate is
+[`Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16`](https://huggingface.co/Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16),
+pinned at revision `1b489c23b583d609b6c17b00e1a877d1faac1ee2`. Its two
+BF16 shards total 59,553,435,272 bytes; all nine runtime-required artifacts are
+size- and SHA-256-pinned. The repository supplies its own processor metadata
+and documents the same SGLang BF16+DFlash topology used here. Its publisher
+reports 0/300 true refusals, but the workstation must reproduce the relevant
+adult-only compliance probe and prompt-quality baseline before promotion.
+
+Download and activate either derivative explicitly:
 
 ```bash
-MUSE_VARIANT=abliterated bash scripts/inference/muse/download-muse-glimmer-30b.sh
+MUSE_VARIANT=blackfrost bash scripts/inference/muse/download-muse-glimmer-30b.sh
 # The command returns only after checksum verification and DOWNLOAD_COMPLETE.
-MUSE_VARIANT=abliterated bash scripts/comfyui/activate-creative-stack.sh
+MUSE_VARIANT=blackfrost bash scripts/comfyui/activate-creative-stack.sh
 ```
 
 For an explicitly asynchronous transfer, add `MUSE_DOWNLOAD_DETACH=yes`; that
@@ -683,7 +705,7 @@ Nix-managed host-worker log under
 `~/.local/state/creative-model-downloads/` until it reports
 `DOWNLOAD_COMPLETE`. No mutable Python image or runtime `pip install` is used.
 
-Both variants use distinct model directories, caches, download locks/logs, and
+All variants use distinct model directories, caches, download locks/logs, and
 runtime container names. They share the official BF16 DFlash assistant. DFlash
 sampling remains output-exact because the target verifies candidates, but the
 modified target may accept fewer draft tokens; benchmark acceptance and speed
@@ -1186,6 +1208,7 @@ The starting surface is:
 | Fast/direct Krea generation | `1a. Krea 2 Text to Image - Simple` | User workflows → `pixaroma-ep24-krea2-bf16` | Krea BF16 marker and pinned enhancer/Pixaroma nodes |
 | Detailed or 2K Krea generation | `2a. ... Extra Pass` or `2d. ... - 2K` | User workflows → `pixaroma-ep24-krea2-bf16` | Additional GPU time and memory for the 1.5× latent pass |
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
+| 8B-authored Krea image with realistic finish | `3d. ... Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16` | User workflows → `pixaroma-ep24-krea2-bf16` | BF16 8B Heretic is prompt-only; BF16 4B conditions Krea; Klein license and marker required |
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
 | Identity-preserving photoreal character view | `Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | Krea and Klein markers; one canonical identity input; enable exactly one realism LoRA |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
@@ -1214,7 +1237,7 @@ workflow inventory:
 
 ```bash
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep24-krea2-bf16 \
-  -type f -name '*.json' | wc -l)" -eq 11
+  -type f -name '*.json' | wc -l)" -eq 12
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
   -type f -name '*.json' | wc -l)" -eq 8
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
@@ -1663,7 +1686,7 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
-- [ ] Eleven BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
+- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.

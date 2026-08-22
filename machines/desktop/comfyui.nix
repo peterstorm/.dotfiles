@@ -677,6 +677,7 @@ let
           pkgs.findutils
           pkgs.gnugrep
           pkgs.jq
+          pkgs.python3
           pkgs.unzip
         ];
       }
@@ -769,23 +770,37 @@ let
           jq -e . "$destination" >/dev/null
         done < ${pixaromaEp24AbliteratedWorkflowManifest}
 
+        prompt_enhancer="$out/workflows/3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16.json"
+        prompt_enhancer_refinement="$out/workflows/3d. Krea 2 Text to Image + Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16.json"
+        python3 ${../../scripts/comfyui/build-krea2-identity-realism-workflow.py} \
+          --prompt-enhancer "$prompt_enhancer" \
+          --realism ${kreaFluxKleinWorkflowSource} \
+          --output "$prompt_enhancer_refinement"
+
         jq -s -e '
-          length == 11
+          length == 12
           and ([.[] | .nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
-            | length == 11 and all(.[]; . == "krea2_turbo_bf16.safetensors"))
+            | length == 13
+              and ([.[] | select(. == "krea2_turbo_bf16.safetensors")] | length == 12)
+              and ([.[] | select(. == "flux-2-klein-9b-bf16.safetensors")] | length == 1))
           and ([.[] | .nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
-            | ([.[] | select(. == "qwen3vl_4b_bf16.safetensors")] | length == 8)
-              and ([.[] | select(. == "${krea2AbliteratedEncoder}")] | length == 3))
+            | length == 14
+              and ([.[] | select(. == "qwen3vl_4b_bf16.safetensors")] | length == 8)
+              and ([.[] | select(. == "${krea2AbliteratedEncoder}")] | length == 4)
+              and ([.[] | select(. == "qwen3-vl-8b-heretic-1.3.0_bf16.safetensors")] | length == 1)
+              and ([.[] | select(. == "qwen_3_8b_bf16.safetensors")] | length == 1))
           and ([.[] | .nodes[] | select(.type == "VAELoader") | .widgets_values[0]]
-            | length == 11 and all(.[]; . == "qwen_image_vae.safetensors"))
+            | length == 13
+              and ([.[] | select(. == "qwen_image_vae.safetensors")] | length == 12)
+              and ([.[] | select(. == "flux2-vae.safetensors")] | length == 1))
           and ([.[] | .nodes[] | select(.type == "KSampler") | .widgets_values[2]]
-            | length == 17
-              and ([.[] | select(. == 8)] | length == 11)
+            | length == 18
+              and ([.[] | select(. == 8)] | length == 12)
               and ([.[] | select(. == 4)] | length == 6))
-          and ([.[] | .nodes[] | select(.type == "TextGenerate")] | length == 6)
+          and ([.[] | .nodes[] | select(.type == "TextGenerate")] | length == 7)
           and ([.[] | .nodes[] | select(.type == "VAEDecodeTiled")] | length == 1)
           and ([.[] | .nodes[] | select(.type == "LatentUpscaleBy")] | length == 6)
-          and ([.[] | .nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")] | length == 11)
+          and ([.[] | .nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")] | length == 12)
           and ([.[] | .nodes[] | select(.type == "LoraLoaderModelOnly")
               | .widgets_values[0]] | sort
             == (["krea2_kidsdrawing.safetensors", "krea2_vintagetarot.safetensors"] | sort))
@@ -807,21 +822,53 @@ let
                     . as $link_id
                     | any($graph.links[]; .[0] == $link_id and .[1] == $node.id))))
           and ([.[] | .nodes[].type | select(. as $type | ([
-              "CLIPLoader", "CLIPTextEncode", "ComfyUI-Krea2T-Enhancer",
-              "ConditioningZeroOut", "EmptySD3LatentImage", "KSampler",
-              "LatentUpscaleBy", "LoraLoaderModelOnly", "PixaromaLabel",
-              "PixaromaNote", "PixaromaPortraitLandscape", "PixaromaPreview",
+              "CFGGuider", "CLIPLoader", "CLIPTextEncode", "ColorMatch",
+              "ComfyUI-Krea2T-Enhancer", "ConditioningZeroOut",
+              "EmptyFlux2LatentImage", "EmptySD3LatentImage", "Flux2Scheduler",
+              "GetImageSize", "ImageScaleToTotalPixels", "ImageSharpen",
+              "KSampler", "KSamplerSelect", "LatentUpscaleBy",
+              "LoraLoaderModelOnly", "PixaromaLabel", "PixaromaNote",
+              "PixaromaPortraitLandscape", "PixaromaPreview",
               "PixaromaResolution", "PixaromaRunTimer", "PixaromaSeed",
-              "PixaromaShowText", "StringConcatenate", "TextGenerate",
-              "UNETLoader", "VAEDecode", "VAEDecodeTiled", "VAELoader"
+              "PixaromaShowText", "PreviewImage", "RandomNoise",
+              "ReferenceLatent", "SamplerCustomAdvanced", "SaveImage",
+              "StringConcatenate", "TextGenerate", "UNETLoader", "VAEDecode",
+              "VAEDecodeTiled", "VAEEncode", "VAELoader"
             ] | index($type) | not))] | length == 0)
         ' "$out"/workflows/*.json >/dev/null
+        jq -e '
+          . as $workflow
+          | (([.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]] | sort)
+              == (["flux-2-klein-9b-bf16.safetensors", "krea2_turbo_bf16.safetensors"] | sort))
+            and (([.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]] | sort)
+              == ([
+                "${krea2AbliteratedEncoder}",
+                "qwen3-vl-8b-heretic-1.3.0_bf16.safetensors",
+                "qwen_3_8b_bf16.safetensors"
+              ] | sort))
+            and (([.nodes[] | select(.type == "VAELoader") | .widgets_values[0]] | sort)
+              == (["flux2-vae.safetensors", "qwen_image_vae.safetensors"] | sort))
+            and ([.nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")] | length == 1)
+            and ([.links[] | select(.[1:5] == [218, 0, 213, 0])] | length == 1)
+            and ([.links[] | select(.[1] == 218 and .[3] == 6)] | length == 0)
+            and ([.nodes[] | select(.type == "ReferenceLatent")] | length == 2)
+            and ([.nodes[] | select(.type == "Flux2Scheduler") | .widgets_values[0]] == [2])
+            and ([.nodes[] | select(.type == "ImageScaleToTotalPixels") | .widgets_values[1]] == [4])
+            and ([.nodes[] | select(.type == "SaveImage" and .mode == 0)] | length == 1)
+            and any(.links[]; .[1:5] == [164, 0, 56, 0])
+            and ([.groups[].title] == ["FLUX.2 Klein 9B BF16 realistic finishing stage"])
+            and ([.nodes[] | select(.id == 54) | .widgets_values[0]
+              | contains("Do not add, remove, redesign, or beautify anything.")] == [true])
+            and all(.links[]; . as $edge
+              | any($workflow.nodes[]; .id == $edge[1])
+                and any($workflow.nodes[]; .id == $edge[3]))
+        ' "$prompt_enhancer_refinement" >/dev/null
         if grep -RqiE 'fp8|int8|rgthree|resolve/main|tree/main|uncensored|unrestricted|krea2RealVae' \
           "$out/workflows"; then
           echo "forbidden Episode 24 model, node, or mutable link" >&2
           exit 1
         fi
-        test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 11
+        test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 12
       '';
 
   pixaromaEp29 =

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034 # This sourced module exports the resolved contract.
 # Resolve a legal Muse Glimmer runtime variant into one immutable configuration.
-# Source this file, then call muse_resolve_variant standard|abliterated.
+# Source this file, then call muse_resolve_variant standard|abliterated|blackfrost.
 
 muse_resolve_variant() {
   if [ "$#" -ne 1 ]; then
@@ -69,8 +69,30 @@ EOF
       MUSE_CACHE_HOST="$model_root/sglang-cache/muse-glimmer-abliterated-bf16-dflash"
       MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"
       ;;
+    blackfrost)
+      MUSE_TARGET_REPO="Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16"
+      MUSE_TARGET_REV="1b489c23b583d609b6c17b00e1a877d1faac1ee2"
+      MUSE_TARGET_HOST="$model_root/Muse-Glimmer-30B-Blackfrost-Abliterated-BF16"
+      MUSE_TARGET_CONTAINER="/models/Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16"
+      read -r -d '' MUSE_TARGET_MANIFEST <<'EOF' || true
+5a9df2d8a385b3d361ab6ae68d73586f4e775033933bd0cd863fb7f3820e6a14 5109 config.json
+b0e427c998641420eb4091cc85d4e15643fb57f89222834a14ec76430625b6fb 148 generation_config.json
+6bbce2a5b3b0f154935b89c9efb0a8caf19119a9c478b268f2359e2a0946a4b2 9532 chat_template.jinja
+042152d9344018814d835ccc87ba9a9a8a392a9eb63fdb47eca914fb1c8dfcab 49950112952 model-00001-of-00002.safetensors
+e18797b13e1c0a283b34696eee900377c21767e928311401196b398acceb5d05 9603322320 model-00002-of-00002.safetensors
+7d817b4dccb1b123fc6c1939356c65cee3a0ad462a5b821ac88280990a27d1ba 132674 model.safetensors.index.json
+97e2a486dd9866b81f40cf4b8bc0c9ced9a7cd8a5bc65aa4cc2f4de0712dae77 1084 processor_config.json
+c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d 28129897 tokenizer.json
+2c6afa8ba24e821c85c2c0e658846845969389f0458f3d166888b229c8375ee2 89619 tokenizer_config.json
+EOF
+      MUSE_TARGET_AUXILIARY_REPO=""
+      MUSE_TARGET_AUXILIARY_REV=""
+      MUSE_TARGET_AUXILIARY_MANIFEST=""
+      MUSE_CACHE_HOST="$model_root/sglang-cache/muse-glimmer-blackfrost-bf16-dflash"
+      MUSE_CONTAINER_NAME="muse-glimmer-30b-blackfrost-bf16-dflash"
+      ;;
     *)
-      echo "error: Muse variant must be standard or abliterated (got: $MUSE_VARIANT)" >&2
+      echo "error: Muse variant must be standard, abliterated, or blackfrost (got: $MUSE_VARIANT)" >&2
       return 2
       ;;
   esac

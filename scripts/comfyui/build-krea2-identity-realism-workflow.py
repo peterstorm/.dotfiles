@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the BF16 Krea Identity Edit -> FLUX.2 Klein realism workflow."""
+"""Compose validated BF16 Krea workflows with FLUX.2 Klein realism stages."""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ Link = list[Any]
 
 IDENTITY_REMOVE_NODES = {163, 223}
 DETAIL_NODE_IDS = {136, 137, 139, 141}
+PROMPT_AUTHOR_ENCODER = "qwen3-vl-8b-heretic-1.3.0_bf16.safetensors"
+
 FLUX_NODE_IDS = {
     46,
     47,
@@ -315,6 +317,107 @@ def build_workflow(identity_source: Graph, realism_source: Graph) -> Graph:
     return graph
 
 
+def build_prompt_enhancer_refinement_workflow(
+    prompt_enhancer_source: Graph, realism_source: Graph
+) -> Graph:
+    graph = copy.deepcopy(prompt_enhancer_source)
+    existing_ids = set(nodes_by_id(graph))
+    collisions = existing_ids & FLUX_NODE_IDS
+    if collisions:
+        raise ValueError(f"FLUX refinement node IDs collide: {sorted(collisions)}")
+
+    source_nodes = nodes_by_id(graph)
+    replace_title(
+        source_nodes[198],
+        "Krea 2 Prompt Enhancer → FLUX.2 Klein 9B BF16 Realism",
+    )
+    source_nodes[195]["title"] = "Krea conditioning — required 4B 12×2560 stack"
+    source_nodes[199]["title"] = "Krea result — inspect before FLUX refinement"
+
+    prompt_author = copy_node(graph, 195, 218)
+    prompt_author["widgets_values"] = [PROMPT_AUTHOR_ENCODER, "krea2", "default"]
+    prompt_author["title"] = "Prompt author only — BF16 Qwen3-VL-8B Heretic"
+    shift_position(prompt_author, 0, 950)
+    graph["nodes"].append(prompt_author)
+    prompt_author_links = [
+        link for link in graph["links"] if link[1:5] == [195, 0, 213, 0]
+    ]
+    if len(prompt_author_links) != 1:
+        raise ValueError("expected one shared 4B encoder link to TextGenerate")
+    prompt_author_links[0][1] = 218
+
+    note = json.loads(source_nodes[217]["widgets_values"][0])
+    note["content"] += (
+        "<h2>FLUX.2 Klein realism finish</h2>"
+        "<p>A separate full-BF16 Qwen3-VL-8B Heretic encoder authors the prompt; "
+        "it never feeds Krea conditioning. Krea remains connected to the required "
+        "4B 12×2560 encoder stack. The result then flows into a four-megapixel, "
+        "full-BF16 FLUX.2 Klein 9B reference-latent pass whose conservative "
+        "instruction preserves composition and subjects while restoring natural "
+        "texture and optical detail.</p>"
+    )
+    source_nodes[217]["widgets_values"][0] = json.dumps(note, separators=(",", ":"))
+
+    flux_nodes = [
+        copy_node(realism_source, node_id) for node_id in sorted(FLUX_NODE_IDS)
+    ]
+    for node in flux_nodes:
+        shift_position(node, -4300)
+    flux = {node["id"]: node for node in flux_nodes}
+    flux[62]["widgets_values"][0] = "qwen_3_8b_bf16.safetensors"
+    flux[63]["widgets_values"][0] = "flux-2-klein-9b-bf16.safetensors"
+    flux[54]["widgets_values"][0] = (
+        "Refine to high-definition photorealism while keeping the entire source image "
+        "faithful. Preserve every subject, identity, expression, pose, body proportion, "
+        "object, color, spatial relationship, composition, framing, wardrobe, background, "
+        "and visible text. Restore natural skin, hair, material texture, and optical detail "
+        "where appropriate. Do not add, remove, redesign, or beautify anything."
+    )
+    flux[54]["title"] = "Content-locked FLUX realism instruction"
+    flux[56]["widgets_values"][1] = 4
+    flux[56]["title"] = "Four-megapixel Krea handoff"
+    flux[64]["title"] = "Match refined color to the Krea result"
+    flux[65]["title"] = "Final conservative sharpen"
+    flux[46]["title"] = "Final FLUX.2 Klein realistic image"
+    flux[96]["mode"] = 0
+    flux[96]["widgets_values"][0] = "Ep24_3c_Krea2_Enhancer_Klein9B_Realism"
+    flux[96]["title"] = "Save Krea → Klein realism result"
+
+    graph["nodes"].extend(flux_nodes)
+    for link in realism_source["links"]:
+        if link[1] in FLUX_NODE_IDS and link[3] in FLUX_NODE_IDS:
+            add_link(graph, link[1], link[2], link[3], link[4], link[5])
+    add_link(graph, 164, 0, 56, 0, "IMAGE")
+
+    graph["groups"] = [
+        *graph.get("groups", []),
+        {
+            "id": max(
+                (group.get("id", 0) for group in graph.get("groups", [])),
+                default=0,
+            )
+            + 1,
+            "title": "FLUX.2 Klein 9B BF16 realistic finishing stage",
+            "bounding": [700, 300, 2700, 1080],
+            "color": "#3f789e",
+            "font_size": 24,
+            "flags": {},
+        },
+    ]
+    for node in graph["nodes"]:
+        node.get("properties", {}).pop("models", None)
+    graph["extra"] = {
+        **graph.get("extra", {}),
+        "ds": {"scale": 0.65, "offset": [1120, 160]},
+        "workflowRendererVersion": "LG",
+    }
+    rebuild_port_links(graph)
+    normalize_orders(graph)
+    graph["last_node_id"] = max(node["id"] for node in graph["nodes"])
+    graph["last_link_id"] = max(link[0] for link in graph["links"])
+    return graph
+
+
 def validate_graph(graph: Graph) -> None:
     node_ids = [node["id"] for node in graph["nodes"]]
     link_ids = [link[0] for link in graph["links"]]
@@ -342,9 +445,49 @@ def validate_graph(graph: Graph) -> None:
         raise ValueError("exactly FameGrid must be active by default")
 
 
+def validate_prompt_enhancer_refinement_graph(graph: Graph) -> None:
+    node_ids = [node["id"] for node in graph["nodes"]]
+    link_ids = [link[0] for link in graph["links"]]
+    if len(node_ids) != len(set(node_ids)):
+        raise ValueError("duplicate node id")
+    if len(link_ids) != len(set(link_ids)):
+        raise ValueError("duplicate link id")
+    rebuild_port_links(copy.deepcopy(graph))
+
+    index = nodes_by_id(graph)
+    if index[194]["widgets_values"][0] != "krea2_turbo_bf16.safetensors":
+        raise ValueError("Krea stage must use the BF16 diffusion model")
+    if index[195]["widgets_values"][0] != (
+        "huihui_qwen3vl_4b_abliterated_bf16.safetensors"
+    ):
+        raise ValueError("Krea stage must preserve the Episode 24 abliterated encoder")
+    if index[196]["widgets_values"][0] != "qwen_image_vae.safetensors":
+        raise ValueError("Krea stage must preserve the Qwen Image VAE")
+    if index[218]["widgets_values"] != [PROMPT_AUTHOR_ENCODER, "krea2", "default"]:
+        raise ValueError("prompt author must use the isolated BF16 8B Heretic encoder")
+    if not any(link[1:5] == [218, 0, 213, 0] for link in graph["links"]):
+        raise ValueError("8B Heretic encoder is not connected to TextGenerate")
+    if any(link[1] == 218 and link[3] == 6 for link in graph["links"]):
+        raise ValueError("8B Heretic encoder must never feed Krea conditioning")
+    if index[62]["widgets_values"][0] != "qwen_3_8b_bf16.safetensors":
+        raise ValueError("FLUX stage must use the BF16 Qwen encoder")
+    if index[63]["widgets_values"][0] != "flux-2-klein-9b-bf16.safetensors":
+        raise ValueError("FLUX stage must use the BF16 Klein diffusion model")
+    if index[51]["widgets_values"][0] != "flux2-vae.safetensors":
+        raise ValueError("FLUX stage must use the FLUX.2 VAE")
+    if index[56]["widgets_values"][1] != 4:
+        raise ValueError("FLUX handoff must target four megapixels")
+    if index[96]["mode"] != 0:
+        raise ValueError("the final FLUX result must be saved")
+    if not any(link[1:5] == [164, 0, 56, 0] for link in graph["links"]):
+        raise ValueError("Krea output is not connected to the FLUX refinement stage")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--identity", required=True, type=Path)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--identity", type=Path)
+    source.add_argument("--prompt-enhancer", type=Path)
     parser.add_argument("--realism", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
@@ -352,10 +495,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    identity = json.loads(args.identity.read_text())
     realism = json.loads(args.realism.read_text())
-    workflow = build_workflow(identity, realism)
-    validate_graph(workflow)
+    if args.identity is not None:
+        workflow = build_workflow(json.loads(args.identity.read_text()), realism)
+        validate_graph(workflow)
+    else:
+        workflow = build_prompt_enhancer_refinement_workflow(
+            json.loads(args.prompt_enhancer.read_text()), realism
+        )
+        validate_prompt_enhancer_refinement_graph(workflow)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(workflow, indent=2) + "\n")
 

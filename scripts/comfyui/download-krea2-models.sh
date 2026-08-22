@@ -3,8 +3,9 @@
 #
 # The profile contains highest-fidelity BF16 Turbo text-to-image weights, a
 # full-BF16 abliterated Qwen3-VL encoder, Krea's style LoRAs, Episode 30
-# edit/outfit LoRAs, and its local H3 prompt encoder. Every repository is revision-pinned;
-# every artifact is verified by size + SHA-256 before an atomic rename.
+# edit/outfit LoRAs, and isolated FP8/BF16 local prompt encoders. Every
+# repository is revision-pinned; every artifact is verified by size + SHA-256
+# before an atomic rename.
 set -euo pipefail
 
 REPO="Comfy-Org/Krea-2"
@@ -47,6 +48,7 @@ read -r -d '' AUXILIARY_MANIFEST <<EOF || true
 6adf9a69cc9502d286db7b69964d37da7e9cfe4b05b4d004bc275f087d3fd3cf 1828256432 $IDENTITY_REPO $IDENTITY_REV krea2_identity_edit_v1_2.safetensors loras/krea2/krea2_identity_edit_v1_2.safetensors
 4d1033032a1a24bb9b09c44b44514c6791241ebc7b91ffe4f5edd70830a8804d 1142684152 $OUTFIT_REPO $OUTFIT_REV krea_outfittransfer.safetensors loras/krea2/krea_outfittransfer.safetensors
 7f8ec20de729e2d99f3a04852d4c4499c1677cda167f5ea63d21b0882a5c32b5 10017064632 $H3_PROMPT_REPO $H3_PROMPT_REV comfyui/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors text_encoders/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors
+1fb1c78533a944ceb7a48c55b16b7a7290ed671ee666f8bd42e01c2da5ffbff5 17534334584 $H3_PROMPT_REPO $H3_PROMPT_REV comfyui/qwen3-vl-8b-heretic-1.3.0.safetensors text_encoders/qwen3-vl-8b-heretic-1.3.0_bf16.safetensors
 03590b45adf6a071dd5de231d4e2b697355746e36ce2d9368b4c0587ba014cd2 8875719408 $ABLITERATED_ENCODER_REPO $ABLITERATED_ENCODER_REV Huihui-Qwen3-VL-4B-Instruct-abliterated.safetensors text_encoders/huihui_qwen3vl_4b_abliterated_bf16.safetensors
 EOF
 
@@ -117,7 +119,7 @@ install_manifest() {
 
 main() {
   local command repo_staging repo revision source relative marker_tmp
-  local expected_sha expected_size base_count auxiliary_count
+  local expected_sha expected_size base_count auxiliary_count token_file token_mode
   local -a files missing_files
   if [ "${KREA2_ACCEPT_LICENSE:-}" != yes ]; then
     cat >&2 <<EOF
@@ -135,6 +137,16 @@ EOF
       return 1
     }
   done
+
+  token_file="$HOME/.config/hf/token"
+  if [ -f "$token_file" ]; then
+    token_mode="$(stat -c %a "$token_file")"
+    if ((8#$token_mode & 8#077)); then
+      echo "error: Hugging Face token file must not be group/world-accessible: $token_file" >&2
+      return 1
+    fi
+    export HF_TOKEN_PATH="$token_file"
+  fi
 
   if [ ! -d "$MODELS_ROOT" ]; then
     sudo install -d -m 0750 -o "$USER" -g users "$MODELS_ROOT"

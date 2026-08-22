@@ -2,7 +2,8 @@
 # Launch a Muse Glimmer 30B BF16 variant with lossless DFlash on one RTX PRO 6000.
 #
 # MUSE_VARIANT=standard selects upstream; abliterated selects the pinned mlasli
-# BF16 derivative. DFlash remains output-exact, although draft acceptance and
+# BF16 derivative; blackfrost selects the pinned Blackfrost BF16 derivative.
+# DFlash remains output-exact, although draft acceptance and
 # therefore speed must be qualified independently for the modified target. This
 # is the text-only half of the creative profile. It disables perception and
 # exposes an authenticated OpenAI-compatible endpoint on :8001 by default.

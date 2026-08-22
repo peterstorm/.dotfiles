@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Download a pinned BF16 Muse Glimmer target and the official BF16 DFlash draft.
 #
-# MUSE_VARIANT=standard selects the qualified upstream target;
-# MUSE_VARIANT=abliterated selects mlasli's BF16 refusal-suppressed derivative.
-# The linked Abliterated-BF16 repository is full BF16, not a quantization.
+# MUSE_VARIANT=standard selects the qualified upstream target; abliterated selects
+# mlasli's BF16 derivative; blackfrost selects the stronger refusal-suppressed
+# Blackfrost BF16 derivative. All three targets are full BF16, not quantizations.
 # Together target + draft occupy about 60.2 GiB. The operation is resumable and
 # uses the Nix-managed Hugging Face client. Standard Hub HTTPS is forced because
 # hf-xet 1.6.0 hangs on this workstation for Muse.
