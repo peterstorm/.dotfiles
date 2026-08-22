@@ -16,6 +16,10 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
   text-to-image, style-reference, Episode 24 generation, and Episode 30 edit
   graphs use the official BF16 Qwen3-VL-4B encoder. Three experimental Episode
   24 graphs instead use a separately pinned full-BF16 abliterated encoder.
+- **Krea 2 Turbo BF16 → FLUX.2 Klein 9B BF16** is the video-backed
+  photoreal refinement profile. It preserves the active Detail Daemon, 4 MP
+  handoff, color-match, sharpen, and save path while removing embedded
+  credentials and the inactive face-detector branch.
 - **MiniMax H3 API partner nodes** are the immediately usable H3 path in Denmark:
   text-to-video, first/last-frame, multimodal reference-to-video, Context IR
   prompt refinement, and 2K regeneration.
@@ -25,8 +29,9 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 
 This deliberately does **not** install ComfyUI-Manager or permit mutable node
 installs. Core supplies the standard generation nodes. The in-repo Muse adapter
-and the three packs required by Pixaroma Episodes 29–30 are immutable source
-pins: Krea 2 Identity Edit, Krea2T Enhancer, and Pixaroma. The latter is a broad
+and all required packs are immutable source pins: Krea 2 Identity Edit,
+Krea2T Enhancer, Pixaroma, Detail Daemon, and KJNodes. The latter two provide
+only the video workflow's active detail and color-match operations. Pixaroma is a broad
 pack, but it is now a concrete workflow dependency rather than speculative tooling;
 ComfyUI remains loopback-only and systemd-confined.
 
@@ -40,11 +45,13 @@ ComfyUI remains loopback-only and systemd-confined.
 | Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
 | Episode 24/29/30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
 | Episode 24 Krea workflows | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 11/11 BF16/model/node/link gate |
+| Krea 2 + FLUX.2 Klein 9B workflow | The AI Blueprint/Google Drive, installed under `/var/lib/comfyui/` | exact SHA-256; BF16/model/node/link/credential gate |
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
 | Curated creative suite | 53 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
 | Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
+| FLUX.2 Klein 9B BF16, encoder, VAE, and two Krea LoRAs | `/models/comfyui/` | HF revisions/Civitai model versions + exact size + SHA-256 manifest |
 | Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
 | Comfy account/partner credits | Comfy account | external prepaid service |
@@ -93,6 +100,19 @@ available globally** because MiniMax operates moderation and compliance
 controls. The ComfyUI H3 partner nodes use hosted generation and are the legal
 initial path, subject to Comfy/MiniMax service terms and account availability.
 
+### FLUX.2 Klein 9B: non-commercial weights
+
+The full 9B model uses the **FLUX Non-Commercial License**, requires accepting
+BFL's gated Hugging Face agreement, and is not approved here for commercial
+production. The profile downloader requires
+`FLUX2_KLEIN_ACCEPT_NONCOMMERCIAL_LICENSE=yes`; it never accepts the agreement
+for the operator. The linked FameGrid LoRA requires creator credit, permits
+commercial use of images/rented generation, and forbids derivatives or
+relicensing. UltraReal's creator settings permit no-credit commercial use and
+derivatives. The second gate,
+`KREA2_FLUX_LORA_ACCEPT_LICENSES=yes`, records deliberate acceptance of both
+Civitai model pages. This is a license reading, not legal advice.
+
 ### Krea 2 weights: usable, but not open source
 
 Krea 2 uses the Krea 2 Community License:
@@ -131,8 +151,8 @@ The switch installs:
 - `comfyui.service`, installed but intentionally not boot-started while the
   normal Qwen TP2 profile owns both GPUs;
 - `/models/comfyui/{diffusion_models,text_encoders,vae,loras,...}`;
-- the immutable Muse, Krea edit, Krea enhancer, and Pixaroma nodes via an
-  extra-path YAML in the Nix store;
+- the immutable Muse, Krea edit, Krea enhancer, Pixaroma, Detail Daemon, and
+  KJNodes packages via an extra-path YAML in the Nix store;
 - eleven BF16-adapted Episode 24 Krea workflows—eight standard and three
   abliterated-encoder variants—under
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep24-krea2-bf16/`;
@@ -140,6 +160,8 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16/`;
 - all seven Episode 30 workflows under
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
+- one BF16 Krea 2 → FLUX.2 Klein 9B refinement workflow under
+  `/var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16/`;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
 - 53 curated official workflows under
@@ -162,7 +184,8 @@ transactional profile switch. After activation, acceptance requires:
 - logs list Muse, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
-- exactly eleven BF16-adapted Episode 24, eight Episode 29, and seven Episode 30 workflows are installed;
+- exactly eleven BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
+  and one Krea/FLUX Klein workflow are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -270,6 +293,43 @@ KREA2_ACCEPT_LICENSE=yes bash scripts/comfyui/download-krea2-models.sh
 # KREA2_MODELS_READY: Comfy-Org/Krea-2@e5ea8b...
 ```
 
+### Install the video-backed Krea 2 → FLUX.2 Klein 9B profile
+
+The [The AI Blueprint workflow](https://www.youtube.com/watch?v=AvoZYzIH2Ss)
+is pinned at 80,110 bytes, SHA-256
+`2abcf72647bc690c859261644b613037dfc71cd6c2755519861d6503cf7ffff2`.
+Before downloading, accept the gated BFL agreement at the pinned FLUX repository,
+authenticate `hf` interactively, read both linked Civitai model pages, and place
+a Civitai API token in a private file:
+
+```bash
+install -d -m 0700 ~/.config/civitai
+install -m 0600 /dev/null ~/.config/civitai/token
+read -rsp 'Civitai token: ' CIVITAI_TOKEN; echo
+printf '%s' "$CIVITAI_TOKEN" >~/.config/civitai/token
+unset CIVITAI_TOKEN
+
+FLUX2_KLEIN_ACCEPT_NONCOMMERCIAL_LICENSE=yes \
+KREA2_FLUX_LORA_ACCEPT_LICENSES=yes \
+  bash scripts/comfyui/download-krea2-flux-klein-models.sh
+```
+
+The 35,332,092,548-byte (35.33 GB / 32.91 GiB) manifest contains:
+
+- full BF16 `flux-2-klein-9b-bf16.safetensors` from
+  `black-forest-labs/FLUX.2-klein-9B@92196c8...`;
+- official ComfyUI full-BF16 `qwen_3_8b_bf16.safetensors` from
+  `Comfy-Org/flux2-klein-9B@3f62d9d...`;
+- the official Comfy FLUX.2 VAE at `Comfy-Org/flux2-dev@ab90556...`;
+- UltraReal Krea 2 v2 BF16, Civitai version `3182356`;
+- FameGrid Standard Krea 2 BF16, Civitai version `3154245`.
+
+Every artifact has an exact byte count and SHA-256. Hugging Face credentials are
+resolved by `hf`; the Civitai token is read from the mode-0600 file and passed
+through a private curl config, never argv. Downloads resume in a same-filesystem
+staging tree and publish only after full verification. The script also verifies
+the standard Krea BF16 DiT, encoder, and VAE before doing network I/O.
+
 Krea 2 RAW is intentionally omitted. RAW takes 52 steps and is the model to
 fine-tune LoRAs against; Turbo is the 8-step production model and accepts RAW
 LoRAs. Add RAW only when a real LoRA-training or diversity experiment justifies
@@ -357,6 +417,40 @@ experiments, not a guarantee about Krea output behavior.
 Build-time checks require all eleven JSON files, exact BF16 loaders, valid graph
 links, known node types, the original sampler counts, and no INT8/FP8, rgthree,
 mutable model links, misleading source labels, or alternate VAE references.
+
+### The AI Blueprint — Krea 2 + FLUX.2 Klein 9B photoreal refinement
+
+Open **User workflows → `krea2-flux2-klein9b-bf16` → Krea 2 Turbo BF16 +
+FLUX.2 Klein 9B BF16 - Detail Daemon**. The workstation adapter retains the
+published active topology:
+
+1. Krea 2 Turbo BF16 generation with FameGrid Standard active at 0.9;
+2. Detail Daemon refinement using `er_sde`, beta scheduling, and CFG 1;
+3. decode and scale to four megapixels;
+4. FLUX.2 Klein 9B BF16 reference-latent refinement with the fixed prompt
+   `Upscale the image in high definition, restore realistic skin texture,
+   remove plastic looking skin, keep the entire image content unchanged.`;
+5. KJNodes color match at 0.8, core sharpen, preview, and persistent save.
+
+UltraReal v2 is retained as the published mutually selectable LoRA at weight
+0.8; it is bypassed by default while FameGrid is active. Test one LoRA at a
+time. The adapter replaces the source's FP8 Krea encoder with BF16, gives every
+FLUX component an explicit BF16 selector, copies the source prompt into the
+core Krea encoder, and enables final `SaveImage`.
+
+The source graph carried an rgthree comparison widget containing a saved bearer
+URL, stale mutable model links, and a disabled FaceDetailer/SAM/YOLO branch.
+Those are removed at build time. Existing core previews preserve before/after
+inspection without rgthree. The inactive face branch can be qualified later as
+a separate profile; silently installing mutable detector dependencies is not
+part of this reference workflow. Build gates require exact nodes and loaders,
+valid graph links, no FP8/INT8 selectors, no credential material, and no mutable
+model URLs.
+
+This pipeline is intended for final stills, not cheap iteration: it loads Krea,
+then full BF16 FLUX Klein plus a 16.38 GB encoder and works at four megapixels.
+Queue one job on GPU1, keep H3 idle, and record peak RAM/VRAM on the first run.
+Do not use the FLUX output commercially unless a different license authorizes it.
 
 ### Pixaroma Episode 30 — complete imported bundle
 
@@ -453,9 +547,9 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **79 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, eight
-  Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated official
-  graphs installed into the workflow browser.
+- **80 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, one
+  Krea/FLUX Klein BF16 graph, eight Episode 29 graphs, seven pinned Episode 30
+  graphs, and 53 curated official graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -994,6 +1088,7 @@ The starting surface is:
 | Fast/direct Krea generation | `1a. Krea 2 Text to Image - Simple` | User workflows → `pixaroma-ep24-krea2-bf16` | Krea BF16 marker and pinned enhancer/Pixaroma nodes |
 | Detailed or 2K Krea generation | `2a. ... Extra Pass` or `2d. ... - 2K` | User workflows → `pixaroma-ep24-krea2-bf16` | Additional GPU time and memory for the 1.5× latent pass |
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
+| Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
 | Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
 | Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
@@ -1023,6 +1118,8 @@ test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
   -type f -name '*.json' | wc -l)" -eq 8
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
   -type f -name '*.json' | wc -l)" -eq 7
+test "$(find /var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 1
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
   -type f -name '*.json' | wc -l)" -eq 53
 ```
@@ -1031,6 +1128,7 @@ Verify local model publication separately:
 
 ```bash
 test -f /models/comfyui/.krea2-production-complete
+test -f /models/comfyui/.krea2-flux2-klein9b-bf16-v1.complete
 test -f /models/comfyui/.minimax-h3-bf16-complete
 
 MUSE_VARIANT="${MUSE_VARIANT:-standard}"
@@ -1423,13 +1521,15 @@ problems inside a long generation.
 | Pixaroma | **Installed**, pinned to Episode 30 commit; broad route/node surface accepted only because all seven requested workflows depend on it and the service is confined to loopback |
 | ComfyUI-Manager | Mutable git/pip state outside Nix; intentionally absent |
 | VideoHelperSuite | Established, but core `VIDEO`, `LoadVideo`, `CreateVideo`, and `SaveVideo` cover this stack |
-| KJNodes | Useful only if later qualifying Sage Attention or specialty video operations; broad dependency surface |
+| ComfyUI-Detail-Daemon | **Installed**, MIT, pinned commit; exact sampler seam used by the Krea/FLUX workflow |
+| KJNodes | **Installed**, GPL-3.0, pinned commit; exact `ColorMatch` seam used by the Krea/FLUX workflow |
 | rgthree-comfy | Not installed; Episode 24's two Power LoRA nodes are deterministically converted to core `LoraLoaderModelOnly` nodes |
 | IF AI Tools | Archived and dependency-heavy; the in-repo Muse node is narrower and uses the existing endpoint |
 | New H3 “director/turbo/cache” nodes | Too new and overlapping with native H3; no baseline evidence yet |
 
-After a clean native baseline, KJNodes plus Sage Attention is the first optional
-performance experiment worth considering. Comfy's H3 guide reports roughly 2×
+After a clean native baseline, Sage Attention is the first optional performance
+experiment worth considering. KJNodes is present for color matching, but that
+does not install or qualify Sage Attention. Comfy's H3 guide reports roughly 2×
 speed potential with minimal quality loss, but it requires a wheel matched to
 Torch/CUDA and introduces fallback paths for non-BF16/FP16 layers. Package and
 benchmark it separately; do not silently fold it into the reference profile.
@@ -1457,8 +1557,8 @@ Do not call the stack qualified until:
 - [ ] Nix evaluation and build pass from the pinned flake.
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
-- [ ] Comfy logs load Muse plus all pinned Episode 24/29/30 dependencies with no failed imports.
-- [ ] Eleven BF16 Episode 24 workflows, eight Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
+- [ ] Comfy logs load Muse plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
+- [ ] Eleven BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.
@@ -1474,6 +1574,9 @@ Do not call the stack qualified until:
 - [ ] H3 BF16 REF2VA then completes with one matched-size image at 768p/124
       frames, without either DiT co-residing, host swapping, or a GPU OOM.
 - [ ] Standard Muse→Krea BF16 1K and 2K images complete.
+- [ ] The Krea→FLUX Klein workflow completes with only FameGrid active, saves a
+      four-megapixel result, and records peak GPU1 VRAM/host RAM; repeat with
+      only UltraReal active and retain the stronger result.
 - [ ] Abliterated Muse starts from its pinned marker, completes the same fixed
       prompt corpus, and records quality, refusal behavior, throughput, and
       effective DFlash acceptance versus standard.
@@ -1525,6 +1628,14 @@ The Comfy state, Krea models, inputs, outputs, and workflows remain on disk.
 
 Sources accessed 2026-08-21–22:
 
+- [The AI Blueprint Krea 2 + FLUX Klein workflow](https://www.youtube.com/watch?v=AvoZYzIH2Ss)
+- [Pinned public workflow post](https://www.patreon.com/posts/165369288)
+- [Official ComfyUI FLUX.2 Klein guide](https://docs.comfy.org/tutorials/flux/flux-2-klein)
+- [FLUX.2 Klein 9B repository and license](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B)
+- [FameGrid Standard Krea 2](https://civitai.com/models/2088956?modelVersionId=3154245)
+- [UltraReal Krea 2 v2](https://civitai.com/models/2462105?modelVersionId=3182356)
+- [ComfyUI Detail Daemon](https://github.com/Jonseed/ComfyUI-Detail-Daemon)
+- [ComfyUI KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
 - [Pixaroma Episode 24 Krea 2 workflows](https://www.youtube.com/watch?v=r1D_6pcDbV8)
 - [Pixaroma Episode 29 MiniMax H3 workflows](https://www.youtube.com/watch?v=267y00jaOUc)
 - [Pixaroma Episode 30 video and transcript](https://www.youtube.com/watch?v=rGVf3m19yM8)

@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KREA_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
+KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 MUSE_DOWNLOAD="$ROOT/scripts/inference/muse/download-muse-glimmer-30b.sh"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 PROFILE_CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
@@ -35,6 +36,7 @@ if verify_manifest "$sandbox/root" "$fixture_manifest"$'\n'"$expected_sha $expec
   fail "missing artifact passed verification"
 fi
 
+# shellcheck disable=SC2034 # Read dynamically by auxiliary_verification_manifest.
 AUXILIARY_MANIFEST="$expected_sha $expected_size repo revision source.bin artifact.bin"
 [ "$(auxiliary_verification_manifest)" = "$fixture_manifest" ] \
   || fail "auxiliary manifest did not normalize to the shared verification shape"
@@ -53,10 +55,123 @@ stage_verified_existing "$installed_sha" "$installed_size" nested/model.bin \
   || fail "verified existing artifact was not reused"
 [ "$(stat -c %i "$MODELS_ROOT/nested/model.bin")" = "$(stat -c %i "$STAGING/nested/model.bin")" ] \
   || fail "verified existing artifact was not staged as a same-filesystem hard link"
+install_file nested/model.bin
+[ ! -e "$STAGING/nested/model.bin" ] \
+  || fail "same-inode staging link remained after idempotent installation"
+verify_manifest "$MODELS_ROOT" "$installed_sha $installed_size nested/model.bin" \
+  || fail "idempotent same-inode installation damaged the verified destination"
 printf 'corrupt\n' >"$MODELS_ROOT/corrupt.bin"
 if stage_verified_existing "$installed_sha" "$installed_size" corrupt.bin 2>/dev/null; then
   fail "corrupt existing artifact was reused"
 fi
+
+# Both FLUX/Klein legal gates must reject before any downloader boundary.
+mkdir -p "$sandbox/bin"
+cat >"$sandbox/bin/hf" <<'EOF'
+#!/usr/bin/env bash
+printf 'hf-called\n' >>"$KLEIN_EVENTS"
+exit 0
+EOF
+chmod +x "$sandbox/bin/hf"
+: >"$sandbox/klein-events"
+klein_status=0
+KLEIN_EVENTS="$sandbox/klein-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/klein" bash "$KLEIN_DOWNLOAD" \
+  >/dev/null 2>&1 || klein_status=$?
+[ "$klein_status" -eq 2 ] || fail "FLUX Klein missing-license gate returned $klein_status"
+klein_status=0
+KLEIN_EVENTS="$sandbox/klein-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/klein" \
+  FLUX2_KLEIN_ACCEPT_NONCOMMERCIAL_LICENSE=yes \
+  bash "$KLEIN_DOWNLOAD" >/dev/null 2>&1 || klein_status=$?
+[ "$klein_status" -eq 2 ] || fail "Civitai LoRA missing-license gate returned $klein_status"
+[ ! -s "$sandbox/klein-events" ] || fail "FLUX Klein called hf before license acceptance"
+
+# shellcheck source=scripts/comfyui/download-krea2-flux-klein-models.sh
+source "$KLEIN_DOWNLOAD"
+printf '%s\n' 'fixture-civitai-token-1234567890' >"$sandbox/civitai-token"
+chmod 0600 "$sandbox/civitai-token"
+[ "$(CIVITAI_TOKEN_FILE="$sandbox/civitai-token" resolve_civitai_token)" = \
+  'fixture-civitai-token-1234567890' ] || fail "private Civitai token file was not resolved"
+chmod 0644 "$sandbox/civitai-token"
+if CIVITAI_TOKEN_FILE="$sandbox/civitai-token" resolve_civitai_token >/dev/null 2>&1; then
+  fail "group/world-readable Civitai token file was accepted"
+fi
+cat >"$sandbox/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$CURL_EVENTS"
+stat -c %a "$2" >"$CURL_CONFIG_MODE"
+cp "$2" "$CURL_CONFIG_COPY"
+EOF
+chmod +x "$sandbox/bin/curl"
+STAGING="$sandbox/klein-curl"
+mkdir -p "$STAGING"
+CURL_EVENTS="$sandbox/curl-events" \
+CURL_CONFIG_MODE="$sandbox/curl-config-mode" \
+CURL_CONFIG_COPY="$sandbox/curl-config-copy" \
+PATH="$sandbox/bin:$PATH" \
+  download_civitai_file 'https://example.invalid/model?fileId=1' \
+    "$STAGING/model.part" 'fixture-civitai-token-1234567890'
+[ "$(cat "$sandbox/curl-events")" = "--config $(cut -d' ' -f2 "$sandbox/curl-events")" ] \
+  || fail "Civitai curl invocation exposed extra process arguments"
+! grep -Fq 'fixture-civitai-token-1234567890' "$sandbox/curl-events" \
+  || fail "Civitai token leaked through curl arguments"
+[ "$(cat "$sandbox/curl-config-mode")" = 600 ] \
+  || fail "Civitai curl config was not private"
+grep -Fq 'fixture-civitai-token-1234567890' "$sandbox/curl-config-copy" \
+  || fail "Civitai curl config did not receive the token"
+
+# Exercise the complete FLUX/Klein transaction with tiny file adapters.
+MODELS_ROOT="$sandbox/klein-root"
+PROFILE_REV="fixture-klein-profile"
+STAGING="$MODELS_ROOT/.staging-$PROFILE_REV"
+MARKER="$MODELS_ROOT/.$PROFILE_REV.complete"
+LOCK="$MODELS_ROOT/.$PROFILE_REV.lock"
+mkdir -p "$MODELS_ROOT/dependencies"
+printf 'Krea dependency\n' >"$MODELS_ROOT/dependencies/krea.bin"
+krea_sha="$(sha256sum "$MODELS_ROOT/dependencies/krea.bin" | cut -d' ' -f1)"
+krea_size="$(stat -c %s "$MODELS_ROOT/dependencies/krea.bin")"
+KREA_DEPENDENCY_MANIFEST="$krea_sha $krea_size dependencies/krea.bin"
+hf_payload='HF fixture artifact'
+civitai_payload='Civitai fixture artifact'
+hf_sha="$(printf '%s\n' "$hf_payload" | sha256sum | cut -d' ' -f1)"
+hf_size="$(printf '%s\n' "$hf_payload" | wc -c)"
+civitai_sha="$(printf '%s\n' "$civitai_payload" | sha256sum | cut -d' ' -f1)"
+civitai_size="$(printf '%s\n' "$civitai_payload" | wc -c)"
+HF_MANIFEST="$hf_sha $hf_size fixture/repo fixture-revision source.bin diffusion_models/hf.bin"
+CIVITAI_MANIFEST="$civitai_sha $civitai_size https://example.invalid/model?fileId=1 loras/civitai.bin"
+cat >"$sandbox/bin/hf" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$KLEIN_EVENTS"
+mkdir -p "$7/$(dirname "$3")"
+printf '%s\n' "$HF_PAYLOAD" >"$7/$3"
+EOF
+cat >"$sandbox/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$KLEIN_EVENTS"
+config="$2"
+output="$(awk -F'"' '$1 ~ /^output = / { print $2 }' "$config")"
+mkdir -p "$(dirname "$output")"
+printf '%s\n' "$CIVITAI_PAYLOAD" >"$output"
+EOF
+chmod +x "$sandbox/bin/hf" "$sandbox/bin/curl" "$sandbox/civitai-token"
+chmod 0600 "$sandbox/civitai-token"
+: >"$sandbox/klein-events"
+KLEIN_EVENTS="$sandbox/klein-events" \
+HF_PAYLOAD="$hf_payload" CIVITAI_PAYLOAD="$civitai_payload" \
+CIVITAI_TOKEN_FILE="$sandbox/civitai-token" PATH="$sandbox/bin:$PATH" \
+FLUX2_KLEIN_ACCEPT_NONCOMMERCIAL_LICENSE=yes \
+KREA2_FLUX_LORA_ACCEPT_LICENSES=yes main >/dev/null
+verify_manifest "$MODELS_ROOT" "$(verification_manifest)" \
+  || fail "completed FLUX/Klein fixture profile did not verify"
+grep -Fxq "$PROFILE_REV" "$MARKER" \
+  || fail "FLUX/Klein completion marker was not published"
+[ "$(stat -c %a "$MODELS_ROOT/diffusion_models/hf.bin")" = 640 ] \
+  || fail "FLUX/Klein Hugging Face artifact mode is not 0640"
+[ "$(stat -c %a "$MODELS_ROOT/loras/civitai.bin")" = 640 ] \
+  || fail "FLUX/Klein Civitai artifact mode is not 0640"
+! grep -Fq 'fixture-civitai-token-1234567890' "$sandbox/klein-events" \
+  || fail "FLUX/Klein transaction leaked the Civitai token through argv"
 
 # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
 source "$PROFILE_CATALOG"

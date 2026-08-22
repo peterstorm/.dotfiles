@@ -70,11 +70,14 @@ let
       comfyui-embedded-docs
       comfyui-frontend-package
       comfyui-workflow-templates
+      color-matcher
       einops
       filelock
       imageio
       imageio-ffmpeg
       kornia
+      matplotlib
+      mss
       numpy
       opencv4
       pillow
@@ -178,12 +181,28 @@ let
     hash = "sha256-cA+df6RO0z6i9urybxE9keftDhfh4o2Gxh/oSF8Blis=";
   };
 
+  detailDaemonNode = pkgs.fetchFromGitHub {
+    owner = "Jonseed";
+    repo = "ComfyUI-Detail-Daemon";
+    rev = "3394e44afea04ed0188fb37b21f0d9952469766b";
+    hash = "sha256-QmvimdfSjjE5qrm8TanSIB+U2MP4ylKCw6mArD+djUk=";
+  };
+
+  kjNodes = pkgs.fetchFromGitHub {
+    owner = "kijai";
+    repo = "ComfyUI-KJNodes";
+    rev = "3f20054214fec9f9234fd3841ae6f1e4287948f6";
+    hash = "sha256-2rurJ/wvr9zcHamGZhcTrM4D20/vMLw6xtN/+ZiHJgw=";
+  };
+
   declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
     mkdir -p "$out"
     ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
     ln -s ${krea2EditNode} "$out/comfyui-krea2edit"
     ln -s ${krea2EnhancerNode} "$out/ComfyUI-Krea2T-Enhancer"
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
+    ln -s ${detailDaemonNode} "$out/ComfyUI-Detail-Daemon"
+    ln -s ${kjNodes} "$out/ComfyUI-KJNodes"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -201,6 +220,12 @@ let
   pixaromaEp30Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep30%20Workflows.zip";
     hash = "sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k=";
+  };
+
+  kreaFluxKleinWorkflowSource = pkgs.fetchurl {
+    name = "krea2-flux2-klein9b-source.json";
+    url = "https://drive.usercontent.google.com/download?id=1JwwwVDPAgnPdqETorb9CFDI1Vq4lVpx_&export=download&confirm=t";
+    hash = "sha256-Krz3Jke8aQyFkmFkS2EwN9/HHNbCdVUZhh1lA89///I=";
   };
 
   pixaromaEp24ProfileNote = pkgs.writeText "pixaroma-ep24-bf16-profile-note.json" ''
@@ -690,21 +715,131 @@ let
         fi
       '';
 
+  kreaFluxKleinWorkflow =
+    pkgs.runCommand "krea2-flux2-klein9b-bf16-workflow"
+      {
+        nativeBuildInputs = [
+          pkgs.jq
+          pkgs.gnugrep
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        source=${kreaFluxKleinWorkflowSource}
+        destination="$out/workflows/Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon.json"
+        prompt="$(jq -r '.nodes[] | select(.id == 101) | .widgets_values[0]' "$source")"
+        test -n "$prompt"
+
+        jq --arg prompt "$prompt" '
+          (.nodes[] | select(.id == 14) | .widgets_values[0]) =
+            "krea2_turbo_bf16.safetensors"
+          | (.nodes[] | select(.id == 6) | .widgets_values[0]) =
+              "qwen3vl_4b_bf16.safetensors"
+          | (.nodes[] | select(.id == 63) | .widgets_values[0]) =
+              "flux-2-klein-9b-bf16.safetensors"
+          | (.nodes[] | select(.id == 62) | .widgets_values[0]) =
+              "qwen_3_8b_bf16.safetensors"
+          | (.nodes[] | select(.id == 75) | .widgets_values[0]) =
+              "ultra_real_krea2_v2_bf16.safetensors"
+          | (.nodes[] | select(.id == 142) | .widgets_values[0]) =
+              "famegrid_standard_krea2_bf16.safetensors"
+          | (.nodes[] | select(.id == 5) | .widgets_values[0]) = $prompt
+          | (.nodes[] | select(.id == 5) | .inputs[] | select(.name == "text") | .link) = null
+          | (.nodes[] | select(.id == 96)) |= (
+              .mode = 0
+              | .pos = [7010, 1010]
+              | .widgets_values[0] = "Krea2-Flux2-Klein-BF16"
+            )
+          | .nodes |= map(
+              . as $node
+              | select([79, 101, 121, 125, 133, 134] | index($node.id) | not)
+            )
+          | .links |= map(
+              if .[0] == 219 then [219, 91, 0, 56, 0, "IMAGE"]
+              elif .[0] == 222 then [222, 65, 0, 96, 0, "IMAGE"]
+              else .
+              end
+            )
+          | .links |= map(
+              . as $link
+              | select(
+                  ([79, 101, 121, 125, 133, 134] | index($link[1]) | not)
+                  and ([79, 101, 121, 125, 133, 134] | index($link[3]) | not)
+                )
+            )
+          | .groups |= map(
+              select(.title != "Compare" and (.title != "Face detailer" or .bounding[1] < 0))
+              | if .title == "Face detailer"
+                then .title = "Detail Daemon refinement"
+                else .
+                end
+            )
+          | del(.nodes[].properties.models)
+        ' "$source" >"$destination"
+
+        jq -e '
+          . as $workflow
+          | ([.nodes[].id] | length == (unique | length))
+            and ([.links[][0]] | length == (unique | length))
+            and all(.links[];
+              .[1] as $source_id
+              | .[3] as $destination_id
+              | any($workflow.nodes[]; .id == $source_id)
+                and any($workflow.nodes[]; .id == $destination_id))
+          and ([.nodes[].type] | unique | sort) == ([
+            "BasicScheduler", "CFGGuider", "CLIPLoader", "CLIPTextEncode",
+            "ColorMatch", "ConditioningZeroOut", "DetailDaemonSamplerNode",
+            "EmptyFlux2LatentImage", "EmptyLatentImage", "Flux2Scheduler",
+            "GetImageSize", "ImageScaleToTotalPixels", "ImageSharpen",
+            "KSamplerAdvanced", "KSamplerSelect", "LoraLoaderModelOnly",
+            "ModelSamplingAuraFlow", "PreviewImage", "RandomNoise",
+            "ReferenceLatent", "SamplerCustom", "SamplerCustomAdvanced",
+            "SaveImage", "UNETLoader", "VAEDecode", "VAEEncode", "VAELoader"
+          ] | sort)
+          and ([.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]] | sort)
+            == (["flux-2-klein-9b-bf16.safetensors", "krea2_turbo_bf16.safetensors"] | sort)
+          and ([.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]] | sort)
+            == (["qwen3vl_4b_bf16.safetensors", "qwen_3_8b_bf16.safetensors"] | sort)
+          and ([.nodes[] | select(.type == "VAELoader") | .widgets_values[0]] | sort)
+            == (["flux2-vae.safetensors", "qwen_image_vae.safetensors"] | sort)
+          and ([.nodes[] | select(.type == "LoraLoaderModelOnly") | .widgets_values[0]] | sort)
+            == (["famegrid_standard_krea2_bf16.safetensors", "ultra_real_krea2_v2_bf16.safetensors"] | sort)
+          and ([.nodes[] | select(.id == 6) | .widgets_values[1]] == ["krea2"])
+          and ([.nodes[] | select(.id == 62) | .widgets_values[1]] == ["flux2"])
+          and ([.nodes[] | select(.type == "DetailDaemonSamplerNode")] | length == 1)
+          and ([.nodes[] | select(.type == "ColorMatch")] | length == 1)
+          and ([.nodes[] | select(.type == "SaveImage" and .mode == 0)] | length == 1)
+          and ([.groups[].title] | sort)
+            == (["Detail Daemon refinement", "Krea 2", "Upscaling Via Flux Klein"] | sort)
+        ' "$destination" >/dev/null
+        if grep -qiE 'fp8|int8|rgthree|Rh-Comfy-Auth|resolve/main|tree/main|sam_vit|yolov8|CR Text|FaceDetailer' \
+          "$destination"; then
+          echo "forbidden lower-precision selector, credential, mutable link, or inactive node" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
+      '';
+
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
     ep24_dir="$user_workflows/pixaroma-ep24-krea2-bf16"
     ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"
     ep30_dir="$user_workflows/pixaroma-ep30"
+    klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
+    klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
-    rm -rf "$ep24_staging" "$ep29_staging" "$ep30_staging" "$elite_staging"
+    rm -rf \
+      "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" "$elite_staging"
     install -d -m 0700 \
-      "$ep24_staging" "$ep29_staging" "$ep30_staging" "$elite_staging" "$input_dir"
+      "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
+      "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -720,6 +855,9 @@ let
     for source in ${pixaromaEp30}/media/*; do
       install -m 0600 "$source" "$input_dir/$(basename "$source")"
     done
+    for source in ${kreaFluxKleinWorkflow}/workflows/*.json; do
+      install -m 0600 "$source" "$klein_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -727,10 +865,11 @@ let
         install -m 0600 "$source" "$destination/$(basename "$source")"
       done
     done
-    rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$elite_dir"
+    rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
+    mv "$klein_staging" "$klein_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 

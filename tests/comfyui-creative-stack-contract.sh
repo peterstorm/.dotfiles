@@ -9,6 +9,7 @@ DESKTOP="$ROOT/machines/desktop/default.nix"
 NODE="$ROOT/comfyui/custom_nodes/muse_glimmer_prompt/__init__.py"
 NODE_TEST="$ROOT/tests/test_muse_glimmer_prompt.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
+KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
@@ -33,13 +34,14 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
+bash -n "$KLEIN_DOWNLOAD"
 bash -n "$H3_DOWNLOAD"
 bash -n "$ACTIVATE"
 nix-instantiate --parse "$MODULE" >/dev/null
@@ -70,6 +72,16 @@ contains "$MODULE" 'declarative_nodes.custom_nodes = toString declarativeNodes;'
 contains "$MODULE" 'rev = "bdfa8b267fdb13730868d435b277dcfe696ec083";'
 contains "$MODULE" 'rev = "cf8895005540680306cd46e1faaf75f8902db794";'
 contains "$MODULE" 'rev = "c1aaee4f6a41a69563eab50e51cd1ef7347f22e9";'
+contains "$MODULE" 'rev = "3394e44afea04ed0188fb37b21f0d9952469766b";'
+contains "$MODULE" 'rev = "3f20054214fec9f9234fd3841ae6f1e4287948f6";'
+contains "$MODULE" 'sha256-Krz3Jke8aQyFkmFkS2EwN9/HHNbCdVUZhh1lA89///I='
+contains "$MODULE" 'krea2-flux2-klein9b-bf16-workflow'
+contains "$MODULE" 'flux-2-klein-9b-bf16.safetensors'
+contains "$MODULE" 'qwen_3_8b_bf16.safetensors'
+contains "$MODULE" 'famegrid_standard_krea2_bf16.safetensors'
+contains "$MODULE" 'ultra_real_krea2_v2_bf16.safetensors'
+contains "$MODULE" 'DetailDaemonSamplerNode'
+contains "$MODULE" 'Rh-Comfy-Auth'
 contains "$MODULE" 'Ep24%20Workflows.zip'
 contains "$MODULE" 'sha256-aHuDeJ6dpP3bcTR1FOLyVaV+WYv99f6vT5VhUjBq8nQ='
 contains "$MODULE" 'pixaroma-ep24-krea2-bf16-workflows'
@@ -139,12 +151,14 @@ contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out" -type f -name '\''
 contains "$MODULE" 'ep24_dir="$user_workflows/pixaroma-ep24-krea2-bf16"'
 contains "$MODULE" 'ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"'
 contains "$MODULE" 'ep30_dir="$user_workflows/pixaroma-ep30"'
+contains "$MODULE" 'klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"'
 contains "$MODULE" 'elite_dir="$user_workflows/creative-suite"'
 contains "$MODULE" 'ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"'
 contains "$MODULE" 'ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"'
 contains "$MODULE" 'ep30_staging="$user_workflows/.pixaroma-ep30.new"'
+contains "$MODULE" 'klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"'
 contains "$MODULE" 'elite_staging="$user_workflows/.creative-suite.new"'
-contains "$MODULE" 'rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$elite_dir"'
+contains "$MODULE" 'rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$elite_dir"'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -190,6 +204,22 @@ contains "$DOWNLOAD" 'missing_files'
 contains "$DOWNLOAD" 'sha256sum "$file"'
 contains "$DOWNLOAD" 'stat -c %s "$file"'
 contains "$DOWNLOAD" 'mv -f "$destination.new" "$destination"'
+
+# The video-backed Krea/FLUX profile is BF16, license-gated, immutable, and secret-safe.
+contains "$KLEIN_DOWNLOAD" 'FLUX2_KLEIN_ACCEPT_NONCOMMERCIAL_LICENSE'
+contains "$KLEIN_DOWNLOAD" 'KREA2_FLUX_LORA_ACCEPT_LICENSES'
+contains "$KLEIN_DOWNLOAD" 'black-forest-labs/FLUX.2-klein-9B 92196c8e11f7b6cf2b7493e037d8c5345c559216'
+contains "$KLEIN_DOWNLOAD" 'Comfy-Org/flux2-klein-9B 3f62d9d8ae1fec33c6e91453d5c712855b096b55'
+contains "$KLEIN_DOWNLOAD" '0975d6b77b5f510b99547d6724a208e36527df654e8f6134f59ece3f9f30da58 18157185168'
+contains "$KLEIN_DOWNLOAD" 'f0ff9239d56269ca1d05e5f86da6a79fac111af464955681f11c7ab0ec5ef6c1 16381517176'
+contains "$KLEIN_DOWNLOAD" '233a8b1df4b3387f9f2bedaa2099d0e14cc946d1105f732de2a8600310b86f07 228588904'
+contains "$KLEIN_DOWNLOAD" '40ce4ebd8af41f985ef7ff0b15c4989eacec155b9975c9649dbce00ba31fed46 228587744'
+contains "$KLEIN_DOWNLOAD" 'CIVITAI_TOKEN_FILE'
+contains "$KLEIN_DOWNLOAD" 'curl --config "$config"'
+contains "$KLEIN_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
+if grep -Eq 'hf download .*--token|curl .*token' "$KLEIN_DOWNLOAD"; then
+  fail "$KLEIN_DOWNLOAD exposes a credential through process arguments"
+fi
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$DOWNLOAD")" -eq 15 ]] \
   || fail "Krea base manifest must contain exactly 15 pinned artifacts"
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 4 ]] \
@@ -247,7 +277,8 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**79 user workflows:**'
+contains "$RUNBOOK" '**80 user workflows:**'
+contains "$RUNBOOK" 'krea2-flux2-klein9b-bf16'
 contains "$RUNBOOK" 'character-bible.md'
 contains "$RUNBOOK" 'desktop-muse/muse-glimmer-30b'
 contains "$RUNBOOK" 'compile and render exactly one scene'

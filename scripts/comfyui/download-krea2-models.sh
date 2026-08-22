@@ -89,10 +89,16 @@ stage_verified_existing() {
 }
 
 install_file() {
-  local relative="$1" destination
+  local relative="$1" destination staged
   destination="$MODELS_ROOT/$relative"
+  staged="$STAGING/$relative"
   mkdir -p "$(dirname "$destination")"
-  mv -f "$STAGING/$relative" "$destination.new"
+  if [ -e "$destination" ] && [ "$staged" -ef "$destination" ]; then
+    chmod 0640 "$destination"
+    rm -f "$staged"
+    return 0
+  fi
+  mv -f "$staged" "$destination.new"
   chmod 0640 "$destination.new"
   mv -f "$destination.new" "$destination"
 }
