@@ -186,6 +186,11 @@ let
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
   '';
 
+  pixaromaEp24Archive = pkgs.fetchurl {
+    url = "https://workflows.pixaroma.com/workflows/Ep24%20Workflows.zip";
+    hash = "sha256-aHuDeJ6dpP3bcTR1FOLyVaV+WYv99f6vT5VhUjBq8nQ=";
+  };
+
   pixaromaEp29Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep29%20Workflows.zip";
     hash = "sha256-DV0WoYk/S9zdMEKOWaCfj5Uru0YDpzea6XLLTwcZWbM=";
@@ -195,6 +200,21 @@ let
     url = "https://workflows.pixaroma.com/workflows/Ep30%20Workflows.zip";
     hash = "sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k=";
   };
+
+  pixaromaEp24ProfileNote = pkgs.writeText "pixaroma-ep24-bf16-profile-note.json" ''
+    {"version":1,"content":"<h1>Pixaroma Episode 24 — workstation BF16 profile</h1><p>This graph is adapted from the pinned Episode 24 archive for this workstation's full-precision Krea 2 profile.</p><ul><li>BF16 Krea 2 Turbo diffusion model</li><li>BF16 Qwen3-VL-4B encoder</li><li>Official Qwen Image VAE</li><li>Original 8-step CFG-1 baseline; extra-pass graphs retain the original 4-step, denoise-0.4 refinement</li></ul><p>LoRA graphs use ComfyUI's core model-only LoRA loader and flat pinned model paths; no additional node package or alternate model family is required.</p>"}
+  '';
+
+  pixaromaEp24WorkflowManifest = pkgs.writeText "pixaroma-ep24-workflows.manifest" ''
+    1a. Krea 2 Text to Image - Simple.json
+    1b. Krea 2 Text to Image - Simple + Lora.json
+    1c. Krea 2 Text to Image - Simple + Prompt Enhancer.json
+    1d. Krea 2 Text to Image - Simple Low Vram.json
+    2a. Krea 2 Text to Image + Extra Pass.json
+    2b. Krea 2 Text to Image + Extra Pass + Lora.json
+    2c. Krea 2 Text to Image + Extra Pass + Prompt Enhancer.json
+    2d. Krea 2 Text to Image - 2K.json
+  '';
 
   pixaromaEp29ProfileNote = pkgs.writeText "pixaroma-ep29-bf16-profile-note.json" ''
     {"version":1,"content":"<h1>Pixaroma Episode 29 — workstation BF16 profile</h1><p>This graph is adapted from the pinned Episode 29 archive for this workstation's maximum-quality local MiniMax H3 profile.</p><ul><li>Unpruned BF16 FL2VA or REF2VA — exactly one task family per graph</li><li>BF16 Qwen3-VL-32B encoder</li><li>FP16 video VAE and FP32 audio VAE</li><li>50 steps, CFG 1, no Turbo LoRA</li></ul><p>Generate one scene at a time. Do not place FL2VA and REF2VA in one active graph. The local H3 legal gate and runtime qualification in the creative-stack runbook still apply.</p>"}
@@ -259,112 +279,255 @@ let
     cloud/api_bytedance_seed_audio1_0_t2a.json
   '';
 
-  eliteWorkflows = pkgs.runCommand "comfyui-elite-workflows" { nativeBuildInputs = [ pkgs.jq ]; } ''
-    source_root="$(${pkgs.findutils}/bin/find ${binaryTorchPython.pkgs.comfyui-workflow-templates-json}/lib \
-      -type d -path '*/comfyui_workflow_templates_json/templates' -print -quit)"
-    test -n "$source_root"
-    while IFS=/ read -r category filename; do
-      test -n "$category" && test -n "$filename"
-      source="$source_root/$filename"
-      test -f "$source"
-      mkdir -p "$out/$category"
-      cp "$source" "$out/$category/$filename"
-      jq -e . "$out/$category/$filename" >/dev/null
-    done < ${eliteWorkflowManifest}
+  eliteWorkflows =
+    pkgs.runCommand "comfyui-elite-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        source_root="$(${pkgs.findutils}/bin/find ${binaryTorchPython.pkgs.comfyui-workflow-templates-json}/lib \
+          -type d -path '*/comfyui_workflow_templates_json/templates' -print -quit)"
+        test -n "$source_root"
+        while IFS=/ read -r category filename; do
+          test -n "$category" && test -n "$filename"
+          source="$source_root/$filename"
+          test -f "$source"
+          mkdir -p "$out/$category"
+          cp "$source" "$out/$category/$filename"
+          jq -e . "$out/$category/$filename" >/dev/null
+        done < ${eliteWorkflowManifest}
 
-    # Keep the official Krea T2I and style-reference topologies, but expose
-    # only workstation-bound BF16 variants. The redundant INT8 T2I template is
-    # intentionally absent from the curated inventory.
-    krea_style_source="$out/image/image_krea2_turbo_int8_image_style_reference.json"
-    krea_style_bf16="$out/image/image_krea2_turbo_bf16_image_style_reference.json"
-    mv "$krea_style_source" "$krea_style_bf16"
+        # Keep the official Krea T2I and style-reference topologies, but expose
+        # only workstation-bound BF16 variants. The redundant INT8 T2I template is
+        # intentionally absent from the curated inventory.
+        krea_style_source="$out/image/image_krea2_turbo_int8_image_style_reference.json"
+        krea_style_bf16="$out/image/image_krea2_turbo_bf16_image_style_reference.json"
+        mv "$krea_style_source" "$krea_style_bf16"
 
-    for krea_bf16 in \
-      "$out/image/image_krea2_turbo_t2i.json" \
-      "$krea_style_bf16"; do
-      jq '
-        walk(
-          if type == "string" then
-            gsub("krea2_turbo_fp8_scaled\\.safetensors"; "krea2_turbo_bf16.safetensors")
-            | gsub("krea2_turbo_int8_convrot\\.safetensors"; "krea2_turbo_bf16.safetensors")
-            | gsub("qwen3vl_4b_fp8_scaled\\.safetensors"; "qwen3vl_4b_bf16.safetensors")
-            | gsub("https://huggingface.co/Comfy-Org/Krea-2/resolve/main/";
-                "https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
-            | gsub("https://huggingface.co/Comfy-Org/Krea-2/tree/main/";
-                "https://huggingface.co/Comfy-Org/Krea-2/tree/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
-          else . end
-        )
-      ' "$krea_bf16" >"$krea_bf16.new"
-      mv "$krea_bf16.new" "$krea_bf16"
-    done
+        for krea_bf16 in \
+          "$out/image/image_krea2_turbo_t2i.json" \
+          "$krea_style_bf16"; do
+          jq '
+            walk(
+              if type == "string" then
+                gsub("krea2_turbo_fp8_scaled\\.safetensors"; "krea2_turbo_bf16.safetensors")
+                | gsub("krea2_turbo_int8_convrot\\.safetensors"; "krea2_turbo_bf16.safetensors")
+                | gsub("qwen3vl_4b_fp8_scaled\\.safetensors"; "qwen3vl_4b_bf16.safetensors")
+                | gsub("https://huggingface.co/Comfy-Org/Krea-2/resolve/main/";
+                    "https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
+                | gsub("https://huggingface.co/Comfy-Org/Krea-2/tree/main/";
+                    "https://huggingface.co/Comfy-Org/Krea-2/tree/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
+              else . end
+            )
+          ' "$krea_bf16" >"$krea_bf16.new"
+          mv "$krea_bf16.new" "$krea_bf16"
+        done
 
-    jq -s -e '
-      length == 2
-      and all(.[];
-        ([.. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
-          == ["krea2_turbo_bf16.safetensors"])
-        and ([.. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
-          == ["qwen3vl_4b_bf16.safetensors"]))
-      and ([.[0] | .. | objects | select(.type? == "KSampler") | .widgets_values[2]]
-        == [8])
-    ' \
-      "$out/image/image_krea2_turbo_t2i.json" \
-      "$krea_style_bf16" >/dev/null
-    ! grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|resolve/main|tree/main' \
-      "$out/image/image_krea2_turbo_t2i.json" \
-      "$krea_style_bf16"
+        jq -s -e '
+          length == 2
+          and all(.[];
+            ([.. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+              == ["krea2_turbo_bf16.safetensors"])
+            and ([.. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
+              == ["qwen3vl_4b_bf16.safetensors"]))
+          and ([.[0] | .. | objects | select(.type? == "KSampler") | .widgets_values[2]]
+            == [8])
+        ' \
+          "$out/image/image_krea2_turbo_t2i.json" \
+          "$krea_style_bf16" >/dev/null
+        if grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|resolve/main|tree/main' \
+          "$out/image/image_krea2_turbo_t2i.json" \
+          "$krea_style_bf16"; then
+          echo "forbidden lower-precision Krea selector or mutable link" >&2
+          exit 1
+        fi
 
-    # Publish maximum-quality BF16 copies of all three compatible official
-    # local H3 templates. The complete upstream Template Library remains
-    # untouched; these copies are the workstation-bound user workflows.
-    while read -r source_name destination_name; do
-      source="$source_root/$source_name"
-      destination="$out/video/$destination_name"
-      test -f "$source"
-      jq '
-        walk(
-          if type == "string" then
-            gsub("minimax_h3_fl2va_pruned_int8_convrot\\.safetensors";
-              "minimax_h3_fl2va_bf16.safetensors")
-            | gsub("minimax_h3_ref2va_pruned_int8_convrot\\.safetensors";
-                "minimax_h3_ref2va_bf16.safetensors")
-            | gsub("qwen3vl_32b_minimax_h3_nvfp4_awq\\.safetensors";
-                "qwen3vl_32b_minimax_h3_bf16.safetensors")
-            | gsub("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/";
-                "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/dc559027db79c174125df4d827db55cd11178860/")
-          else . end
-        )
-        | (.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]) = 50
-      ' "$source" >"$destination"
-      jq -e . "$destination" >/dev/null
-    done < ${officialH3Bf16WorkflowManifest}
+        # Publish maximum-quality BF16 copies of all three compatible official
+        # local H3 templates. The complete upstream Template Library remains
+        # untouched; these copies are the workstation-bound user workflows.
+        while read -r source_name destination_name; do
+          source="$source_root/$source_name"
+          destination="$out/video/$destination_name"
+          test -f "$source"
+          jq '
+            walk(
+              if type == "string" then
+                gsub("minimax_h3_fl2va_pruned_int8_convrot\\.safetensors";
+                  "minimax_h3_fl2va_bf16.safetensors")
+                | gsub("minimax_h3_ref2va_pruned_int8_convrot\\.safetensors";
+                    "minimax_h3_ref2va_bf16.safetensors")
+                | gsub("qwen3vl_32b_minimax_h3_nvfp4_awq\\.safetensors";
+                    "qwen3vl_32b_minimax_h3_bf16.safetensors")
+                | gsub("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/";
+                    "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/dc559027db79c174125df4d827db55cd11178860/")
+              else . end
+            )
+            | (.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]) = 50
+          ' "$source" >"$destination"
+          jq -e . "$destination" >/dev/null
+        done < ${officialH3Bf16WorkflowManifest}
 
-    jq -s -e '
-      length == 3
-      and ([.[] | .. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
-        | sort == ([
-          "minimax_h3_fl2va_bf16.safetensors",
-          "minimax_h3_fl2va_bf16.safetensors",
-          "minimax_h3_ref2va_bf16.safetensors"
-        ] | sort))
-      and all(.[];
-        ([.. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
-          == ["qwen3vl_32b_minimax_h3_bf16.safetensors"])
-        and ([.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]]
-          == [50])
-        and ([.. | objects | select(.type? == "LoraLoader") ] | length == 0))
-    ' "$out"/video/video_minimax_h3_bf16_*.json >/dev/null
-    ! grep -RqiE 'pruned_int8|nvfp4|resolve/main' \
-      "$out"/video/video_minimax_h3_bf16_*.json
+        jq -s -e '
+          length == 3
+          and ([.[] | .. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+            | sort == ([
+              "minimax_h3_fl2va_bf16.safetensors",
+              "minimax_h3_fl2va_bf16.safetensors",
+              "minimax_h3_ref2va_bf16.safetensors"
+            ] | sort))
+          and all(.[];
+            ([.. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
+              == ["qwen3vl_32b_minimax_h3_bf16.safetensors"])
+            and ([.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]]
+              == [50])
+            and ([.. | objects | select(.type? == "LoraLoader") ] | length == 0))
+        ' "$out"/video/video_minimax_h3_bf16_*.json >/dev/null
+        if grep -RqiE 'pruned_int8|nvfp4|resolve/main' \
+          "$out"/video/video_minimax_h3_bf16_*.json; then
+          echo "forbidden practical H3 selector or mutable link" >&2
+          exit 1
+        fi
 
-    test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 53
-  '';
+        test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 53
+      '';
+
+  pixaromaEp24 =
+    pkgs.runCommand "pixaroma-ep24-krea2-bf16-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.findutils
+          pkgs.gnugrep
+          pkgs.jq
+          pkgs.unzip
+        ];
+      }
+      ''
+        unzip -q ${pixaromaEp24Archive} -d unpacked
+        source_root=unpacked/Ep24\ Workflows
+        test "$(${pkgs.findutils}/bin/find "$source_root" -type f -name '*.json' | wc -l)" -eq 11
+        test "$(${pkgs.findutils}/bin/find "$source_root" -type f -name '3u.*.json' | wc -l)" -eq 3
+        mkdir -p "$out/workflows"
+        profile_note="$(cat ${pixaromaEp24ProfileNote})"
+
+        while IFS= read -r filename; do
+          test -n "$filename"
+          source="$source_root/$filename"
+          destination="$out/workflows/$filename"
+          test -f "$source"
+          jq --arg profile_note "$profile_note" '
+            def adapt_power_lora:
+              (.nodes[] | select(.type == "Power Lora Loader (rgthree)")) as $power
+              | ($power.inputs[] | select(.name == "clip") | .link) as $clip_input_link
+              | ($power.outputs[] | select(.name == "CLIP") | .links[0]) as $clip_output_link
+              | (.links[] | select(.[0] == $clip_input_link)) as $clip_input_edge
+              | ($clip_input_edge[1]) as $clip_loader_id
+              | ($clip_input_edge[2]) as $clip_loader_slot
+              | (.nodes[] | select(.id == $power.id)) |= (
+                  .type = "LoraLoaderModelOnly"
+                  | .title = "Krea 2 Style LoRA (core)"
+                  | .inputs = [
+                      (.inputs[] | select(.name == "model")),
+                      {"name":"lora_name","type":"COMBO","widget":{"name":"lora_name"},"link":null},
+                      {"name":"strength_model","type":"FLOAT","widget":{"name":"strength_model"},"link":null}
+                    ]
+                  | .outputs = [(.outputs[] | select(.name == "MODEL"))]
+                  | .properties = {
+                      "Node name for S&R": "LoraLoaderModelOnly",
+                      "cnr_id": "comfy-core",
+                      "ver": "0.31.1"
+                    }
+                  | .widgets_values = [
+                      ($power.widgets_values[2].lora | split("\\") | last),
+                      $power.widgets_values[2].strength
+                    ]
+                  | del(.color, .bgcolor)
+                )
+              | (.nodes[] | select(.id == $clip_loader_id)
+                  | .outputs[$clip_loader_slot].links) |=
+                    map(if . == $clip_input_link then $clip_output_link else . end)
+              | (.links[] | select(.[0] == $clip_output_link)) |=
+                  (.[1] = $clip_loader_id | .[2] = $clip_loader_slot)
+              | del(.links[] | select(.[0] == $clip_input_link));
+
+            (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
+              "krea2_turbo_bf16.safetensors"
+            | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
+                "qwen3vl_4b_bf16.safetensors"
+            | (.nodes[] | select(.type == "VAELoader") | .widgets_values[0]) =
+                "qwen_image_vae.safetensors"
+            | if any(.nodes[]; .type == "Power Lora Loader (rgthree)")
+                then adapt_power_lora else . end
+            | (.nodes[] | select(.type == "PixaromaNote") | .widgets_values[0]) =
+                $profile_note
+            | del(.extra.node_versions["rgthree-comfy"])
+            | del(.extra.node_versions["ComfyUI-GGUF"])
+          ' "$source" >"$destination"
+          jq -e . "$destination" >/dev/null
+        done < ${pixaromaEp24WorkflowManifest}
+
+        jq -s -e '
+          length == 8
+          and ([.[] | .nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+            | length == 8 and all(.[]; . == "krea2_turbo_bf16.safetensors"))
+          and ([.[] | .nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
+            | length == 8 and all(.[]; . == "qwen3vl_4b_bf16.safetensors"))
+          and ([.[] | .nodes[] | select(.type == "VAELoader") | .widgets_values[0]]
+            | length == 8 and all(.[]; . == "qwen_image_vae.safetensors"))
+          and ([.[] | .nodes[] | select(.type == "KSampler") | .widgets_values[2]]
+            | length == 12
+              and ([.[] | select(. == 8)] | length == 8)
+              and ([.[] | select(. == 4)] | length == 4))
+          and ([.[] | .nodes[] | select(.type == "TextGenerate")] | length == 3)
+          and ([.[] | .nodes[] | select(.type == "VAEDecodeTiled")] | length == 1)
+          and ([.[] | .nodes[] | select(.type == "LatentUpscaleBy")] | length == 4)
+          and ([.[] | .nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")] | length == 8)
+          and ([.[] | .nodes[] | select(.type == "LoraLoaderModelOnly")
+              | .widgets_values[0]] | sort
+            == (["krea2_kidsdrawing.safetensors", "krea2_vintagetarot.safetensors"] | sort))
+          and ([.[] | .nodes[] | select(.type == "Power Lora Loader (rgthree)")]
+            | length == 0)
+          and all(.[]; . as $graph
+            | all($graph.nodes[].inputs[]? | select(.link != null);
+                .link as $link_id | any($graph.links[]; .[0] == $link_id))
+            and all($graph.links[]; . as $edge
+                | any($graph.nodes[]; .id == $edge[1])
+                  and any($graph.nodes[]; .id == $edge[3])
+                  and (($graph.nodes[] | select(.id == $edge[1])
+                      | .outputs[$edge[2]].links | index($edge[0])) != null)
+                  and (($graph.nodes[] | select(.id == $edge[3])
+                      | .inputs[$edge[4]].link) == $edge[0]))
+            and all($graph.nodes[];
+                . as $node
+                | all($node.outputs[]?.links[]?;
+                    . as $link_id
+                    | any($graph.links[]; .[0] == $link_id and .[1] == $node.id))))
+          and ([.[] | .nodes[].type | select(. as $type | ([
+              "CLIPLoader", "CLIPTextEncode", "ComfyUI-Krea2T-Enhancer",
+              "ConditioningZeroOut", "EmptySD3LatentImage", "KSampler",
+              "LatentUpscaleBy", "LoraLoaderModelOnly", "PixaromaLabel",
+              "PixaromaNote", "PixaromaPortraitLandscape", "PixaromaPreview",
+              "PixaromaResolution", "PixaromaRunTimer", "PixaromaSeed",
+              "PixaromaShowText", "StringConcatenate", "TextGenerate",
+              "UNETLoader", "VAEDecode", "VAEDecodeTiled", "VAELoader"
+            ] | index($type) | not))] | length == 0)
+        ' "$out"/workflows/*.json >/dev/null
+        if grep -RqiE 'fp8|int8|rgthree|resolve/main|tree/main|uncensored|unrestricted|abliterated|krea2RealVae' \
+          "$out/workflows"; then
+          echo "forbidden Episode 24 model, node, or mutable link" >&2
+          exit 1
+        fi
+        test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 8
+      '';
 
   pixaromaEp29 =
     pkgs.runCommand "pixaroma-ep29-bf16-workflows"
       {
         nativeBuildInputs = [
           pkgs.findutils
+          pkgs.gnugrep
           pkgs.jq
           pkgs.unzip
         ];
@@ -422,13 +585,17 @@ let
               "VAEDecodeAudio", "VAELoader"
             ]) | length) == 0)
         ' "$out"/workflows/*.json >/dev/null
-        ! grep -RqiE 'pruned_int8|nvfp4|LayerUtility' "$out/workflows"
+        if grep -RqiE 'pruned_int8|nvfp4|LayerUtility' "$out/workflows"; then
+          echo "forbidden Episode 29 practical selector or unsupported node" >&2
+          exit 1
+        fi
       '';
 
   pixaromaEp30 =
     pkgs.runCommand "pixaroma-ep30-workflows"
       {
         nativeBuildInputs = [
+          pkgs.gnugrep
           pkgs.jq
           pkgs.unzip
         ];
@@ -478,22 +645,31 @@ let
           and ([.[] | .nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
             | length == 5 and all(.[]; . == "qwen3vl_4b_bf16.safetensors"))
         ' "$out/workflows"/*.json >/dev/null
-        ! grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|qwen3-vl-4b-heretic_int8|qwen3-vl-8b-heretic-1.3.0-int8convrot|craftingmod|resolve/main|tree/main' \
-          "$out/workflows"
+        if grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|qwen3-vl-4b-heretic_int8|qwen3-vl-8b-heretic-1.3.0-int8convrot|craftingmod|resolve/main|tree/main' \
+          "$out/workflows"; then
+          echo "forbidden Episode 30 lower-precision selector or mutable link" >&2
+          exit 1
+        fi
       '';
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
+    ep24_dir="$user_workflows/pixaroma-ep24-krea2-bf16"
     ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"
     ep30_dir="$user_workflows/pixaroma-ep30"
     elite_dir="$user_workflows/creative-suite"
+    ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
-    rm -rf "$ep29_staging" "$ep30_staging" "$elite_staging"
-    install -d -m 0700 "$ep29_staging" "$ep30_staging" "$elite_staging" "$input_dir"
+    rm -rf "$ep24_staging" "$ep29_staging" "$ep30_staging" "$elite_staging"
+    install -d -m 0700 \
+      "$ep24_staging" "$ep29_staging" "$ep30_staging" "$elite_staging" "$input_dir"
+    for source in ${pixaromaEp24}/workflows/*.json; do
+      install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
+    done
     for source in ${pixaromaEp29}/workflows/*.json; do
       install -m 0600 "$source" "$ep29_staging/$(basename "$source")"
     done
@@ -513,7 +689,8 @@ let
         install -m 0600 "$source" "$destination/$(basename "$source")"
       done
     done
-    rm -rf "$ep29_dir" "$ep30_dir" "$elite_dir"
+    rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$elite_dir"
+    mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
     mv "$elite_staging" "$elite_dir"

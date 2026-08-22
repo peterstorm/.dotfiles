@@ -13,8 +13,8 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
   workflows. The UI listens only on `127.0.0.1:8188` and is reached through an
   SSH tunnel.
 - **Krea 2 Turbo BF16** is the only local Krea execution profile. Text-to-image,
-  style-reference, and Episode 30 edit graphs all use the BF16 DiT and BF16
-  Qwen3-VL-4B encoder.
+  style-reference, Episode 24 generation, and Episode 30 edit graphs all use the
+  BF16 DiT and BF16 Qwen3-VL-4B encoder.
 - **MiniMax H3 API partner nodes** are the immediately usable H3 path in Denmark:
   text-to-video, first/last-frame, multimodal reference-to-video, Context IR
   prompt refinement, and 2K regeneration.
@@ -37,7 +37,8 @@ ComfyUI remains loopback-only and systemd-confined.
 | CUDA PyTorch | Nixpkgs `torch-bin`, `triton-bin`, `torchvision-bin`, `torchaudio-bin` | Nix flake pin; no source build |
 | Core nodes and template library | ComfyUI/Nix package | Nix flake pin |
 | Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
-| Episode 29–30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
+| Episode 24/29/30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
+| Episode 24 Krea workflows | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 8/8 BF16/model/node/link gate |
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
 | Curated creative suite | 53 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
@@ -131,6 +132,8 @@ The switch installs:
 - `/models/comfyui/{diffusion_models,text_encoders,vae,loras,...}`;
 - the immutable Muse, Krea edit, Krea enhancer, and Pixaroma nodes via an
   extra-path YAML in the Nix store;
+- eight BF16-adapted Episode 24 Krea workflows under
+  `/var/lib/comfyui/user/default/workflows/pixaroma-ep24-krea2-bf16/`;
 - eight BF16-adapted Episode 29 H3 video workflows under
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16/`;
 - all seven Episode 30 workflows under
@@ -157,7 +160,7 @@ transactional profile switch. After activation, acceptance requires:
 - logs list Muse, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
-- exactly eight BF16-adapted Episode 29 and seven Episode 30 workflows are installed;
+- exactly eight BF16-adapted Episode 24, eight Episode 29, and seven Episode 30 workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -299,6 +302,44 @@ Krea's local prompting rules are simple: natural language, faithful detail,
 long prompts when useful, and exact visible text in double quotes. The Muse
 node embeds Krea's official expansion contract.
 
+### Pixaroma Episode 24 — eight Krea workflows, adapted to BF16
+
+The source is [Episode 24](https://www.youtube.com/watch?v=r1D_6pcDbV8),
+`Ep24 Workflows.zip`, 62,784 bytes, SHA-256
+`687b83789e9da4fddb71347514e2f255a57e598bfdf5feaf4f956152306af274`.
+Nix installs the eight workflows demonstrated by the video:
+
+1. simple text-to-image;
+2. simple text-to-image with a style LoRA;
+3. simple text-to-image with local prompt enhancement;
+4. the tiled-decode low-VRAM variant;
+5. an extra latent-upscale/refinement pass;
+6. extra pass plus style LoRA;
+7. extra pass plus prompt enhancement;
+8. the creator's 2K workflow.
+
+Every graph is rewritten to `krea2_turbo_bf16.safetensors`,
+`qwen3vl_4b_bf16.safetensors`, and `qwen_image_vae.safetensors`. The initial
+sampler remains the video's 8-step, CFG-1, `er_sde`/`simple` baseline. Extra-pass
+and 2K graphs retain the 1.5× latent upscale followed by four Euler steps at
+0.4 denoise. The low-VRAM graph retains tiled VAE decode, but it is a diagnostic
+fallback on this 96 GiB card rather than the normal path.
+
+The two LoRA graphs originally use `Power Lora Loader (rgthree)`. The adapter
+replaces that node with ComfyUI core's `LoraLoaderModelOnly`, reconnects the
+encoder directly, and selects the already pinned flat-path Krea style LoRAs.
+This preserves model conditioning while avoiding another broad custom-node
+package. Prompt-enhancer graphs retain core `TextGenerate`; Muse remains the
+preferred external prompt author when GPU memory or prompt quality matters.
+
+The current ZIP also contains three `3u` “uncensored” files that are absent from
+the video chapters and transcript. They select an unpinned FP8 abliterated
+encoder and alternate third-party VAE. Those post-video additions are excluded
+rather than silently relabeled as BF16. Build-time checks require eight selected
+JSON files, exact BF16 loaders, valid graph links, known node types, the original
+sampler counts, and no INT8/FP8, rgthree, mutable model links, or alternate VAE
+references.
+
 ### Pixaroma Episode 30 — complete imported bundle
 
 The source is [Episode 30](https://www.youtube.com/watch?v=rGVf3m19yM8),
@@ -394,9 +435,9 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **68 user workflows:** eight BF16-adapted Pixaroma Episode 29 graphs, seven
-  pinned Episode 30 graphs, and 53 curated official graphs installed into the
-  workflow browser.
+- **76 user workflows:** eight BF16-adapted Pixaroma Episode 24 graphs, eight
+  Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated official
+  graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -932,6 +973,8 @@ The starting surface is:
 | Production job | Open this | Where it appears | Additional readiness requirement |
 |---|---|---|---|
 | Canonical character image | `image_krea2_turbo_t2i` | User workflows → `creative-suite/image` | Krea production marker in `/models/comfyui` |
+| Fast/direct Krea generation | `1a. Krea 2 Text to Image - Simple` | User workflows → `pixaroma-ep24-krea2-bf16` | Krea BF16 marker and pinned enhancer/Pixaroma nodes |
+| Detailed or 2K Krea generation | `2a. ... Extra Pass` or `2d. ... - 2K` | User workflows → `pixaroma-ep24-krea2-bf16` | Additional GPU time and memory for the 1.5× latent pass |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
 | Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
 | Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
@@ -955,6 +998,8 @@ After switching the NixOS generation and starting ComfyUI once, verify the user
 workflow inventory:
 
 ```bash
+test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep24-krea2-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 8
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
   -type f -name '*.json' | wc -l)" -eq 8
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
@@ -1360,7 +1405,7 @@ problems inside a long generation.
 | ComfyUI-Manager | Mutable git/pip state outside Nix; intentionally absent |
 | VideoHelperSuite | Established, but core `VIDEO`, `LoadVideo`, `CreateVideo`, and `SaveVideo` cover this stack |
 | KJNodes | Useful only if later qualifying Sage Attention or specialty video operations; broad dependency surface |
-| rgthree-comfy | Good UI ergonomics, no generation capability required here |
+| rgthree-comfy | Not installed; Episode 24's two Power LoRA nodes are deterministically converted to core `LoraLoaderModelOnly` nodes |
 | IF AI Tools | Archived and dependency-heavy; the in-repo Muse node is narrower and uses the existing endpoint |
 | New H3 “director/turbo/cache” nodes | Too new and overlapping with native H3; no baseline evidence yet |
 
@@ -1393,8 +1438,9 @@ Do not call the stack qualified until:
 - [ ] Nix evaluation and build pass from the pinned flake.
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
-- [ ] Comfy logs load Muse plus all three pinned Episode 29–30 packs with no failed imports.
-- [ ] Eight BF16 Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
+- [ ] Comfy logs load Muse plus all pinned Episode 24/29/30 dependencies with no failed imports.
+- [ ] Eight BF16 Episode 24 workflows, eight Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
+- [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT/encoder and pinned Qwen VAE.
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
@@ -1457,8 +1503,9 @@ The Comfy state, Krea models, inputs, outputs, and workflows remain on disk.
 
 ## Sources
 
-Sources accessed 2026-08-21:
+Sources accessed 2026-08-21–22:
 
+- [Pixaroma Episode 24 Krea 2 workflows](https://www.youtube.com/watch?v=r1D_6pcDbV8)
 - [Pixaroma Episode 29 MiniMax H3 workflows](https://www.youtube.com/watch?v=267y00jaOUc)
 - [Pixaroma Episode 30 video and transcript](https://www.youtube.com/watch?v=rGVf3m19yM8)
 - [Pixaroma workflow index](https://workflows.pixaroma.com/)
