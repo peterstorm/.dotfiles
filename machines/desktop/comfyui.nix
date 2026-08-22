@@ -208,7 +208,6 @@ let
 
   eliteWorkflowManifest = pkgs.writeText "comfyui-elite-workflows.manifest" ''
     image/image_krea2_turbo_t2i.json
-    image/image_krea2_turbo_t2i_int8.json
     image/image_krea2_turbo_int8_image_style_reference.json
     image/image_qwen_Image_2512.json
     image/image_qwen_image_edit_2511.json
@@ -273,27 +272,47 @@ let
       jq -e . "$out/$category/$filename" >/dev/null
     done < ${eliteWorkflowManifest}
 
-    # The official Krea BF16 graph currently selects an FP8 DiT that this
-    # workstation intentionally does not carry. Keep its topology and 8-step
-    # Turbo schedule, but bind every saved selector and model link to our BF16
-    # artifact at the exact repository revision.
-    krea_bf16="$out/image/image_krea2_turbo_t2i.json"
-    jq '
-      walk(
-        if type == "string" then
-          gsub("krea2_turbo_fp8_scaled\\.safetensors"; "krea2_turbo_bf16.safetensors")
-          | gsub("https://huggingface.co/Comfy-Org/Krea-2/resolve/main/";
-              "https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
-        else . end
-      )
-    ' "$krea_bf16" >"$krea_bf16.new"
-    mv "$krea_bf16.new" "$krea_bf16"
-    jq -e '
-      ([.. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
-        == ["krea2_turbo_bf16.safetensors"])
-      and ([.. | objects | select(.type? == "KSampler") | .widgets_values[2]] == [8])
-    ' "$krea_bf16" >/dev/null
-    ! grep -Fq 'krea2_turbo_fp8_scaled.safetensors' "$krea_bf16"
+    # Keep the official Krea T2I and style-reference topologies, but expose
+    # only workstation-bound BF16 variants. The redundant INT8 T2I template is
+    # intentionally absent from the curated inventory.
+    krea_style_source="$out/image/image_krea2_turbo_int8_image_style_reference.json"
+    krea_style_bf16="$out/image/image_krea2_turbo_bf16_image_style_reference.json"
+    mv "$krea_style_source" "$krea_style_bf16"
+
+    for krea_bf16 in \
+      "$out/image/image_krea2_turbo_t2i.json" \
+      "$krea_style_bf16"; do
+      jq '
+        walk(
+          if type == "string" then
+            gsub("krea2_turbo_fp8_scaled\\.safetensors"; "krea2_turbo_bf16.safetensors")
+            | gsub("krea2_turbo_int8_convrot\\.safetensors"; "krea2_turbo_bf16.safetensors")
+            | gsub("qwen3vl_4b_fp8_scaled\\.safetensors"; "qwen3vl_4b_bf16.safetensors")
+            | gsub("https://huggingface.co/Comfy-Org/Krea-2/resolve/main/";
+                "https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
+            | gsub("https://huggingface.co/Comfy-Org/Krea-2/tree/main/";
+                "https://huggingface.co/Comfy-Org/Krea-2/tree/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
+          else . end
+        )
+      ' "$krea_bf16" >"$krea_bf16.new"
+      mv "$krea_bf16.new" "$krea_bf16"
+    done
+
+    jq -s -e '
+      length == 2
+      and all(.[];
+        ([.. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+          == ["krea2_turbo_bf16.safetensors"])
+        and ([.. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
+          == ["qwen3vl_4b_bf16.safetensors"]))
+      and ([.[0] | .. | objects | select(.type? == "KSampler") | .widgets_values[2]]
+        == [8])
+    ' \
+      "$out/image/image_krea2_turbo_t2i.json" \
+      "$krea_style_bf16" >/dev/null
+    ! grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|resolve/main|tree/main' \
+      "$out/image/image_krea2_turbo_t2i.json" \
+      "$krea_style_bf16"
 
     # Publish maximum-quality BF16 copies of all three compatible official
     # local H3 templates. The complete upstream Template Library remains
@@ -338,7 +357,7 @@ let
     ! grep -RqiE 'pruned_int8|nvfp4|resolve/main' \
       "$out"/video/video_minimax_h3_bf16_*.json
 
-    test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 54
+    test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 53
   '';
 
   pixaromaEp29 =
@@ -430,9 +449,13 @@ let
         # against this workstation's pinned model names and the ZIP's actual media.
         for workflow in "$out/workflows"/*.json; do
           substituteInPlace "$workflow" \
-            --replace-warn 'krea2\\krea2_turbo_int8_convrot.safetensors' 'krea2_turbo_int8_convrot.safetensors' \
-            --replace-warn 'qwen3-vl-4b-heretic_int8.safetensors' 'qwen3vl_4b_fp8_scaled.safetensors' \
-            --replace-warn 'krea2_turbo_fp8_scaled.safetensors' 'krea2_turbo_int8_convrot.safetensors' \
+            --replace-warn 'krea2\\krea2_turbo_int8_convrot.safetensors' 'krea2_turbo_bf16.safetensors' \
+            --replace-warn 'qwen3-vl-4b-heretic_int8.safetensors' 'qwen3vl_4b_bf16.safetensors' \
+            --replace-warn 'krea2_turbo_fp8_scaled.safetensors' 'krea2_turbo_bf16.safetensors' \
+            --replace-warn 'krea2_turbo_int8_convrot.safetensors' 'krea2_turbo_bf16.safetensors' \
+            --replace-warn 'qwen3-vl-4b-heretic_int8' 'qwen3vl_4b_bf16' \
+            --replace-warn '>12.2 GB<' '>24.5 GB<' \
+            --replace-warn '>4.5 GB<' '>8.3 GB<' \
             --replace-warn 'OutfitRock (1).jpeg' 'OutfitRock.jpeg' \
             --replace-warn 'https://huggingface.co/Comfy-Org/Krea-2/resolve/main/' 'https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/' \
             --replace-warn 'https://huggingface.co/Comfy-Org/Krea-2/tree/main/' 'https://huggingface.co/Comfy-Org/Krea-2/tree/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/' \
@@ -449,7 +472,13 @@ let
 
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 7
         test "$(find "$out/media" -type f | wc -l)" -eq 6
-        ! grep -RqiE 'krea2_turbo_fp8_scaled|qwen3-vl-8b-heretic-1.3.0-int8convrot|craftingmod|resolve/main|tree/main' \
+        jq -s -e '
+          ([.[] | .nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+            | length == 5 and all(.[]; . == "krea2_turbo_bf16.safetensors"))
+          and ([.[] | .nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
+            | length == 5 and all(.[]; . == "qwen3vl_4b_bf16.safetensors"))
+        ' "$out/workflows"/*.json >/dev/null
+        ! grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|qwen3-vl-4b-heretic_int8|qwen3-vl-8b-heretic-1.3.0-int8convrot|craftingmod|resolve/main|tree/main' \
           "$out/workflows"
       '';
 

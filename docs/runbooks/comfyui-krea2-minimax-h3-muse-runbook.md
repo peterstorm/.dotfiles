@@ -12,8 +12,9 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 - **ComfyUI 0.31.1** on physical GPU1 runs local Krea 2 and exposes MiniMax H3
   workflows. The UI listens only on `127.0.0.1:8188` and is reached through an
   SSH tunnel.
-- **Krea 2 Turbo BF16** is the default local image model. The official INT8
-  ConvRot style-reference path and official style LoRAs are installed beside it.
+- **Krea 2 Turbo BF16** is the only local Krea execution profile. Text-to-image,
+  style-reference, and Episode 30 edit graphs all use the BF16 DiT and BF16
+  Qwen3-VL-4B encoder.
 - **MiniMax H3 API partner nodes** are the immediately usable H3 path in Denmark:
   text-to-video, first/last-frame, multimodal reference-to-video, Context IR
   prompt refinement, and 2K regeneration.
@@ -39,7 +40,7 @@ ComfyUI remains loopback-only and systemd-confined.
 | Episode 29–30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
-| Curated creative suite | 54 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
+| Curated creative suite | 53 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
 | Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
@@ -136,7 +137,7 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
-- 54 curated official workflows under
+- 53 curated official workflows under
   `/var/lib/comfyui/user/default/workflows/creative-suite/`, grouped into image,
   video, audio, 3D, enhancement, and hosted-frontier folders.
 
@@ -236,8 +237,8 @@ The downloader fetches only these pinned production artifacts from
 
 - Turbo diffusion model BF16 and Qwen3-VL-4B encoder BF16 for highest-fidelity
   local text-to-image;
-- Turbo INT8 ConvRot and Qwen3-VL-4B FP8 for the official style-reference
-  workflow;
+- Turbo INT8 ConvRot and Qwen3-VL-4B FP8 retained as pinned, inactive upstream
+  comparison artifacts; no curated or Episode 30 workflow selects them;
 - Qwen Image VAE;
 - Krea style-reference LoRA;
 - nine official Krea style LoRAs;
@@ -269,14 +270,16 @@ another 26.3 GB artifact and a separate benchmark.
 
 ### Local, private, default
 
-Open **Template Library → Image**:
+Open **User workflows → `creative-suite/image`**:
 
-1. **Krea-2: Text to Image** (`image_krea2_turbo_t2i`)
-2. **Krea-2 Style Reference**
-   (`image_krea2_turbo_int8_image_style_reference`)
+1. **Krea-2: Text to Image — BF16** (`image_krea2_turbo_t2i`)
+2. **Krea-2 Style Reference — BF16**
+   (`image_krea2_turbo_bf16_image_style_reference`)
 
-These are official Comfy templates using core nodes. No custom package is
-needed. For the normal image workflow, select:
+These are deterministic workstation copies of official Comfy templates using
+core nodes. No custom package is needed. Do not open the similarly named
+upstream Template Library entries for production; they retain their original
+lower-precision selectors. For the normal image workflow, select:
 
 - `krea2_turbo_bf16.safetensors`;
 - `qwen3vl_4b_bf16.safetensors`;
@@ -284,12 +287,13 @@ needed. For the normal image workflow, select:
 - 8 steps;
 - 1K for iteration, then 2.0 megapixels for the selected final.
 
-For style reference, use the official dedicated combination:
+The BF16 style-reference copy uses the same full-precision DiT and encoder plus:
 
-- `krea2_turbo_int8_convrot.safetensors`;
-- `qwen3vl_4b_fp8_scaled.safetensors`;
 - `qwen_image_vae.safetensors`;
 - `krea2_style_reference.safetensors`.
+
+Nix rewrites both exposed widgets and internal loader metadata. The redundant
+official INT8 T2I graph is not installed in the curated user-workflow inventory.
 
 Krea's local prompting rules are simple: natural language, faithful detail,
 long prompts when useful, and exact visible text in double quotes. The Muse
@@ -312,13 +316,14 @@ ComfyUI start:
 7. `Minimax H3 First Frame 2 Video Prompt Generator`
 
 The deployment normalizes three stale saved selectors without changing graph
-topology: nested Krea diffusion paths become this workstation's flat pinned
-path, the Krea editor uses the official pinned Qwen3-VL-4B FP8 encoder, and the
-archive's nonexistent `OutfitRock (1).jpeg` becomes its actual
-`OutfitRock.jpeg`. Operator-facing notes are normalized too: the unavailable
-Krea FP8 and alternate Heretic INT8 references become the artifacts in our
-verified manifests, and every Krea, Identity Edit, Outfit Transfer, and Heretic
-model link resolves an exact revision rather than mutable `main`.
+topology: nested Krea diffusion paths become this workstation's flat BF16 path,
+the Krea editor uses the pinned Qwen3-VL-4B BF16 encoder, and the archive's
+nonexistent `OutfitRock (1).jpeg` becomes its actual `OutfitRock.jpeg`.
+Operator-facing notes are normalized too: lower-precision Krea references become
+the BF16 artifacts in our verified manifest, the alternate Heretic INT8 link
+becomes the pinned FP8 prompt-only artifact, and every Krea, Identity Edit,
+Outfit Transfer, and Heretic model link resolves an exact revision rather than
+mutable `main`.
 
 The transcript establishes that this is **not an official Krea edit model**. It
 combines Krea 2 Turbo, an edit LoRA, `Krea2EditGroundedEncode`,
@@ -389,8 +394,8 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **69 user workflows:** eight BF16-adapted Pixaroma Episode 29 graphs, seven
-  pinned Episode 30 graphs, and 54 curated official graphs installed into the
+- **68 user workflows:** eight BF16-adapted Pixaroma Episode 29 graphs, seven
+  pinned Episode 30 graphs, and 53 curated official graphs installed into the
   workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
@@ -398,12 +403,12 @@ There are three distinct workflow inventories; do not conflate them:
   Other local graphs are discoverable but remain weightless until their own model
   profile is licensed, pinned, downloaded, and qualified.
 
-The curated 54 are selected from Comfy's official immutable template package,
+The curated 53 are selected from Comfy's official immutable template package,
 not community workflow aggregators. They provide:
 
 | Folder | Count | Production capabilities |
 |---|---:|---|
-| `image` | 11 | Krea 2 BF16/INT8/style; Qwen Image 2512; Qwen Edit 2511/INT8/relight/layers; Flux.2 Klein 9B generation/edit; Z-Image Turbo INT8 |
+| `image` | 10 | Krea 2 BF16 T2I/style reference; Qwen Image 2512; Qwen Edit 2511/INT8/relight/layers; Flux.2 Klein 9B generation/edit; Z-Image Turbo INT8 |
 | `video` | 12 | BF16 MiniMax H3 T2V/I2V/R2V; LTX-2.3 T2V/I2V/FLF/IA2V; HunyuanVideo 1.5 T2V/I2V; Wan 2.2 T2V/I2V/FLF |
 | `audio` | 3 | ACE-Step 1.5 music and Stable Audio 3 Medium |
 | `3d` | 2 | Hunyuan3D single-view and turbo multiview reconstruction |
@@ -418,15 +423,15 @@ credits, and remote upload. Local non-Krea/H3 graphs require separate model
 storage and validation; their presence does not claim that their weights are
 installed.
 
-The model-aware adaptation audit found four compatible official graphs that
-needed workstation bindings. `image_krea2_turbo_t2i` selected an FP8 DiT not in
-our production manifest, so its saved selector and metadata now point to
-`krea2_turbo_bf16.safetensors` at the pinned Krea revision while retaining the
-official 8-step schedule. The three official local H3 graphs are published as
+The model-aware adaptation audit found five compatible official graphs that
+needed workstation bindings. `image_krea2_turbo_t2i` and the renamed
+`image_krea2_turbo_bf16_image_style_reference` both select the BF16 DiT and BF16
+Qwen3-VL-4B encoder at the pinned Krea revision; T2I retains the official 8-step
+schedule and style reference retains its dedicated LoRA topology. The redundant
+INT8 T2I graph is absent. The three official local H3 graphs are published as
 `video_minimax_h3_bf16_{t2v,i2v,r2v}` with unpruned BF16 DiTs, BF16 Qwen3-VL-32B,
-50 steps, and exact-revision model links. Krea INT8/style templates already
-matched our pinned artifacts and were left unchanged. Templates for Mage Flow,
-Qwen Image, Flux, Wan, LTX, Hunyuan, and other architectures were not rewritten:
+50 steps, and exact-revision model links. Templates for Mage Flow, Qwen Image,
+Flux, Wan, LTX, Hunyuan, and other architectures were not rewritten:
 sharing a text encoder or VAE does not make a different DiT compatible.
 
 ### Hosted Krea partner nodes
@@ -926,8 +931,8 @@ The starting surface is:
 
 | Production job | Open this | Where it appears | Additional readiness requirement |
 |---|---|---|---|
-| Canonical character image | `image_krea2_turbo_t2i` | User workflows → `creative-suite/image`, and Templates → Image | Krea production marker in `/models/comfyui` |
-| Style-led character image | `image_krea2_turbo_int8_image_style_reference` | User workflows → `creative-suite/image`, and Templates → Image | Krea INT8/FP8/style artifacts |
+| Canonical character image | `image_krea2_turbo_t2i` | User workflows → `creative-suite/image` | Krea production marker in `/models/comfyui` |
+| Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
 | Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
 | Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
 | Wardrobe variants | `Krea 2 + One Image Outfit Lora` or `Krea 2 + Outfit Transfer 2` | User workflows → `pixaroma-ep30` | Outfit-transfer weights and clean clothing references |
@@ -955,7 +960,7 @@ test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
   -type f -name '*.json' | wc -l)" -eq 7
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
-  -type f -name '*.json' | wc -l)" -eq 54
+  -type f -name '*.json' | wc -l)" -eq 53
 ```
 
 Verify local model publication separately:
@@ -1389,7 +1394,7 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all three pinned Episode 29–30 packs with no failed imports.
-- [ ] Eight BF16 Episode 29 workflows, seven Episode 30 workflows, 54 curated workflows, and 16 unique sample inputs are present.
+- [ ] Eight BF16 Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
@@ -1406,8 +1411,8 @@ Do not call the stack qualified until:
 - [ ] Abliterated Muse starts from its pinned marker, completes the same fixed
       prompt corpus, and records quality, refusal behavior, throughput, and
       effective DFlash acceptance versus standard.
-- [ ] A local Krea style-reference generation completes with the dedicated
-      INT8/FP8/style-reference files.
+- [ ] A local Krea style-reference generation completes with the BF16 DiT,
+      BF16 Qwen3-VL-4B encoder, and dedicated style-reference LoRA.
 - [ ] Fixed seed/prompt Krea reruns are compared for determinism.
 - [ ] H3 API T2V, first/last-frame, and reference workflows each complete.
 - [ ] Context IR output preserves the same reference ordering.
