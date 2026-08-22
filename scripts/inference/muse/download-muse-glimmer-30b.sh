@@ -54,6 +54,26 @@ ensure_hf_metadata_access() {
   fi
 }
 
+ensure_target_auxiliary_artifacts() {
+  local _sha _size relative
+  [ -n "$MUSE_TARGET_AUXILIARY_REPO" ] || return 0
+  if inference_verify_checkpoint_manifest \
+    "$MUSE_TARGET_HOST" "$MUSE_TARGET_AUXILIARY_MANIFEST" 2>/dev/null; then
+    return 0
+  fi
+
+  ensure_hf_metadata_access "$MUSE_TARGET_HOST"
+  while read -r _sha _size relative; do
+    [ -n "$relative" ] || continue
+    hf download \
+      "$MUSE_TARGET_AUXILIARY_REPO" "$relative" \
+      --revision "$MUSE_TARGET_AUXILIARY_REV" \
+      --local-dir "$MUSE_TARGET_HOST"
+  done <<<"$MUSE_TARGET_AUXILIARY_MANIFEST"
+  inference_verify_checkpoint_manifest \
+    "$MUSE_TARGET_HOST" "$MUSE_TARGET_AUXILIARY_MANIFEST"
+}
+
 download_muse_models() {
   local state_dir="$1" lock target_ready=0 draft_ready=0
   lock="$state_dir/muse-glimmer-$MUSE_VARIANT.lock"
@@ -64,6 +84,8 @@ download_muse_models() {
     return 1
   fi
 
+  export HF_HUB_DISABLE_XET=1
+  ensure_target_auxiliary_artifacts
   checkpoint_is_complete \
     "$MUSE_TARGET_HOST" "$MUSE_TARGET_REPO@$MUSE_TARGET_REV" "$MUSE_TARGET_MANIFEST" \
     && target_ready=1
@@ -75,7 +97,6 @@ download_muse_models() {
     return 0
   fi
 
-  export HF_HUB_DISABLE_XET=1
   if [ "$target_ready" -eq 0 ]; then
     ensure_hf_metadata_access "$MUSE_TARGET_HOST"
     download_checkpoint \

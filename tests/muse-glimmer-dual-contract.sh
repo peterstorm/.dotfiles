@@ -46,10 +46,13 @@ contains "$VARIANTS" "MUSE_DRAFT_REV=\"$DRAFT_REV\""
 contains "$VARIANTS" 'MUSE_TARGET_REPO="mlasli/Muse-Glimmer-30B-Abliterated-BF16"'
 contains "$VARIANTS" 'MUSE_TARGET_REV="daf5fab76a0351a583714a92d88ebdb6eb48af35"'
 contains "$VARIANTS" 'MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"'
+contains "$VARIANTS" 'MUSE_TARGET_AUXILIARY_REPO="meta-models/Muse-Glimmer-30B"'
+contains "$VARIANTS" 'MUSE_TARGET_AUXILIARY_REV="a4e59da52a7bc87ae7251dd5545c0dd437c44b68"'
+contains "$VARIANTS" '97e2a486dd9866b81f40cf4b8bc0c9ced9a7cd8a5bc65aa4cc2f4de0712dae77 1084 processor_config.json'
 contains "$VARIANTS" '8eef61530e1283642c77ce2e6721feb5c6f348fa055c00e90f2844a136372694 49950112952 model-00001-of-00002.safetensors'
 contains "$VARIANTS" 'cd53270fef03dac41c34a7cafd64cdc400cff149f59d3aff17e248892f328b5b 49902303112 model-00001-of-00002.safetensors'
 contains "$VARIANTS" 'fd88d337eb84f8d0e6ba33a7684d7efa6722d4460ba4d6badca9699418392a84 5111976608 model.safetensors'
-[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ [^ ]+$' "$VARIANTS")" -eq 20 ]] \
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ [^ ]+$' "$VARIANTS")" -eq 22 ]] \
   || fail "$VARIANTS must pin all required standard, abliterated, and draft artifacts"
 # shellcheck source=scripts/inference/muse/muse-glimmer-variant.sh
 source "$VARIANTS"
@@ -70,6 +73,8 @@ muse_resolve_variant unknown >/dev/null 2>&1 || unknown_status=$?
 contains "$DOWNLOAD" 'source "$SCRIPT_DIR/muse-glimmer-variant.sh"'
 contains "$DOWNLOAD" 'muse_resolve_variant "${MUSE_VARIANT:-standard}"'
 contains "$DOWNLOAD" 'export HF_HUB_DISABLE_XET=1'
+contains "$DOWNLOAD" 'ensure_target_auxiliary_artifacts'
+contains "$DOWNLOAD" '"$MUSE_TARGET_AUXILIARY_REPO" "$relative"'
 contains "$DOWNLOAD" 'inference_verify_checkpoint_manifest "$directory" "$manifest"'
 contains "$DOWNLOAD" 'write_completion_marker "$directory" "$repo@$revision"'
 contains "$DOWNLOAD" 'MUSE_DOWNLOAD_WORKER=yes'
@@ -81,6 +86,32 @@ fi
 if grep -Fq 'HF_XET_HIGH_PERFORMANCE' "$DOWNLOAD"; then
   fail "$DOWNLOAD re-enables the Xet backend that hangs on this workstation"
 fi
+
+# The derivative-only auxiliary fetch is idempotent and manifest-verified.
+# shellcheck source=scripts/inference/muse/download-muse-glimmer-30b.sh
+source "$DOWNLOAD"
+aux_sandbox="$(mktemp -d)"
+trap 'rm -rf "$aux_sandbox"' EXIT
+MUSE_TARGET_HOST="$aux_sandbox/target"
+MUSE_TARGET_AUXILIARY_REPO="example/upstream"
+MUSE_TARGET_AUXILIARY_REV="0123456789abcdef"
+aux_payload='pinned processor metadata'
+aux_sha="$(printf '%s' "$aux_payload" | sha256sum | cut -d' ' -f1)"
+MUSE_TARGET_AUXILIARY_MANIFEST="$aux_sha ${#aux_payload} processor_config.json"
+mkdir -p "$MUSE_TARGET_HOST"
+hf() {
+  [[ "$*" == "download example/upstream processor_config.json --revision 0123456789abcdef --local-dir $MUSE_TARGET_HOST" ]] \
+    || fail "auxiliary Hugging Face request does not use the resolved immutable source"
+  printf '%s' "$aux_payload" >"$MUSE_TARGET_HOST/processor_config.json"
+  printf 'fetch\n' >>"$aux_sandbox/hf-calls"
+}
+ensure_target_auxiliary_artifacts
+ensure_target_auxiliary_artifacts
+[[ "$(wc -l <"$aux_sandbox/hf-calls")" -eq 1 ]] \
+  || fail "verified auxiliary metadata must not be downloaded twice"
+unset -f hf
+rm -rf "$aux_sandbox"
+trap - EXIT
 
 contains "$MUSE_RUN" "IMAGE=\"$IMAGE\""
 contains "$MUSE_RUN" "DIGEST=\"$DIGEST\""

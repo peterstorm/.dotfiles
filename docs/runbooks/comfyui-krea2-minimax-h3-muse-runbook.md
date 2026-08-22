@@ -659,7 +659,12 @@ at immutable revision `daf5fab76a0351a583714a92d88ebdb6eb48af35`.
 Despite the request describing it as a quant, that repository is **full BF16**:
 its two model shards total 59,553,433,736 bytes. Every runtime-required target
 and DFlash draft artifact is checked by exact size and SHA-256 after download
-and again before launch. Its model card reports weight-level refusal
+and again before launch. Because the derivative omits SGLang's required
+`processor_config.json`, the downloader adds only that architecture-identical
+1,084-byte file from upstream Muse revision
+`a4e59da52a7bc87ae7251dd5545c0dd437c44b68`, pinned by SHA-256
+`97e2a486...0712dae77`; it does not borrow or alter model weights. Its model
+card reports weight-level refusal
 suppression at alpha 0.15 but no formal capability benchmark, so it is an
 experimental creative variant—not a replacement for the standard baseline.
 

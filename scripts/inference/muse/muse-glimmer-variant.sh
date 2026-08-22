@@ -36,6 +36,9 @@ b58cc2144ba1ba1af4420f67f4ca3ced7f09298510b80464cc75018a0be14381 9603322320 mode
 c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d 28129897 tokenizer.json
 781e6c74f571642c71202167b67d9255b28cc439bdda1582ff31346182f5a9c5 79936 tokenizer_config.json
 EOF
+      MUSE_TARGET_AUXILIARY_REPO=""
+      MUSE_TARGET_AUXILIARY_REV=""
+      MUSE_TARGET_AUXILIARY_MANIFEST=""
       MUSE_CACHE_HOST="$model_root/sglang-cache/muse-glimmer-bf16-dflash"
       MUSE_CONTAINER_NAME="muse-glimmer-30b-bf16-dflash"
       ;;
@@ -54,6 +57,14 @@ c459da918abc4caf363e7d47e0fddaa68e3dd8c54cd2d47c6170fde5d8308230 9651130624 mode
 79f6028c3b5544f6be46607b8580d7376bf68bdc66647480fd3bfa520ad9efa3 132674 model.safetensors.index.json
 700365b2a965cd87ec583d5bd7ce354ef4fb8c5a00fbd7269846bb360cac374c 28129995 tokenizer.json
 b2c352bba1d2ee25295aa84e7bdaa15a2b0305b79009926bcea72516ca200d42 79985 tokenizer_config.json
+97e2a486dd9866b81f40cf4b8bc0c9ced9a7cd8a5bc65aa4cc2f4de0712dae77 1084 processor_config.json
+EOF
+      # The derivative omits SGLang's required processor metadata. Reuse only
+      # that architecture-identical file from the immutable upstream revision.
+      MUSE_TARGET_AUXILIARY_REPO="meta-models/Muse-Glimmer-30B"
+      MUSE_TARGET_AUXILIARY_REV="a4e59da52a7bc87ae7251dd5545c0dd437c44b68"
+      read -r -d '' MUSE_TARGET_AUXILIARY_MANIFEST <<'EOF' || true
+97e2a486dd9866b81f40cf4b8bc0c9ced9a7cd8a5bc65aa4cc2f4de0712dae77 1084 processor_config.json
 EOF
       MUSE_CACHE_HOST="$model_root/sglang-cache/muse-glimmer-abliterated-bf16-dflash"
       MUSE_CONTAINER_NAME="muse-glimmer-30b-abliterated-bf16-dflash"
