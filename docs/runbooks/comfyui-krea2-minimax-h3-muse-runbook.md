@@ -39,7 +39,7 @@ ComfyUI remains loopback-only and systemd-confined.
 | Episode 29–30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
-| Curated creative suite | 51 official Comfy workflows under six task folders | pinned template package; exact file manifest + JSON gate |
+| Curated creative suite | 54 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
 | Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
@@ -136,7 +136,7 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
-- 51 curated official workflows under
+- 54 curated official workflows under
   `/var/lib/comfyui/user/default/workflows/creative-suite/`, grouped into image,
   video, audio, 3D, enhancement, and hosted-frontier folders.
 
@@ -315,7 +315,10 @@ The deployment normalizes three stale saved selectors without changing graph
 topology: nested Krea diffusion paths become this workstation's flat pinned
 path, the Krea editor uses the official pinned Qwen3-VL-4B FP8 encoder, and the
 archive's nonexistent `OutfitRock (1).jpeg` becomes its actual
-`OutfitRock.jpeg`.
+`OutfitRock.jpeg`. Operator-facing notes are normalized too: the unavailable
+Krea FP8 and alternate Heretic INT8 references become the artifacts in our
+verified manifests, and every Krea, Identity Edit, Outfit Transfer, and Heretic
+model link resolves an exact revision rather than mutable `main`.
 
 The transcript establishes that this is **not an official Krea edit model**. It
 combines Krea 2 Turbo, an edit LoRA, `Krea2EditGroundedEncode`,
@@ -386,8 +389,8 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **66 user workflows:** eight BF16-adapted Pixaroma Episode 29 graphs, seven
-  pinned Episode 30 graphs, and 51 curated official graphs installed into the
+- **69 user workflows:** eight BF16-adapted Pixaroma Episode 29 graphs, seven
+  pinned Episode 30 graphs, and 54 curated official graphs installed into the
   workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
@@ -395,13 +398,13 @@ There are three distinct workflow inventories; do not conflate them:
   Other local graphs are discoverable but remain weightless until their own model
   profile is licensed, pinned, downloaded, and qualified.
 
-The curated 51 are selected from Comfy's official immutable template package,
+The curated 54 are selected from Comfy's official immutable template package,
 not community workflow aggregators. They provide:
 
 | Folder | Count | Production capabilities |
 |---|---:|---|
 | `image` | 11 | Krea 2 BF16/INT8/style; Qwen Image 2512; Qwen Edit 2511/INT8/relight/layers; Flux.2 Klein 9B generation/edit; Z-Image Turbo INT8 |
-| `video` | 9 | LTX-2.3 T2V/I2V/FLF/IA2V; HunyuanVideo 1.5 T2V/I2V; Wan 2.2 T2V/I2V/FLF |
+| `video` | 12 | BF16 MiniMax H3 T2V/I2V/R2V; LTX-2.3 T2V/I2V/FLF/IA2V; HunyuanVideo 1.5 T2V/I2V; Wan 2.2 T2V/I2V/FLF |
 | `audio` | 3 | ACE-Step 1.5 music and Stable Audio 3 Medium |
 | `3d` | 2 | Hunyuan3D single-view and turbo multiview reconstruction |
 | `enhance` | 4 | SeedVR2 image/video restoration, interpolation upscale, and GAN upscale |
@@ -411,8 +414,20 @@ This is deliberately a curated production surface rather than "install every
 community JSON." It prioritizes first-party workflows, current model families,
 multiple generation/edit/reference modes, audio and 3D coverage, and core/API
 nodes that do not require ComfyUI-Manager. Hosted graphs require a Comfy account,
-credits, and remote upload. Local non-Krea graphs require separate model storage
-and validation; their presence does not claim that their weights are installed.
+credits, and remote upload. Local non-Krea/H3 graphs require separate model
+storage and validation; their presence does not claim that their weights are
+installed.
+
+The model-aware adaptation audit found four compatible official graphs that
+needed workstation bindings. `image_krea2_turbo_t2i` selected an FP8 DiT not in
+our production manifest, so its saved selector and metadata now point to
+`krea2_turbo_bf16.safetensors` at the pinned Krea revision while retaining the
+official 8-step schedule. The three official local H3 graphs are published as
+`video_minimax_h3_bf16_{t2v,i2v,r2v}` with unpruned BF16 DiTs, BF16 Qwen3-VL-32B,
+50 steps, and exact-revision model links. Krea INT8/style templates already
+matched our pinned artifacts and were left unchanged. Templates for Mage Flow,
+Qwen Image, Flux, Wan, LTX, Hunyuan, and other architectures were not rewritten:
+sharing a text encoder or VAE does not make a different DiT compatible.
 
 ### Hosted Krea partner nodes
 
@@ -655,18 +670,18 @@ workflow fits**.
 
 #### Pick exactly one task family per saved workflow
 
-Create separate saved copies of the official templates instead of one graph with
-both DiTs and a switch:
+Nix publishes three workstation-bound copies of the official templates instead
+of one graph with both DiTs and a switch:
 
-| Saved workflow | Start from | Diffusion selector | Purpose |
+| Saved workflow | Immutable upstream | Diffusion selector | Purpose |
 |---|---|---|---|
-| `MiniMax H3 BF16 — T2V` | `video_minimax_h3_t2v` | `minimax_h3_fl2va_bf16.safetensors` | Text-to-video/audio |
-| `MiniMax H3 BF16 — I2V` | `video_minimax_h3_i2v` | `minimax_h3_fl2va_bf16.safetensors` | First frame, last frame, or both |
-| `MiniMax H3 BF16 — R2V` | `video_minimax_h3_r2v` | `minimax_h3_ref2va_bf16.safetensors` | Image/video/audio references |
+| `video_minimax_h3_bf16_t2v` | `video_minimax_h3_t2v` | `minimax_h3_fl2va_bf16.safetensors` | Text-to-video/audio |
+| `video_minimax_h3_bf16_i2v` | `video_minimax_h3_i2v` | `minimax_h3_fl2va_bf16.safetensors` | First frame, last frame, or both |
+| `video_minimax_h3_bf16_r2v` | `video_minimax_h3_r2v` | `minimax_h3_ref2va_bf16.safetensors` | Image/video/audio references |
 
-In the official T2V/I2V templates, the four model selectors are exposed on the
-large MiniMax H3 subgraph node. The R2V template shows individual `UNETLoader`,
-`CLIPLoader`, and `VAELoader` nodes. Save a copy before changing selectors.
+The T2V/I2V copies rewrite both the exposed subgraph widgets and their internal
+loaders. The R2V copy rewrites its individual `UNETLoader`, `CLIPLoader`, and
+`VAELoader` metadata. Do not manually change the immutable upstream templates.
 
 All three use:
 
@@ -926,9 +941,10 @@ The starting surface is:
 | Hosted H3 scene | `api_minimax_h3_t2v`, `api_minimax_h3_flf2v`, or `api_minimax_h3_r2v` | User workflows → `creative-suite/cloud` | Comfy account, credits, and acceptance of remote upload |
 
 The complete pinned Template Library also remains available through the
-**Templates** button. Its three practical local H3 templates remain useful as
-upstream references. The Episode 29 user workflows are separate maximum-quality
-BF16 adaptations and do not alter those official templates.
+**Templates** button. Its three practical local H3 templates remain untouched
+upstream references. Maximum-quality official copies appear under
+`creative-suite/video`, while the Episode 29 workflows provide additional
+Pixaroma control surfaces under their own folder.
 
 After switching the NixOS generation and starting ComfyUI once, verify the user
 workflow inventory:
@@ -939,7 +955,7 @@ test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
   -type f -name '*.json' | wc -l)" -eq 7
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
-  -type f -name '*.json' | wc -l)" -eq 51
+  -type f -name '*.json' | wc -l)" -eq 54
 ```
 
 Verify local model publication separately:
@@ -1373,7 +1389,7 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all three pinned Episode 29–30 packs with no failed imports.
-- [ ] Eight BF16 Episode 29 workflows, seven Episode 30 workflows, 51 curated workflows, and 16 unique sample inputs are present.
+- [ ] Eight BF16 Episode 29 workflows, seven Episode 30 workflows, 54 curated workflows, and 16 unique sample inputs are present.
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.

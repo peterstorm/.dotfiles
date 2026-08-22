@@ -200,6 +200,12 @@ let
     {"version":1,"content":"<h1>Pixaroma Episode 29 — workstation BF16 profile</h1><p>This graph is adapted from the pinned Episode 29 archive for this workstation's maximum-quality local MiniMax H3 profile.</p><ul><li>Unpruned BF16 FL2VA or REF2VA — exactly one task family per graph</li><li>BF16 Qwen3-VL-32B encoder</li><li>FP16 video VAE and FP32 audio VAE</li><li>50 steps, CFG 1, no Turbo LoRA</li></ul><p>Generate one scene at a time. Do not place FL2VA and REF2VA in one active graph. The local H3 legal gate and runtime qualification in the creative-stack runbook still apply.</p>"}
   '';
 
+  officialH3Bf16WorkflowManifest = pkgs.writeText "comfyui-official-h3-bf16-workflows.manifest" ''
+    video_minimax_h3_t2v.json video_minimax_h3_bf16_t2v.json
+    video_minimax_h3_i2v.json video_minimax_h3_bf16_i2v.json
+    video_minimax_h3_r2v.json video_minimax_h3_bf16_r2v.json
+  '';
+
   eliteWorkflowManifest = pkgs.writeText "comfyui-elite-workflows.manifest" ''
     image/image_krea2_turbo_t2i.json
     image/image_krea2_turbo_t2i_int8.json
@@ -266,7 +272,73 @@ let
       cp "$source" "$out/$category/$filename"
       jq -e . "$out/$category/$filename" >/dev/null
     done < ${eliteWorkflowManifest}
-    test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 51
+
+    # The official Krea BF16 graph currently selects an FP8 DiT that this
+    # workstation intentionally does not carry. Keep its topology and 8-step
+    # Turbo schedule, but bind every saved selector and model link to our BF16
+    # artifact at the exact repository revision.
+    krea_bf16="$out/image/image_krea2_turbo_t2i.json"
+    jq '
+      walk(
+        if type == "string" then
+          gsub("krea2_turbo_fp8_scaled\\.safetensors"; "krea2_turbo_bf16.safetensors")
+          | gsub("https://huggingface.co/Comfy-Org/Krea-2/resolve/main/";
+              "https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/")
+        else . end
+      )
+    ' "$krea_bf16" >"$krea_bf16.new"
+    mv "$krea_bf16.new" "$krea_bf16"
+    jq -e '
+      ([.. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+        == ["krea2_turbo_bf16.safetensors"])
+      and ([.. | objects | select(.type? == "KSampler") | .widgets_values[2]] == [8])
+    ' "$krea_bf16" >/dev/null
+    ! grep -Fq 'krea2_turbo_fp8_scaled.safetensors' "$krea_bf16"
+
+    # Publish maximum-quality BF16 copies of all three compatible official
+    # local H3 templates. The complete upstream Template Library remains
+    # untouched; these copies are the workstation-bound user workflows.
+    while read -r source_name destination_name; do
+      source="$source_root/$source_name"
+      destination="$out/video/$destination_name"
+      test -f "$source"
+      jq '
+        walk(
+          if type == "string" then
+            gsub("minimax_h3_fl2va_pruned_int8_convrot\\.safetensors";
+              "minimax_h3_fl2va_bf16.safetensors")
+            | gsub("minimax_h3_ref2va_pruned_int8_convrot\\.safetensors";
+                "minimax_h3_ref2va_bf16.safetensors")
+            | gsub("qwen3vl_32b_minimax_h3_nvfp4_awq\\.safetensors";
+                "qwen3vl_32b_minimax_h3_bf16.safetensors")
+            | gsub("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/";
+                "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/dc559027db79c174125df4d827db55cd11178860/")
+          else . end
+        )
+        | (.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]) = 50
+      ' "$source" >"$destination"
+      jq -e . "$destination" >/dev/null
+    done < ${officialH3Bf16WorkflowManifest}
+
+    jq -s -e '
+      length == 3
+      and ([.[] | .. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+        | sort == ([
+          "minimax_h3_fl2va_bf16.safetensors",
+          "minimax_h3_fl2va_bf16.safetensors",
+          "minimax_h3_ref2va_bf16.safetensors"
+        ] | sort))
+      and all(.[];
+        ([.. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
+          == ["qwen3vl_32b_minimax_h3_bf16.safetensors"])
+        and ([.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]]
+          == [50])
+        and ([.. | objects | select(.type? == "LoraLoader") ] | length == 0))
+    ' "$out"/video/video_minimax_h3_bf16_*.json >/dev/null
+    ! grep -RqiE 'pruned_int8|nvfp4|resolve/main' \
+      "$out"/video/video_minimax_h3_bf16_*.json
+
+    test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 54
   '';
 
   pixaromaEp29 =
@@ -360,12 +432,25 @@ let
           substituteInPlace "$workflow" \
             --replace-warn 'krea2\\krea2_turbo_int8_convrot.safetensors' 'krea2_turbo_int8_convrot.safetensors' \
             --replace-warn 'qwen3-vl-4b-heretic_int8.safetensors' 'qwen3vl_4b_fp8_scaled.safetensors' \
-            --replace-warn 'OutfitRock (1).jpeg' 'OutfitRock.jpeg'
+            --replace-warn 'krea2_turbo_fp8_scaled.safetensors' 'krea2_turbo_int8_convrot.safetensors' \
+            --replace-warn 'OutfitRock (1).jpeg' 'OutfitRock.jpeg' \
+            --replace-warn 'https://huggingface.co/Comfy-Org/Krea-2/resolve/main/' 'https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/' \
+            --replace-warn 'https://huggingface.co/Comfy-Org/Krea-2/tree/main/' 'https://huggingface.co/Comfy-Org/Krea-2/tree/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/' \
+            --replace-warn 'https://huggingface.co/DreamFast/Qwen3-VL-4b-Heretic-ComfyUI/resolve/main/' 'https://huggingface.co/Comfy-Org/Krea-2/resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/text_encoders/' \
+            --replace-warn 'https://huggingface.co/DreamFast/Qwen3-VL-4b-Heretic-ComfyUI/tree/main' 'https://huggingface.co/Comfy-Org/Krea-2/tree/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/text_encoders' \
+            --replace-warn 'https://huggingface.co/conradlocke/krea2-identity-edit/resolve/main/' 'https://huggingface.co/conradlocke/krea2-identity-edit/resolve/89e9e7a09ee2e5c9331e952063d79b1b8a703280/' \
+            --replace-warn 'https://huggingface.co/conradlocke/krea2-identity-edit/tree/main' 'https://huggingface.co/conradlocke/krea2-identity-edit/tree/89e9e7a09ee2e5c9331e952063d79b1b8a703280' \
+            --replace-warn 'https://huggingface.co/AliveAi/Krea-2-Edit-Outfit-Transfer/resolve/main/' 'https://huggingface.co/AliveAi/Krea-2-Edit-Outfit-Transfer/resolve/827dab8588b6cb261cf9ae580c417bc068740b7f/' \
+            --replace-warn 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/resolve/main/' 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/resolve/28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3/' \
+            --replace-warn 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/tree/main/' 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/tree/28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3/' \
+            --replace-warn 'https://huggingface.co/craftingmod/Qwen3-VL-8B-Heretic-INT8/resolve/main/qwen3-vl-8b-heretic-1.3.0-int8convrot.safetensors?download=true' 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/resolve/28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3/comfyui/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors'
           jq -e . "$workflow" >/dev/null
         done
 
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 7
         test "$(find "$out/media" -type f | wc -l)" -eq 6
+        ! grep -RqiE 'krea2_turbo_fp8_scaled|qwen3-vl-8b-heretic-1.3.0-int8convrot|craftingmod|resolve/main|tree/main' \
+          "$out/workflows"
       '';
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
