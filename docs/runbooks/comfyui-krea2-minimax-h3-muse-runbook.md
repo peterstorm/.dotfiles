@@ -165,6 +165,11 @@ The switch installs:
 - one BF16 Identity Edit v1.2 → selectable Krea realism → FLUX.2 Klein 9B
   character-reference workflow under
   `/var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16/`;
+- two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
+  in separate graphs—under
+  `/var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16/`;
+- the idle-queue-only `h3-model-phase` command for native model preparation and
+  release between jobs;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
 - 53 curated official workflows under
@@ -188,8 +193,8 @@ transactional profile switch. After activation, acceptance requires:
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly eleven BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
-  one Krea/FLUX Klein workflow, and one identity-realism character workflow are
-  installed;
+  one Krea/FLUX Klein workflow, one identity-realism character workflow, and two
+  maximum-quality H3 production workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -587,10 +592,11 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **81 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, one
+- **83 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, one identity-realism character-reference graph,
-  eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
-  official graphs installed into the workflow browser.
+  two image-led maximum-quality H3 production graphs, eight Episode 29 graphs,
+  seven pinned Episode 30 graphs, and 53 curated official graphs installed into
+  the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -896,6 +902,51 @@ Delete, disconnect, or mute unrelated output branches before queueing. ComfyUI
 executes every active output branch needed by the prompt; merely moving an
 unused Krea or second H3 branch to the side does not make it inert.
 
+#### Image-led production workflows and safe phase control
+
+After the still-image pass is complete, use the two purpose-built workflows in
+**User workflows → `minimax-h3-production-bf16`**:
+
+1. `01 MiniMax H3 BF16 FL2VA - First Frame Production` accepts an approved
+   opening frame and exposes an optional last-frame input on the native H3
+   subgraph. It selects only unpruned BF16 FL2VA.
+2. `02 MiniMax H3 BF16 REF2VA - Character References Production` starts with
+   Picture 1 as identity geometry and Picture 2 as wardrobe, style, or
+   environment evidence. It selects only unpruned BF16 REF2VA and defaults to
+   `ref_image_size=match`.
+
+Both default to 1344×768, five seconds/124 frames, batch 1, 50 steps, BF16
+Qwen3-VL-32B, the native video/audio VAEs, and no Turbo LoRA. Neither graph
+contains Krea loaders or a second H3 diffusion family. Their visible phase note
+contains the exact safe command.
+
+Before the first FL2VA job or after changing from REF2VA:
+
+```bash
+h3-model-phase prepare fl2va
+```
+
+Before the first REF2VA job or after changing from FL2VA:
+
+```bash
+h3-model-phase prepare ref2va
+```
+
+The command checks both running and pending queues, fails if either is nonempty,
+uses native `POST /free`, checks the queue again, and records only the prepared
+family. It does not preload 66 GB of weights: queueing the matching workflow
+loads Qwen, its one DiT, and each VAE on demand. After the saved output completes
+and the queue is idle, either retain the same family for the next scene or run:
+
+```bash
+h3-model-phase release
+```
+
+There is intentionally no in-graph unload node. An output node that unloads its
+own graph can race decode or invalidate cached latent values; mutable unload
+extensions also bypass the native model manager. Phase control remains an
+idle-job operation outside the graph.
+
 #### What happens automatically inside one queued job
 
 The exact phase order differs slightly by task because the native H3
@@ -1131,6 +1182,8 @@ The starting surface is:
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
 | Identity-preserving photoreal character view | `Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | Krea and Klein markers; one canonical identity input; enable exactly one realism LoRA |
+| Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
+| Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
 | Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
 | Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
@@ -1164,6 +1217,8 @@ test "$(find /var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16 \
   -type f -name '*.json' | wc -l)" -eq 1
 test "$(find /var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16 \
   -type f -name '*.json' | wc -l)" -eq 1
+test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
   -type f -name '*.json' | wc -l)" -eq 53
 ```

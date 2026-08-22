@@ -12,11 +12,13 @@ DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 WORKFLOW_BUILDER="$ROOT/scripts/comfyui/build-krea2-identity-realism-workflow.py"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
+H3_PHASE="$ROOT/scripts/comfyui/h3-model-phase.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
 H3_RUNBOOK="$ROOT/docs/runbooks/local-ai-video-script-runbook.md"
 TRANSITION_TEST="$ROOT/tests/creative-stack-transitions-contract.sh"
 DOWNLOAD_TEST="$ROOT/tests/model-download-verification-contract.sh"
+H3_PHASE_TEST="$ROOT/tests/h3-model-phase-contract.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -35,15 +37,16 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
 bash -n "$KLEIN_DOWNLOAD"
 bash -n "$H3_DOWNLOAD"
+bash -n "$H3_PHASE"
 bash -n "$ACTIVATE"
 nix-instantiate --parse "$MODULE" >/dev/null
 
@@ -82,6 +85,13 @@ contains "$MODULE" 'qwen_3_8b_bf16.safetensors'
 contains "$MODULE" 'famegrid_standard_krea2_bf16.safetensors'
 contains "$MODULE" 'ultra_real_krea2_v2_bf16.safetensors'
 contains "$MODULE" 'DetailDaemonSamplerNode'
+contains "$MODULE" 'minimax-h3-production-bf16-workflows'
+contains "$MODULE" '01 MiniMax H3 BF16 FL2VA - First Frame Production.json'
+contains "$MODULE" '02 MiniMax H3 BF16 REF2VA - Character References Production.json'
+contains "$MODULE" 'h3-model-phase prepare fl2va'
+contains "$MODULE" 'h3-model-phase prepare ref2va'
+contains "$MODULE" 'forbidden Krea, practical H3, Turbo, mutable link, or Manager dependency'
+contains "$MODULE" 'h3ModelPhase'
 contains "$MODULE" 'krea2-identity-realism-klein9b-bf16-workflow'
 contains "$MODULE" 'build-krea2-identity-realism-workflow.py'
 contains "$MODULE" 'Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16.json'
@@ -161,14 +171,17 @@ contains "$MODULE" 'ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"'
 contains "$MODULE" 'ep30_dir="$user_workflows/pixaroma-ep30"'
 contains "$MODULE" 'klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"'
 contains "$MODULE" 'character_dir="$user_workflows/krea2-character-sheet-bf16"'
+contains "$MODULE" 'h3_production_dir="$user_workflows/minimax-h3-production-bf16"'
 contains "$MODULE" 'elite_dir="$user_workflows/creative-suite"'
 contains "$MODULE" 'ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"'
 contains "$MODULE" 'ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"'
 contains "$MODULE" 'ep30_staging="$user_workflows/.pixaroma-ep30.new"'
 contains "$MODULE" 'klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"'
 contains "$MODULE" 'character_staging="$user_workflows/.krea2-character-sheet-bf16.new"'
+contains "$MODULE" 'h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"'
 contains "$MODULE" 'elite_staging="$user_workflows/.creative-suite.new"'
-contains "$MODULE" '"$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" "$elite_dir"'
+contains "$MODULE" '"$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir"'
+contains "$MODULE" '"$h3_production_dir" "$elite_dir"'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -251,6 +264,16 @@ contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate link id")'
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 4 ]] \
   || fail "Episode 24/30 auxiliary manifest must contain exactly 4 pinned artifacts"
 
+# H3 phase control is loopback-only, queue-aware, native, and behaviorally verified.
+contains "$H3_PHASE" 'http://127.0.0.1:8188'
+contains "$H3_PHASE" 'COMFYUI_URL must use loopback HTTP'
+contains "$H3_PHASE" 'refusing model release while ComfyUI is busy'
+contains "$H3_PHASE" '--data '\''{"unload_models":true,"free_memory":true}'\'''
+contains "$H3_PHASE" 'H3_PHASE_READY family=%s; queue only the matching BF16 workflow'
+contains "$H3_PHASE" 'H3_PHASE_RELEASED family=none'
+absent "$H3_PHASE" '/interrupt'
+"$H3_PHASE_TEST"
+
 # MiniMax H3 is separately authorized, revision-pinned, complete, and atomic.
 contains "$H3_DOWNLOAD" 'MINIMAX_H3_ACCEPT_LICENSE'
 contains "$H3_DOWNLOAD" 'MINIMAX_H3_AUTHORIZED'
@@ -303,11 +326,15 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**81 user workflows:**'
+contains "$RUNBOOK" '**83 user workflows:**'
 contains "$RUNBOOK" 'krea2-flux2-klein9b-bf16'
 contains "$RUNBOOK" 'krea2-character-sheet-bf16'
 contains "$RUNBOOK" 'Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16'
 contains "$RUNBOOK" 'enable exactly one realism LoRA'
+contains "$RUNBOOK" 'minimax-h3-production-bf16'
+contains "$RUNBOOK" 'h3-model-phase prepare fl2va'
+contains "$RUNBOOK" 'h3-model-phase prepare ref2va'
+contains "$RUNBOOK" 'There is intentionally no in-graph unload node'
 contains "$RUNBOOK" 'character-bible.md'
 contains "$RUNBOOK" 'desktop-muse/muse-glimmer-30b'
 contains "$RUNBOOK" 'compile and render exactly one scene'

@@ -160,6 +160,17 @@ let
       "$out/muse_glimmer_prompt/__init__.py"
   '';
 
+  h3ModelPhase = pkgs.writeShellApplication {
+    name = "h3-model-phase";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.jq
+      pkgs.util-linux
+    ];
+    text = builtins.readFile ../../scripts/comfyui/h3-model-phase.sh;
+  };
+
   krea2EditNode = pkgs.fetchFromGitHub {
     owner = "lbouaraba";
     repo = "comfyui-krea2edit";
@@ -255,6 +266,53 @@ let
 
   pixaromaEp29ProfileNote = pkgs.writeText "pixaroma-ep29-bf16-profile-note.json" ''
     {"version":1,"content":"<h1>Pixaroma Episode 29 — workstation BF16 profile</h1><p>This graph is adapted from the pinned Episode 29 archive for this workstation's maximum-quality local MiniMax H3 profile.</p><ul><li>Unpruned BF16 FL2VA or REF2VA — exactly one task family per graph</li><li>BF16 Qwen3-VL-32B encoder</li><li>FP16 video VAE and FP32 audio VAE</li><li>50 steps, CFG 1, no Turbo LoRA</li></ul><p>Generate one scene at a time. Do not place FL2VA and REF2VA in one active graph. The local H3 legal gate and runtime qualification in the creative-stack runbook still apply.</p>"}
+  '';
+
+  h3Fl2vaPhaseNote = pkgs.writeText "minimax-h3-fl2va-phase-note.md" ''
+    ## Maximum-quality H3 — FL2VA phase
+
+    This graph contains **only** the unpruned BF16 FL2VA family, BF16 Qwen3-VL-32B,
+    the video/audio VAEs, 50 sampling steps, batch 1, and no Turbo LoRA.
+
+    Before queueing, wait for an idle queue and run:
+
+    ```bash
+    h3-model-phase prepare fl2va
+    ```
+
+    The workflow loaders then load Qwen, FL2VA, and each VAE on demand. ComfyUI
+    performs the in-job phase hand-offs. Never run `/free` while this graph is active.
+
+    After the output is saved and the queue is idle, either keep FL2VA cached for the
+    next FL2VA scene or release it with:
+
+    ```bash
+    h3-model-phase release
+    ```
+  '';
+
+  h3Ref2vaPhaseNote = pkgs.writeText "minimax-h3-ref2va-phase-note.md" ''
+    ## Maximum-quality H3 — REF2VA phase
+
+    This graph contains **only** the unpruned BF16 REF2VA family, BF16 Qwen3-VL-32B,
+    the video/audio VAEs, 50 sampling steps, batch 1, and no Turbo LoRA.
+
+    Before switching from FL2VA or queueing the first REF2VA scene, wait for an idle
+    queue and run:
+
+    ```bash
+    h3-model-phase prepare ref2va
+    ```
+
+    The workflow loaders then load Qwen, REF2VA, and each VAE on demand. ComfyUI
+    performs the in-job phase hand-offs. Never run `/free` while this graph is active.
+
+    After the output is saved and the queue is idle, either keep REF2VA cached for the
+    next REF2VA scene or release it with:
+
+    ```bash
+    h3-model-phase release
+    ```
   '';
 
   officialH3Bf16WorkflowManifest = pkgs.writeText "comfyui-official-h3-bf16-workflows.manifest" ''
@@ -429,6 +487,133 @@ let
         fi
 
         test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 53
+      '';
+
+  h3ProductionWorkflows =
+    pkgs.runCommand "minimax-h3-production-bf16-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        i2v="$out/workflows/01 MiniMax H3 BF16 FL2VA - First Frame Production.json"
+        r2v="$out/workflows/02 MiniMax H3 BF16 REF2VA - Character References Production.json"
+
+        jq --rawfile phase_note ${h3Fl2vaPhaseNote} '
+          (.nodes[] | select(.id == 105)) |= (
+            .title = "ON-DEMAND BF16 FL2VA — first/last-frame video"
+            | .widgets_values[0] = "Use <Picture 1> as the exact opening composition. Preserve subject identity, face geometry, wardrobe, environment, and visual style. Describe one coherent action, one camera move, environmental motion, dialogue, sound effects, ambience, and music for this five-second shot."
+            | .widgets_values[1] = 1344
+            | .widgets_values[2] = 768
+            | .widgets_values[3] = 5
+          )
+          | (.nodes[] | select(.id == 114)) |=
+              (.title = "Picture 1 — approved first frame")
+          | (.nodes[] | select(.id == 115)) |= (
+              .title = "Native 768p short edge — 1344×768"
+              | .widgets_values = ["16:9 (Widescreen)", 0.98, 32]
+            )
+          | (.nodes[] | select(.id == 117)) |= (
+              .title = "SAFE MODEL PHASE — prepare FL2VA before queueing"
+              | .widgets_values = [$phase_note]
+            )
+          | (.nodes[] | select(.id == 92)) |= (
+              .title = "Save accepted FL2VA scene"
+              | .widgets_values[0] = "video/H3_BF16_FL2VA_Scene"
+            )
+          | walk(if type == "object" then del(.properties.models) else . end)
+        ' ${eliteWorkflows}/video/video_minimax_h3_bf16_i2v.json >"$i2v"
+
+        jq --rawfile phase_note ${h3Ref2vaPhaseNote} '
+          (.nodes[] | select(.id == 117)) |= (
+            .title = "SAFE MODEL PHASE — prepare REF2VA before queueing"
+            | .widgets_values = [$phase_note]
+          )
+          | (.nodes[] | select(.id == 127)) |=
+              (.title = "ON-DEMAND — unpruned BF16 REF2VA only")
+          | (.nodes[] | select(.id == 128)) |=
+              (.title = "ON-DEMAND — BF16 Qwen3-VL-32B")
+          | (.nodes[] | select(.id == 119)) |=
+              (.title = "ON-DEMAND — FP16 video VAE")
+          | (.nodes[] | select(.id == 120)) |=
+              (.title = "ON-DEMAND — FP32 audio VAE")
+          | (.nodes[] | select(.id == 115)) |= (
+              .title = "Native 768p short edge — 1344×768"
+              | .widgets_values = ["16:9 (Widescreen)", 0.98, 32]
+            )
+          | (.nodes[] | select(.id == 137)) |=
+              (.title = "Picture 1 — canonical identity and face geometry")
+          | (.nodes[] | select(.id == 139)) |=
+              (.title = "Picture 2 — wardrobe, style, or environment role")
+          | (.nodes[] | select(.id == 138)) |= (
+              .title = "One scene prompt — preserve exact reference roles"
+              | .widgets_values[0] = "<Picture 1>: preserve this character’s exact identity, face geometry, age, hair, and body proportions. <Picture 2>: preserve only its explicitly intended wardrobe, style, or environment role. Generate one coherent five-second scene with one primary action and one camera move. Keep continuity exact. Include deliberate dialogue, sound effects, ambience, and music instructions; add no unrequested characters, wardrobe changes, text, or watermarks."
+            )
+          | (.nodes[] | select(.id == 132)) |=
+              (.title = "Duration — start at five seconds" | .widgets_values[0] = 5)
+          | (.nodes[] | select(.id == 136)) |= (
+              .title = "REF2VA conditioning — start with ref_image_size=match"
+              | .widgets_values[1] = 1344
+              | .widgets_values[2] = 768
+              | .widgets_values[3] = 124
+              | .widgets_values[4] = "match"
+            )
+          | (.nodes[] | select(.id == 124)) |= (
+              .title = "Maximum-quality baseline — 50 steps, no Turbo"
+              | .widgets_values = ["simple", 50, 1]
+            )
+          | (.nodes[] | select(.id == 92)) |= (
+              .title = "Save accepted REF2VA scene"
+              | .widgets_values[0] = "video/H3_BF16_REF2VA_Scene"
+            )
+          | (.groups[] | select(.title == "Models")).title =
+              "On-demand BF16 load — REF2VA family only"
+          | (.groups[] | select(.title == "Sampling")).title =
+              "Maximum-quality 50-step sampling"
+          | (.groups[] | select(.title == "User Inputs")).title =
+              "Approved images and one-scene prompt"
+          | walk(if type == "object" then del(.properties.models) else . end)
+        ' ${eliteWorkflows}/video/video_minimax_h3_bf16_r2v.json >"$r2v"
+
+        jq -s -e '
+          length == 2
+          and ([.[] | .. | objects | select(.type? == "CLIPLoader") | .widgets_values[0]]
+            == [
+              "qwen3vl_32b_minimax_h3_bf16.safetensors",
+              "qwen3vl_32b_minimax_h3_bf16.safetensors"
+            ])
+          and ([.[0] | .. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+            == ["minimax_h3_fl2va_bf16.safetensors"])
+          and ([.[1] | .. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+            == ["minimax_h3_ref2va_bf16.safetensors"])
+          and all(.[];
+            ([.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]]
+              == [50])
+            and ([.. | objects | select(.type? == "VAELoader") | .widgets_values[0]]
+              | sort == ([
+                "minimax_h3_audio_vae_fp32.safetensors",
+                "minimax_h3_video_vae_fp16.safetensors"
+              ] | sort))
+            and ([.. | objects | select(.type? == "LoraLoader")] | length == 0)
+            and ([.. | objects | select(.type? == "SaveVideo" and .mode == 0)] | length == 1))
+          and ([.[0] | .. | strings | select(contains("h3-model-phase prepare fl2va"))] | length == 1)
+          and ([.[1] | .. | strings | select(contains("h3-model-phase prepare ref2va"))] | length == 1)
+        ' "$i2v" "$r2v" >/dev/null
+        if grep -RqiE 'krea|pruned_int8|nvfp4|minimax_h3_turbo|resolve/main|tree/main|ComfyUI-Manager' \
+          "$out/workflows"; then
+          echo "forbidden Krea, practical H3, Turbo, mutable link, or Manager dependency" >&2
+          exit 1
+        fi
+        if grep -qi 'minimax_h3_ref2va.*safetensors' "$i2v" \
+          || grep -qi 'minimax_h3_fl2va.*safetensors' "$r2v"; then
+          echo "H3 production workflow contains the wrong diffusion family" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 2
       '';
 
   pixaromaEp24 =
@@ -923,20 +1108,22 @@ let
     ep30_dir="$user_workflows/pixaroma-ep30"
     klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
     character_dir="$user_workflows/krea2-character-sheet-bf16"
+    h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
     klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
     character_staging="$user_workflows/.krea2-character-sheet-bf16.new"
+    h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$elite_staging"
+      "$character_staging" "$h3_production_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$elite_staging" "$input_dir"
+      "$character_staging" "$h3_production_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -958,6 +1145,9 @@ let
     for source in ${kreaIdentityRealismWorkflow}/workflows/*.json; do
       install -m 0600 "$source" "$character_staging/$(basename "$source")"
     done
+    for source in ${h3ProductionWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_production_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -966,12 +1156,14 @@ let
       done
     done
     rm -rf \
-      "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" "$elite_dir"
+      "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
+      "$h3_production_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
     mv "$klein_staging" "$klein_dir"
     mv "$character_staging" "$character_dir"
+    mv "$h3_production_staging" "$h3_production_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 
@@ -986,6 +1178,7 @@ in
 {
   environment.systemPackages = [
     comfyui
+    h3ModelPhase
     modelTools
     pkgs.ffmpeg-full
   ];
