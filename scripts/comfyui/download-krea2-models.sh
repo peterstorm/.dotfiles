@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Download the production Krea 2 local profile for the Nix-managed ComfyUI.
 #
-# The profile contains highest-fidelity BF16 Turbo text-to-image weights, the
-# official INT8 style-reference path, Krea's style LoRAs, Episode 30 edit/outfit
-# LoRAs, and its local H3 prompt encoder. Every repository is revision-pinned;
+# The profile contains highest-fidelity BF16 Turbo text-to-image weights, a
+# full-BF16 abliterated Qwen3-VL encoder, Krea's style LoRAs, Episode 30
+# edit/outfit LoRAs, and its local H3 prompt encoder. Every repository is revision-pinned;
 # every artifact is verified by size + SHA-256 before an atomic rename.
 set -euo pipefail
 
@@ -15,6 +15,8 @@ OUTFIT_REPO="AliveAi/Krea-2-Edit-Outfit-Transfer"
 OUTFIT_REV="827dab8588b6cb261cf9ae580c417bc068740b7f"
 H3_PROMPT_REPO="DreamFast/Qwen3-VL-8B-Heretic-1.3.0"
 H3_PROMPT_REV="28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3"
+ABLITERATED_ENCODER_REPO="ahmed22xa/Huihui-Qwen3-VL-4B-Instruct-abliterated-comfy"
+ABLITERATED_ENCODER_REV="6d6fc98f9bfa783dfa4f143804525742cb5dad62"
 MODELS_ROOT="${COMFYUI_MODELS_ROOT:-/models/comfyui}"
 STAGING="$MODELS_ROOT/.staging-krea2-$REV"
 MARKER="$MODELS_ROOT/.krea2-production-complete"
@@ -45,6 +47,7 @@ read -r -d '' AUXILIARY_MANIFEST <<EOF || true
 6adf9a69cc9502d286db7b69964d37da7e9cfe4b05b4d004bc275f087d3fd3cf 1828256432 $IDENTITY_REPO $IDENTITY_REV krea2_identity_edit_v1_2.safetensors loras/krea2/krea2_identity_edit_v1_2.safetensors
 4d1033032a1a24bb9b09c44b44514c6791241ebc7b91ffe4f5edd70830a8804d 1142684152 $OUTFIT_REPO $OUTFIT_REV krea_outfittransfer.safetensors loras/krea2/krea_outfittransfer.safetensors
 7f8ec20de729e2d99f3a04852d4c4499c1677cda167f5ea63d21b0882a5c32b5 10017064632 $H3_PROMPT_REPO $H3_PROMPT_REV comfyui/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors text_encoders/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors
+03590b45adf6a071dd5de231d4e2b697355746e36ce2d9368b4c0587ba014cd2 8875719408 $ABLITERATED_ENCODER_REPO $ABLITERATED_ENCODER_REV Huihui-Qwen3-VL-4B-Instruct-abliterated.safetensors text_encoders/huihui_qwen3vl_4b_abliterated_bf16.safetensors
 EOF
 
 verify_manifest() {
@@ -73,6 +76,18 @@ auxiliary_verification_manifest() {
   awk 'NF == 6 { print $1, $2, $6 }' <<<"$AUXILIARY_MANIFEST"
 }
 
+stage_verified_existing() {
+  local expected_sha="$1" expected_size="$2" relative="$3"
+  local source="$MODELS_ROOT/$relative" staged="$STAGING/$relative"
+  if ! verify_manifest "$MODELS_ROOT" "$expected_sha $expected_size $relative" \
+    >/dev/null 2>&1; then
+    return 1
+  fi
+  mkdir -p "$(dirname "$staged")"
+  rm -f "$staged"
+  ln "$source" "$staged"
+}
+
 install_file() {
   local relative="$1" destination
   destination="$MODELS_ROOT/$relative"
@@ -92,7 +107,8 @@ install_manifest() {
 
 main() {
   local command repo_staging repo revision source relative marker_tmp
-  local -a files
+  local expected_sha expected_size base_count auxiliary_count
+  local -a files missing_files
   if [ "${KREA2_ACCEPT_LICENSE:-}" != yes ]; then
     cat >&2 <<EOF
 error: Krea 2 uses the Krea 2 Community License, not an open-source weight license.
@@ -128,7 +144,7 @@ EOF
     echo "Verifying the existing Krea 2 production profile..."
     if verify_manifest "$MODELS_ROOT" "$MANIFEST" \
        && verify_manifest "$MODELS_ROOT" "$(auxiliary_verification_manifest)"; then
-      echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
+      echo "KREA2_MODELS_READY: $REPO@$REV + Episode 24/30 auxiliary dependencies"
       exit 0
     fi
     echo "Existing profile is incomplete or corrupt; resuming the pinned download." >&2
@@ -136,18 +152,34 @@ EOF
 
   mkdir -p "$STAGING"
   mapfile -t files < <(awk 'NF == 3 { print $3 }' <<<"$MANIFEST")
-  export HF_HUB_DISABLE_XET=1
-  hf download "$REPO" "${files[@]}" --revision "$REV" --local-dir "$STAGING"
-
-  while read -r _ _ repo revision source relative; do
+  missing_files=()
+  while read -r expected_sha expected_size relative; do
     [ -n "$relative" ] || continue
+    if ! stage_verified_existing "$expected_sha" "$expected_size" "$relative"; then
+      missing_files+=("$relative")
+    fi
+  done <<<"$MANIFEST"
+
+  export HF_HUB_DISABLE_XET=1
+  if [ "${#missing_files[@]}" -gt 0 ]; then
+    hf download "$REPO" "${missing_files[@]}" --revision "$REV" --local-dir "$STAGING"
+  fi
+
+  while read -r expected_sha expected_size repo revision source relative; do
+    [ -n "$relative" ] || continue
+    if stage_verified_existing "$expected_sha" "$expected_size" "$relative"; then
+      continue
+    fi
     repo_staging="$STAGING/.repositories/${repo//\//--}"
     hf download "$repo" "$source" --revision "$revision" --local-dir "$repo_staging"
     mkdir -p "$(dirname "$STAGING/$relative")"
     mv -f "$repo_staging/$source" "$STAGING/$relative"
   done <<<"$AUXILIARY_MANIFEST"
 
-  printf 'Verifying %d pinned base artifacts and 3 Episode 30 dependencies...\n' "${#files[@]}"
+  base_count="${#files[@]}"
+  auxiliary_count="$(awk 'NF == 6 { count++ } END { print count + 0 }' <<<"$AUXILIARY_MANIFEST")"
+  printf 'Verifying %d pinned base artifacts and %d auxiliary dependencies...\n' \
+    "$base_count" "$auxiliary_count"
   verify_manifest "$STAGING" "$MANIFEST"
   verify_manifest "$STAGING" "$(auxiliary_verification_manifest)"
 
@@ -167,7 +199,7 @@ EOF
   mv -f "$marker_tmp" "$MARKER"
   rm -rf "$STAGING"
 
-  echo "KREA2_MODELS_READY: $REPO@$REV + Episode 30 edit/prompt dependencies"
+  echo "KREA2_MODELS_READY: $REPO@$REV + Episode 24/30 auxiliary dependencies"
   echo "model root: $MODELS_ROOT"
 }
 

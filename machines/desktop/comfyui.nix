@@ -186,6 +186,8 @@ let
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
   '';
 
+  krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
+
   pixaromaEp24Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep24%20Workflows.zip";
     hash = "sha256-aHuDeJ6dpP3bcTR1FOLyVaV+WYv99f6vT5VhUjBq8nQ=";
@@ -214,6 +216,16 @@ let
     2b. Krea 2 Text to Image + Extra Pass + Lora.json
     2c. Krea 2 Text to Image + Extra Pass + Prompt Enhancer.json
     2d. Krea 2 Text to Image - 2K.json
+  '';
+
+  pixaromaEp24AbliteratedProfileNote = pkgs.writeText "pixaroma-ep24-abliterated-bf16-profile-note.json" ''
+    {"version":1,"content":"<h1>Pixaroma Episode 24 — abliterated BF16 encoder profile</h1><p>This graph uses the pinned full-BF16 Huihui Qwen3-VL-4B abliterated encoder with the workstation's BF16 Krea 2 Turbo diffusion model and official Qwen Image VAE.</p><ul><li>Single-file ComfyUI BF16 encoder derived from huihui-ai/Huihui-Qwen3-VL-4B-Instruct-abliterated</li><li>Exact repository revision, byte count, and SHA-256 verified by the Krea downloader</li><li>Original Episode 24 sampler and upscale topology retained</li></ul><p>This is a lower-refusal experimental encoder profile, not a guarantee about Krea output behavior. Keep the standard BF16 workflows as the quality baseline.</p>"}
+  '';
+
+  pixaromaEp24AbliteratedWorkflowManifest = pkgs.writeText "pixaroma-ep24-abliterated-workflows.manifest" ''
+    3u. Krea 2 Text to Image - 2K (Uncensored).json|3a. Krea 2 Text to Image - 2K - Abliterated BF16.json
+    3u. Krea 2 Text to Image + Extra Pass + Prompt Enhancer (Uncensored).json|3b. Krea 2 Text to Image + Extra Pass + Prompt Enhancer - Abliterated BF16.json
+    3u. Krea 2 Text to Image + Prompt Enhancer (Uncensored).json|3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16.json
   '';
 
   pixaromaEp29ProfileNote = pkgs.writeText "pixaroma-ep29-bf16-profile-note.json" ''
@@ -468,22 +480,48 @@ let
           jq -e . "$destination" >/dev/null
         done < ${pixaromaEp24WorkflowManifest}
 
+        abliterated_profile_note="$(cat ${pixaromaEp24AbliteratedProfileNote})"
+        while IFS='|' read -r source_name destination_name; do
+          test -n "$source_name" && test -n "$destination_name"
+          source="$source_root/$source_name"
+          destination="$out/workflows/$destination_name"
+          test -f "$source"
+          jq \
+            --arg profile_note "$abliterated_profile_note" \
+            --arg encoder "${krea2AbliteratedEncoder}" '
+              (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
+                "krea2_turbo_bf16.safetensors"
+              | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
+                  $encoder
+              | (.nodes[] | select(.type == "VAELoader") | .widgets_values[0]) =
+                  "qwen_image_vae.safetensors"
+              | (.nodes[] | select(.type == "PixaromaNote") | .widgets_values[0]) =
+                  $profile_note
+              | (.nodes[] | select(.type == "PixaromaLabel") | .widgets_values[0]) |=
+                  gsub("Uncensored|Unrestricted"; "Abliterated BF16")
+              | del(.extra.node_versions["rgthree-comfy"])
+              | del(.extra.node_versions["ComfyUI-GGUF"])
+            ' "$source" >"$destination"
+          jq -e . "$destination" >/dev/null
+        done < ${pixaromaEp24AbliteratedWorkflowManifest}
+
         jq -s -e '
-          length == 8
+          length == 11
           and ([.[] | .nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
-            | length == 8 and all(.[]; . == "krea2_turbo_bf16.safetensors"))
+            | length == 11 and all(.[]; . == "krea2_turbo_bf16.safetensors"))
           and ([.[] | .nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
-            | length == 8 and all(.[]; . == "qwen3vl_4b_bf16.safetensors"))
+            | ([.[] | select(. == "qwen3vl_4b_bf16.safetensors")] | length == 8)
+              and ([.[] | select(. == "${krea2AbliteratedEncoder}")] | length == 3))
           and ([.[] | .nodes[] | select(.type == "VAELoader") | .widgets_values[0]]
-            | length == 8 and all(.[]; . == "qwen_image_vae.safetensors"))
+            | length == 11 and all(.[]; . == "qwen_image_vae.safetensors"))
           and ([.[] | .nodes[] | select(.type == "KSampler") | .widgets_values[2]]
-            | length == 12
-              and ([.[] | select(. == 8)] | length == 8)
-              and ([.[] | select(. == 4)] | length == 4))
-          and ([.[] | .nodes[] | select(.type == "TextGenerate")] | length == 3)
+            | length == 17
+              and ([.[] | select(. == 8)] | length == 11)
+              and ([.[] | select(. == 4)] | length == 6))
+          and ([.[] | .nodes[] | select(.type == "TextGenerate")] | length == 6)
           and ([.[] | .nodes[] | select(.type == "VAEDecodeTiled")] | length == 1)
-          and ([.[] | .nodes[] | select(.type == "LatentUpscaleBy")] | length == 4)
-          and ([.[] | .nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")] | length == 8)
+          and ([.[] | .nodes[] | select(.type == "LatentUpscaleBy")] | length == 6)
+          and ([.[] | .nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")] | length == 11)
           and ([.[] | .nodes[] | select(.type == "LoraLoaderModelOnly")
               | .widgets_values[0]] | sort
             == (["krea2_kidsdrawing.safetensors", "krea2_vintagetarot.safetensors"] | sort))
@@ -514,12 +552,12 @@ let
               "UNETLoader", "VAEDecode", "VAEDecodeTiled", "VAELoader"
             ] | index($type) | not))] | length == 0)
         ' "$out"/workflows/*.json >/dev/null
-        if grep -RqiE 'fp8|int8|rgthree|resolve/main|tree/main|uncensored|unrestricted|abliterated|krea2RealVae' \
+        if grep -RqiE 'fp8|int8|rgthree|resolve/main|tree/main|uncensored|unrestricted|krea2RealVae' \
           "$out/workflows"; then
           echo "forbidden Episode 24 model, node, or mutable link" >&2
           exit 1
         fi
-        test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 8
+        test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 11
       '';
 
   pixaromaEp29 =

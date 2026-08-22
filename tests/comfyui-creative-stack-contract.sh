@@ -80,8 +80,12 @@ contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$source_root" -type f -n
 contains "$MODULE" '"Krea 2 Style LoRA (core)"'
 contains "$MODULE" '"LoraLoaderModelOnly"'
 contains "$MODULE" '"krea2_kidsdrawing.safetensors", "krea2_vintagetarot.safetensors"'
-contains "$MODULE" 'fp8|int8|rgthree|resolve/main|tree/main|uncensored|unrestricted|abliterated|krea2RealVae'
-contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '\''*.json'\'' | wc -l)" -eq 8'
+contains "$MODULE" '3a. Krea 2 Text to Image - 2K - Abliterated BF16.json'
+contains "$MODULE" '3b. Krea 2 Text to Image + Extra Pass + Prompt Enhancer - Abliterated BF16.json'
+contains "$MODULE" '3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16.json'
+contains "$MODULE" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
+contains "$MODULE" 'fp8|int8|rgthree|resolve/main|tree/main|uncensored|unrestricted|krea2RealVae'
+contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out/workflows" -type f -name '\''*.json'\'' | wc -l)" -eq 11'
 contains "$MODULE" 'Ep29%20Workflows.zip'
 contains "$MODULE" 'sha256-DV0WoYk/S9zdMEKOWaCfj5Uru0YDpzea6XLLTwcZWbM='
 contains "$MODULE" 'Ep30%20Workflows.zip'
@@ -177,13 +181,19 @@ contains "$DOWNLOAD" 'qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors'
 contains "$DOWNLOAD" 'IDENTITY_REV="89e9e7a09ee2e5c9331e952063d79b1b8a703280"'
 contains "$DOWNLOAD" 'OUTFIT_REV="827dab8588b6cb261cf9ae580c417bc068740b7f"'
 contains "$DOWNLOAD" 'H3_PROMPT_REV="28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3"'
+contains "$DOWNLOAD" 'ABLITERATED_ENCODER_REPO="ahmed22xa/Huihui-Qwen3-VL-4B-Instruct-abliterated-comfy"'
+contains "$DOWNLOAD" 'ABLITERATED_ENCODER_REV="6d6fc98f9bfa783dfa4f143804525742cb5dad62"'
+contains "$DOWNLOAD" '03590b45adf6a071dd5de231d4e2b697355746e36ce2d9368b4c0587ba014cd2 8875719408'
+contains "$DOWNLOAD" 'text_encoders/huihui_qwen3vl_4b_abliterated_bf16.safetensors'
+contains "$DOWNLOAD" 'stage_verified_existing'
+contains "$DOWNLOAD" 'missing_files'
 contains "$DOWNLOAD" 'sha256sum "$file"'
 contains "$DOWNLOAD" 'stat -c %s "$file"'
 contains "$DOWNLOAD" 'mv -f "$destination.new" "$destination"'
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$DOWNLOAD")" -eq 15 ]] \
   || fail "Krea base manifest must contain exactly 15 pinned artifacts"
-[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 3 ]] \
-  || fail "Episode 30 auxiliary manifest must contain exactly 3 pinned artifacts"
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 4 ]] \
+  || fail "Episode 24/30 auxiliary manifest must contain exactly 4 pinned artifacts"
 
 # MiniMax H3 is separately authorized, revision-pinned, complete, and atomic.
 contains "$H3_DOWNLOAD" 'MINIMAX_H3_ACCEPT_LICENSE'
@@ -234,8 +244,10 @@ contains "$RUNBOOK" '687b83789e9da4fddb71347514e2f255a57e598bfdf5feaf4f956152306
 contains "$RUNBOOK" 'pixaroma-ep24-krea2-bf16'
 contains "$RUNBOOK" 'eight workflows demonstrated by the video'
 contains "$RUNBOOK" 'LoraLoaderModelOnly'
-contains "$RUNBOOK" 'three `3u` “uncensored” files'
-contains "$RUNBOOK" '**76 user workflows:**'
+contains "$RUNBOOK" 'three later experimental topologies'
+contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
+contains "$RUNBOOK" '8,875,719,408 bytes'
+contains "$RUNBOOK" '**79 user workflows:**'
 contains "$RUNBOOK" 'character-bible.md'
 contains "$RUNBOOK" 'desktop-muse/muse-glimmer-30b'
 contains "$RUNBOOK" 'compile and render exactly one scene'

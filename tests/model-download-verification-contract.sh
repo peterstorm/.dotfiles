@@ -46,6 +46,17 @@ printf 'install me\n' >"$STAGING/nested/model.bin"
 install_file nested/model.bin
 [ "$(stat -c %a "$MODELS_ROOT/nested/model.bin")" = 640 ] \
   || fail "installed artifact mode is not 0640"
+installed_sha="$(sha256sum "$MODELS_ROOT/nested/model.bin" | cut -d' ' -f1)"
+installed_size="$(stat -c %s "$MODELS_ROOT/nested/model.bin")"
+STAGING="$sandbox/restaging"
+stage_verified_existing "$installed_sha" "$installed_size" nested/model.bin \
+  || fail "verified existing artifact was not reused"
+[ "$(stat -c %i "$MODELS_ROOT/nested/model.bin")" = "$(stat -c %i "$STAGING/nested/model.bin")" ] \
+  || fail "verified existing artifact was not staged as a same-filesystem hard link"
+printf 'corrupt\n' >"$MODELS_ROOT/corrupt.bin"
+if stage_verified_existing "$installed_sha" "$installed_size" corrupt.bin 2>/dev/null; then
+  fail "corrupt existing artifact was reused"
+fi
 
 # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
 source "$PROFILE_CATALOG"
