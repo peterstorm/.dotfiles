@@ -186,10 +186,19 @@ let
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
   '';
 
+  pixaromaEp29Archive = pkgs.fetchurl {
+    url = "https://workflows.pixaroma.com/workflows/Ep29%20Workflows.zip";
+    hash = "sha256-DV0WoYk/S9zdMEKOWaCfj5Uru0YDpzea6XLLTwcZWbM=";
+  };
+
   pixaromaEp30Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep30%20Workflows.zip";
     hash = "sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k=";
   };
+
+  pixaromaEp29ProfileNote = pkgs.writeText "pixaroma-ep29-bf16-profile-note.json" ''
+    {"version":1,"content":"<h1>Pixaroma Episode 29 — workstation BF16 profile</h1><p>This graph is adapted from the pinned Episode 29 archive for this workstation's maximum-quality local MiniMax H3 profile.</p><ul><li>Unpruned BF16 FL2VA or REF2VA — exactly one task family per graph</li><li>BF16 Qwen3-VL-32B encoder</li><li>FP16 video VAE and FP32 audio VAE</li><li>50 steps, CFG 1, no Turbo LoRA</li></ul><p>Generate one scene at a time. Do not place FL2VA and REF2VA in one active graph. The local H3 legal gate and runtime qualification in the creative-stack runbook still apply.</p>"}
+  '';
 
   eliteWorkflowManifest = pkgs.writeText "comfyui-elite-workflows.manifest" ''
     image/image_krea2_turbo_t2i.json
@@ -260,6 +269,71 @@ let
     test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 51
   '';
 
+  pixaromaEp29 =
+    pkgs.runCommand "pixaroma-ep29-bf16-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.findutils
+          pkgs.jq
+          pkgs.unzip
+        ];
+      }
+      ''
+        unzip -q ${pixaromaEp29Archive} -d unpacked
+        source_root=unpacked/EP29\ Workflows
+        mkdir -p "$out/workflows" "$out/media"
+        profile_note="$(cat ${pixaromaEp29ProfileNote})"
+
+        find "$source_root" -type f -name '*.json' \
+          ! -path '*/Low Vram/*' \
+          ! -path '*/4. Generate Image H3 (fl2va)/*' \
+          -print0 | while IFS= read -r -d $'\0' source; do
+          destination="$out/workflows/$(basename "$source")"
+          jq --arg profile_note "$profile_note" '
+            (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) |=
+              if contains("fl2va") then "minimax_h3_fl2va_bf16.safetensors"
+              elif contains("ref2va") then "minimax_h3_ref2va_bf16.safetensors"
+              else error("unexpected Episode 29 diffusion selector")
+              end
+            | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
+                "qwen3vl_32b_minimax_h3_bf16.safetensors"
+            | (.nodes[] | select(.type == "KSampler") | .widgets_values[2]) = 50
+            | (.nodes[] | select(.type == "PixaromaNote") | .widgets_values[0]) =
+                $profile_note
+          ' "$source" >"$destination"
+          jq -e . "$destination" >/dev/null
+        done
+        cp "$source_root"/Media\ Inputs/* "$out/media/"
+
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 8
+        test "$(find "$out/media" -type f | wc -l)" -eq 11
+        jq -s -e '
+          length == 8
+          and ([.[] | .nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+            | map(select(. == "minimax_h3_fl2va_bf16.safetensors")) | length == 4)
+          and ([.[] | .nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+            | map(select(. == "minimax_h3_ref2va_bf16.safetensors")) | length == 4)
+          and all(.[];
+            ([.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]] as $unets
+            | ($unets | length) == 1
+            and ($unets[0] == "minimax_h3_fl2va_bf16.safetensors"
+              or $unets[0] == "minimax_h3_ref2va_bf16.safetensors"))
+            and ([.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
+              == ["qwen3vl_32b_minimax_h3_bf16.safetensors"])
+            and ([.nodes[] | select(.type == "KSampler") | .widgets_values[2]] == [50])
+            and (([.nodes[].type] - [
+              "CLIPLoader", "ConditioningZeroOut", "KSampler",
+              "MiniMaxH3ImageToVideo", "MiniMaxH3ReferenceToVideo",
+              "PixaromaDuration", "PixaromaH3AudioSync", "PixaromaLabel",
+              "PixaromaLoadAudio", "PixaromaLoadImageMini", "PixaromaLongestSide",
+              "PixaromaNote", "PixaromaPrompt", "PixaromaRunTimer",
+              "PixaromaSaveMp4", "PixaromaSizes", "UNETLoader", "VAEDecode",
+              "VAEDecodeAudio", "VAELoader"
+            ]) | length) == 0)
+        ' "$out"/workflows/*.json >/dev/null
+        ! grep -RqiE 'pruned_int8|nvfp4|LayerUtility' "$out/workflows"
+      '';
+
   pixaromaEp30 =
     pkgs.runCommand "pixaroma-ep30-workflows"
       {
@@ -297,13 +371,21 @@ let
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
+    ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"
     ep30_dir="$user_workflows/pixaroma-ep30"
     elite_dir="$user_workflows/creative-suite"
+    ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
-    rm -rf "$ep30_staging" "$elite_staging"
-    install -d -m 0700 "$ep30_staging" "$elite_staging" "$input_dir"
+    rm -rf "$ep29_staging" "$ep30_staging" "$elite_staging"
+    install -d -m 0700 "$ep29_staging" "$ep30_staging" "$elite_staging" "$input_dir"
+    for source in ${pixaromaEp29}/workflows/*.json; do
+      install -m 0600 "$source" "$ep29_staging/$(basename "$source")"
+    done
+    for source in ${pixaromaEp29}/media/*; do
+      install -m 0600 "$source" "$input_dir/$(basename "$source")"
+    done
     for source in ${pixaromaEp30}/workflows/*.json; do
       install -m 0600 "$source" "$ep30_staging/$(basename "$source")"
     done
@@ -317,7 +399,8 @@ let
         install -m 0600 "$source" "$destination/$(basename "$source")"
       done
     done
-    rm -rf "$ep30_dir" "$elite_dir"
+    rm -rf "$ep29_dir" "$ep30_dir" "$elite_dir"
+    mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
     mv "$elite_staging" "$elite_dir"
   '';
@@ -436,6 +519,6 @@ in
   };
 
   # Intentionally no firewall rule for 8188 and no ComfyUI-Manager package.
-  # Core covers the native workflows; the three third-party Episode 30 packs
-  # above are immutable source pins required by the imported editing workflows.
+  # Core covers the native workflows; the three third-party Pixaroma packs
+  # above are immutable source pins required by the imported Episode 29/30 graphs.
 }

@@ -23,9 +23,9 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 
 This deliberately does **not** install ComfyUI-Manager or permit mutable node
 installs. Core supplies the standard generation nodes. The in-repo Muse adapter
-and the three packs required by Pixaroma Episode 30 are immutable source pins:
-Krea 2 Identity Edit, Krea2T Enhancer, and Pixaroma. The latter is a broad pack,
-but it is now a concrete workflow dependency rather than speculative tooling;
+and the three packs required by Pixaroma Episodes 29–30 are immutable source
+pins: Krea 2 Identity Edit, Krea2T Enhancer, and Pixaroma. The latter is a broad
+pack, but it is now a concrete workflow dependency rather than speculative tooling;
 ComfyUI remains loopback-only and systemd-confined.
 
 ## What is declarative and what is not
@@ -36,7 +36,8 @@ ComfyUI remains loopback-only and systemd-confined.
 | CUDA PyTorch | Nixpkgs `torch-bin`, `triton-bin`, `torchvision-bin`, `torchaudio-bin` | Nix flake pin; no source build |
 | Core nodes and template library | ComfyUI/Nix package | Nix flake pin |
 | Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
-| Episode 30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
+| Episode 29–30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
+| Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
 | Curated creative suite | 51 official Comfy workflows under six task folders | pinned template package; exact file manifest + JSON gate |
 | Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
@@ -129,9 +130,12 @@ The switch installs:
 - `/models/comfyui/{diffusion_models,text_encoders,vae,loras,...}`;
 - the immutable Muse, Krea edit, Krea enhancer, and Pixaroma nodes via an
   extra-path YAML in the Nix store;
+- eight BF16-adapted Episode 29 H3 video workflows under
+  `/var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16/`;
 - all seven Episode 30 workflows under
-  `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/` and all six supplied
-  sample inputs under `/var/lib/comfyui/input/`;
+  `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
+- the 11 Episode 29 and six Episode 30 sample inputs under
+  `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
 - 51 curated official workflows under
   `/var/lib/comfyui/user/default/workflows/creative-suite/`, grouped into image,
   video, audio, 3D, enhancement, and hosted-frontier folders.
@@ -152,7 +156,7 @@ transactional profile switch. After activation, acceptance requires:
 - logs list Muse, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
-- exactly seven Episode 30 workflows and six source inputs are installed;
+- exactly eight BF16-adapted Episode 29 and seven Episode 30 workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -337,12 +341,54 @@ larger downstream workflow. Muse Glimmer 30B remains the preferred prompt author
 for quality and reference mode, while these two workflows preserve the video's
 self-contained ComfyUI option.
 
+### Pixaroma Episode 29 — selected H3 video workflows, adapted to BF16
+
+The source is [Episode 29](https://www.youtube.com/watch?v=267y00jaOUc),
+`Ep29 Workflows.zip`, 9,540,206 bytes, SHA-256
+`0d5d16a1893f4bdcdd30428e59a09f8f952bbb4603a7379ae972cb4f071959b3`.
+Nix selects eight video-generation graphs and all 11 sample inputs:
+
+1. text-to-video;
+2. first-frame image-to-video;
+3. first+last-frame image-to-video;
+4. last-frame-only image-to-video;
+5. two-image reference-to-video;
+6. three-image reference-to-video;
+7. reference image + synchronized singing audio;
+8. reference image + synchronized speech audio.
+
+The build transforms the imported JSON deterministically: practical pruned INT8
+FL2VA/REF2VA selectors become the separately authorized unpruned BF16 files,
+the NVFP4-AWQ encoder becomes BF16 Qwen3-VL-32B, every sampler becomes the
+50-step/CFG-1 maximum-quality baseline, mutable model-download notes are
+replaced by the workstation profile contract, and no Turbo LoRA is added. Each
+graph still contains exactly one DiT family. The archive's low-VRAM graph is
+excluded because it adds `ComfyUI_LayerStyle`, targets 8 GB cards, and trades
+quality for offload behavior we do not need. Its H3 text-to-image and image-edit
+graphs are also excluded because the video itself finds them slower and worse
+than Krea 2 for those jobs.
+
+Episode 29's useful additions over the official local templates are explicit
+first+last and last-only graphs, ready-made two/three-reference graphs, and
+Pixaroma's H3 audio-latent synchronization for speech and singing. Muse replaces
+the video's hosted custom ChatGPT prompt step. Do not rely on the video's
+speculation that personal use bypasses excluded territories; this deployment's
+separate H3 authorization remains mandatory.
+
+Retain the video's sound operational advice: dimensions stay divisible by 32,
+clips stay at or below 15 seconds, and dynamic VRAM remains enabled (the service
+does not pass `--disable-dynamic-vram`). Do not adopt Easy Cache because the
+video's own testers observed worse output. Sage Attention is not added from the
+video's mutable Windows add-on: the CUDA 13.2 Nix runtime must first get an
+immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark.
+
 ### Curated creative suite
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **58 user workflows:** seven pinned Pixaroma Episode 30 graphs plus 51 curated
-  official graphs installed into the workflow browser.
+- **66 user workflows:** eight BF16-adapted Pixaroma Episode 29 graphs, seven
+  pinned Episode 30 graphs, and 51 curated official graphs installed into the
+  workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -872,20 +918,24 @@ The starting surface is:
 | Wardrobe variants | `Krea 2 + One Image Outfit Lora` or `Krea 2 + Outfit Transfer 2` | User workflows → `pixaroma-ep30` | Outfit-transfer weights and clean clothing references |
 | Story, screenplay, and scene cards | Muse Glimmer in Pi | Select `desktop-muse/muse-glimmer-30b` | Muse target and DFlash draft markers; Muse endpoint healthy |
 | Per-scene H3 prompt compilation | `Muse Glimmer Creative Prompt` | Add node → creative → Muse Glimmer | Muse endpoint healthy; accepted scene card already written |
-| Text-only local H3 scene | `video_minimax_h3_t2v` | Templates → Video | Local H3 marker; save a BF16 FL2VA copy as described above |
-| First/last-frame local H3 scene | `video_minimax_h3_i2v` | Templates → Video | Local H3 marker; save a BF16 FL2VA copy |
-| Character/reference-led local H3 scene | `video_minimax_h3_r2v` | Templates → Video | Local H3 marker; save a BF16 REF2VA copy |
+| Text-only local H3 scene | `Minimax H3 - Text to video` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker; BF16 FL2VA graph is already adapted |
+| First-frame local H3 scene | `Minimax H3 - Image to video FF (First Frame)` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker and accepted Krea keyframe |
+| First+last or last-only local H3 scene | `Minimax H3 - Image to video FFLF` or `Minimax H3 - Image to video LF (Last Frame)` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker and matching-ratio keyframes |
+| Character/reference-led local H3 scene | `Minimax H3 - Reference Two Images` or `Minimax H3 - Reference Three Images` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker; BF16 REF2VA graph is already adapted |
+| Audio-led performance | `Minimax H3 - Reference Image + Audio Sync - SPEAK` or `... - SING` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker; consented ≤15-second audio and one identity image |
 | Hosted H3 scene | `api_minimax_h3_t2v`, `api_minimax_h3_flf2v`, or `api_minimax_h3_r2v` | User workflows → `creative-suite/cloud` | Comfy account, credits, and acceptance of remote upload |
 
 The complete pinned Template Library also remains available through the
-**Templates** button. The three local H3 templates are not duplicated into the
-51-workflow user-curated folder; search the official Template Library for
-`MiniMax H3`, then save the BF16 copies under the names from Section 8.
+**Templates** button. Its three practical local H3 templates remain useful as
+upstream references. The Episode 29 user workflows are separate maximum-quality
+BF16 adaptations and do not alter those official templates.
 
 After switching the NixOS generation and starting ComfyUI once, verify the user
 workflow inventory:
 
 ```bash
+test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 8
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
   -type f -name '*.json' | wc -l)" -eq 7
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
@@ -1322,13 +1372,14 @@ Do not call the stack qualified until:
 - [ ] Nix evaluation and build pass from the pinned flake.
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
-- [ ] Comfy logs load Muse plus all three pinned Episode 30 packs with no failed imports.
-- [ ] Seven Episode 30 workflows, 51 curated workflows, and six sample inputs are present.
+- [ ] Comfy logs load Muse plus all three pinned Episode 29–30 packs with no failed imports.
+- [ ] Eight BF16 Episode 29 workflows, seven Episode 30 workflows, 51 curated workflows, and 16 unique sample inputs are present.
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `Krea 2 + Edit Lora` completes at 1 MP with fixed seed and `ref_boost=4`.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
+- [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.
 - [ ] H3 BF16 FL2VA T2V and one-keyframe I2V each complete at 768p/124 frames
       with Muse active on GPU0; record both GPU1 VRAM and host RAM peaks.
 - [ ] After the FL2VA job finishes, the idle-queue `/free` operation or a
@@ -1387,6 +1438,7 @@ The Comfy state, Krea models, inputs, outputs, and workflows remain on disk.
 
 Sources accessed 2026-08-21:
 
+- [Pixaroma Episode 29 MiniMax H3 workflows](https://www.youtube.com/watch?v=267y00jaOUc)
 - [Pixaroma Episode 30 video and transcript](https://www.youtube.com/watch?v=rGVf3m19yM8)
 - [Pixaroma workflow index](https://workflows.pixaroma.com/)
 - [Muse Glimmer 30B Abliterated BF16](https://huggingface.co/mlasli/Muse-Glimmer-30B-Abliterated-BF16)
