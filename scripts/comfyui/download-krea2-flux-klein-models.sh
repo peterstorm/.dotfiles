@@ -63,6 +63,10 @@ verify_manifest() {
 stage_verified_existing() {
   local expected_sha="$1" expected_size="$2" relative="$3"
   local source="$MODELS_ROOT/$relative" staged="$STAGING/$relative"
+  if verify_manifest "$STAGING" "$expected_sha $expected_size $relative" \
+    >/dev/null 2>&1; then
+    return 0
+  fi
   if ! verify_manifest "$MODELS_ROOT" "$expected_sha $expected_size $relative" \
     >/dev/null 2>&1; then
     return 1

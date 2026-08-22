@@ -64,6 +64,15 @@ printf 'corrupt\n' >"$MODELS_ROOT/corrupt.bin"
 if stage_verified_existing "$installed_sha" "$installed_size" corrupt.bin 2>/dev/null; then
   fail "corrupt existing artifact was reused"
 fi
+STAGING="$sandbox/reboot-resume-staging"
+mkdir -p "$STAGING/nested"
+printf 'downloaded before reboot\n' >"$STAGING/nested/resume.bin"
+resume_sha="$(sha256sum "$STAGING/nested/resume.bin" | cut -d' ' -f1)"
+resume_size="$(stat -c %s "$STAGING/nested/resume.bin")"
+stage_verified_existing "$resume_sha" "$resume_size" nested/resume.bin \
+  || fail "verified staging-only artifact was not resumed"
+[ ! -e "$MODELS_ROOT/nested/resume.bin" ] \
+  || fail "staging-only resume unexpectedly required an installed artifact"
 
 # Both FLUX/Klein legal gates must reject before any downloader boundary.
 mkdir -p "$sandbox/bin"
