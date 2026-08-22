@@ -178,12 +178,66 @@ let
     hash = "sha256-/uK+MV+x2W1Gpm3vo54154fjGcUebNRPhPByS5ms2Qk=";
   };
 
-  krea2EnhancerNode = pkgs.fetchFromGitHub {
+  krea2EnhancerSource = pkgs.fetchFromGitHub {
     owner = "capitan01R";
     repo = "ComfyUI-Krea2T-Enhancer";
-    rev = "cf8895005540680306cd46e1faaf75f8902db794";
-    hash = "sha256-KkUK27W/SnFhCjIV5czcm23eN8wptk1/wClv2TAJ99k=";
+    # Upstream's focused ComfyUI diffusion-wrapper ABI compatibility fix.
+    rev = "a01434a0d7a77eba1899116ce2b52ffab5584e91";
+    hash = "sha256-UuDjX2neQkFcGvL9V6nXSSTYfyiu9VhgmuX9/EySo5M=";
   };
+
+  krea2EnhancerNode =
+    pkgs.runCommand "comfyui-krea2t-enhancer-abi-compatible"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${krea2EnhancerSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "krea2_enhancer_abi_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load the Krea enhancer module")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+
+        class PassthroughExecutor:
+            class_obj = object()
+
+            def __call__(self, *args, **kwargs):
+                return args, kwargs
+
+        transformer_options = {
+            "krea2t_prompt_adherence_enhancer": {"enabled": True}
+        }
+        args = (
+            object(),
+            object(),
+            object(),
+            object(),
+            object(),
+            transformer_options,
+        )
+        marker = object()
+        received_args, received_kwargs = module.krea2t_enhancer_wrapper(
+            PassthroughExecutor(), *args, marker=marker
+        )
+        assert received_args == args
+        assert received_kwargs == {"marker": marker}
+        PY
+        chmod -R a-w "$out"
+      '';
 
   pixaromaNode = pkgs.fetchFromGitHub {
     owner = "pixaroma";

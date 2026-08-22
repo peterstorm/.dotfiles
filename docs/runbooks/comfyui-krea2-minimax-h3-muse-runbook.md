@@ -537,7 +537,8 @@ output, character-plus-background composition, one-reference outfit generation,
 and two-reference try-on. For outfit photos, crop away the original wearer's
 head/body when possible; the transcript shows two visible people confuse the
 LoRA. The exact Krea nodes are pinned to Identity Edit v1.2.5, enhancer commit
-`cf88950`, and Pixaroma `c1aaee4`; no Manager update is allowed.
+`a01434a` (the upstream seven-argument ComfyUI diffusion-wrapper ABI fix), and
+Pixaroma `c1aaee4`; no Manager update is allowed.
 
 The two H3 workflows use Pixaroma's local Qwen3-VL-8B prompt generator. The
 transcript reports that its 4B experiment missed instructions, while 8B was more
