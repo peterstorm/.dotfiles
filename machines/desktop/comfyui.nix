@@ -821,6 +821,100 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
       '';
 
+  kreaIdentityRealismWorkflow =
+    pkgs.runCommand "krea2-identity-realism-klein9b-bf16-workflow"
+      {
+        nativeBuildInputs = [
+          pkgs.python3
+          pkgs.unzip
+          pkgs.jq
+          pkgs.gnugrep
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p unpacked "$out/workflows"
+        cp ${pixaromaEp30Archive} episode30.zip
+        unzip -q episode30.zip -d unpacked
+        identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
+        destination="$out/workflows/Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16.json"
+        python3 ${../../scripts/comfyui/build-krea2-identity-realism-workflow.py} \
+          --identity "$identity" \
+          --realism ${kreaFluxKleinWorkflowSource} \
+          --output "$destination"
+
+        jq -e '
+          . as $workflow
+          | [
+              ([.nodes[].id] | length == (unique | length)),
+              ([.links[][0]] | length == (unique | length)),
+              all(.links[];
+                .[1] as $source_id
+                | .[3] as $destination_id
+                | any($workflow.nodes[]; .id == $source_id)
+                  and any($workflow.nodes[]; .id == $destination_id)),
+              (([.nodes[].type] | unique | sort) == ([
+                "BasicScheduler", "CFGGuider", "CLIPLoader", "CLIPTextEncode",
+                "ColorMatch", "ComfyUI-Krea2T-Enhancer", "ConditioningZeroOut",
+                "DetailDaemonSamplerNode", "EmptyFlux2LatentImage",
+                "EmptySD3LatentImage", "Flux2Scheduler", "GetImageSize",
+                "ImageScaleToTotalPixels", "ImageSharpen",
+                "Krea2EditGroundedEncode", "Krea2EditModelPatch", "KSamplerSelect",
+                "LoraLoaderModelOnly", "PixaromaCompare", "PixaromaLabel",
+                "PixaromaLoadImageMini", "PixaromaLoraLoader", "PixaromaPreview",
+                "PixaromaPrompt", "PixaromaResolution", "PixaromaSliders",
+                "PreviewImage", "RandomNoise", "ReferenceLatent", "SamplerCustom",
+                "SamplerCustomAdvanced", "SaveImage", "UNETLoader", "VAEDecode",
+                "VAEEncode", "VAELoader"
+              ] | sort)),
+              (([.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]] | sort)
+                == (["flux-2-klein-9b-bf16.safetensors", "krea2_turbo_bf16.safetensors"] | sort)),
+              (([.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]] | sort)
+                == (["qwen3vl_4b_bf16.safetensors", "qwen_3_8b_bf16.safetensors"] | sort)),
+              (([.nodes[] | select(.type == "VAELoader") | .widgets_values[0]] | sort)
+                == (["flux2-vae.safetensors", "qwen_image_vae.safetensors"] | sort)),
+              (([.nodes[] | select(.type == "LoraLoaderModelOnly")
+                | { name: .widgets_values[0], mode: .mode }] | sort_by(.name))
+                == ([
+                  { name: "famegrid_standard_krea2_bf16.safetensors", mode: 0 },
+                  { name: "ultra_real_krea2_v2_bf16.safetensors", mode: 4 }
+                ] | sort_by(.name))),
+              (([.nodes[] | select(.type == "PixaromaLoraLoader")
+                | .widgets_values[0].loras[0]
+                | { name: .name, on: .on, strength_model: .sm, strength_clip: .sc }])
+                == [{
+                  name: "krea2/krea2_identity_edit_v1_2.safetensors",
+                  on: true,
+                  strength_model: 1,
+                  strength_clip: 1
+                }]),
+              ([.nodes[] | select(.type == "DetailDaemonSamplerNode")] | length == 1),
+              (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]]) == [4]),
+              (([.nodes[] | select(.type == "BasicScheduler") | .widgets_values])
+                == [["simple", 10, 1]]),
+              (([.nodes[] | select(.type == "Flux2Scheduler") | .widgets_values[0]]) == [2]),
+              (([.nodes[] | select(.type == "ImageScaleToTotalPixels") | .widgets_values[1]]) == [4]),
+              ([.nodes[] | select(.type == "ReferenceLatent")] | length == 2),
+              ([.nodes[] | select(.type == "SaveImage" and .mode == 0)] | length == 1),
+              (([.groups[].title] | sort) == ([
+                "Canonical reference and BF16 Krea loaders",
+                "Choose exactly one Krea realism LoRA",
+                "Detail Daemon identity pass",
+                "FLUX.2 Klein 9B BF16 photoreal refinement",
+                "Identity Edit v1.2 — change one view at a time",
+                "Identity QA — reject drift before approving"
+              ] | sort))
+            ]
+          | all
+        ' "$destination" >/dev/null
+        if grep -qiE 'fp8|int8|rgthree|Rh-Comfy-Auth|resolve/main|tree/main|sam_vit|yolov8|CR Text|FaceDetailer|VHS_' \
+          "$destination"; then
+          echo "forbidden lower-precision selector, credential, mutable link, or inactive dependency" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
+      '';
+
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
@@ -828,18 +922,21 @@ let
     ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"
     ep30_dir="$user_workflows/pixaroma-ep30"
     klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
+    character_dir="$user_workflows/krea2-character-sheet-bf16"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
     klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
+    character_staging="$user_workflows/.krea2-character-sheet-bf16.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
-      "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" "$elite_staging"
+      "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
+      "$character_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$elite_staging" "$input_dir"
+      "$character_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -858,6 +955,9 @@ let
     for source in ${kreaFluxKleinWorkflow}/workflows/*.json; do
       install -m 0600 "$source" "$klein_staging/$(basename "$source")"
     done
+    for source in ${kreaIdentityRealismWorkflow}/workflows/*.json; do
+      install -m 0600 "$source" "$character_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -865,11 +965,13 @@ let
         install -m 0600 "$source" "$destination/$(basename "$source")"
       done
     done
-    rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$elite_dir"
+    rm -rf \
+      "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
     mv "$klein_staging" "$klein_dir"
+    mv "$character_staging" "$character_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 

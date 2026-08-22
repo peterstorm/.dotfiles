@@ -162,6 +162,9 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
 - one BF16 Krea 2 → FLUX.2 Klein 9B refinement workflow under
   `/var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16/`;
+- one BF16 Identity Edit v1.2 → selectable Krea realism → FLUX.2 Klein 9B
+  character-reference workflow under
+  `/var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16/`;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
 - 53 curated official workflows under
@@ -185,7 +188,8 @@ transactional profile switch. After activation, acceptance requires:
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly eleven BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
-  and one Krea/FLUX Klein workflow are installed;
+  one Krea/FLUX Klein workflow, and one identity-realism character workflow are
+  installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -452,6 +456,42 @@ then full BF16 FLUX Klein plus a 16.38 GB encoder and works at four megapixels.
 Queue one job on GPU1, keep H3 idle, and record peak RAM/VRAM on the first run.
 Do not use the FLUX output commercially unless a different license authorizes it.
 
+### Identity-preserving photoreal character references
+
+Open **User workflows → `krea2-character-sheet-bf16` → Krea 2 Identity v1.2 +
+Realism + FLUX.2 Klein 9B BF16**. This declarative graph merges the pinned
+Episode 30 custom-ratio Identity Edit topology with the pinned AI Blueprint
+refinement topology. It is intended to derive one approved view at a time from
+one canonical identity image—not to ask a generator for a crowded multi-view
+sheet.
+
+The default path is:
+
+1. full-rank Krea 2 Identity Edit v1.2 at LoRA strength 1.0 and `ref_boost=4`;
+2. FameGrid Standard active at a conservative 0.65, with UltraReal Krea 2 v2
+   retained but bypassed at 0.6;
+3. a 10-step, CFG-1, `er_sde`/`simple` Krea pass wrapped by Detail Daemon;
+4. explicit inspection of the Krea identity result against the canonical input;
+5. a four-megapixel handoff to full-BF16 FLUX.2 Klein 9B using an
+   identity-locked refinement instruction;
+6. color matching back to the Krea result, conservative sharpening, preview,
+   and persistent save.
+
+Enable **exactly one** realism LoRA. To try UltraReal, bypass FameGrid and enable
+UltraReal; never enable both for baseline qualification. Reject the Krea result
+before relying on the final preview if face geometry, age, hairline, asymmetric
+features, body silhouette, or wardrobe materials drift. FLUX receives the Krea
+result through reference latents, but it is a refiner rather than an identity
+model and therefore does not replace this review gate.
+
+For a production character sheet, repeat the graph for front face,
+three-quarter face, clean profile, full-body front, full-body back, and selected
+expressions. Keep the same canonical image and invariant identity/wardrobe
+language; change only the requested view. Assemble accepted full-resolution
+files into a contact sheet afterward. The build rejects malformed links,
+non-BF16 selectors, stale download URLs, embedded credentials, rgthree,
+FaceDetailer/SAM/YOLO, and video-helper metadata.
+
 ### Pixaroma Episode 30 — complete imported bundle
 
 The source is [Episode 30](https://www.youtube.com/watch?v=rGVf3m19yM8),
@@ -547,9 +587,10 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **80 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, one
-  Krea/FLUX Klein BF16 graph, eight Episode 29 graphs, seven pinned Episode 30
-  graphs, and 53 curated official graphs installed into the workflow browser.
+- **81 user workflows:** eleven BF16-adapted Pixaroma Episode 24 graphs, one
+  Krea/FLUX Klein BF16 graph, one identity-realism character-reference graph,
+  eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
+  official graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -1089,6 +1130,7 @@ The starting surface is:
 | Detailed or 2K Krea generation | `2a. ... Extra Pass` or `2d. ... - 2K` | User workflows → `pixaroma-ep24-krea2-bf16` | Additional GPU time and memory for the 1.5× latent pass |
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
+| Identity-preserving photoreal character view | `Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | Krea and Klein markers; one canonical identity input; enable exactly one realism LoRA |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
 | Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
 | Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
@@ -1119,6 +1161,8 @@ test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep29-h3-bf16 \
 test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
   -type f -name '*.json' | wc -l)" -eq 7
 test "$(find /var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 1
+test "$(find /var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16 \
   -type f -name '*.json' | wc -l)" -eq 1
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
   -type f -name '*.json' | wc -l)" -eq 53

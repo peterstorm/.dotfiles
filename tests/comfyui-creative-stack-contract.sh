@@ -10,6 +10,7 @@ NODE="$ROOT/comfyui/custom_nodes/muse_glimmer_prompt/__init__.py"
 NODE_TEST="$ROOT/tests/test_muse_glimmer_prompt.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
+WORKFLOW_BUILDER="$ROOT/scripts/comfyui/build-krea2-identity-realism-workflow.py"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
@@ -34,10 +35,10 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$H3_DOWNLOAD" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
@@ -81,6 +82,13 @@ contains "$MODULE" 'qwen_3_8b_bf16.safetensors'
 contains "$MODULE" 'famegrid_standard_krea2_bf16.safetensors'
 contains "$MODULE" 'ultra_real_krea2_v2_bf16.safetensors'
 contains "$MODULE" 'DetailDaemonSamplerNode'
+contains "$MODULE" 'krea2-identity-realism-klein9b-bf16-workflow'
+contains "$MODULE" 'build-krea2-identity-realism-workflow.py'
+contains "$MODULE" 'Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16.json'
+contains "$MODULE" 'krea2/krea2_identity_edit_v1_2.safetensors'
+contains "$MODULE" 'Choose exactly one Krea realism LoRA'
+contains "$MODULE" 'Identity QA — reject drift before approving'
+contains "$MODULE" 'forbidden lower-precision selector, credential, mutable link, or inactive dependency'
 contains "$MODULE" 'Rh-Comfy-Auth'
 contains "$MODULE" 'Ep24%20Workflows.zip'
 contains "$MODULE" 'sha256-aHuDeJ6dpP3bcTR1FOLyVaV+WYv99f6vT5VhUjBq8nQ='
@@ -152,13 +160,15 @@ contains "$MODULE" 'ep24_dir="$user_workflows/pixaroma-ep24-krea2-bf16"'
 contains "$MODULE" 'ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"'
 contains "$MODULE" 'ep30_dir="$user_workflows/pixaroma-ep30"'
 contains "$MODULE" 'klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"'
+contains "$MODULE" 'character_dir="$user_workflows/krea2-character-sheet-bf16"'
 contains "$MODULE" 'elite_dir="$user_workflows/creative-suite"'
 contains "$MODULE" 'ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"'
 contains "$MODULE" 'ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"'
 contains "$MODULE" 'ep30_staging="$user_workflows/.pixaroma-ep30.new"'
 contains "$MODULE" 'klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"'
+contains "$MODULE" 'character_staging="$user_workflows/.krea2-character-sheet-bf16.new"'
 contains "$MODULE" 'elite_staging="$user_workflows/.creative-suite.new"'
-contains "$MODULE" 'rm -rf "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$elite_dir"'
+contains "$MODULE" '"$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" "$elite_dir"'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -220,6 +230,22 @@ contains "$KLEIN_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
 if grep -Eq 'hf download .*--token|curl .*token' "$KLEIN_DOWNLOAD"; then
   fail "$KLEIN_DOWNLOAD exposes a credential through process arguments"
 fi
+
+# The character-sheet workflow is a pure merge of immutable sources with exact defaults.
+contains "$WORKFLOW_BUILDER" 'IDENTITY_REMOVE_NODES = {163, 223}'
+contains "$WORKFLOW_BUILDER" 'krea2_turbo_bf16.safetensors'
+contains "$WORKFLOW_BUILDER" 'qwen3vl_4b_bf16.safetensors'
+contains "$WORKFLOW_BUILDER" 'krea2/krea2_identity_edit_v1_2.safetensors'
+contains "$WORKFLOW_BUILDER" 'ultra_real_krea2_v2_bf16.safetensors", 0.6'
+contains "$WORKFLOW_BUILDER" 'famegrid_standard_krea2_bf16.safetensors", 0.65'
+contains "$WORKFLOW_BUILDER" 'flux-2-klein-9b-bf16.safetensors'
+contains "$WORKFLOW_BUILDER" 'qwen_3_8b_bf16.safetensors'
+contains "$WORKFLOW_BUILDER" 'detail[141]["widgets_values"] = ["simple", 10, 1]'
+contains "$WORKFLOW_BUILDER" 'detail[139]["widgets_values"] = [True, 530887432637999, "randomize", 1]'
+contains "$WORKFLOW_BUILDER" 'Refine to high-definition photorealism. Preserve the person'
+contains "$WORKFLOW_BUILDER" 'def rebuild_port_links(graph: Graph) -> None:'
+contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate node id")'
+contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate link id")'
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$DOWNLOAD")" -eq 15 ]] \
   || fail "Krea base manifest must contain exactly 15 pinned artifacts"
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 4 ]] \
@@ -277,8 +303,11 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**80 user workflows:**'
+contains "$RUNBOOK" '**81 user workflows:**'
 contains "$RUNBOOK" 'krea2-flux2-klein9b-bf16'
+contains "$RUNBOOK" 'krea2-character-sheet-bf16'
+contains "$RUNBOOK" 'Krea 2 Identity v1.2 + Realism + FLUX.2 Klein 9B BF16'
+contains "$RUNBOOK" 'enable exactly one realism LoRA'
 contains "$RUNBOOK" 'character-bible.md'
 contains "$RUNBOOK" 'desktop-muse/muse-glimmer-30b'
 contains "$RUNBOOK" 'compile and render exactly one scene'
