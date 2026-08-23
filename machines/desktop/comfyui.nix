@@ -1125,9 +1125,14 @@ let
         identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
         destination="$out/workflows/Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16.json"
         python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
-          --identity "$identity" \
+          --single-view "$identity" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --output "$destination"
+        sheet="$out/workflows/Krea 2 Three-Panel Character Sheet BF16.json"
+        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+          --three-panel "$identity" \
+          --realism ${kreaFluxKleinWorkflowSource} \
+          --output "$sheet"
 
         jq -e '
           . as $workflow
@@ -1212,12 +1217,62 @@ let
             ]
           | all
         ' "$destination" >/dev/null
-        if grep -qiE 'fp8|int8|rgthree|Rh-Comfy-Auth|resolve/main|tree/main|sam_vit|yolov8|CR Text|FaceDetailer|VHS_' \
-          "$destination"; then
+
+        jq -e '
+          . as $workflow
+          | [
+              ([.nodes[].id] | length == (unique | length)),
+              ([.links[][0]] | length == (unique | length)),
+              all(.links[];
+                .[1] as $source_id
+                | .[3] as $destination_id
+                | any($workflow.nodes[]; .id == $source_id)
+                  and any($workflow.nodes[]; .id == $destination_id)),
+              (([.nodes[] | select(.type == "Krea2EditGroundedEncode") | .id] | sort)
+                == ([224, 228] | sort)),
+              (([.nodes[] | select(.type == "SamplerCustom") | .id]) == [139]),
+              (([.nodes[] | select(.type == "EmptyImage") | .widgets_values])
+                == [[1536, 768, 1, 7829367]]),
+              (([.nodes[] | select(.type == "PixaromaLoadImageMini")
+                | .properties.loadImagePixState | fromjson
+                | { ratio: .ratio_preset, w: .fit_w, h: .fit_h }])
+                == [{ ratio: "3:4", w: 768, h: 1024 }]),
+              (([.nodes[] | select(.type == "PixaromaResolution")
+                | .widgets_values[0] | { w, h }])
+                == [{ w: 1536, h: 768 }]),
+              (([.nodes[] | select(.type == "LoraLoaderModelOnly") | .mode] | unique)
+                == [4]),
+              (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]])
+                == [0]),
+              (([.nodes[] | select(.id == 221) | .properties.promptState.text
+                | contains("THREE-PANEL CHARACTER REFERENCE SHEET")]) == [true]),
+              (([.nodes[] | select(.id == 221) | .properties.promptState.text
+                | contains("MAGNIFIED FACE CLOSE-UP ONLY")]) == [true]),
+              (([.nodes[] | select(.id == 503)
+                | { mode, prefix: .widgets_values[0] }])
+                == [{ mode: 0, prefix: "CharacterSheet_Krea2_3Panel" }]),
+              any(.links[]; .[1:5] == [226, 0, 224, 1]),
+              any(.links[]; .[1:5] == [300, 0, 228, 1]),
+              any(.links[]; .[1:5] == [300, 0, 301, 0]),
+              any(.links[]; .[1:5] == [301, 0, 232, 1]),
+              any(.links[]; .[1:5] == [300, 0, 232, 5]),
+              any(.links[]; .[1:5] == [164, 0, 503, 0]),
+              ([.links[] | select(.[1] == 226) | .[3:5]] == [[224, 1]]),
+              (([.groups[].title] | sort) == ([
+                "Approved full-look identity reference — visual grounding only",
+                "Blank spatial canvas — prevents source-image overlay",
+                "Native three-panel generation and save",
+                "Three-panel grammar and BF16 Identity Edit model"
+              ] | sort))
+            ]
+          | all
+        ' "$sheet" >/dev/null
+        if grep -RqiE 'fp8|int8|rgthree|Rh-Comfy-Auth|resolve/main|tree/main|sam_vit|yolov8|CR Text|FaceDetailer|VHS_' \
+          "$out/workflows"; then
           echo "forbidden lower-precision selector, credential, mutable link, or inactive dependency" >&2
           exit 1
         fi
-        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 2
       '';
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''

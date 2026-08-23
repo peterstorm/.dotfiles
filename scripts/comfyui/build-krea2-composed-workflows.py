@@ -31,6 +31,25 @@ STYLE_PRESERVING_REFINEMENT_PROMPT = (
     "exactly one subject. Do not photorealize, stylize, redesign, beautify, duplicate, "
     "add panels, or display the source image."
 )
+THREE_PANEL_SHEET_PROMPT = (
+    "A THREE-PANEL CHARACTER REFERENCE SHEET composed as one horizontal frame, "
+    "divided into exactly three equal vertical panels side by side. The exact same "
+    "uploaded character and exact same outfit appear consistently. LEFT PANEL — "
+    "FULL-BODY FRONT: complete direct front view from crown through footwear, squared "
+    "to camera. CENTER PANEL — FULL-BODY REAR: complete direct back view turned 180 "
+    "degrees away, face entirely invisible, backpack and rear outfit construction "
+    "readable. RIGHT PANEL — MAGNIFIED FACE CLOSE-UP ONLY: a dramatically tighter and "
+    "larger head-and-shoulders crop, from just above the crown down only to the "
+    "collarbones; the face occupies most of the right panel from side to side. No torso "
+    "below the collarbones, waist, hands, legs, footwear, or full-body figure in the "
+    "right panel. Preserve the exact identity, species, face design, proportions, hair "
+    "or fur, colors, clothing, footwear, accessories, and original visual medium from "
+    "the uploaded approved full-look reference. Use the same flat 18% neutral gray "
+    "field and identical even shadowless illumination in all panels. No cast or contact "
+    "shadow, floor line, gradient, hotspot, vignette, glow, halo, light spill, bokeh, "
+    "text, labels, numbering, extra panels, extra characters, source-image display, "
+    "outer frame, or inset."
+)
 
 FLUX_NODE_IDS = {
     46,
@@ -93,6 +112,26 @@ def ensure_optional_input(node: Graph, name: str, value_type: str) -> int:
         {"name": name, "shape": 7, "type": value_type, "link": None}
     )
     return len(node["inputs"]) - 1
+
+
+def empty_image_node(node_id: int, x: float, y: float) -> Graph:
+    return {
+        "id": node_id,
+        "type": "EmptyImage",
+        "pos": [x, y],
+        "size": [270, 130],
+        "flags": {},
+        "order": 0,
+        "mode": 0,
+        "inputs": [],
+        "outputs": [{"name": "IMAGE", "type": "IMAGE", "links": []}],
+        "properties": {
+            "cnr_id": "comfy-core",
+            "Node name for S&R": "EmptyImage",
+        },
+        "widgets_values": [1536, 768, 1, 7829367],
+        "title": "Blank 18% gray spatial canvas — never the identity reference",
+    }
 
 
 def next_link_id(graph: Graph) -> int:
@@ -378,6 +417,136 @@ def build_single_view_character_workflow(
     return graph
 
 
+def build_three_panel_character_sheet_workflow(
+    identity_source: Graph, realism_source: Graph
+) -> Graph:
+    graph = build_single_view_character_workflow(identity_source, realism_source)
+
+    blank_latent = copy_node(graph, 233, 301)
+    blank_latent["title"] = "Encode blank spatial canvas"
+    set_position(blank_latent, -80, 920)
+    final_save = copy_node(graph, 96, 503)
+    final_save["mode"] = 0
+    final_save["widgets_values"][0] = "CharacterSheet_Krea2_3Panel"
+    final_save["title"] = "SAVE — generated three-panel character sheet"
+    set_position(final_save, 2150, 520)
+
+    removed_nodes = FLUX_NODE_IDS | {199, 230, 233}
+    graph["nodes"] = [
+        node for node in graph["nodes"] if node["id"] not in removed_nodes
+    ]
+    remove_links_touching(graph, removed_nodes)
+    index = nodes_by_id(graph)
+
+    replace_title(index[198], "Krea 2 — Three-Panel Character Sheet BF16")
+    index[221]["properties"]["promptState"]["text"] = THREE_PANEL_SHEET_PROMPT
+    index[221]["title"] = "Three-panel grammar — front / rear / tight face"
+    index[224]["title"] = "Identity grounding only — approved full-look reference"
+    index[228]["title"] = "Blank-canvas negative conditioning"
+    index[232]["title"] = "Blank spatial patch — uploaded reference cannot be pasted"
+    index[139]["widgets_values"][1] = 530887432638002
+    index[139]["title"] = "Generate all three panels in one native Krea pass"
+    index[164]["title"] = "Decode complete horizontal character sheet"
+
+    source_state = json.loads(index[226]["properties"]["loadImagePixState"])
+    source_state.update(
+        {
+            "fit_w": 768,
+            "fit_h": 1024,
+            "ratio_preset": "3:4",
+            "ratio_w": 3,
+            "ratio_h": 4,
+            "ratio_action": "crop",
+        }
+    )
+    index[226]["properties"]["loadImagePixState"] = json.dumps(
+        source_state, separators=(",", ":")
+    )
+    index[226]["title"] = "Approved full-look reference — visual identity only"
+
+    resolution_state = copy.deepcopy(index[235]["widgets_values"][0])
+    resolution_state.update(
+        {
+            "mode": "custom",
+            "ratio": "custom",
+            "w": 1536,
+            "h": 768,
+            "custom_w": 1536,
+            "custom_h": 768,
+            "custom_ratio_w": 2,
+            "custom_ratio_h": 1,
+        }
+    )
+    index[235]["properties"]["resolutionState"] = json.dumps(
+        resolution_state, separators=(",", ":")
+    )
+    index[235]["widgets_values"][0] = resolution_state
+    index[235]["title"] = "Native three-panel canvas — 1536×768"
+    index[234]["title"] = "Reference Boost — 0 for front/rear/close-up layout freedom"
+
+    blank_canvas = empty_image_node(300, -450, 920)
+    graph["nodes"].extend([blank_canvas, blank_latent, final_save])
+
+    # Replace all spatial source conditioning with the blank gray canvas. The
+    # approved render remains connected only to the positive grounded encoder.
+    rewired_inputs = {(228, 1), (232, 1), (232, 5)}
+    graph["links"] = [
+        link for link in graph["links"] if (link[3], link[4]) not in rewired_inputs
+    ]
+    add_link(graph, 300, 0, 301, 0, "IMAGE")
+    add_link(graph, 196, 0, 301, 1, "VAE")
+    add_link(graph, 300, 0, 228, 1, "IMAGE")
+    add_link(graph, 301, 0, 232, 1, "LATENT")
+    add_link(graph, 300, 0, 232, 5, "IMAGE")
+    add_link(graph, 164, 0, 503, 0, "IMAGE")
+
+    graph["groups"] = [
+        {
+            "id": 1,
+            "title": "Approved full-look identity reference — visual grounding only",
+            "bounding": [-1080, 150, 650, 1070],
+            "color": "#3f789e",
+            "font_size": 24,
+            "flags": {},
+        },
+        {
+            "id": 2,
+            "title": "Three-panel grammar and BF16 Identity Edit model",
+            "bounding": [-700, -165, 1420, 1175],
+            "color": "#8f6c3d",
+            "font_size": 24,
+            "flags": {},
+        },
+        {
+            "id": 3,
+            "title": "Blank spatial canvas — prevents source-image overlay",
+            "bounding": [-500, 850, 780, 420],
+            "color": "#6d5a8f",
+            "font_size": 24,
+            "flags": {},
+        },
+        {
+            "id": 4,
+            "title": "Native three-panel generation and save",
+            "bounding": [735, -150, 2100, 1350],
+            "color": "#8f3f4d",
+            "font_size": 24,
+            "flags": {},
+        },
+    ]
+    for node in graph["nodes"]:
+        node.get("properties", {}).pop("models", None)
+    graph["extra"] = {
+        **graph.get("extra", {}),
+        "ds": {"scale": 0.68, "offset": [950, 180]},
+    }
+    rebuild_port_links(graph)
+    normalize_orders(graph)
+    graph["last_node_id"] = max(node["id"] for node in graph["nodes"])
+    graph["last_link_id"] = max(link[0] for link in graph["links"])
+    return graph
+
+
 def build_prompt_enhancer_refinement_workflow(
     prompt_enhancer_source: Graph, realism_source: Graph
 ) -> Graph:
@@ -540,6 +709,97 @@ def validate_single_view_character_graph(graph: Graph) -> None:
         raise ValueError("optional FLUX output must be connected to its save node")
 
 
+def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
+    node_ids = [node["id"] for node in graph["nodes"]]
+    link_ids = [link[0] for link in graph["links"]]
+    if len(node_ids) != len(set(node_ids)):
+        raise ValueError("duplicate node id")
+    if len(link_ids) != len(set(link_ids)):
+        raise ValueError("duplicate link id")
+    rebuild_port_links(copy.deepcopy(graph))
+
+    index = nodes_by_id(graph)
+    if any(node_id in index for node_id in FLUX_NODE_IDS):
+        raise ValueError(
+            "three-panel generation must not include the optional FLUX stage"
+        )
+    if index[240]["mode"] != 4 or index[241]["mode"] != 4:
+        raise ValueError("three-panel generation must preserve style by default")
+    if index[232]["widgets_values"][0] != 0:
+        raise ValueError("three-panel layout must default to ref_boost 0")
+    if index[234]["properties"]["slidersState"]["sliders"][0]["value"] != 0:
+        raise ValueError("the connected reference-boost slider must default to 0")
+
+    source_resolution = json.loads(index[226]["properties"]["loadImagePixState"])
+    if (
+        source_resolution["ratio_preset"],
+        source_resolution["fit_w"],
+        source_resolution["fit_h"],
+    ) != ("3:4", 768, 1024):
+        raise ValueError("three-panel identity grounding must use a 3:4 source plate")
+    output_resolution = index[235]["widgets_values"][0]
+    if (output_resolution["w"], output_resolution["h"]) != (1536, 768):
+        raise ValueError("the native three-panel canvas must be 1536×768")
+    if index[300]["type"] != "EmptyImage" or index[300]["widgets_values"] != [
+        1536,
+        768,
+        1,
+        7829367,
+    ]:
+        raise ValueError("the spatial patch must use the pinned blank gray canvas")
+
+    if {node["id"] for node in graph["nodes"] if node["type"] == "SamplerCustom"} != {
+        139
+    }:
+        raise ValueError("the complete sheet must be generated in one Krea pass")
+    if {
+        node["id"]
+        for node in graph["nodes"]
+        if node["type"] == "Krea2EditGroundedEncode"
+    } != {224, 228}:
+        raise ValueError("the sheet must use one positive and one negative encoder")
+
+    prompt = index[221]["properties"]["promptState"]["text"]
+    required_markers = (
+        "THREE-PANEL CHARACTER REFERENCE SHEET",
+        "FULL-BODY FRONT",
+        "FULL-BODY REAR",
+        "MAGNIFIED FACE CLOSE-UP ONLY",
+        "flat 18% neutral gray",
+    )
+    missing_markers = [marker for marker in required_markers if marker not in prompt]
+    if missing_markers:
+        raise ValueError(f"invalid three-panel grammar: {missing_markers}")
+    if index[503]["mode"] != 0 or index[503]["widgets_values"][0] != (
+        "CharacterSheet_Krea2_3Panel"
+    ):
+        raise ValueError("the final three-panel sheet must be saved")
+
+    target_latent_slot = next(
+        slot
+        for slot, node_input in enumerate(index[232]["inputs"])
+        if node_input["name"] == "target_latent"
+    )
+    required_links = {
+        (226, 0, 224, 1),
+        (300, 0, 228, 1),
+        (300, 0, 301, 0),
+        (196, 0, 301, 1),
+        (301, 0, 232, 1),
+        (300, 0, 232, 5),
+        (162, 0, 232, target_latent_slot),
+        (164, 0, 503, 0),
+    }
+    actual_links = {tuple(link[1:5]) for link in graph["links"]}
+    missing_links = required_links - actual_links
+    if missing_links:
+        raise ValueError(
+            f"incomplete native three-panel graph: {sorted(missing_links)}"
+        )
+    if any(link[1] == 226 and link[3] in {228, 232} for link in graph["links"]):
+        raise ValueError("the uploaded reference must never enter spatial conditioning")
+
+
 def validate_prompt_enhancer_refinement_graph(graph: Graph) -> None:
     node_ids = [node["id"] for node in graph["nodes"]]
     link_ids = [link[0] for link in graph["links"]]
@@ -583,7 +843,8 @@ def validate_prompt_enhancer_refinement_graph(graph: Graph) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--identity", type=Path)
+    source.add_argument("--single-view", type=Path)
+    source.add_argument("--three-panel", type=Path)
     source.add_argument("--prompt-enhancer", type=Path)
     parser.add_argument("--realism", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
@@ -593,11 +854,16 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     realism = json.loads(args.realism.read_text())
-    if args.identity is not None:
+    if args.single_view is not None:
         workflow = build_single_view_character_workflow(
-            json.loads(args.identity.read_text()), realism
+            json.loads(args.single_view.read_text()), realism
         )
         validate_single_view_character_graph(workflow)
+    elif args.three_panel is not None:
+        workflow = build_three_panel_character_sheet_workflow(
+            json.loads(args.three_panel.read_text()), realism
+        )
+        validate_three_panel_character_sheet_graph(workflow)
     else:
         workflow = build_prompt_enhancer_refinement_workflow(
             json.loads(args.prompt_enhancer.read_text()), realism

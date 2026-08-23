@@ -162,9 +162,9 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
 - one BF16 Krea 2 → FLUX.2 Klein 9B refinement workflow under
   `/var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16/`;
-- one BF16 Identity Edit v1.2 single-view character workflow, with optional
-  realism and FLUX.2 Klein stages disabled by default, under
-  `/var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16/`;
+- two BF16 Identity Edit v1.2 character workflows under
+  `/var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16/`: one
+  single-view plate generator and one real three-panel character-sheet builder;
 - two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
   in separate graphs—under
   `/var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16/`;
@@ -193,8 +193,9 @@ transactional profile switch. After activation, acceptance requires:
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
-  one Krea/FLUX Klein workflow, one style-preserving single-view character
-  workflow, and two maximum-quality H3 production workflows are installed;
+  one Krea/FLUX Klein workflow, one style-preserving single-view plate workflow,
+  one assembled three-panel character-sheet workflow, and two maximum-quality
+  H3 production workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -531,6 +532,43 @@ rejects malformed links, mismatched defaults, active optional stages,
 non-BF16 selectors, stale URLs, embedded credentials, rgthree,
 FaceDetailer/SAM/YOLO, and video-helper metadata.
 
+### Actual three-panel character sheet
+
+Open **User workflows → `krea2-character-sheet-bf16` → Krea 2 Three-Panel
+Character Sheet BF16** only after approving a complete full-look render. This is
+the actual sheet workflow; the single-view graph above produces source plates.
+
+The graph follows a one-prompt, one-image Mode-4 grammar in one native Krea
+pass:
+
+1. **LEFT:** complete full-body front view;
+2. **CENTER:** strict full-body rear view with the face completely hidden;
+3. **RIGHT:** magnified front-facing chest-up identity plate.
+
+The approved full-look render connects only to positive visual grounding, where
+it supplies identity, design, and outfit evidence. It never enters the model
+patch, negative conditioning, or output canvas. A separate pinned 1536×768
+`EmptyImage` supplies a flat gray spatial canvas and is VAE-encoded into the
+model patch. This structural separation is what prevents the uploaded source
+from being pasted in front of or between the generated panels.
+
+One Krea sampler generates the complete three-panel frame at 1536×768 and
+`SaveImage` writes it with prefix `CharacterSheet_Krea2_3Panel`. Qualification
+with the rabbit explorer reference produced a clean front plate, a true rear
+plate, and a visibly magnified face panel with no embedded source image.
+
+All panels default to a flat 18% neutral-gray field, even shadowless lighting,
+no cast/contact shadow, and no text or labels. Both realism LoRAs remain bypassed
+and `ref_boost=0` remains the layout-freedom baseline. Edit the one visible
+three-panel prompt when a project needs a headless outfit plate, side profiles,
+an expression panel, or another layout; keep all panel roles explicit in that
+single prompt.
+
+The default layout is intentionally three panels rather than six: each plate
+retains enough pixel budget for identity and garment detail. A six-panel variant
+should be a separate explicit workflow because doubling the cell count halves
+the useful per-panel resolution.
+
 ### Pixaroma Episode 30 — complete imported bundle
 
 The source is [Episode 30](https://www.youtube.com/watch?v=rGVf3m19yM8),
@@ -627,9 +665,10 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **84 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
-  Krea/FLUX Klein BF16 graph, one style-preserving single-view character graph,
-  two image-led maximum-quality H3 production graphs, eight Episode 29 graphs,
+- **85 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+  Krea/FLUX Klein BF16 graph, one style-preserving single-view plate graph, one
+  assembled three-panel character-sheet graph, two image-led maximum-quality
+  H3 production graphs, eight Episode 29 graphs,
   seven pinned Episode 30 graphs, and 53 curated official graphs installed into
   the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
@@ -1232,6 +1271,7 @@ The starting surface is:
 | 8B-authored Krea image with realistic finish | `3d. ... Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16` | User workflows → `pixaroma-ep24-krea2-bf16` | BF16 8B Heretic is prompt-only; BF16 4B conditions Krea; Klein license and marker required |
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
 | Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; `ref_boost=0`; both realism LoRAs bypassed; FLUX outputs muted |
+| Native three-panel character sheet | `Krea 2 Three-Panel Character Sheet BF16` | User workflows → `krea2-character-sheet-bf16` | Approved full-look source used only for visual grounding; blank 1536×768 spatial canvas; one Krea pass and save |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
 | Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
@@ -1266,7 +1306,7 @@ test "$(find /var/lib/comfyui/user/default/workflows/pixaroma-ep30 \
 test "$(find /var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16 \
   -type f -name '*.json' | wc -l)" -eq 1
 test "$(find /var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16 \
-  -type f -name '*.json' | wc -l)" -eq 1
+  -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16 \
   -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
@@ -1439,7 +1479,18 @@ Reject any candidate that changes face geometry, eye color, scar side, hair
 parting, age, body silhouette, canonical materials, species, or visual medium.
 A polished inconsistent image is not a useful reference.
 
-#### 2.4 Add style, wardrobe, and location references separately
+#### 2.4 Assemble the approved three-panel sheet
+
+After approving the full-look outfit render, open `Krea 2 Three-Panel Character
+Sheet BF16`. Keep the default front/rear/face grammar or edit the one prompt to
+the three roles the project needs. Queue the graph once; one native Krea pass
+generates and saves the complete horizontal sheet. Reject it if the center panel
+exposes the face instead of a strict rear view, if the right panel is wider than
+chest-up, or if outfit construction, skin/fur tone, or identity markers disagree
+across panels. For downstream H3 conditioning, prefer separate accepted plates
+when possible; the sheet is primarily a compact human-review artifact.
+
+#### 2.5 Add style, wardrobe, and location references separately
 
 - Use the official Krea style-reference workflow for palette, texture, lighting,
   and rendering language—not as the sole identity reference.
@@ -1719,6 +1770,9 @@ Do not call the stack qualified until:
       BF16` completes at 1:1/1 MP with `ref_boost=0`, exactly one generated
       subject, no source-panel outpainting, both realism LoRAs bypassed, and
       both FLUX output nodes muted.
+- [ ] `Krea 2 Three-Panel Character Sheet BF16` generates front, strict rear,
+      and magnified face panels in one 1536×768 native Krea pass, then saves
+      exactly one sheet without embedding the uploaded source image.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.
