@@ -4,6 +4,7 @@
   "defaultModel": "qwen3.8-27b",
   "packages": [
     "../../dev/claude-plugins/loom",
+    "git:github.com/peterstorm/pi-goal@v0.1.0",
     "../../dev/claude-plugins/cortex",
     "../../dev/claude-plugins/obsidian"
   ],
