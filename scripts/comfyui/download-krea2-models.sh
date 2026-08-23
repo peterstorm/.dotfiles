@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Download the production Krea 2 local profile for the Nix-managed ComfyUI.
 #
-# The profile contains highest-fidelity BF16 Turbo text-to-image weights, a
+# The profile contains full-precision BF16 Raw and Turbo diffusion weights, a
 # full-BF16 abliterated Qwen3-VL encoder, Krea's style LoRAs, Episode 30
 # edit/outfit LoRAs, and isolated FP8/BF16 local prompt encoders. Every
 # repository is revision-pinned; every artifact is verified by size + SHA-256
@@ -26,6 +26,7 @@ LICENSE_URL="https://www.krea.ai/krea-2-licensing"
 
 # sha256, exact bytes, repository-relative path
 read -r -d '' MANIFEST <<'EOF' || true
+f99bb0ff8e362b77342bc4994e0c50906fe7ef7074864b181b7d48d2fa6d03d7 26283332608 diffusion_models/krea2_raw_bf16.safetensors
 78bbf8f4165eda19cea3cb06c78089221932a39e2eed8af9da741f942c47ffb3 26283332608 diffusion_models/krea2_turbo_bf16.safetensors
 8e4eeda70dd5037ab1ba2bef6b417f9f901e26093117cf397f741fc1fdaaf3f1 13492686496 diffusion_models/krea2_turbo_int8_convrot.safetensors
 36f3ff447ef59201722e8f9ce6020c9819fdcfba6aa2608c4e09b1c0ce114e34 8875719384 text_encoders/qwen3vl_4b_bf16.safetensors

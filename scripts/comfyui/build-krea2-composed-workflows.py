@@ -7,9 +7,10 @@ import argparse
 import copy
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 Graph = dict[str, Any]
+QualityTier = Literal["turbo", "raw"]
 
 IDENTITY_REMOVE_NODES = {163, 223}
 DETAIL_NODE_IDS = {136, 137, 139, 141}
@@ -182,21 +183,35 @@ def normalize_orders(graph: Graph) -> None:
 
 
 def build_single_view_character_workflow(
-    identity_source: Graph, realism_source: Graph
+    identity_source: Graph,
+    realism_source: Graph,
+    quality_tier: QualityTier = "turbo",
 ) -> Graph:
     graph = copy.deepcopy(identity_source)
+    removed_nodes = set(IDENTITY_REMOVE_NODES)
+    if quality_tier == "raw":
+        removed_nodes.add(207)  # Krea2T enhancer is Turbo-specific.
     graph["nodes"] = [
-        node for node in graph["nodes"] if node["id"] not in IDENTITY_REMOVE_NODES
+        node for node in graph["nodes"] if node["id"] not in removed_nodes
     ]
-    remove_links_touching(graph, IDENTITY_REMOVE_NODES)
+    remove_links_touching(graph, removed_nodes)
     identity_nodes = nodes_by_id(graph)
+    if quality_tier == "raw":
+        add_link(graph, 194, 0, 231, 0, "MODEL")
 
-    identity_nodes[194]["widgets_values"][0] = "krea2_turbo_bf16.safetensors"
+    diffusion_model = (
+        "krea2_raw_bf16.safetensors"
+        if quality_tier == "raw"
+        else "krea2_turbo_bf16.safetensors"
+    )
+    identity_nodes[194]["widgets_values"][0] = diffusion_model
     identity_nodes[195]["widgets_values"][0] = "qwen3vl_4b_bf16.safetensors"
     identity_nodes[231]["widgets_values"][0]["loras"][0]["name"] = (
         "krea2/krea2_identity_edit_v1_2.safetensors"
     )
-    identity_nodes[231]["title"] = "Identity Edit v1.2 — strength 1.0"
+    identity_nodes[231]["title"] = (
+        f"Identity Edit v1.2 — {quality_tier.upper()} BF16 — strength 1.0"
+    )
     identity_nodes[232]["widgets_values"][0] = 1
     identity_nodes[232]["title"] = "Identity-preserving edit pass — neutral ref_boost 1"
     identity_nodes[221]["properties"]["promptState"]["text"] = SINGLE_VIEW_PROMPT
@@ -254,12 +269,18 @@ def build_single_view_character_workflow(
         copy_node(realism_source, node_id) for node_id in sorted(DETAIL_NODE_IDS)
     ]
     detail = {node["id"]: node for node in detail_nodes}
-    detail[137]["title"] = "Krea sampler — er_sde"
     detail[136]["title"] = "Detail Daemon — identity-aware Krea pass"
-    detail[141]["widgets_values"] = ["simple", 10, 1]
-    detail[141]["title"] = "Identity Edit baseline — 10 steps, denoise 1.0"
-    detail[139]["widgets_values"] = [True, 530887432637999, "randomize", 1]
-    detail[139]["title"] = "Krea Identity + realism sampling — CFG 1"
+    steps = 20 if quality_tier == "raw" else 10
+    cfg = 3 if quality_tier == "raw" else 1
+    sampler_name = "euler" if quality_tier == "raw" else "er_sde"
+    detail[137]["widgets_values"] = [sampler_name]
+    detail[137]["title"] = f"Krea {quality_tier.upper()} sampler — {sampler_name}"
+    detail[141]["widgets_values"] = ["simple", steps, 1]
+    detail[141]["title"] = (
+        f"Identity Edit {quality_tier.upper()} — {steps} steps, denoise 1.0"
+    )
+    detail[139]["widgets_values"] = [True, 530887432637999, "randomize", cfg]
+    detail[139]["title"] = f"Krea Identity sampling — CFG {cfg:g}"
     set_position(detail[137], 780, -80)
     set_position(detail[136], 1080, -95)
     set_position(detail[141], 780, 245)
@@ -282,7 +303,11 @@ def build_single_view_character_workflow(
     flux[46]["mode"] = 2
     flux[46]["title"] = "MUTED — optional FLUX preview (enable with Save node)"
     flux[96]["mode"] = 2
-    flux[96]["widgets_values"][0] = "CharacterSheet_Krea2_SingleView_Klein9B"
+    flux[96]["widgets_values"][0] = (
+        "CharacterSheet_Krea2_RAW_SingleView_Klein9B"
+        if quality_tier == "raw"
+        else "CharacterSheet_Krea2_SingleView_Klein9B"
+    )
     flux[96]["title"] = "MUTED — optional FLUX save (enable with Preview node)"
     set_position(flux[46], 4360, 40)
     set_position(flux[96], 4360, 500)
@@ -294,6 +319,13 @@ def build_single_view_character_workflow(
     set_position(identity_nodes[230], 1720, 850)
 
     graph["nodes"].extend([ultra_real, famegrid, *detail_nodes, *flux_nodes])
+
+    if quality_tier == "raw":
+        replace_title(
+            identity_nodes[198],
+            "Krea 2 RAW BF16 Single-View Character + Optional FLUX.2 Klein 9B",
+        )
+        identity_nodes[199]["widgets_values"][0] = "CharacterSheet_Krea2_RAW_SingleView"
 
     # Replace the direct Identity Edit sampler and direct model-patch link.
     graph["links"] = [
@@ -398,13 +430,21 @@ def build_single_view_character_workflow(
 
 
 def build_three_panel_character_sheet_workflow(
-    identity_source: Graph, realism_source: Graph
+    identity_source: Graph,
+    realism_source: Graph,
+    quality_tier: QualityTier = "turbo",
 ) -> Graph:
-    graph = build_single_view_character_workflow(identity_source, realism_source)
+    graph = build_single_view_character_workflow(
+        identity_source, realism_source, quality_tier
+    )
 
     final_save = copy_node(graph, 96, 503)
     final_save["mode"] = 0
-    final_save["widgets_values"][0] = "CharacterSheet_Krea2_3Panel"
+    final_save["widgets_values"][0] = (
+        "CharacterSheet_Krea2_RAW_3Panel"
+        if quality_tier == "raw"
+        else "CharacterSheet_Krea2_3Panel"
+    )
     final_save["title"] = "SAVE — generated three-panel character sheet"
     set_position(final_save, 2150, 520)
 
@@ -415,7 +455,12 @@ def build_three_panel_character_sheet_workflow(
     remove_links_touching(graph, removed_nodes)
     index = nodes_by_id(graph)
 
-    replace_title(index[198], "Krea 2 — Three-Panel Character Sheet BF16")
+    replace_title(
+        index[198],
+        "Krea 2 RAW BF16 — Three-Panel Character Sheet"
+        if quality_tier == "raw"
+        else "Krea 2 — Three-Panel Character Sheet BF16",
+    )
     index[221]["properties"]["promptState"]["text"] = THREE_PANEL_SHEET_PROMPT
     index[221]["title"] = "Three-panel grammar — front / rear / tight face"
     index[224]["widgets_values"][1] = 1024
@@ -426,7 +471,9 @@ def build_three_panel_character_sheet_workflow(
     index[232]["title"] = "Appearance identity tokens — neutral ref_boost 1"
     index[233]["title"] = "VAE-encode approved identity reference"
     index[139]["widgets_values"][1] = 530887432638002
-    index[139]["title"] = "Generate all three panels in one native Krea pass"
+    index[139]["title"] = (
+        f"Generate all three panels in one {quality_tier.upper()} Krea pass"
+    )
     index[164]["title"] = "Decode complete horizontal character sheet"
 
     source_state = json.loads(index[226]["properties"]["loadImagePixState"])
@@ -615,7 +662,9 @@ def build_prompt_enhancer_refinement_workflow(
     return graph
 
 
-def validate_single_view_character_graph(graph: Graph) -> None:
+def validate_single_view_character_graph(
+    graph: Graph, quality_tier: QualityTier = "turbo"
+) -> None:
     node_ids = [node["id"] for node in graph["nodes"]]
     link_ids = [link[0] for link in graph["links"]]
     if len(node_ids) != len(set(node_ids)):
@@ -640,6 +689,21 @@ def validate_single_view_character_graph(graph: Graph) -> None:
         raise ValueError(f"missing required node types: {sorted(missing_types)}")
     if index[240]["mode"] != 4 or index[241]["mode"] != 4:
         raise ValueError("all optional realism LoRAs must be bypassed by default")
+    expected_model = (
+        "krea2_raw_bf16.safetensors"
+        if quality_tier == "raw"
+        else "krea2_turbo_bf16.safetensors"
+    )
+    if index[194]["widgets_values"][0] != expected_model:
+        raise ValueError(f"unexpected {quality_tier} diffusion model")
+    expected_steps = 20 if quality_tier == "raw" else 10
+    expected_cfg = 3 if quality_tier == "raw" else 1
+    if index[141]["widgets_values"] != ["simple", expected_steps, 1]:
+        raise ValueError(f"unexpected {quality_tier} scheduler")
+    if index[139]["widgets_values"][3] != expected_cfg:
+        raise ValueError(f"unexpected {quality_tier} CFG")
+    if (207 in index) == (quality_tier == "raw"):
+        raise ValueError("the Krea2T enhancer must exist only in Turbo workflows")
     if index[232]["widgets_values"][0] != 1:
         raise ValueError(
             "single-view identity preservation must default to ref_boost 1"
@@ -677,7 +741,9 @@ def validate_single_view_character_graph(graph: Graph) -> None:
         raise ValueError("optional FLUX output must be connected to its save node")
 
 
-def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
+def validate_three_panel_character_sheet_graph(
+    graph: Graph, quality_tier: QualityTier = "turbo"
+) -> None:
     node_ids = [node["id"] for node in graph["nodes"]]
     link_ids = [link[0] for link in graph["links"]]
     if len(node_ids) != len(set(node_ids)):
@@ -687,6 +753,21 @@ def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
     rebuild_port_links(copy.deepcopy(graph))
 
     index = nodes_by_id(graph)
+    expected_model = (
+        "krea2_raw_bf16.safetensors"
+        if quality_tier == "raw"
+        else "krea2_turbo_bf16.safetensors"
+    )
+    if index[194]["widgets_values"][0] != expected_model:
+        raise ValueError(f"unexpected {quality_tier} diffusion model")
+    expected_steps = 20 if quality_tier == "raw" else 10
+    expected_cfg = 3 if quality_tier == "raw" else 1
+    if index[141]["widgets_values"] != ["simple", expected_steps, 1]:
+        raise ValueError(f"unexpected {quality_tier} scheduler")
+    if index[139]["widgets_values"][3] != expected_cfg:
+        raise ValueError(f"unexpected {quality_tier} CFG")
+    if (207 in index) == (quality_tier == "raw"):
+        raise ValueError("the Krea2T enhancer must exist only in Turbo workflows")
     if any(node_id in index for node_id in FLUX_NODE_IDS):
         raise ValueError(
             "three-panel generation must not include the optional FLUX stage"
@@ -738,9 +819,12 @@ def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
     missing_markers = [marker for marker in required_markers if marker not in prompt]
     if missing_markers:
         raise ValueError(f"invalid three-panel grammar: {missing_markers}")
-    if index[503]["mode"] != 0 or index[503]["widgets_values"][0] != (
-        "CharacterSheet_Krea2_3Panel"
-    ):
+    expected_prefix = (
+        "CharacterSheet_Krea2_RAW_3Panel"
+        if quality_tier == "raw"
+        else "CharacterSheet_Krea2_3Panel"
+    )
+    if index[503]["mode"] != 0 or index[503]["widgets_values"][0] != expected_prefix:
         raise ValueError("the final three-panel sheet must be saved")
 
     target_latent_slot = next(
@@ -819,6 +903,7 @@ def parse_args() -> argparse.Namespace:
     source.add_argument("--three-panel", type=Path)
     source.add_argument("--prompt-enhancer", type=Path)
     parser.add_argument("--realism", required=True, type=Path)
+    parser.add_argument("--quality-tier", choices=("turbo", "raw"), default="turbo")
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
 
@@ -826,16 +911,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     realism = json.loads(args.realism.read_text())
+    quality_tier: QualityTier = args.quality_tier
     if args.single_view is not None:
         workflow = build_single_view_character_workflow(
-            json.loads(args.single_view.read_text()), realism
+            json.loads(args.single_view.read_text()), realism, quality_tier
         )
-        validate_single_view_character_graph(workflow)
+        validate_single_view_character_graph(workflow, quality_tier)
     elif args.three_panel is not None:
         workflow = build_three_panel_character_sheet_workflow(
-            json.loads(args.three_panel.read_text()), realism
+            json.loads(args.three_panel.read_text()), realism, quality_tier
         )
-        validate_three_panel_character_sheet_graph(workflow)
+        validate_three_panel_character_sheet_graph(workflow, quality_tier)
     else:
         workflow = build_prompt_enhancer_refinement_workflow(
             json.loads(args.prompt_enhancer.read_text()), realism

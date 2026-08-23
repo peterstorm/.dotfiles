@@ -12,10 +12,12 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 - **ComfyUI 0.31.1** on physical GPU1 runs local Krea 2 and exposes MiniMax H3
   workflows. The UI listens only on `127.0.0.1:8188` and is reached through an
   SSH tunnel.
-- **Krea 2 Turbo BF16** is the only local Krea diffusion profile. Standard
-  text-to-image, style-reference, Episode 24 generation, and Episode 30 edit
-  graphs use the official BF16 Qwen3-VL-4B encoder. Three experimental Episode
-  24 graphs instead use a separately pinned full-BF16 abliterated encoder.
+- **Krea 2 has separate BF16 production tiers.** Turbo remains the fast,
+  post-trained 8–10-step inference model. RAW is the undistilled maximum-control
+  tier: 52 steps and CFG 3.5 for text-to-image, or the Identity Edit model
+  card's 20-step/CFG-3 RAW recipe. Both use the official BF16 Qwen3-VL-4B
+  encoder. Turbo-specific style-reference and Krea2T-enhancer workflows remain
+  Turbo rather than being mislabeled as RAW-compatible.
 - **Krea 2 Turbo BF16 → FLUX.2 Klein 9B BF16** is the video-backed
   photoreal refinement profile. It preserves the active Detail Daemon, 4 MP
   handoff, color-match, sharpen, and save path while removing embedded
@@ -162,9 +164,13 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/pixaroma-ep30/`;
 - one BF16 Krea 2 → FLUX.2 Klein 9B refinement workflow under
   `/var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16/`;
-- two BF16 Identity Edit v1.2 character workflows under
+- two BF16 Identity Edit v1.2 Turbo character workflows under
   `/var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16/`: one
   single-view plate generator and one real three-panel character-sheet builder;
+- four RAW BF16 maximum-quality workflows under
+  `/var/lib/comfyui/user/default/workflows/krea2-max-quality-bf16/`: undistilled
+  text-to-image, single-view identity, three-panel identity, and RAW→FLUX.2
+  Klein finishing;
 - two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
   in separate graphs—under
   `/var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16/`;
@@ -193,9 +199,9 @@ transactional profile switch. After activation, acceptance requires:
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
-  one Krea/FLUX Klein workflow, one style-preserving single-view plate workflow,
-  one assembled three-panel character-sheet workflow, and two maximum-quality
-  H3 production workflows are installed;
+  one Krea/FLUX Klein workflow, two Turbo character workflows, four RAW
+  maximum-quality Krea workflows, and two maximum-quality H3 production
+  workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -273,8 +279,9 @@ KREA2_ACCEPT_LICENSE=yes bash scripts/comfyui/download-krea2-models.sh
 The downloader fetches only these pinned production artifacts from
 `Comfy-Org/Krea-2@e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96`:
 
-- Turbo diffusion model BF16 and Qwen3-VL-4B encoder BF16 for highest-fidelity
-  local text-to-image;
+- RAW and Turbo diffusion models in BF16 plus the Qwen3-VL-4B BF16 encoder;
+  RAW is `krea2_raw_bf16.safetensors`, 26,283,332,608 bytes, SHA-256
+  `f99bb0ff...6d03d7`; Turbo remains the fast post-trained inference model;
 - Turbo INT8 ConvRot and Qwen3-VL-4B FP8 retained as pinned, inactive upstream
   comparison artifacts; no curated or Episode 30 workflow selects them;
 - Qwen Image VAE;
@@ -291,8 +298,8 @@ The downloader fetches only these pinned production artifacts from
   `ahmed22xa/Huihui-Qwen3-VL-4B-Instruct-abliterated-comfy@6d6fc98...`
   (Apache-2.0), 8,875,719,408 bytes, SHA-256 `03590b45...14cd2`.
 
-The complete manifest is 80,692,477,014 bytes (80.69 GB / 75.15 GiB). Every file has an exact expected byte count
-and SHA-256. Files are downloaded to a same-filesystem staging tree, verified,
+The complete manifest is 106,975,809,622 bytes (106.98 GB / 99.63 GiB). Every
+file has an exact expected byte count and SHA-256. Files are downloaded to a same-filesystem staging tree, verified,
 and atomically renamed into `/models/comfyui`; partial or corrupt profiles do
 not become the completion marker.
 
@@ -340,10 +347,13 @@ through a private curl config, never argv. Downloads resume in a same-filesystem
 staging tree and publish only after full verification. The script also verifies
 the standard Krea BF16 DiT, encoder, and VAE before doing network I/O.
 
-Krea 2 RAW is intentionally omitted. RAW takes 52 steps and is the model to
-fine-tune LoRAs against; Turbo is the 8-step production model and accepts RAW
-LoRAs. Add RAW only when a real LoRA-training or diversity experiment justifies
-another 26.3 GB artifact and a separate benchmark.
+Krea's official guidance is nuanced: RAW is the undistilled base and Turbo is
+an 8-step post-trained model that Krea recommends for routine inference. RAW is
+not guaranteed to win every prompt. It is installed as a separate
+maximum-control tier for deliberate A/B qualification, not as a claim that a
+larger step count universally improves output. Never apply a Turbo-specific
+adapter—such as `krea2_style_reference` or Krea2T Enhancer—to RAW merely because
+the checkpoint loads.
 
 ## 5. Best Krea 2 nodes and workflows
 
@@ -377,6 +387,42 @@ official INT8 T2I graph is not installed in the curated user-workflow inventory.
 Krea's local prompting rules are simple: natural language, faithful detail,
 long prompts when useful, and exact visible text in double quotes. The Muse
 node embeds Krea's official expansion contract.
+
+### Krea maximum-quality tier
+
+Open **User workflows → `krea2-max-quality-bf16`**. This folder keeps slow,
+undistilled workflows separate from Turbo iteration:
+
+1. `01 Krea 2 RAW BF16 - Maximum Quality Text to Image` — official RAW BF16,
+   Euler/simple, 52 steps, CFG 3.5;
+2. `02 Krea 2 RAW BF16 - Maximum Quality Single-View Identity` — full-rank
+   Identity Edit v1.2, RAW BF16, Euler/simple, 20 steps, CFG 3, neutral
+   `ref_boost=1`, and 1024-pixel identity grounding;
+3. `03 Krea 2 RAW BF16 - Maximum Quality Three-Panel Identity` — the same
+   evidence-backed RAW Identity recipe with an independent 1536×768 target;
+4. `04 Krea 2 RAW BF16 to FLUX.2 Klein 9B BF16 - Maximum Quality` — a 52-step
+   RAW first pass followed by full-BF16 Klein finishing. Both optional Krea
+   realism LoRAs are bypassed so an unqualified Turbo/RAW LoRA mix cannot
+   silently define the result.
+
+RAW identity workflows remove `ComfyUI-Krea2T-Enhancer`: that wrapper is for
+Krea 2 Turbo. The negative conditioning uses the same approved reference because
+RAW runs CFG above 1. Source references still enter only semantic and appearance
+token paths; the independent empty latent initializes output pixels.
+
+Not every operation has a legitimate RAW counterpart. The official
+`krea2_style_reference` LoRA declares Krea 2 Turbo as its base and was trained
+with the Turbo adapter, so the BF16 Turbo style-reference workflow remains the
+highest compatible local profile. Episode 24 also retains its pinned
+Turbo-specific enhancer topology. Existing H3 production workflows already use
+unpruned BF16 models at 50 steps, Muse already uses full BF16, and FLUX.2 Klein
+already uses its full BF16 9B checkpoint.
+
+Treat RAW and Turbo as an A/B, not a numeric leaderboard. Krea officially
+recommends Turbo for normal inference; RAW offers undistilled diversity and
+control but costs roughly 5–6× more sampling than Turbo. Compare fixed
+prompt/seed outputs and retain the result that actually preserves identity,
+composition, and detail better.
 
 ### Pixaroma Episode 24 — twelve Krea workflows, adapted to BF16
 
@@ -672,12 +718,11 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **85 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
-  Krea/FLUX Klein BF16 graph, one style-preserving single-view plate graph, one
-  assembled three-panel character-sheet graph, two image-led maximum-quality
-  H3 production graphs, eight Episode 29 graphs,
-  seven pinned Episode 30 graphs, and 53 curated official graphs installed into
-  the workflow browser.
+- **89 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+  Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
+  maximum-quality graphs, two image-led maximum-quality H3 production graphs,
+  eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
+  official graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -1279,6 +1324,7 @@ The starting surface is:
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
 | Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; identity-first `ref_boost=1`; both realism LoRAs bypassed; FLUX outputs muted |
 | Native three-panel character sheet | `Krea 2 Three-Panel Character Sheet BF16` | User workflows → `krea2-character-sheet-bf16` | Approved reference feeds semantic and VAE appearance-token paths; independent 1536×768 target latent; one Krea pass and save |
+| Undistilled maximum-quality Krea suite | `01`–`04 Krea 2 RAW BF16...` | User workflows → `krea2-max-quality-bf16` | RAW T2I 52/3.5; RAW Identity 20/3; RAW three-panel; RAW→full-BF16 Klein; no Turbo enhancer or active unqualified realism LoRA |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
 | Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
@@ -1314,6 +1360,8 @@ test "$(find /var/lib/comfyui/user/default/workflows/krea2-flux2-klein9b-bf16 \
   -type f -name '*.json' | wc -l)" -eq 1
 test "$(find /var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16 \
   -type f -name '*.json' | wc -l)" -eq 2
+test "$(find /var/lib/comfyui/user/default/workflows/krea2-max-quality-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 4
 test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16 \
   -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
@@ -1782,6 +1830,11 @@ Do not call the stack qualified until:
       semantic grounding and VAE appearance tokens, generates front, strict
       rear, and magnified face panels from an independent 1536×768 target latent,
       and saves exactly one sheet without embedding the source image.
+- [ ] All four `krea2-max-quality-bf16` workflows parse and expose only RAW BF16
+      for their Krea stage; T2I and RAW→Klein use 52 steps/CFG 3.5, Identity
+      workflows use 20 steps/CFG 3, and no RAW graph contains Krea2T Enhancer.
+- [ ] Fixed prompt/seed RAW-versus-Turbo A/B results are reviewed before calling
+      RAW better for a given task.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.

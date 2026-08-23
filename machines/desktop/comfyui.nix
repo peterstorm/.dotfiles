@@ -1279,6 +1279,128 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 2
       '';
 
+  kreaMaxQualityWorkflows =
+    pkgs.runCommand "krea2-max-quality-bf16-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.jq
+          pkgs.python3
+          pkgs.unzip
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p unpacked "$out/workflows"
+        cp ${pixaromaEp30Archive} episode30.zip
+        unzip -q episode30.zip -d unpacked
+        identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
+
+        raw_t2i="$out/workflows/01 Krea 2 RAW BF16 - Maximum Quality Text to Image.json"
+        jq '
+          walk(
+            if type == "string" then
+              gsub("Krea-2 Turbo"; "Krea 2 RAW")
+              | gsub("Krea 2 Turbo"; "Krea 2 RAW")
+              | gsub("krea2_turbo_bf16\\.safetensors";
+                  "krea2_raw_bf16.safetensors")
+              | gsub("fast distilled text-to-image model";
+                  "undistilled maximum-control text-to-image model")
+            else . end
+          )
+          | (.. | objects | select(.type? == "UNETLoader")
+              | .widgets_values[0]) = "krea2_raw_bf16.safetensors"
+          | (.. | objects | select(.type? == "KSampler")
+              | .widgets_values[2]) = 52
+          | (.. | objects | select(.type? == "KSampler")
+              | .widgets_values[3]) = 3.5
+          | walk(if type == "object" then del(.properties.models) else . end)
+        ' ${eliteWorkflows}/image/image_krea2_turbo_t2i.json >"$raw_t2i"
+
+        raw_single="$out/workflows/02 Krea 2 RAW BF16 - Maximum Quality Single-View Identity.json"
+        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+          --single-view "$identity" \
+          --realism ${kreaFluxKleinWorkflowSource} \
+          --quality-tier raw \
+          --output "$raw_single"
+
+        raw_sheet="$out/workflows/03 Krea 2 RAW BF16 - Maximum Quality Three-Panel Identity.json"
+        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+          --three-panel "$identity" \
+          --realism ${kreaFluxKleinWorkflowSource} \
+          --quality-tier raw \
+          --output "$raw_sheet"
+
+        raw_klein="$out/workflows/04 Krea 2 RAW BF16 to FLUX.2 Klein 9B BF16 - Maximum Quality.json"
+        jq '
+          (.nodes[] | select(.id == 14) | .widgets_values[0]) =
+            "krea2_raw_bf16.safetensors"
+          | (.nodes[] | select(.id == 75 or .id == 142) | .mode) = 4
+          | (.nodes[] | select(.id == 137)) |= (
+              .title = "Krea RAW maximum-quality sampler — Euler"
+              | .widgets_values = ["euler"]
+            )
+          | (.nodes[] | select(.id == 141)) |= (
+              .title = "Krea RAW — 52 steps"
+              | .widgets_values = ["simple", 52, 1]
+            )
+          | (.nodes[] | select(.id == 139)) |= (
+              .title = "Krea RAW sampling — CFG 3.5"
+              | .widgets_values[3] = 3.5
+            )
+          | (.nodes[] | select(.id == 96)) |= (
+              .title = "Save maximum-quality RAW to Klein result"
+              | .widgets_values[0] = "Krea2_RAW_BF16_Flux2_Klein9B_MaxQuality"
+            )
+          | (.groups[] | select(.title == "Krea 2") | .title) =
+              "Krea 2 RAW BF16 — 52-step maximum quality"
+          | del(.nodes[].properties.models)
+        ' ${kreaFluxKleinWorkflow}/workflows/*.json >"$raw_klein"
+
+        jq -s -e '
+          length == 4
+          and all(.[]; . as $graph
+            | all($graph.links[]; . as $edge
+              | any($graph.nodes[]; .id == $edge[1])
+                and any($graph.nodes[]; .id == $edge[3])))
+          and ([.[0] | .. | objects | select(.type? == "UNETLoader")
+              | .widgets_values[0]] == ["krea2_raw_bf16.safetensors"])
+          and ([.[0] | .. | objects | select(.type? == "KSampler")
+              | .widgets_values[2:4]] == [[52, 3.5]])
+          and all(.[1:3][];
+            ([.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]
+                | select(. == "krea2_raw_bf16.safetensors")]
+              == ["krea2_raw_bf16.safetensors"])
+            and ([.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]
+                | select(startswith("krea2_turbo_"))] | length == 0)
+            and ([.nodes[] | select(.type == "BasicScheduler") | .widgets_values]
+              == [["simple", 20, 1]])
+            and ([.nodes[] | select(.type == "SamplerCustom") | .widgets_values[3]]
+              == [3])
+            and ([.nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")]
+              | length == 0))
+          and (([.[3].nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+              | sort) == ([
+                "flux-2-klein-9b-bf16.safetensors",
+                "krea2_raw_bf16.safetensors"
+              ] | sort))
+          and ([.[3].nodes[] | select(.type == "BasicScheduler") | .widgets_values]
+              == [["simple", 52, 1]])
+          and ([.[3].nodes[] | select(.type == "SamplerCustom") | .widgets_values[3]]
+              == [3.5])
+          and ([.[3].nodes[] | select(.type == "LoraLoaderModelOnly") | .mode]
+              | unique == [4])
+          and ([.[3].nodes[] | select(.type == "SaveImage" and .mode == 0)]
+              | length == 1)
+        ' "$out"/workflows/*.json >/dev/null
+        if grep -RqiE 'krea2_turbo_(bf16|fp8|int8)|ComfyUI-Krea2T-Enhancer|resolve/main|tree/main' \
+          "$out/workflows"; then
+          echo "forbidden Turbo diffusion, Turbo enhancer, or mutable model link in RAW workflows" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 4
+      '';
+
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
@@ -1287,6 +1409,7 @@ let
     ep30_dir="$user_workflows/pixaroma-ep30"
     klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
     character_dir="$user_workflows/krea2-character-sheet-bf16"
+    krea_max_dir="$user_workflows/krea2-max-quality-bf16"
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
@@ -1294,15 +1417,17 @@ let
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
     klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
     character_staging="$user_workflows/.krea2-character-sheet-bf16.new"
+    krea_max_staging="$user_workflows/.krea2-max-quality-bf16.new"
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$h3_production_staging" "$elite_staging"
+      "$character_staging" "$krea_max_staging" "$h3_production_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$h3_production_staging" "$elite_staging" "$input_dir"
+      "$character_staging" "$krea_max_staging" "$h3_production_staging" \
+      "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -1324,6 +1449,9 @@ let
     for source in ${kreaSingleViewCharacterWorkflow}/workflows/*.json; do
       install -m 0600 "$source" "$character_staging/$(basename "$source")"
     done
+    for source in ${kreaMaxQualityWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$krea_max_staging/$(basename "$source")"
+    done
     for source in ${h3ProductionWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_production_staging/$(basename "$source")"
     done
@@ -1336,12 +1464,13 @@ let
     done
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
-      "$h3_production_dir" "$elite_dir"
+      "$krea_max_dir" "$h3_production_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
     mv "$klein_staging" "$klein_dir"
     mv "$character_staging" "$character_dir"
+    mv "$krea_max_staging" "$krea_max_dir"
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$elite_staging" "$elite_dir"
   '';
