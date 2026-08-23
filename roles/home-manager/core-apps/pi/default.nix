@@ -1,4 +1,10 @@
-{pkgs, config, lib, inputs, ...}:
+{
+  pkgs,
+  config,
+  lib,
+  inputs,
+  ...
+}:
 
 let
   piDir = ../../../../pi;
@@ -8,6 +14,53 @@ let
   piSrcDir = "${config.home.homeDirectory}/.dotfiles/pi";
   piAgentDir = "${config.home.homeDirectory}/.pi/agent";
   loomDir = "${config.home.homeDirectory}/dev/claude-plugins/loom";
+
+  # These reviewed cinema skills are project resources, not global Pi skills.
+  # Home Manager links them into ~/dev/creative/.pi/skills, so Pi discovers
+  # them only when that directory is Pi's cwd. The source documents carry no
+  # redistribution license, so keep them out of this public repository: fetch
+  # the user-supplied public archive immutably and fail closed on every file.
+  creativeProjectSkillNames = [
+    "banana-pro-director-30"
+    "character-builder"
+    "cinema-director"
+    "story-bible-builder"
+  ];
+  creativeProjectSkillProvenance = builtins.fromJSON (
+    builtins.readFile (piDir + "/project-skills/creative/provenance.json")
+  );
+  creativeProjectSkillArchive = pkgs.fetchurl {
+    inherit (creativeProjectSkillProvenance) url;
+    hash = creativeProjectSkillProvenance.archiveSha256;
+  };
+  creativeProjectSkillManifest = pkgs.writeText "pi-creative-project-skills.sha256" (
+    lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (path: hash: "${hash}  ${path}") creativeProjectSkillProvenance.files
+    )
+    + "\n"
+  );
+  creativeProjectSkills =
+    pkgs.runCommand "pi-creative-project-skills"
+      {
+        nativeBuildInputs = [ pkgs.unzip ];
+      }
+      ''
+        mkdir -p "$out/skills" source
+        cd source
+        for name in ${lib.escapeShellArgs creativeProjectSkillNames}; do
+          unzip -q ${creativeProjectSkillArchive} "$name.zip"
+          unzip -q "$name.zip" -d "$out/skills"
+          test -f "$out/skills/$name/SKILL.md"
+        done
+        cd "$out"
+        ${pkgs.coreutils}/bin/sha256sum -c ${creativeProjectSkillManifest}
+      '';
+  creativeProjectSkillLinks = builtins.listToAttrs (
+    map (name: {
+      name = "dev/creative/.pi/skills/${name}";
+      value.source = creativeProjectSkills + "/skills/${name}";
+    }) creativeProjectSkillNames
+  );
 
   # models.json holds exactly one machine-dependent value: the desktop-vllm
   # baseUrl. Hosts that can route 192.168.0.0/24 — LAN clients, and WARP-enrolled
@@ -27,6 +80,8 @@ in
 {
   home.packages = [ pkgs.pi-coding-agent ];
 
+  home.file = creativeProjectSkillLinks;
+
   # extensions/ and prompts/ are hand-written source, so they stay whole-directory
   # symlinks: adding, editing or removing a file needs no rebuild. models.json and
   # model-routing.json are also live configuration. agents/ cannot work this way —
@@ -35,12 +90,14 @@ in
   # On a loopback-vLLM host models.json is generated rather than symlinked, so
   # editing it there does need a rebuild. That is the price of the one rewritten
   # field; every other host keeps the live symlink.
-  home.activation.piSymlinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
+  home.activation.piSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     piAgentDir="${piAgentDir}"
     mkdir -p "$piAgentDir"
 
     # Create managed resource symlinks (idempotent)
-    for resource in extensions prompts ${lib.optionalString (!isLoopbackVllm) "models.json"} model-routing.json; do
+    for resource in extensions prompts ${
+      lib.optionalString (!isLoopbackVllm) "models.json"
+    } model-routing.json; do
       target="${piSrcDir}/$resource"
       link="$piAgentDir/$resource"
 
@@ -95,8 +152,15 @@ in
   # than failing, so a configuration that dropped the claude role would still
   # activate, just with no Loom checkout. The render step below reports that and
   # moves on.
-  home.activation.piAgents = lib.hm.dag.entryAfter ["writeBoundary" "claudePluginsWorkspace"] ''
-    export PATH="${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.diffutils pkgs.gnugrep ]}:$PATH"
+  home.activation.piAgents = lib.hm.dag.entryAfter [ "writeBoundary" "claudePluginsWorkspace" ] ''
+    export PATH="${
+      lib.makeBinPath [
+        pkgs.bun
+        pkgs.coreutils
+        pkgs.diffutils
+        pkgs.gnugrep
+      ]
+    }:$PATH"
     agentsDir="${piAgentDir}/agents"
 
     # Migrate the old whole-directory symlink into the dotfiles repo.
@@ -146,8 +210,13 @@ in
   # directory would drag those external installs into version control, so each
   # skill this repo owns is linked per-directory instead. Adding a skill = drop
   # it into pi/skills/ and it appears on the next activation, no rebuild.
-  home.activation.piSkills = lib.hm.dag.entryAfter ["writeBoundary"] ''
-    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep ]}:$PATH"
+  home.activation.piSkills = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    export PATH="${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gnugrep
+      ]
+    }:$PATH"
     skillsDir="${piAgentDir}/skills"
     srcSkillsDir="${piSrcDir}/skills"
 
@@ -188,7 +257,7 @@ in
   '';
 
   # settings.json needs to be mutable (pi writes to it at runtime)
-  home.activation.piSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
+  home.activation.piSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     piSettingsDir="${piAgentDir}"
     piSettingsTarget="$piSettingsDir/settings.json"
     piSettingsSource="${settingsFile}"

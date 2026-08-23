@@ -1,0 +1,15 @@
+{
+  "source": "user-supplied public Dropbox cinema skills archive",
+  "url": "https://www.dropbox.com/scl/fo/hg1qvhqy7nd1oyn92qwtg/AMn_AFk-2hhq2qLYcG2cVzE?rlkey=lsk8kc8iazvv6wjkrl9xz5hv8&dl=1",
+  "archiveSha256": "sha256-QZvKj3qeBGFLEJiwsyavX8PKt3vJ0pvBwC15d6Z5wMM=",
+  "reviewedAsDocumentationOnly": true,
+  "files": {
+    "skills/banana-pro-director-30/SKILL.md": "ff8371ba48cc05f37a3b17287b1c16b2466f1654185ad5064a40b6da2c64f6c5",
+    "skills/character-builder/SKILL.md": "d5de4cc6edcb9c36df76edfc1977eefed6bb72ef1cc40a9fbc0fdcc64f496b88",
+    "skills/cinema-director/SKILL.md": "57d9c538ec8aa4b79807a68bd17a7d1d3f024f079bedbdc8c848e7577f53f5ba",
+    "skills/story-bible-builder/SKILL.md": "c3f44e2d8e890da070fb1b41bd498cd9bfb71d3550048f1c74d4bea5e00f8145",
+    "skills/story-bible-builder/character-interview.md": "84bae39ff58e9a0e1ad5422faabd340ecf428cb14e12b3dd138ccf625a46a327",
+    "skills/story-bible-builder/character-section-format.md": "7478dc7d14fdcc204101c98f5eb5c9320f9cb4ee142916c636194ae9fe674c90",
+    "skills/story-bible-builder/example-bible-excerpts.md": "80aeaaaefd7dace7749fe99b4dd42ed3ef8b2e82403df0614e0b0f9fcfd6d43f"
+  }
+}

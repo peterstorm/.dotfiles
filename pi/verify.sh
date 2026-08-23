@@ -36,7 +36,11 @@ if [ "${1:-}" = "--tests" ]; then
     rmdir "$links/@earendil-works" 2>/dev/null || true
   }
   trap cleanup EXIT
-  bun test "$here/extensions/model-routing" "$here/extensions/subagent" "$@"
+  bun test \
+    "$here/extensions/model-routing" \
+    "$here/extensions/subagent" \
+    "$here/creative-project-skills.test.ts" \
+    "$@"
   exit $?
 fi
 
