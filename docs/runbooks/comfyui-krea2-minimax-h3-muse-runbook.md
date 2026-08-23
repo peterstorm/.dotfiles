@@ -660,6 +660,16 @@ rejects malformed links, mismatched defaults, active optional stages,
 non-BF16 selectors, stale URLs, embedded credentials, rgthree,
 FaceDetailer/SAM/YOLO, and video-helper metadata.
 
+Identity Edit and Outfit Transfer use Pixaroma's custom LoRA loader, which
+persists its selection twice: as `properties.loraLoaderState` and as the visible
+widget state. Every Nix-generated workflow now derives both fields from one
+canonical state and uses Linux `/` separators such as
+`krea2/krea2_identity_edit_v1_2.safetensors`. A red LoRA row means the browser
+still has an older graph in memory; close and reopen the workflow from **User
+workflows**. Do not manually reselect the model. The Episode 30, character-sheet,
+RAW, and contest derivations fail their build if these two states diverge or a
+Windows `\` separator returns.
+
 ### Actual three-panel character sheet
 
 Open **User workflows → `krea2-character-sheet-bf16` → Krea 2 Three-Panel

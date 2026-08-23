@@ -11,8 +11,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from pixaroma_workflow_state import (
+    synchronize_pixaroma_lora_state,
+    validate_pixaroma_lora_state,
+)
+
 Graph = dict[str, Any]
 QualityTier = Literal["turbo", "raw"]
+IDENTITY_EDIT_LORA = "krea2/krea2_identity_edit_v1_2.safetensors"
+OUTFIT_TRANSFER_LORA = "krea2/krea_outfittransfer.safetensors"
 
 FACE_LOCK_PROMPT = (
     "Create one canonical chest-up face lock from the complete Muse-authored character "
@@ -294,6 +301,9 @@ def strip_model_metadata(value: Any) -> None:
 
 
 def finalize(graph: Graph) -> Graph:
+    for node in graph["nodes"]:
+        if node.get("type") == "PixaromaLoraLoader":
+            synchronize_pixaroma_lora_state(node)
     strip_model_metadata(graph)
     for order, node in enumerate(graph["nodes"]):
         node["order"] = order
@@ -409,6 +419,7 @@ def build_identity_variant(
     index[228]["widgets_values"][1] = 1024
     index[232]["widgets_values"][0] = 1
     index[234]["properties"]["slidersState"]["sliders"][0]["value"] = 1
+    synchronize_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)
     index[199]["title"] = "PRIMARY OUTPUT — inspect identity before approval"
     index[199]["widgets_values"][0] = f"{variant.output_prefix}_{quality_tier.upper()}"
     return finalize(graph)
@@ -426,6 +437,7 @@ def build_sheet_variant(source: Graph, variant: SheetVariant) -> Graph:
     index[235]["title"] = (
         f"Independent sheet canvas — {variant.output_width}×{variant.output_height}"
     )
+    synchronize_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)
     index[503]["title"] = f"SAVE — {variant.title}"
     index[503]["widgets_values"][0] = variant.output_prefix
     return finalize(graph)
@@ -441,9 +453,7 @@ def build_character_world_variant(source: Graph, quality_tier: QualityTier) -> G
     )
     index[195]["widgets_values"][0] = "qwen3vl_4b_bf16.safetensors"
     index[196]["widgets_values"][0] = "qwen_image_vae.safetensors"
-    index[231]["widgets_values"][0]["loras"][0]["name"] = (
-        "krea2/krea2_identity_edit_v1_2.safetensors"
-    )
+    synchronize_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)
     index[232]["widgets_values"][0] = 1
     index[234]["properties"]["slidersState"]["sliders"][0]["value"] = 1
     index[224]["widgets_values"][1] = 1024
@@ -485,9 +495,7 @@ def build_outfit_transfer_variant(source: Graph) -> Graph:
     index[235]["title"] = "Full-body target canvas — 768×1344"
     index[224]["widgets_values"][1] = 1024
     index[228]["widgets_values"][1] = 1024
-    index[231]["widgets_values"][0]["loras"][0]["name"] = (
-        "krea2/krea_outfittransfer.safetensors"
-    )
+    synchronize_pixaroma_lora_state(index[231], OUTFIT_TRANSFER_LORA)
     index[232]["widgets_values"][0] = 1
     index[238]["title"] = "Editable local outfit-transfer role instruction"
     index[238]["widgets_values"] = [OUTFIT_TRANSFER_PROMPT, ""]
@@ -613,6 +621,9 @@ def validate_pack(workflows: dict[str, Graph]) -> None:
         raise ValueError(f"forbidden selectors or dependencies: {violations}")
     for graph in workflows.values():
         validate_graph(graph)
+        for node in graph["nodes"]:
+            if node.get("type") == "PixaromaLoraLoader":
+                validate_pixaroma_lora_state(node)
 
 
 def parse_args() -> argparse.Namespace:

@@ -9,12 +9,18 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
+from pixaroma_workflow_state import (
+    synchronize_pixaroma_lora_state,
+    validate_pixaroma_lora_state,
+)
+
 Graph = dict[str, Any]
 QualityTier = Literal["turbo", "raw"]
 
 IDENTITY_REMOVE_NODES = {163, 223}
 DETAIL_NODE_IDS = {136, 137, 139, 141}
 PROMPT_AUTHOR_ENCODER = "qwen3-vl-8b-heretic-1.3.0_bf16.safetensors"
+IDENTITY_EDIT_LORA = "krea2/krea2_identity_edit_v1_2.safetensors"
 SINGLE_VIEW_PROMPT = (
     "Generate exactly one new full-body left-facing side profile of the same subject, "
     "with the face and body viewed from the side. Preserve the subject's identity, "
@@ -206,9 +212,7 @@ def build_single_view_character_workflow(
     )
     identity_nodes[194]["widgets_values"][0] = diffusion_model
     identity_nodes[195]["widgets_values"][0] = "qwen3vl_4b_bf16.safetensors"
-    identity_nodes[231]["widgets_values"][0]["loras"][0]["name"] = (
-        "krea2/krea2_identity_edit_v1_2.safetensors"
-    )
+    synchronize_pixaroma_lora_state(identity_nodes[231], IDENTITY_EDIT_LORA)
     identity_nodes[231]["title"] = (
         f"Identity Edit v1.2 — {quality_tier.upper()} BF16 — strength 1.0"
     )
@@ -696,6 +700,7 @@ def validate_single_view_character_graph(
     )
     if index[194]["widgets_values"][0] != expected_model:
         raise ValueError(f"unexpected {quality_tier} diffusion model")
+    validate_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)
     expected_steps = 20 if quality_tier == "raw" else 10
     expected_cfg = 3 if quality_tier == "raw" else 1
     if index[141]["widgets_values"] != ["simple", expected_steps, 1]:
@@ -760,6 +765,7 @@ def validate_three_panel_character_sheet_graph(
     )
     if index[194]["widgets_values"][0] != expected_model:
         raise ValueError(f"unexpected {quality_tier} diffusion model")
+    validate_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)
     expected_steps = 20 if quality_tier == "raw" else 10
     expected_cfg = 3 if quality_tier == "raw" else 1
     if index[141]["widgets_values"] != ["simple", expected_steps, 1]:

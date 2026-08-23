@@ -772,7 +772,8 @@ let
 
         prompt_enhancer="$out/workflows/3c. Krea 2 Text to Image + Prompt Enhancer - Abliterated BF16.json"
         prompt_enhancer_refinement="$out/workflows/3d. Krea 2 Text to Image + Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16.json"
-        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+        PYTHONPATH=${../../scripts/comfyui} \
+          python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --prompt-enhancer "$prompt_enhancer" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --output "$prompt_enhancer_refinement"
@@ -946,6 +947,7 @@ let
         nativeBuildInputs = [
           pkgs.gnugrep
           pkgs.jq
+          pkgs.python3
           pkgs.unzip
         ];
       }
@@ -983,6 +985,7 @@ let
             --replace-warn 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/resolve/main/' 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/resolve/28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3/' \
             --replace-warn 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/tree/main/' 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/tree/28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3/' \
             --replace-warn 'https://huggingface.co/craftingmod/Qwen3-VL-8B-Heretic-INT8/resolve/main/qwen3-vl-8b-heretic-1.3.0-int8convrot.safetensors?download=true' 'https://huggingface.co/DreamFast/Qwen3-VL-8B-Heretic-1.3.0/resolve/28dc0129b4c7c16304bc2ed3697c9437ae8ac2f3/comfyui/qwen3-vl-8b-heretic-1.3.0_fp8_e4m3fn.safetensors'
+          python3 ${../../scripts/comfyui/pixaroma_workflow_state.py} "$workflow"
           jq -e . "$workflow" >/dev/null
         done
 
@@ -993,6 +996,9 @@ let
             | length == 5 and all(.[]; . == "krea2_turbo_bf16.safetensors"))
           and ([.[] | .nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]]
             | length == 5 and all(.[]; . == "qwen3vl_4b_bf16.safetensors"))
+          and all(.[]; all(.nodes[] | select(.type == "PixaromaLoraLoader");
+            (.properties.loraLoaderState | fromjson) == .widgets_values[0]
+            and all(.widgets_values[0].loras[]; .name | contains("\\") | not)))
         ' "$out/workflows"/*.json >/dev/null
         if grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|qwen3-vl-4b-heretic_int8|qwen3-vl-8b-heretic-1.3.0-int8convrot|craftingmod|resolve/main|tree/main' \
           "$out/workflows"; then
@@ -1124,12 +1130,14 @@ let
         unzip -q episode30.zip -d unpacked
         identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
         destination="$out/workflows/Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16.json"
-        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+        PYTHONPATH=${../../scripts/comfyui} \
+          python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --single-view "$identity" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --output "$destination"
         sheet="$out/workflows/Krea 2 Three-Panel Character Sheet BF16.json"
-        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+        PYTHONPATH=${../../scripts/comfyui} \
+          python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --three-panel "$identity" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --output "$sheet"
@@ -1179,6 +1187,8 @@ let
                   strength_model: 1,
                   strength_clip: 1
                 }]),
+              all(.nodes[] | select(.type == "PixaromaLoraLoader");
+                (.properties.loraLoaderState | fromjson) == .widgets_values[0]),
               ([.nodes[] | select(.type == "DetailDaemonSamplerNode")] | length == 1),
               (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]]) == [1]),
               (([.nodes[] | select(.type == "PixaromaSliders")
@@ -1244,6 +1254,8 @@ let
                 == [4]),
               (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]])
                 == [1]),
+              all(.nodes[] | select(.type == "PixaromaLoraLoader");
+                (.properties.loraLoaderState | fromjson) == .widgets_values[0]),
               (([.nodes[] | select(.id == 221) | .properties.promptState.text
                 | contains("THREE-PANEL CHARACTER REFERENCE SHEET")]) == [true]),
               (([.nodes[] | select(.id == 221) | .properties.promptState.text
@@ -1318,14 +1330,16 @@ let
         ' ${eliteWorkflows}/image/image_krea2_turbo_t2i.json >"$raw_t2i"
 
         raw_single="$out/workflows/02 Krea 2 RAW BF16 - Maximum Quality Single-View Identity.json"
-        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+        PYTHONPATH=${../../scripts/comfyui} \
+          python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --single-view "$identity" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --quality-tier raw \
           --output "$raw_single"
 
         raw_sheet="$out/workflows/03 Krea 2 RAW BF16 - Maximum Quality Three-Panel Identity.json"
-        python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
+        PYTHONPATH=${../../scripts/comfyui} \
+          python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
           --three-panel "$identity" \
           --realism ${kreaFluxKleinWorkflowSource} \
           --quality-tier raw \
@@ -1378,7 +1392,9 @@ let
             and ([.nodes[] | select(.type == "SamplerCustom") | .widgets_values[3]]
               == [3])
             and ([.nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer")]
-              | length == 0))
+              | length == 0)
+            and all(.nodes[] | select(.type == "PixaromaLoraLoader");
+              (.properties.loraLoaderState | fromjson) == .widgets_values[0]))
           and (([.[3].nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
               | sort) == ([
                 "flux-2-klein-9b-bf16.safetensors",
@@ -1413,7 +1429,8 @@ let
       ''
         set -euo pipefail
         mkdir -p "$out/workflows"
-        python3 ${../../scripts/comfyui/build-contest-production-workflows.py} \
+        PYTHONPATH=${../../scripts/comfyui} \
+          python3 ${../../scripts/comfyui/build-contest-production-workflows.py} \
           --turbo-t2i \
             "${eliteWorkflows}/image/image_krea2_turbo_t2i.json" \
           --raw-t2i \
@@ -1499,6 +1516,9 @@ let
               | .widgets_values[0]] == ["minimax_h3_ref2va_bf16.safetensors"])
           and ([.[20] | .. | objects | select(.type? == "BasicScheduler")
               | .widgets_values] == [["simple", 50, 1]])
+          and all(.[]; all(.nodes[] | select(.type == "PixaromaLoraLoader");
+            (.properties.loraLoaderState | fromjson) == .widgets_values[0]
+            and all(.widgets_values[0].loras[]; .name | contains("\\") | not)))
         ' "$out"/workflows/*.json >/dev/null
         if grep -RqiE \
           'krea2_turbo_(int8|fp8)|flux-2-klein-9b-fp8|qwen_3_8b_fp8|pruned_int8|nvfp4|resolve/main|tree/main|ComfyUI-Manager' \

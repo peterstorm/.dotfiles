@@ -11,6 +11,8 @@ NODE_TEST="$ROOT/tests/test_muse_glimmer_prompt.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 WORKFLOW_BUILDER="$ROOT/scripts/comfyui/build-krea2-composed-workflows.py"
+PIXAROMA_STATE="$ROOT/scripts/comfyui/pixaroma_workflow_state.py"
+PIXAROMA_STATE_TEST="$ROOT/tests/test_pixaroma_workflow_state.py"
 CONTEST_BUILDER="$ROOT/scripts/comfyui/build-contest-production-workflows.py"
 CONTEST_BUILDER_TEST="$ROOT/tests/test_contest_workflow_builder.py"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
@@ -39,10 +41,10 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
@@ -100,6 +102,7 @@ contains "$MODULE" 'forbidden Krea, practical H3, Turbo, mutable link, or Manage
 contains "$MODULE" 'h3ModelPhase'
 contains "$MODULE" 'krea2-single-view-character-bf16-workflow'
 contains "$MODULE" 'build-krea2-composed-workflows.py'
+contains "$MODULE" 'PYTHONPATH=${../../scripts/comfyui}'
 contains "$MODULE" 'Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16.json'
 contains "$MODULE" 'Krea 2 Three-Panel Character Sheet BF16.json'
 contains "$MODULE" 'krea2-max-quality-bf16-workflows'
@@ -163,6 +166,8 @@ contains "$MODULE" 'test "$(find "$out/workflows" -type f -name '\''*.json'\'' |
 contains "$MODULE" 'test "$(find "$out/media" -type f | wc -l)" -eq 6'
 contains "$MODULE" 'grep -RohF '\''krea2\\krea2_turbo_int8_convrot.safetensors'\'''
 contains "$MODULE" 'grep -RohF '\''qwen3-vl-4b-heretic_int8.safetensors'\'''
+contains "$MODULE" 'python3 ${../../scripts/comfyui/pixaroma_workflow_state.py} "$workflow"'
+contains "$MODULE" '(.properties.loraLoaderState | fromjson) == .widgets_values[0]'
 contains "$MODULE" '--replace-warn '\''krea2_turbo_fp8_scaled.safetensors'\'' '\''krea2_turbo_bf16.safetensors'\'''
 contains "$MODULE" '--replace-warn '\''qwen3-vl-4b-heretic_int8.safetensors'\'' '\''qwen3vl_4b_bf16.safetensors'\'''
 contains "$MODULE" '--replace-warn '\''krea2_turbo_int8_convrot.safetensors'\'' '\''krea2_turbo_bf16.safetensors'\'''
@@ -342,6 +347,13 @@ contains "$WORKFLOW_BUILDER" 'link[1:5] == [164, 0, 56, 0]'
 contains "$WORKFLOW_BUILDER" 'FLUX refinement output is not connected to its save node'
 contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate node id")'
 contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate link id")'
+contains "$WORKFLOW_BUILDER" 'synchronize_pixaroma_lora_state(identity_nodes[231], IDENTITY_EDIT_LORA)'
+contains "$WORKFLOW_BUILDER" 'validate_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)'
+contains "$PIXAROMA_STATE" 'def canonical_lora_name(raw_name: str) -> str:'
+contains "$PIXAROMA_STATE" 'node["properties"]["loraLoaderState"] = json.dumps('
+contains "$PIXAROMA_STATE" 'node["widgets_values"] = [copy.deepcopy(state)]'
+contains "$PIXAROMA_STATE" 'def normalize_pixaroma_lora_graph(graph: Graph) -> Graph:'
+"$PIXAROMA_STATE_TEST"
 
 # The contest pack maps prompt skills onto audited local BF16 graphs without
 # importing the untrusted skills or pretending unsupported cloud tools are local.
@@ -362,6 +374,9 @@ contains "$CONTEST_BUILDER" 'pipeline["widgets_values"][7] = False'
 contains "$CONTEST_BUILDER" 'index[232]["widgets_values"][0] = 1'
 contains "$CONTEST_BUILDER" 'index[224]["widgets_values"][1] = 1024'
 contains "$CONTEST_BUILDER" 'index[228]["widgets_values"][1] = 1024'
+contains "$CONTEST_BUILDER" 'synchronize_pixaroma_lora_state(index[231], IDENTITY_EDIT_LORA)'
+contains "$CONTEST_BUILDER" 'synchronize_pixaroma_lora_state(index[231], OUTFIT_TRANSFER_LORA)'
+contains "$CONTEST_BUILDER" 'validate_pixaroma_lora_state(node)'
 contains "$CONTEST_BUILDER" 'H3_FL2VA_LAST_PROMPT'
 contains "$CONTEST_BUILDER" 'add_link(graph, 500, 0, 105, 1, "IMAGE")'
 contains "$CONTEST_BUILDER" 'strip_model_metadata(graph)'
