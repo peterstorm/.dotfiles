@@ -1180,9 +1180,9 @@ let
                   strength_clip: 1
                 }]),
               ([.nodes[] | select(.type == "DetailDaemonSamplerNode")] | length == 1),
-              (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]]) == [0]),
+              (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]]) == [1]),
               (([.nodes[] | select(.type == "PixaromaSliders")
-                | .properties.slidersState.sliders[0].value]) == [0]),
+                | .properties.slidersState.sliders[0].value]) == [1]),
               (([.nodes[] | select(.type == "PixaromaLoadImageMini")
                 | .properties.loadImagePixState | fromjson
                 | { ratio: .ratio_preset, w: .fit_w, h: .fit_h }])
@@ -1231,8 +1231,8 @@ let
               (([.nodes[] | select(.type == "Krea2EditGroundedEncode") | .id] | sort)
                 == ([224, 228] | sort)),
               (([.nodes[] | select(.type == "SamplerCustom") | .id]) == [139]),
-              (([.nodes[] | select(.type == "EmptyImage") | .widgets_values])
-                == [[1536, 768, 1, 7829367]]),
+              (([.nodes[] | select(.id == 224 or .id == 228)
+                | .widgets_values[1]]) == [1024, 1024]),
               (([.nodes[] | select(.type == "PixaromaLoadImageMini")
                 | .properties.loadImagePixState | fromjson
                 | { ratio: .ratio_preset, w: .fit_w, h: .fit_h }])
@@ -1243,7 +1243,7 @@ let
               (([.nodes[] | select(.type == "LoraLoaderModelOnly") | .mode] | unique)
                 == [4]),
               (([.nodes[] | select(.type == "Krea2EditModelPatch") | .widgets_values[0]])
-                == [0]),
+                == [1]),
               (([.nodes[] | select(.id == 221) | .properties.promptState.text
                 | contains("THREE-PANEL CHARACTER REFERENCE SHEET")]) == [true]),
               (([.nodes[] | select(.id == 221) | .properties.promptState.text
@@ -1252,16 +1252,20 @@ let
                 | { mode, prefix: .widgets_values[0] }])
                 == [{ mode: 0, prefix: "CharacterSheet_Krea2_3Panel" }]),
               any(.links[]; .[1:5] == [226, 0, 224, 1]),
-              any(.links[]; .[1:5] == [300, 0, 228, 1]),
-              any(.links[]; .[1:5] == [300, 0, 301, 0]),
-              any(.links[]; .[1:5] == [301, 0, 232, 1]),
-              any(.links[]; .[1:5] == [300, 0, 232, 5]),
+              any(.links[]; .[1:5] == [226, 0, 228, 1]),
+              any(.links[]; .[1:5] == [226, 0, 233, 0]),
+              any(.links[]; .[1:5] == [196, 0, 233, 1]),
+              any(.links[]; .[1:5] == [233, 0, 232, 1]),
+              any(.links[]; .[1:5] == [196, 0, 232, 4]),
+              any(.links[]; .[1:5] == [226, 0, 232, 5]),
+              any(.links[]; .[1] == 162 and .[3] == 232),
+              any(.links[]; .[1:5] == [162, 0, 139, 5]),
               any(.links[]; .[1:5] == [164, 0, 503, 0]),
-              ([.links[] | select(.[1] == 226) | .[3:5]] == [[224, 1]]),
+              (([.links[] | select(.[1] == 226) | .[3:5]] | sort)
+                == ([[224, 1], [228, 1], [232, 5], [233, 0]] | sort)),
               (([.groups[].title] | sort) == ([
-                "Approved full-look identity reference — visual grounding only",
-                "Blank spatial canvas — prevents source-image overlay",
-                "Native three-panel generation and save",
+                "Approved reference — semantic and appearance identity paths",
+                "Independent target latent — native three-panel generation and save",
                 "Three-panel grammar and BF16 Identity Edit model"
               ] | sort))
             ]

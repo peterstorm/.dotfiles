@@ -114,26 +114,6 @@ def ensure_optional_input(node: Graph, name: str, value_type: str) -> int:
     return len(node["inputs"]) - 1
 
 
-def empty_image_node(node_id: int, x: float, y: float) -> Graph:
-    return {
-        "id": node_id,
-        "type": "EmptyImage",
-        "pos": [x, y],
-        "size": [270, 130],
-        "flags": {},
-        "order": 0,
-        "mode": 0,
-        "inputs": [],
-        "outputs": [{"name": "IMAGE", "type": "IMAGE", "links": []}],
-        "properties": {
-            "cnr_id": "comfy-core",
-            "Node name for S&R": "EmptyImage",
-        },
-        "widgets_values": [1536, 768, 1, 7829367],
-        "title": "Blank 18% gray spatial canvas — never the identity reference",
-    }
-
-
 def next_link_id(graph: Graph) -> int:
     return max((link[0] for link in graph["links"]), default=0) + 1
 
@@ -217,8 +197,8 @@ def build_single_view_character_workflow(
         "krea2/krea2_identity_edit_v1_2.safetensors"
     )
     identity_nodes[231]["title"] = "Identity Edit v1.2 — strength 1.0"
-    identity_nodes[232]["widgets_values"][0] = 0
-    identity_nodes[232]["title"] = "Pose-changing identity pass — ref_boost 0"
+    identity_nodes[232]["widgets_values"][0] = 1
+    identity_nodes[232]["title"] = "Identity-preserving edit pass — neutral ref_boost 1"
     identity_nodes[221]["properties"]["promptState"]["text"] = SINGLE_VIEW_PROMPT
     identity_nodes[221]["title"] = "Request exactly one new view — edit angle as needed"
     identity_nodes[226]["title"] = "Canonical subject reference — identity only"
@@ -237,9 +217,9 @@ def build_single_view_character_workflow(
         source_state, separators=(",", ":")
     )
     slider_state = identity_nodes[234]["properties"]["slidersState"]
-    slider_state["sliders"][0]["value"] = 0
+    slider_state["sliders"][0]["value"] = 1
     identity_nodes[234]["title"] = (
-        "Reference Boost — 0 for pose changes; raise only if identity drifts"
+        "Reference Boost — 1 identity baseline; lower only if pose is blocked"
     )
     resolution_state = copy.deepcopy(identity_nodes[235]["widgets_values"][0])
     resolution_state.update({"mode": "preset", "ratio": "1:1", "w": 1024, "h": 1024})
@@ -325,8 +305,8 @@ def build_single_view_character_workflow(
     add_link(graph, 240, 0, 241, 0, "MODEL")
     add_link(graph, 241, 0, 232, 0, "MODEL")
 
-    # Pre-encode against the same target canvas used by the sampler. This keeps the
-    # source reference out of the generated canvas and avoids mid-sampling VAE moves.
+    # Pre-encode the source reference at the sampler's target geometry. Reference
+    # tokens preserve appearance; the independent sampler latent owns output pixels.
     target_latent_slot = ensure_optional_input(
         identity_nodes[232], "target_latent", "LATENT"
     )
@@ -422,16 +402,13 @@ def build_three_panel_character_sheet_workflow(
 ) -> Graph:
     graph = build_single_view_character_workflow(identity_source, realism_source)
 
-    blank_latent = copy_node(graph, 233, 301)
-    blank_latent["title"] = "Encode blank spatial canvas"
-    set_position(blank_latent, -80, 920)
     final_save = copy_node(graph, 96, 503)
     final_save["mode"] = 0
     final_save["widgets_values"][0] = "CharacterSheet_Krea2_3Panel"
     final_save["title"] = "SAVE — generated three-panel character sheet"
     set_position(final_save, 2150, 520)
 
-    removed_nodes = FLUX_NODE_IDS | {199, 230, 233}
+    removed_nodes = FLUX_NODE_IDS | {199, 230}
     graph["nodes"] = [
         node for node in graph["nodes"] if node["id"] not in removed_nodes
     ]
@@ -441,9 +418,13 @@ def build_three_panel_character_sheet_workflow(
     replace_title(index[198], "Krea 2 — Three-Panel Character Sheet BF16")
     index[221]["properties"]["promptState"]["text"] = THREE_PANEL_SHEET_PROMPT
     index[221]["title"] = "Three-panel grammar — front / rear / tight face"
-    index[224]["title"] = "Identity grounding only — approved full-look reference"
-    index[228]["title"] = "Blank-canvas negative conditioning"
-    index[232]["title"] = "Blank spatial patch — uploaded reference cannot be pasted"
+    index[224]["widgets_values"][1] = 1024
+    index[224]["title"] = "Semantic identity grounding — approved reference"
+    index[228]["widgets_values"][1] = 1024
+    index[228]["title"] = "Reference-grounded unconditional conditioning"
+    index[232]["widgets_values"][0] = 1
+    index[232]["title"] = "Appearance identity tokens — neutral ref_boost 1"
+    index[233]["title"] = "VAE-encode approved identity reference"
     index[139]["widgets_values"][1] = 530887432638002
     index[139]["title"] = "Generate all three panels in one native Krea pass"
     index[164]["title"] = "Decode complete horizontal character sheet"
@@ -462,7 +443,7 @@ def build_three_panel_character_sheet_workflow(
     index[226]["properties"]["loadImagePixState"] = json.dumps(
         source_state, separators=(",", ":")
     )
-    index[226]["title"] = "Approved full-look reference — visual identity only"
+    index[226]["title"] = "Approved reference — semantic + appearance identity"
 
     resolution_state = copy.deepcopy(index[235]["widgets_values"][0])
     resolution_state.update(
@@ -481,29 +462,22 @@ def build_three_panel_character_sheet_workflow(
         resolution_state, separators=(",", ":")
     )
     index[235]["widgets_values"][0] = resolution_state
-    index[235]["title"] = "Native three-panel canvas — 1536×768"
-    index[234]["title"] = "Reference Boost — 0 for front/rear/close-up layout freedom"
+    index[235]["title"] = "Native three-panel target latent — 1536×768"
+    slider_state = index[234]["properties"]["slidersState"]
+    slider_state["sliders"][0]["value"] = 1
+    index[234]["title"] = "Reference Boost — 1 identity baseline"
 
-    blank_canvas = empty_image_node(300, -450, 920)
-    graph["nodes"].extend([blank_canvas, blank_latent, final_save])
+    graph["nodes"].append(final_save)
 
-    # Replace all spatial source conditioning with the blank gray canvas. The
-    # approved render remains connected only to the positive grounded encoder.
-    rewired_inputs = {(228, 1), (232, 1), (232, 5)}
-    graph["links"] = [
-        link for link in graph["links"] if (link[3], link[4]) not in rewired_inputs
-    ]
-    add_link(graph, 300, 0, 301, 0, "IMAGE")
-    add_link(graph, 196, 0, 301, 1, "VAE")
-    add_link(graph, 300, 0, 228, 1, "IMAGE")
-    add_link(graph, 301, 0, 232, 1, "LATENT")
-    add_link(graph, 300, 0, 232, 5, "IMAGE")
+    # The approved image must feed both trained identity channels: grounded Qwen
+    # encoding for semantics and clean VAE reference tokens for appearance. It is
+    # never the sampler's initial latent; node 162 remains an independent target.
     add_link(graph, 164, 0, 503, 0, "IMAGE")
 
     graph["groups"] = [
         {
             "id": 1,
-            "title": "Approved full-look identity reference — visual grounding only",
+            "title": "Approved reference — semantic and appearance identity paths",
             "bounding": [-1080, 150, 650, 1070],
             "color": "#3f789e",
             "font_size": 24,
@@ -519,17 +493,9 @@ def build_three_panel_character_sheet_workflow(
         },
         {
             "id": 3,
-            "title": "Blank spatial canvas — prevents source-image overlay",
-            "bounding": [-500, 850, 780, 420],
-            "color": "#6d5a8f",
-            "font_size": 24,
-            "flags": {},
-        },
-        {
-            "id": 4,
-            "title": "Native three-panel generation and save",
+            "title": "Independent target latent — native three-panel generation and save",
             "bounding": [735, -150, 2100, 1350],
-            "color": "#8f3f4d",
+            "color": "#6d5a8f",
             "font_size": 24,
             "flags": {},
         },
@@ -674,10 +640,12 @@ def validate_single_view_character_graph(graph: Graph) -> None:
         raise ValueError(f"missing required node types: {sorted(missing_types)}")
     if index[240]["mode"] != 4 or index[241]["mode"] != 4:
         raise ValueError("all optional realism LoRAs must be bypassed by default")
-    if index[232]["widgets_values"][0] != 0:
-        raise ValueError("single-view pose changes must default to ref_boost 0")
-    if index[234]["properties"]["slidersState"]["sliders"][0]["value"] != 0:
-        raise ValueError("the connected reference-boost slider must default to 0")
+    if index[232]["widgets_values"][0] != 1:
+        raise ValueError(
+            "single-view identity preservation must default to ref_boost 1"
+        )
+    if index[234]["properties"]["slidersState"]["sliders"][0]["value"] != 1:
+        raise ValueError("the connected reference-boost slider must default to 1")
     source_resolution = json.loads(index[226]["properties"]["loadImagePixState"])
     if (
         source_resolution["ratio_preset"],
@@ -725,10 +693,12 @@ def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
         )
     if index[240]["mode"] != 4 or index[241]["mode"] != 4:
         raise ValueError("three-panel generation must preserve style by default")
-    if index[232]["widgets_values"][0] != 0:
-        raise ValueError("three-panel layout must default to ref_boost 0")
-    if index[234]["properties"]["slidersState"]["sliders"][0]["value"] != 0:
-        raise ValueError("the connected reference-boost slider must default to 0")
+    if index[232]["widgets_values"][0] != 1:
+        raise ValueError(
+            "three-panel identity preservation must default to ref_boost 1"
+        )
+    if index[234]["properties"]["slidersState"]["sliders"][0]["value"] != 1:
+        raise ValueError("the connected reference-boost slider must default to 1")
 
     source_resolution = json.loads(index[226]["properties"]["loadImagePixState"])
     if (
@@ -740,13 +710,11 @@ def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
     output_resolution = index[235]["widgets_values"][0]
     if (output_resolution["w"], output_resolution["h"]) != (1536, 768):
         raise ValueError("the native three-panel canvas must be 1536×768")
-    if index[300]["type"] != "EmptyImage" or index[300]["widgets_values"] != [
-        1536,
-        768,
-        1,
-        7829367,
-    ]:
-        raise ValueError("the spatial patch must use the pinned blank gray canvas")
+    if (
+        index[224]["widgets_values"][1] != 1024
+        or index[228]["widgets_values"][1] != 1024
+    ):
+        raise ValueError("human identity grounding must default to 1024 pixels")
 
     if {node["id"] for node in graph["nodes"] if node["type"] == "SamplerCustom"} != {
         139
@@ -782,22 +750,26 @@ def validate_three_panel_character_sheet_graph(graph: Graph) -> None:
     )
     required_links = {
         (226, 0, 224, 1),
-        (300, 0, 228, 1),
-        (300, 0, 301, 0),
-        (196, 0, 301, 1),
-        (301, 0, 232, 1),
-        (300, 0, 232, 5),
+        (226, 0, 228, 1),
+        (226, 0, 233, 0),
+        (196, 0, 233, 1),
+        (233, 0, 232, 1),
+        (196, 0, 232, 4),
+        (226, 0, 232, 5),
         (162, 0, 232, target_latent_slot),
+        (162, 0, 139, 5),
         (164, 0, 503, 0),
     }
     actual_links = {tuple(link[1:5]) for link in graph["links"]}
     missing_links = required_links - actual_links
     if missing_links:
         raise ValueError(
-            f"incomplete native three-panel graph: {sorted(missing_links)}"
+            f"incomplete identity-preserving three-panel graph: {sorted(missing_links)}"
         )
-    if any(link[1] == 226 and link[3] in {228, 232} for link in graph["links"]):
-        raise ValueError("the uploaded reference must never enter spatial conditioning")
+    if any(link[1] in {226, 233} and link[3] == 139 for link in graph["links"]):
+        raise ValueError(
+            "the reference must provide tokens, never sampler initialization"
+        )
 
 
 def validate_prompt_enhancer_refinement_graph(graph: Graph) -> None:

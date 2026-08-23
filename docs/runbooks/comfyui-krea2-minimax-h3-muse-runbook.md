@@ -485,7 +485,8 @@ afterward.
 
 The safe default path is:
 
-1. full-rank Krea 2 Identity Edit v1.2 at LoRA strength 1.0 and `ref_boost=0`;
+1. full-rank Krea 2 Identity Edit v1.2 at LoRA strength 1.0 and the neutral
+   identity baseline `ref_boost=1`;
 2. source preprocessing and output canvas both fixed to 1:1 at 1024×1024;
 3. the sampler's empty target latent also connected to the model patch;
 4. FameGrid and UltraReal both bypassed so illustrations, creatures, and 3D
@@ -495,19 +496,20 @@ The safe default path is:
    `CharacterSheet_Krea2_SingleView` prefix.
 
 These defaults correct three independently observed failure modes. A 1:1 source
-fitted into a 16:9 output caused source-panel outpainting on both sides. A
-reference boost of 1 or more reproduced the original pose instead of obeying a
-new viewpoint; `ref_boost=0` produced the requested clean profile while the
-Identity Edit LoRA retained the character design. Active realism and the old
-human-specific FLUX prompt could convert a stylized creature into a person or
-change its medium.
+fitted into a 16:9 output caused source-panel outpainting on both sides. The old
+`ref_boost=0` experiment freed large pose changes for a stylized creature but
+also disabled reference-attention strength enough to cause unacceptable human
+face drift. Neutral `ref_boost=1` is therefore the identity-first production
+default. Active realism and the old human-specific FLUX prompt could convert a
+stylized creature into a person or change its medium.
 
 Keep the output ratio equal to the source preprocessing ratio. If another ratio
 is required, change both together; changing only the output canvas reintroduces
-source-panel outpainting. Start pose changes at `ref_boost=0`, then raise it only
-in small increments if identity drift is worse than pose adherence. The QA
-comparison node deliberately displays source and result together but is never
-connected to either saved output.
+source-panel outpainting. Start at `ref_boost=1`; raise it toward 2 only when
+likeness still drifts, or lower it toward 0 only when a major pose change is
+blocked and the resulting identity remains acceptable. The QA comparison node
+deliberately displays source and result together but is never connected to
+either saved output.
 
 The prompt should request one concrete view without using “character sheet,”
 “turnaround,” “triptych,” or similar layout language. For example:
@@ -545,24 +547,29 @@ pass:
 2. **CENTER:** strict full-body rear view with the face completely hidden;
 3. **RIGHT:** magnified front-facing chest-up identity plate.
 
-The approved full-look render connects only to positive visual grounding, where
-it supplies identity, design, and outfit evidence. It never enters the model
-patch, negative conditioning, or output canvas. A separate pinned 1536×768
-`EmptyImage` supplies a flat gray spatial canvas and is VAE-encoded into the
-model patch. This structural separation is what prevents the uploaded source
-from being pasted in front of or between the generated panels.
+The approved reference feeds both identity channels required by Identity Edit
+v1.2: Qwen image-grounded encoding supplies semantic identity and a clean
+VAE-encoded reference supplies appearance tokens to `Krea2EditModelPatch`. The
+same reference also grounds the CFG-1 unconditional branch. These are reference
+tokens, not output pixels. A separate empty 1536×768 target latent is the only
+sampler initialization, so the source image is never composited into the sheet.
 
 One Krea sampler generates the complete three-panel frame at 1536×768 and
-`SaveImage` writes it with prefix `CharacterSheet_Krea2_3Panel`. Qualification
-with the rabbit explorer reference produced a clean front plate, a true rear
-plate, and a visibly magnified face panel with no embedded source image.
+`SaveImage` writes it with prefix `CharacterSheet_Krea2_3Panel`. Human
+qualification exposed and corrected the former blank-reference defect: neutral
+`ref_boost=1` plus 1024-pixel grounding preserved the supplied face much more
+closely while still producing front, strict rear, and close-up panels without an
+embedded source image. Boost 2 was similar; boost 4 began changing the requested
+face angle, so 1 remains the default.
 
 All panels default to a flat 18% neutral-gray field, even shadowless lighting,
 no cast/contact shadow, and no text or labels. Both realism LoRAs remain bypassed
-and `ref_boost=0` remains the layout-freedom baseline. Edit the one visible
-three-panel prompt when a project needs a headless outfit plate, side profiles,
-an expression panel, or another layout; keep all panel roles explicit in that
-single prompt.
+and `ref_boost=1` is the identity-first baseline. A face-only photo supplies no
+evidence for unseen body shape, footwear, or rear wardrobe, so those details
+must be inferred; use an approved full-look image when those details must match.
+Edit the one visible three-panel prompt when a project needs a headless outfit
+plate, side profiles, an expression panel, or another layout; keep all panel
+roles explicit in that single prompt.
 
 The default layout is intentionally three panels rather than six: each plate
 retains enough pixel budget for identity and garment detail. A six-panel variant
@@ -1270,8 +1277,8 @@ The starting surface is:
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
 | 8B-authored Krea image with realistic finish | `3d. ... Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16` | User workflows → `pixaroma-ep24-krea2-bf16` | BF16 8B Heretic is prompt-only; BF16 4B conditions Krea; Klein license and marker required |
 | Photoreal final still/refinement | `Krea 2 Turbo BF16 + FLUX.2 Klein 9B BF16 - Detail Daemon` | User workflows → `krea2-flux2-klein9b-bf16` | Non-commercial FLUX license accepted; separate five-artifact marker; serialize on GPU1 |
-| Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; `ref_boost=0`; both realism LoRAs bypassed; FLUX outputs muted |
-| Native three-panel character sheet | `Krea 2 Three-Panel Character Sheet BF16` | User workflows → `krea2-character-sheet-bf16` | Approved full-look source used only for visual grounding; blank 1536×768 spatial canvas; one Krea pass and save |
+| Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; identity-first `ref_boost=1`; both realism LoRAs bypassed; FLUX outputs muted |
+| Native three-panel character sheet | `Krea 2 Three-Panel Character Sheet BF16` | User workflows → `krea2-character-sheet-bf16` | Approved reference feeds semantic and VAE appearance-token paths; independent 1536×768 target latent; one Krea pass and save |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
 | Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
@@ -1470,7 +1477,8 @@ BF16`. Feed the canonical anchor and request one controlled change per output:
 
 Keep identity language and wardrobe language identical across prompts. Change
 only the requested view or expression. Keep source preprocessing and output at
-1:1, begin with `ref_boost=0`, and raise it cautiously only if identity drifts.
+1:1, begin with `ref_boost=1`, raise it cautiously if identity still drifts, and
+lower it only when a major pose change is blocked.
 Do not use “character sheet” or “turnaround” in a single-view prompt. Keep both
 realism LoRAs bypassed unless photoreal conversion is explicitly intended, and
 use the primary Krea output before considering the muted FLUX stage.
@@ -1767,12 +1775,13 @@ Do not call the stack qualified until:
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B
-      BF16` completes at 1:1/1 MP with `ref_boost=0`, exactly one generated
+      BF16` completes at 1:1/1 MP with `ref_boost=1`, exactly one generated
       subject, no source-panel outpainting, both realism LoRAs bypassed, and
       both FLUX output nodes muted.
-- [ ] `Krea 2 Three-Panel Character Sheet BF16` generates front, strict rear,
-      and magnified face panels in one 1536×768 native Krea pass, then saves
-      exactly one sheet without embedding the uploaded source image.
+- [ ] `Krea 2 Three-Panel Character Sheet BF16` sends the same reference through
+      semantic grounding and VAE appearance tokens, generates front, strict
+      rear, and magnified face panels from an independent 1536×768 target latent,
+      and saves exactly one sheet without embedding the source image.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.
