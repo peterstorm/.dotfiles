@@ -171,6 +171,10 @@ The switch installs:
   `/var/lib/comfyui/user/default/workflows/krea2-max-quality-bf16/`: undistilled
   text-to-image, single-view identity, three-panel identity, and RAW→FLUX.2
   Klein finishing;
+- 21 purpose-built contest workflows under
+  `/var/lib/comfyui/user/default/workflows/contest-production-bf16/`, spanning
+  face locks, additions, outfits, expression and character sheets, scene plates,
+  conservative Klein finishing, and T2V/FL2VA/REF2VA H3 shots;
 - two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
   in separate graphs—under
   `/var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16/`;
@@ -200,8 +204,8 @@ transactional profile switch. After activation, acceptance requires:
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
   one Krea/FLUX Klein workflow, two Turbo character workflows, four RAW
-  maximum-quality Krea workflows, and two maximum-quality H3 production
-  workflows are installed;
+  maximum-quality Krea workflows, 21 contest-production workflows, and two
+  maximum-quality H3 production workflows are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -423,6 +427,82 @@ recommends Turbo for normal inference; RAW offers undistilled diversity and
 control but costs roughly 5–6× more sampling than Turbo. Compare fixed
 prompt/seed outputs and retain the result that actually preserves identity,
 composition, and detail better.
+
+### Contest production pack — prompt-skill handoff to local BF16 graphs
+
+Open **User workflows → `contest-production-bf16`**. This is the guided local
+production surface for prompts authored in Pi with the character-builder,
+banana-pro-director, cinema-director, story-bible, and Muse context. Those
+external Markdown skills remain operator-loaded reference material; they are
+not copied into the Nix closure, executed by ComfyUI, or trusted as code.
+
+The workflow pack preserves the skills' useful artifact order while translating
+cloud-product names to models actually installed here:
+
+- Nano Banana/Soul/GPT image stages become Krea 2 Turbo preview or RAW production
+  stages. This is a local functional equivalent, not a claim of model parity.
+- Seedance video stages become maximum-quality MiniMax H3 T2V, FL2VA, or REF2VA
+  shots. H3 has different reference and motion behavior; prompts still require
+  operator review.
+- A story bible feeds Muse and the pasted prompt. It has no separate graph because
+  canon is text context, not a diffusion operation.
+- Voice descriptions and sound beds can guide H3 native audio. Exact voice cloning
+  is not provided by this pack. Use the separately pinned Episode 29 speech/singing
+  audio-sync workflows only with consented audio and after qualification.
+- Image finishing is available through full-BF16 Klein. There is no declared BF16
+  video upscaler; the curated SeedVR2 INT8 utilities are not silently promoted into
+  this production tier.
+
+The 21 workflows are ordered as a production path:
+
+| Range | Purpose | Important default |
+|---|---|---|
+| `01`–`02` | Text-only canonical face lock | Turbo 8/1 preview; RAW 52/3.5 production; 768×1024 |
+| `03`–`04` | Permanent addition and canonical re-lock | Dual-channel identity; `ref_boost=1`; 1024 grounding; 768×1024 |
+| `05`–`06` | Full-look outfit plate from an approved face lock | Turbo or RAW Identity Edit; independent 768×1344 target |
+| `07` | Two-image outfit transfer | Turbo-trained outfit adapter; Picture 1 character, Picture 2 outfit |
+| `08` | Three-expression identity set | One RAW image and sampler; three chest-up cells |
+| `09` | Headless three-panel working sheet | RAW; headless front, strict rear, tight face; 1536×768 |
+| `10` | Optional six-panel sheet | RAW 1536×1024; explicitly reduced per-cell identity detail |
+| `11` | Invisible-mannequin garment repair | RAW text-to-image; use only after a direct outfit build misses one garment |
+| `12`–`13` | Pure environment or scene plate | Turbo preview or RAW production; 1344×768 |
+| `14`–`15` | Character plus approved world plate | Picture 1 character, Picture 2 world; Turbo or RAW; 1344×768 |
+| `16` | Krea RAW generation into Klein 4 MP finish | 52-step RAW then full-BF16 Klein; non-commercial license applies |
+| `17` | Accepted arbitrary still into Klein | One source image; conservative identity/composition lock |
+| `18` | H3 text-only environment/motion shot | FL2VA family; prepare `fl2va`; native 1344×768 |
+| `19` | H3 exact first-frame shot | FL2VA family; one approved opening frame |
+| `20` | H3 exact first-and-last-frame shot | FL2VA family; both frame inputs connected explicitly |
+| `21` | H3 character/world references | REF2VA family; Picture 1 full-look, Picture 2 one explicit secondary role |
+
+Image prompt handoff is deliberate. Workflows `01`, `02`, `11`, `12`, and `13`
+disable the official subgraph's prompt expansion and style LoRA, increase the
+exposed prompt budget, and pass the pasted Muse text directly. Identity and
+sheet graphs expose one plainly titled prompt widget and retain the same approved
+reference in semantic Qwen grounding and clean VAE appearance-token channels;
+the independent target latent remains the only sampler initialization. Long
+cinema-director prompts go directly into the H3 conditioning node.
+
+Do not mechanically paste a Higgsfield reference-number convention into a graph
+with different slot semantics. Follow the node titles:
+
+- outfit transfer: **Picture 1 = character**, **Picture 2 = outfit**;
+- character/world still: **Picture 1 = approved full-look character**, **Picture
+  2 = world plate only**;
+- H3 REF2VA: **Picture 1 = approved full-look character**, **Picture 2 = exactly
+  one declared world, prop, second-character, or style role**;
+- H3 FL2VA first+last: **Picture 1 = opening**, **Picture 2 = closing**.
+
+Reference economy still applies. The approved full-look image is normally a
+better sole identity/wardrobe reference than a face lock plus a conflicting
+outfit frame. Add a second reference only when it owns a distinct role. A
+face-only lock cannot define unseen footwear, rear garment construction, or body
+shape. The six-panel workflow is present because this pack explicitly covers the
+guide's optional mode, but three panels remain the production default.
+
+The guide is untrusted production advice, not contest authority. Verify current
+eligibility, submission dates, duration, licensing, disclosure, and model-use
+rules against the contest organizer's official terms before spending credits or
+publishing an entry.
 
 ### Pixaroma Episode 24 — twelve Krea workflows, adapted to BF16
 
@@ -718,11 +798,12 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **89 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **110 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
-  maximum-quality graphs, two image-led maximum-quality H3 production graphs,
-  eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
-  official graphs installed into the workflow browser.
+  maximum-quality graphs, 21 guided contest-production graphs, two image-led
+  maximum-quality H3 production graphs, eight Episode 29 graphs, seven pinned
+  Episode 30 graphs, and 53 curated official graphs installed into the workflow
+  browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** only Krea/Edit dependencies are covered by the production downloader.
@@ -1325,6 +1406,7 @@ The starting surface is:
 | Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; identity-first `ref_boost=1`; both realism LoRAs bypassed; FLUX outputs muted |
 | Native three-panel character sheet | `Krea 2 Three-Panel Character Sheet BF16` | User workflows → `krea2-character-sheet-bf16` | Approved reference feeds semantic and VAE appearance-token paths; independent 1536×768 target latent; one Krea pass and save |
 | Undistilled maximum-quality Krea suite | `01`–`04 Krea 2 RAW BF16...` | User workflows → `krea2-max-quality-bf16` | RAW T2I 52/3.5; RAW Identity 20/3; RAW three-panel; RAW→full-BF16 Klein; no Turbo enhancer or active unqualified realism LoRA |
+| Guided skill-to-graph production path | `01`–`21` ordered character, still, finish, and H3 workflows | User workflows → `contest-production-bf16` | Paste approved Muse prompts directly; obey each graph's titled reference roles; Turbo previews and RAW/H3 production remain separate |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
 | Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
@@ -1362,6 +1444,8 @@ test "$(find /var/lib/comfyui/user/default/workflows/krea2-character-sheet-bf16 
   -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/krea2-max-quality-bf16 \
   -type f -name '*.json' | wc -l)" -eq 4
+test "$(find /var/lib/comfyui/user/default/workflows/contest-production-bf16 \
+  -type f -name '*.json' | wc -l)" -eq 21
 test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16 \
   -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
@@ -1415,6 +1499,12 @@ five seconds. A later edit can join those clips into a sequence. This gives you 
 stable point at which to reject drift before it contaminates every later scene.
 
 ### Step 1 — create a small project bible
+
+If the external story-bible-builder skill is loaded in Pi, use it to interview and
+assemble this canon before asking Muse for image or video prompts. Treat the
+result as human-reviewed project input, not executable code. The story bible
+supplies who, voice, movement, stillness, world rules, and era; the image and
+cinema skills supply how each asset is framed and generated.
 
 Create a mutable project directory outside the Nix store. For example:
 
@@ -1501,46 +1591,49 @@ constraints to detect drift.
 
 #### 2.2 Generate and approve one canonical anchor
 
-Open `image_krea2_turbo_t2i` and generate a neutral, well-lit, single-character
-image before attempting action poses. Start at 1K. Ask for a full body or
-three-quarter body, visible face, simple neutral background, realistic lens, and
-no props obscuring the silhouette.
+Open contest workflow `01 Character Face Lock - Turbo BF16 Preview`, paste the
+approved Muse/character-builder face-lock prompt, and iterate before attempting
+outfits or action poses. The graph is fixed at 768×1024 with prompt expansion and
+style LoRA disabled. Promote an approved specification through `02 Character
+Face Lock - RAW BF16 Production` for the undistilled comparison. Keep the plain
+black baseline top, flat gray field, shadowless light, and identity-only framing.
 
 Generate a small candidate set, then choose **one** canonical anchor manually.
 Record its exact prompt, seed, model selectors, dimensions, and output filename.
 Do not average several almost-matching faces into the identity definition.
 
-#### 2.3 Derive one clean view at a time
+#### 2.3 Re-lock additions, then approve one full look
 
-Open `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B
-BF16`. Feed the canonical anchor and request one controlled change per output:
+Open contest workflow `03 Character Addition Re-Lock - Turbo BF16 Preview` or
+`04 ... RAW BF16 Production` only when a permanent identity state changes. Feed
+the canonical face lock and request exactly one controlled addition:
 
-1. face front, neutral expression;
-2. face three-quarter, neutral expression;
-3. clean left or right profile;
-4. full body front;
-5. full body back;
-6. one story-relevant expression;
-7. optional hands, signature prop, or wardrobe-material detail.
+1. hair color, length, or cut;
+2. a piercing with exact position and metal;
+3. a tattoo or scar with anatomical anchor, size, and orientation;
+4. a default makeup-register change;
+5. another change that alters how the face reads at rest.
 
-Keep identity language and wardrobe language identical across prompts. Change
-only the requested view or expression. Keep source preprocessing and output at
-1:1, begin with `ref_boost=1`, raise it cautiously if identity still drifts, and
-lower it only when a major pose change is blocked.
-Do not use “character sheet” or “turnaround” in a single-view prompt. Keep both
-realism LoRAs bypassed unless photoreal conversion is explicitly intended, and
-use the primary Krea output before considering the muted FLUX stage.
+The prompt must name the change and explicitly hold everything else. Keep the
+3:4 source/output geometry, `ref_boost=1`, and 1024-pixel grounding. The accepted
+result becomes a new versioned canonical lock; do not overwrite the prior state.
+Use workflow `08` when three controlled expressions are needed without changing
+identity.
 
-Reject any candidate that changes face geometry, eye color, scar side, hair
-parting, age, body silhouette, canonical materials, species, or visual medium.
-A polished inconsistent image is not a useful reference.
+Next use workflow `05 Character Full-Look Outfit - Turbo BF16 Preview`, then
+`06 ... RAW BF16 Production`, to place the approved identity into one approved
+head-to-footwear look on an independent 768×1344 target. Reject any candidate
+that changes face geometry, eye color, scar side, hair parting, body silhouette,
+canonical materials, species, or visual medium. A polished inconsistent image
+is not a useful reference.
 
 #### 2.4 Assemble the approved three-panel sheet
 
-After approving the full-look outfit render, open `Krea 2 Three-Panel Character
-Sheet BF16`. Keep the default front/rear/face grammar or edit the one prompt to
-the three roles the project needs. Queue the graph once; one native Krea pass
-generates and saves the complete horizontal sheet. Reject it if the center panel
+Build and approve the full outfit first with contest workflow `05` or `06`, then
+open `09 Character Headless Three-Panel Sheet - RAW BF16 Production`. Paste the
+single Muse sheet prompt with identity and wardrobe described once and the three
+panel roles explicit. Queue the graph once; one native RAW Krea pass generates
+and saves the complete horizontal sheet. Reject it if the center panel
 exposes the face instead of a strict rear view, if the right panel is wider than
 chest-up, or if outfit construction, skin/fur tone, or identity markers disagree
 across panels. For downstream H3 conditioning, prefer separate accepted plates
@@ -1550,10 +1643,11 @@ when possible; the sheet is primarily a compact human-review artifact.
 
 - Use the official Krea style-reference workflow for palette, texture, lighting,
   and rendering language—not as the sole identity reference.
-- Use `One Image Outfit` or `Outfit Transfer 2` only when the story requires a
-  wardrobe variant. Crop away the source model's face/body when possible.
-- Use `Character and Background` to create a scene keyframe containing the
-  approved character and an approved location.
+- Use contest workflow `07 Character Outfit Transfer - Turbo BF16 Adapter` only
+  when the story requires a wardrobe variant. Its local adapter order is fixed:
+  Picture 1 is the character and Picture 2 is the outfit source.
+- Use contest workflow `14` or `15 Character and World Scene Plate` to create a
+  keyframe containing the approved character and an approved location.
 - Keep identity, wardrobe, style, location, and prop images as separate files so
   each can be assigned one explicit job in an H3 R2V manifest.
 
@@ -1568,13 +1662,14 @@ Use Muse in two distinct roles:
 1. **Free-form writer/director in Pi:** select
    `desktop-muse/muse-glimmer-30b` to develop the story, screenplay, and scene
    breakdown interactively.
-2. **Per-scene prompt compiler in ComfyUI:** use `Muse Glimmer Creative Prompt`
-   only after a scene card is approved, with task `MiniMax H3 base` or
-   `MiniMax H3 reference`.
+2. **Approved prompt compiler in Pi:** activate the relevant image or cinema
+   skill plus the story bible, ask Muse for the final standalone prompt, review
+   it, then paste it into the plainly titled widget in the contest workflow.
 
-The ComfyUI node is deliberately task-shaped; it is not the best interface for
-an open-ended writers' room. Start the Pi conversation by pasting the approved
-project and character bibles, then use a request like:
+The `Muse Glimmer Creative Prompt` ComfyUI node remains an optional task-shaped
+alternative, but the contest graphs intentionally do not chain another enhancer
+over already approved Muse text. Start the Pi conversation by pasting the
+approved project and character bibles, then use a request like:
 
 ```text
 Act as a screenwriter and visual director. The project and character bibles
@@ -1635,10 +1730,13 @@ no wardrobe change; watch remains in left hand; no text or watermark.
 
 Before spending H3 sampling time, establish composition cheaply with Krea:
 
-- use Krea T2I for location-only establishing frames;
-- use `Character and Background` for a canonical character in the scene;
-- use Identity Edit for a new pose while preserving the accepted face/outfit;
-- use style reference to carry the project's visual language.
+- use contest workflow `12` or `13` for location-only establishing frames;
+- use contest workflow `14` or `15` for an approved character in an approved
+  world plate;
+- use contest workflow `03`–`06` for a re-lock or full-look plate while
+  preserving the accepted face;
+- use the Turbo-only official style-reference graph only when its trained style
+  adapter is actually required.
 
 Save the accepted frame as `first-frame.png` in that scene directory. Record the
 Krea prompt and seed. The frame is a composition contract, not merely
@@ -1654,9 +1752,9 @@ wait for an idle queue, clear memory, return to Krea, and clear again before H3.
 
 | Need | Mode | Family | Guidance |
 |---|---|---|---|
-| Establishing shot with no recurring identity | T2V | FL2VA | Text only; simplest qualification path |
-| Exact opening composition or previous scene's final frame | I2V | FL2VA | Supply first frame; optional last frame for a required endpoint |
-| Character identity, wardrobe, voice, motion, or several references | R2V | REF2VA | Start with one or two images and `ref_image_size=match` |
+| Establishing shot with no recurring identity | T2V | FL2VA | Contest workflow `18`; text only |
+| Exact opening composition or previous scene's final frame | I2V | FL2VA | Contest workflow `19`; use `20` when an exact last frame is required |
+| Character identity, wardrobe, voice, motion, or references | R2V | REF2VA | Contest workflow `21`; start with Picture 1 full-look and one distinct Picture 2 role |
 
 Prefer I2V when one approved frame carries enough continuity. Prefer R2V when
 identity must survive a large pose/camera change or when audio/video references
@@ -1671,13 +1769,14 @@ when changing FL2VA ↔ REF2VA, Krea ↔ H3, or after any OOM.
 
 For each accepted scene card:
 
-1. Open only the corresponding saved BF16 H3 workflow.
+1. Open only contest workflow `18`, `19`, `20`, or `21`.
 2. Confirm no unrelated output branch is active and the queue is empty.
-3. Load the approved first/last frame or references in the exact documented
-   order.
-4. Add `Muse Glimmer Creative Prompt` before the H3 prompt input.
-5. Select `MiniMax H3 base` for T2V/I2V or `MiniMax H3 reference` for R2V.
-6. For R2V, provide an explicit manifest such as:
+3. Load the approved first/last frame or references in the exact titled order.
+4. Paste the complete approved Muse/Cinema Director prompt into the titled H3
+   prompt widget. Do not run another enhancer over it.
+5. Confirm the workflow family matches the prompt: FL2VA for `18`–`20`, REF2VA
+   for `21`.
+6. For REF2VA, keep an explicit manifest such as:
 
    ```text
    <Picture 1>: Mara identity and face geometry only.
@@ -1817,7 +1916,7 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
-- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 53 curated workflows, and 16 unique sample inputs are present.
+- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 53 curated workflows, and 16 unique sample inputs are present.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.
@@ -1835,6 +1934,14 @@ Do not call the stack qualified until:
       workflows use 20 steps/CFG 3, and no RAW graph contains Krea2T Enhancer.
 - [ ] Fixed prompt/seed RAW-versus-Turbo A/B results are reviewed before calling
       RAW better for a given task.
+- [ ] All 21 `contest-production-bf16` graphs parse; their direct T2I paths have
+      prompt expansion and style LoRA disabled; RAW Krea graphs select RAW BF16;
+      and no graph contains lower-precision selectors or mutable model links.
+- [ ] Contest face lock, addition re-lock, full-look, expression set, headless
+      sheet, garment repair, environment plate, character/world plate, outfit
+      transfer, integrated 4 MP finish, and accepted-still finish each complete.
+- [ ] Contest FL2VA first+last has two connected frame inputs, and contest H3
+      T2V/FL2VA/REF2VA graphs complete only after preparing their matching family.
 - [ ] Custom-ratio, character/background, and both outfit workflows complete.
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.
@@ -1867,6 +1974,7 @@ Commands:
 ```bash
 bash tests/comfyui-creative-stack-contract.sh
 ./tests/test_muse_glimmer_prompt.py
+./tests/test_contest_workflow_builder.py
 nix eval .#nixosConfigurations.desktop.config.systemd.services.comfyui.serviceConfig.ExecStart
 nix build .#nixosConfigurations.desktop.config.system.build.toplevel --dry-run
 

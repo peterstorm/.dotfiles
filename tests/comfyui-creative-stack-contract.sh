@@ -11,6 +11,8 @@ NODE_TEST="$ROOT/tests/test_muse_glimmer_prompt.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 WORKFLOW_BUILDER="$ROOT/scripts/comfyui/build-krea2-composed-workflows.py"
+CONTEST_BUILDER="$ROOT/scripts/comfyui/build-contest-production-workflows.py"
+CONTEST_BUILDER_TEST="$ROOT/tests/test_contest_workflow_builder.py"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 H3_PHASE="$ROOT/scripts/comfyui/h3-model-phase.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
@@ -37,10 +39,10 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
@@ -105,6 +107,13 @@ contains "$MODULE" '01 Krea 2 RAW BF16 - Maximum Quality Text to Image.json'
 contains "$MODULE" '02 Krea 2 RAW BF16 - Maximum Quality Single-View Identity.json'
 contains "$MODULE" '03 Krea 2 RAW BF16 - Maximum Quality Three-Panel Identity.json'
 contains "$MODULE" '04 Krea 2 RAW BF16 to FLUX.2 Klein 9B BF16 - Maximum Quality.json'
+contains "$MODULE" 'contest-production-bf16-workflows'
+contains "$MODULE" 'build-contest-production-workflows.py'
+contains "$CONTEST_BUILDER" '21 H3 REF2VA Character and World References - BF16 Production.json'
+contains "$MODULE" 'contest_dir="$user_workflows/contest-production-bf16"'
+contains "$MODULE" 'contest_staging="$user_workflows/.contest-production-bf16.new"'
+contains "$MODULE" 'for source in ${contestProductionWorkflows}/workflows/*.json; do'
+contains "$MODULE" 'test "$(find "$out/workflows" -type f -name '\''*.json'\'' | wc -l)" -eq 21'
 contains "$MODULE" '--single-view "$identity"'
 contains "$MODULE" '--three-panel "$identity"'
 contains "$MODULE" '--quality-tier raw'
@@ -333,6 +342,32 @@ contains "$WORKFLOW_BUILDER" 'link[1:5] == [164, 0, 56, 0]'
 contains "$WORKFLOW_BUILDER" 'FLUX refinement output is not connected to its save node'
 contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate node id")'
 contains "$WORKFLOW_BUILDER" 'raise ValueError("duplicate link id")'
+
+# The contest pack maps prompt skills onto audited local BF16 graphs without
+# importing the untrusted skills or pretending unsupported cloud tools are local.
+contains "$CONTEST_BUILDER" 'class IdentityVariant:'
+contains "$CONTEST_BUILDER" 'def build_t2i_variant('
+contains "$CONTEST_BUILDER" 'def build_identity_variant('
+contains "$CONTEST_BUILDER" 'def build_sheet_variant('
+contains "$CONTEST_BUILDER" 'def build_character_world_variant('
+contains "$CONTEST_BUILDER" 'def build_outfit_transfer_variant('
+contains "$CONTEST_BUILDER" 'krea2/krea_outfittransfer.safetensors'
+contains "$CONTEST_BUILDER" 'def build_klein_finish_variant('
+contains "$CONTEST_BUILDER" 'def build_h3_t2v_variant('
+contains "$CONTEST_BUILDER" 'def build_h3_fl2va_variant('
+contains "$CONTEST_BUILDER" 'def build_h3_ref_variant('
+contains "$CONTEST_BUILDER" 'if len(workflows) != 21:'
+contains "$CONTEST_BUILDER" 'pipeline["widgets_values"][1] = False'
+contains "$CONTEST_BUILDER" 'pipeline["widgets_values"][7] = False'
+contains "$CONTEST_BUILDER" 'index[232]["widgets_values"][0] = 1'
+contains "$CONTEST_BUILDER" 'index[224]["widgets_values"][1] = 1024'
+contains "$CONTEST_BUILDER" 'index[228]["widgets_values"][1] = 1024'
+contains "$CONTEST_BUILDER" 'H3_FL2VA_LAST_PROMPT'
+contains "$CONTEST_BUILDER" 'add_link(graph, 500, 0, 105, 1, "IMAGE")'
+contains "$CONTEST_BUILDER" 'strip_model_metadata(graph)'
+contains "$CONTEST_BUILDER" 'forbidden selectors or dependencies'
+"$CONTEST_BUILDER_TEST"
+
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$DOWNLOAD")" -eq 16 ]] \
   || fail "Krea base manifest must contain exactly 16 pinned artifacts"
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 5 ]] \
@@ -400,8 +435,15 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**89 user workflows:**'
+contains "$RUNBOOK" '**110 user workflows:**'
 contains "$RUNBOOK" 'krea2-max-quality-bf16'
+contains "$RUNBOOK" 'contest-production-bf16'
+contains "$RUNBOOK" '21 purpose-built contest workflows'
+contains "$RUNBOOK" 'Picture 1 = character'
+contains "$RUNBOOK" 'Picture 1 = opening'
+contains "$RUNBOOK" 'prompt expansion and style LoRA disabled'
+contains "$RUNBOOK" 'video upscaler; the curated SeedVR2 INT8 utilities'
+contains "$RUNBOOK" 'eligibility, submission dates, duration, licensing, disclosure'
 contains "$RUNBOOK" 'krea2_raw_bf16.safetensors'
 contains "$RUNBOOK" '52 steps and CFG 3.5'
 contains "$RUNBOOK" '3d. Krea 2 Text to Image + Prompt Enhancer + FLUX.2 Klein Realism - Abliterated BF16'
@@ -411,7 +453,7 @@ contains "$RUNBOOK" 'krea2-flux2-klein9b-bf16'
 contains "$RUNBOOK" 'krea2-character-sheet-bf16'
 contains "$RUNBOOK" 'Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16'
 contains "$RUNBOOK" 'Krea 2 Three-Panel Character Sheet BF16'
-contains "$RUNBOOK" 'one native Krea pass'
+contains "$RUNBOOK" 'one native RAW Krea pass'
 contains "$RUNBOOK" 'both realism LoRAs bypassed'
 contains "$RUNBOOK" '`ref_boost=1`'
 contains "$RUNBOOK" 'source-panel outpainting'

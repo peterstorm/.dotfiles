@@ -1401,6 +1401,114 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 4
       '';
 
+  contestProductionWorkflows =
+    pkgs.runCommand "contest-production-bf16-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.jq
+          pkgs.python3
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        python3 ${../../scripts/comfyui/build-contest-production-workflows.py} \
+          --turbo-t2i \
+            "${eliteWorkflows}/image/image_krea2_turbo_t2i.json" \
+          --raw-t2i \
+            "${kreaMaxQualityWorkflows}/workflows/01 Krea 2 RAW BF16 - Maximum Quality Text to Image.json" \
+          --turbo-identity \
+            "${kreaSingleViewCharacterWorkflow}/workflows/Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16.json" \
+          --raw-identity \
+            "${kreaMaxQualityWorkflows}/workflows/02 Krea 2 RAW BF16 - Maximum Quality Single-View Identity.json" \
+          --raw-sheet \
+            "${kreaMaxQualityWorkflows}/workflows/03 Krea 2 RAW BF16 - Maximum Quality Three-Panel Identity.json" \
+          --character-world \
+            "${pixaromaEp30}/workflows/Krea 2 + Edit Lora - Character and Background.json" \
+          --outfit-transfer \
+            "${pixaromaEp30}/workflows/Krea 2 + Outfit Transfer 2.json" \
+          --raw-klein-chain \
+            "${kreaMaxQualityWorkflows}/workflows/04 Krea 2 RAW BF16 to FLUX.2 Klein 9B BF16 - Maximum Quality.json" \
+          --klein-edit \
+            "${eliteWorkflows}/image/image_flux2_klein_image_edit_9b_distilled.json" \
+          --h3-t2v \
+            "${eliteWorkflows}/video/video_minimax_h3_bf16_t2v.json" \
+          --h3-fl2va \
+            "${h3ProductionWorkflows}/workflows/01 MiniMax H3 BF16 FL2VA - First Frame Production.json" \
+          --h3-ref2va \
+            "${h3ProductionWorkflows}/workflows/02 MiniMax H3 BF16 REF2VA - Character References Production.json" \
+          --output-dir "$out/workflows"
+
+        jq -s -e '
+          length == 21
+          and all(.[]; . as $graph
+            | ([.nodes[].id] | length == (unique | length))
+            and ([.links[][0]] | length == (unique | length))
+            and all($graph.links[]; . as $edge
+              | any($graph.nodes[]; .id == $edge[1])
+                and any($graph.nodes[]; .id == $edge[3])))
+          and all((.[0:2] + .[10:13])[];
+            ([.nodes[] | select(.id == 30) | .widgets_values[1]] == [false])
+            and ([.nodes[] | select(.id == 30) | .widgets_values[7]] == [false]))
+          and all([.[0], .[11]][];
+            ([.. | objects | select(.type? == "KSampler")
+              | .widgets_values[2:6]] == [[8, 1, "euler", "simple"]]))
+          and all([.[1], .[10], .[12]][];
+            ([.. | objects | select(.type? == "KSampler")
+              | .widgets_values[2:6]] == [[52, 3.5, "euler", "simple"]]))
+          and all([.[2], .[4]][];
+            ([.nodes[] | select(.type == "BasicScheduler") | .widgets_values]
+              == [["simple", 10, 1]])
+            and ([.nodes[] | select(.type == "SamplerCustom") | .widgets_values[3]]
+              == [1]))
+          and all([.[3], .[5]][];
+            ([.nodes[] | select(.type == "BasicScheduler") | .widgets_values]
+              == [["simple", 20, 1]])
+            and ([.nodes[] | select(.type == "SamplerCustom") | .widgets_values[3]]
+              == [3]))
+          and all(.[2:6][];
+            ([.nodes[] | select(.id == 232) | .widgets_values[0]] == [1])
+            and ([.nodes[] | select(.id == 224 or .id == 228)
+              | .widgets_values[1]] == [1024, 1024]))
+          and all(.[7:10][];
+            ([.nodes[] | select(.type == "SamplerCustom")] | length == 1)
+            and ([.nodes[] | select(.id == 503 and .mode == 0)] | length == 1))
+          and ([.[14].nodes[] | select(.id == 163) | .widgets_values[2:6]]
+            == [[20, 3, "euler", "simple"]])
+          and ([.[19].nodes[] | select(.type == "LoadImage")] | length == 2)
+          and any(.[19].links[]; .[1:5] == [500, 0, 105, 1])
+          and ([.[6].nodes[] | select(.type == "PixaromaLoraLoader")
+            | .widgets_values[0].loras[0].name]
+            == ["krea2/krea_outfittransfer.safetensors"])
+          and ([.[16] | .. | objects | select(.type? == "UNETLoader")
+              | .widgets_values[0]] | unique
+            == ["flux-2-klein-9b-bf16.safetensors"])
+          and ([.[16] | .. | objects | select(.type? == "CLIPLoader")
+              | .widgets_values[0]] | unique
+            == ["qwen_3_8b_bf16.safetensors"])
+          and ([.[16] | .. | objects | select(.type? == "VAELoader")
+              | .widgets_values[0]] | unique
+            == ["flux2-vae.safetensors"])
+          and all(.[17:20][];
+            ([.. | objects | select(.type? == "UNETLoader") | .widgets_values[0]]
+              == ["minimax_h3_fl2va_bf16.safetensors"])
+            and ([.. | objects | select(.type? == "BasicScheduler") | .widgets_values]
+              == [["simple", 50, 1]]))
+          and ([.[20] | .. | objects | select(.type? == "UNETLoader")
+              | .widgets_values[0]] == ["minimax_h3_ref2va_bf16.safetensors"])
+          and ([.[20] | .. | objects | select(.type? == "BasicScheduler")
+              | .widgets_values] == [["simple", 50, 1]])
+        ' "$out"/workflows/*.json >/dev/null
+        if grep -RqiE \
+          'krea2_turbo_(int8|fp8)|flux-2-klein-9b-fp8|qwen_3_8b_fp8|pruned_int8|nvfp4|resolve/main|tree/main|ComfyUI-Manager' \
+          "$out/workflows"; then
+          echo "forbidden lower-precision selector, mutable link, or dependency in contest pack" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 21
+      '';
+
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
@@ -1410,6 +1518,7 @@ let
     klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
     character_dir="$user_workflows/krea2-character-sheet-bf16"
     krea_max_dir="$user_workflows/krea2-max-quality-bf16"
+    contest_dir="$user_workflows/contest-production-bf16"
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
@@ -1418,16 +1527,18 @@ let
     klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
     character_staging="$user_workflows/.krea2-character-sheet-bf16.new"
     krea_max_staging="$user_workflows/.krea2-max-quality-bf16.new"
+    contest_staging="$user_workflows/.contest-production-bf16.new"
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$krea_max_staging" "$h3_production_staging" "$elite_staging"
+      "$character_staging" "$krea_max_staging" "$contest_staging" \
+      "$h3_production_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$krea_max_staging" "$h3_production_staging" \
-      "$elite_staging" "$input_dir"
+      "$character_staging" "$krea_max_staging" "$contest_staging" \
+      "$h3_production_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -1452,6 +1563,9 @@ let
     for source in ${kreaMaxQualityWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$krea_max_staging/$(basename "$source")"
     done
+    for source in ${contestProductionWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$contest_staging/$(basename "$source")"
+    done
     for source in ${h3ProductionWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_production_staging/$(basename "$source")"
     done
@@ -1464,13 +1578,14 @@ let
     done
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
-      "$krea_max_dir" "$h3_production_dir" "$elite_dir"
+      "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
     mv "$klein_staging" "$klein_dir"
     mv "$character_staging" "$character_dir"
     mv "$krea_max_staging" "$krea_max_dir"
+    mv "$contest_staging" "$contest_dir"
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$elite_staging" "$elite_dir"
   '';
