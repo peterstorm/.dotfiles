@@ -1806,6 +1806,8 @@ in
   # The downloader writes only SHA-pinned, checksum-verified files here.
   systemd.tmpfiles.rules = [
     "d /models/comfyui 0750 peterstorm users - -"
+    "d /models/voice 0750 peterstorm users - -"
+    "d /models/voice/qwen3-tts 0750 peterstorm users - -"
   ]
   ++ map (directory: "d /models/comfyui/${directory} 0750 peterstorm users - -") modelSubdirectories;
 

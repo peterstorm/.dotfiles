@@ -1,0 +1,44 @@
+FROM pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime@sha256:60f22fb80755fd0b470fb47928dbd55816aa9f847edd95cf43c93253507a9ddf
+
+ARG QWEN3_TTS_REV=022e286b98fbec7e1e916cb940cdf532cd9f488e
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      git \
+      libsndfile1 \
+      libsox-fmt-all \
+      sox \
+    && rm -rf /var/lib/apt/lists/*
+
+# The headless audition runtime never imports the optional Gradio demo. Remove
+# that UI-only dependency instead of shipping a network-facing web stack.
+RUN git clone https://github.com/QwenLM/Qwen3-TTS.git /opt/qwen3-tts \
+    && git -C /opt/qwen3-tts checkout --detach "$QWEN3_TTS_REV" \
+    && test "$(git -C /opt/qwen3-tts rev-parse HEAD)" = "$QWEN3_TTS_REV" \
+    && rm -rf /opt/qwen3-tts/.git \
+    && sed -i '/  "gradio",/d' /opt/qwen3-tts/pyproject.toml
+
+# Direct runtime dependencies are fixed to the versions qualified with this
+# image. The base image already owns the CUDA-matched Torch and torchaudio.
+RUN python -m pip install --no-cache-dir \
+      accelerate==1.12.0 \
+      einops==0.8.1 \
+      librosa==0.11.0 \
+      onnxruntime==1.23.2 \
+      soundfile==0.13.1 \
+      sox==1.5.0 \
+      transformers==4.57.3 \
+    && python -m pip install --no-cache-dir --no-deps /opt/qwen3-tts \
+    && python -m pip check
+
+LABEL org.opencontainers.image.title="Qwen3-TTS local voice audition runtime" \
+      org.opencontainers.image.source="https://github.com/QwenLM/Qwen3-TTS" \
+      org.opencontainers.image.revision="022e286b98fbec7e1e916cb940cdf532cd9f488e" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+ENV PYTHONUNBUFFERED=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    TOKENIZERS_PARALLELISM=false
+
+WORKDIR /work

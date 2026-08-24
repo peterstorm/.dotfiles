@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+DOCKERFILE="$ROOT/scripts/inference/voice/Dockerfile.qwen3-tts"
+BUILD="$ROOT/scripts/inference/voice/build-qwen3-tts-image.sh"
+DOWNLOAD="$ROOT/scripts/inference/voice/download-qwen3-tts-voice-design.sh"
+GENERATE="$ROOT/scripts/inference/voice/generate_voice_design_auditions.py"
+RUN="$ROOT/scripts/inference/voice/run-qwen3-tts-voice-auditions.sh"
+
+contains() {
+  grep -Fq -- "$2" "$1" || { echo "missing contract in $1: $2" >&2; exit 1; }
+}
+
+for file in "$DOCKERFILE" "$BUILD" "$DOWNLOAD" "$GENERATE" "$RUN"; do
+  test -f "$file"
+done
+bash -n "$BUILD" "$DOWNLOAD" "$RUN"
+
+contains "$DOCKERFILE" 'pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime@sha256:60f22fb80755fd0b470fb47928dbd55816aa9f847edd95cf43c93253507a9ddf'
+contains "$DOCKERFILE" 'QWEN3_TTS_REV=022e286b98fbec7e1e916cb940cdf532cd9f488e'
+contains "$DOCKERFILE" 'transformers==4.57.3'
+contains "$DOCKERFILE" 'sed -i '\''/  "gradio",/d'\'' /opt/qwen3-tts/pyproject.toml'
+contains "$DOCKERFILE" 'HF_HUB_OFFLINE=1'
+contains "$BUILD" 'QWEN3_TTS_IMAGE_ID='
+contains "$BUILD" '--network none'
+
+contains "$DOWNLOAD" 'Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign'
+contains "$DOWNLOAD" '5ecdb67327fd37bb2e042aab12ff7391903235d3'
+contains "$DOWNLOAD" '391e8db219f292c515297cdceeb43e4eae67cdde35fa57e79a6a8a532fca0522 3833402552 model.safetensors'
+contains "$DOWNLOAD" '836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258 682293092 speech_tokenizer/model.safetensors'
+contains "$DOWNLOAD" 'verify_manifest "$STAGING"'
+
+contains "$GENERATE" '@dataclass(frozen=True)'
+contains "$GENERATE" 'language must equal English'
+contains "$GENERATE" 'members must contain exactly four entries'
+contains "$GENERATE" 'candidates must contain exactly three entries'
+contains "$GENERATE" 'local_files_only=True'
+contains "$GENERATE" 'attn_implementation="sdpa"'
+contains "$GENERATE" 'subtype="PCM_16"'
+contains "$GENERATE" 'SHA256SUMS'
+
+contains "$RUN" '--network none'
+contains "$RUN" '--read-only'
+contains "$RUN" '--cap-drop all'
+contains "$RUN" '--security-opt no-new-privileges'
+contains "$RUN" '--gpus "device=$GPU_DEVICE"'
+contains "$RUN" 'dst=/models/voice-design,readonly'
+contains "$RUN" 'QWEN3_TTS_EXPECTED_IMAGE_ID'
+contains "$RUN" 'sha256sum -c SHA256SUMS'
+if grep -Eq 'pip install|hf download|curl |wget ' "$RUN"; then
+  echo 'runtime audition script must not download or install anything' >&2
+  exit 1
+fi
+
+echo QWEN3_TTS_VOICE_CONTRACT_PASS
