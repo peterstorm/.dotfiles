@@ -78,18 +78,27 @@ skills:
 - `cinema-director`
 - `story-bible-builder` and its three relative reference documents
 
-Nix also fetches MiniMax's official `music-caption-rewriter` from the exact
-MiniMax-Music3 revision and source hash in the provenance file, including its
-relative template/index assets under the upstream community license.
+Nix also fetches MiniMax's official `music-caption-rewriter` and
+`h3-prompt-writing` skills from exact MiniMax-Music3 and MiniMax-H3 revisions
+and source hashes in the provenance file, including their relative assets under
+the applicable upstream community licenses.
 
-The repository owns four MIT-licensed companion skills:
+The repository owns eight MIT-licensed companion skills:
 
+- `action-physics-production` — support, force, contact order, momentum,
+  conditioning strategy, proof coverage, and sampled-frame action QA;
 - `blocking-continuity` — normalized staging, screen direction, map qualification,
   and fail-closed spatial QA;
 - `ensemble-action-production` — local-only Krea 2, MiniMax Music 3, and MiniMax H3
   production orchestration;
+- `identity-realism-production` — mandatory Krea/Klein face A/B qualification and
+  accepted high-fidelity identity handoff to production H3;
 - `performance-direction` — playable actor and listener work with sampled-frame QA;
-- `prop-continuity` — prop scale, mating geometry, action coverage, and semantic QA.
+- `prop-continuity` — prop scale, mating geometry, action coverage, and semantic QA;
+- `synthetic-voice-production` — immutable original VoiceAnchors, dialogue cloning,
+  stem-safe singing conversion, versioning, and listening acceptance;
+- `wardrobe-asset-production` — approved front/rear/detail packages, serialized
+  lineage, immutable versions, and visible construction evidence.
 
 These authored skills adapt model-agnostic production lessons without modifying or
 republishing the unlicensed archive or uploaded reference text.
@@ -104,7 +113,7 @@ pi
 Pi requires an explicit project-trust decision before loading `.pi/skills`.
 Approve the prompt after verifying the path is exactly `~/dev/creative`; use
 `/trust` if that decision should persist, then restart Pi as instructed. Starting
-Pi elsewhere does not discover these nine skills. Pi intentionally applies
+Pi elsewhere does not discover these fourteen skills. Pi intentionally applies
 ancestor traversal to `.agents/skills`, not `.pi/skills`; this setup uses the
 Pi-only `.pi` location, so start the session from the creative project root.
 

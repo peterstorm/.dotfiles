@@ -10,6 +10,13 @@
     "path": "skills/music-caption-rewriter",
     "license": "MiniMax-Music3 Community License"
   },
+  "officialH3PromptWriting": {
+    "source": "MiniMax-AI/MiniMax-H3",
+    "revision": "d21241f0a4b3acbb34c97dae47fa417b7065e438",
+    "sourceSha256": "sha256-k7gcGofqKCl3eMry0zX6JvwIJ20hUBDOQ+/hj/S2Ay4=",
+    "path": "skills/h3-prompt-writing",
+    "license": "MiniMax H3 Community License"
+  },
   "files": {
     "skills/banana-pro-director-30/SKILL.md": "ff8371ba48cc05f37a3b17287b1c16b2466f1654185ad5064a40b6da2c64f6c5",
     "skills/character-builder/SKILL.md": "d5de4cc6edcb9c36df76edfc1977eefed6bb72ef1cc40a9fbc0fdcc64f496b88",

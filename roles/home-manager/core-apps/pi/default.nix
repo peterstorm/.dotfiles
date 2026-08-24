@@ -25,14 +25,15 @@ let
     "cinema-director"
     "story-bible-builder"
   ];
-  officialCreativeProjectSkillNames = [
-    "music-caption-rewriter"
-  ];
   authoredCreativeProjectSkillNames = [
+    "action-physics-production"
     "blocking-continuity"
     "ensemble-action-production"
+    "identity-realism-production"
     "performance-direction"
     "prop-continuity"
+    "synthetic-voice-production"
+    "wardrobe-asset-production"
   ];
   creativeProjectSkillProvenance = builtins.fromJSON (
     builtins.readFile (piDir + "/project-skills/creative/provenance.json")
@@ -46,6 +47,12 @@ let
     repo = "MiniMax-Music3";
     rev = creativeProjectSkillProvenance.officialMusicCaptionRewriter.revision;
     hash = creativeProjectSkillProvenance.officialMusicCaptionRewriter.sourceSha256;
+  };
+  h3PromptWritingSource = pkgs.fetchFromGitHub {
+    owner = "MiniMax-AI";
+    repo = "MiniMax-H3";
+    rev = creativeProjectSkillProvenance.officialH3PromptWriting.revision;
+    hash = creativeProjectSkillProvenance.officialH3PromptWriting.sourceSha256;
   };
   creativeProjectSkillManifest = pkgs.writeText "pi-creative-project-skills.sha256" (
     lib.concatStringsSep "\n" (
@@ -74,10 +81,16 @@ let
       name = "dev/creative/.pi/skills/${name}";
       value.source = creativeProjectSkills + "/skills/${name}";
     }) archivedCreativeProjectSkillNames
-    ++ map (name: {
-      name = "dev/creative/.pi/skills/${name}";
-      value.source = musicCaptionRewriterSource + "/skills/${name}";
-    }) officialCreativeProjectSkillNames
+    ++ [
+      {
+        name = "dev/creative/.pi/skills/music-caption-rewriter";
+        value.source = musicCaptionRewriterSource + "/skills/music-caption-rewriter";
+      }
+      {
+        name = "dev/creative/.pi/skills/h3-prompt-writing";
+        value.source = h3PromptWritingSource + "/skills/h3-prompt-writing";
+      }
+    ]
     ++ map (name: {
       name = "dev/creative/.pi/skills/${name}";
       value.source = piDir + "/project-skills/creative/${name}";

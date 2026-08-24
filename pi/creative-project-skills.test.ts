@@ -16,15 +16,20 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const creativeSkillNames = Object.freeze([
+	"action-physics-production",
 	"banana-pro-director-30",
 	"blocking-continuity",
 	"character-builder",
 	"cinema-director",
 	"ensemble-action-production",
+	"h3-prompt-writing",
+	"identity-realism-production",
 	"music-caption-rewriter",
 	"performance-direction",
 	"prop-continuity",
 	"story-bible-builder",
+	"synthetic-voice-production",
+	"wardrobe-asset-production",
 ]);
 
 const temporaryRoots: string[] = [];
@@ -79,7 +84,7 @@ afterEach(() => {
 });
 
 describe("creative project skill scope", () => {
-	test("discovers all nine skills from the creative project root", async () => {
+	test("discovers every skill from the creative project root", async () => {
 		const projectRoot = temporaryDirectory("pi-creative-project-");
 		const agentDir = temporaryDirectory("pi-creative-agent-");
 		deployCreativeSkills(projectRoot);
@@ -120,6 +125,12 @@ describe("creative project skill scope", () => {
 
 	test("authored skills define independent fail-closed production contracts", () => {
 		const contracts = Object.freeze({
+			"action-physics-production": [
+				"physical-state contract",
+				"Support state",
+				"Proof shot",
+				"sampled-frame atomic QA",
+			],
 			"blocking-continuity": [
 				"normalized image coordinates",
 				"planning evidence by default",
@@ -132,6 +143,12 @@ describe("creative project skill scope", () => {
 				"creative-model-phase prepare music3",
 				"Audience reappraisal",
 			],
+			"identity-realism-production": [
+				"Mandatory for production H3",
+				"Identity A",
+				"Realism B",
+				"No modifier reapplication",
+			],
 			"performance-direction": [
 				"Read the entire scene first",
 				"Listener task",
@@ -143,6 +160,18 @@ describe("creative project skill scope", () => {
 				"World and receptacle lock",
 				"Story and coverage gate",
 				"Frame-sampled semantic verification",
+			],
+			"synthetic-voice-production": [
+				"VoiceAnchor",
+				"Identity/performance firewall",
+				"Never convert a blended chorus",
+				"new numbered output root",
+			],
+			"wardrobe-asset-production": [
+				"Version instead of overwrite",
+				"Front first",
+				"Construction close-up",
+				"Visible evidence",
 			],
 		});
 

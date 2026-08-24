@@ -1,6 +1,6 @@
 ---
 name: ensemble-action-production
-description: "Orchestrates an original local-only ensemble music/action production from story causality through cast, music, world, vehicles, shots, generation, and evidence-backed acceptance. Use for bands, teams, squads, mech pilots, action trailers, music videos, or episodic proof-of-concepts where every member needs distinct dramatic and capability coverage. Coordinates story-bible-builder, character-builder, performance-direction, blocking-continuity, prop-continuity, cinema-director, Krea 2, MiniMax Music 3, and MiniMax H3 without cloud generation."
+description: "Orchestrates an original local-only ensemble music/action production from story causality through cast, music, world, vehicles, shots, generation, and evidence-backed acceptance. Use for bands, teams, squads, mech pilots, action trailers, music videos, or episodic proof-of-concepts where every member needs distinct dramatic and capability coverage. Coordinates story-bible-builder, character-builder, identity-realism-production, action-physics-production, performance-direction, blocking-continuity, prop-continuity, cinema-director, Krea 2, MiniMax Music 3, and MiniMax H3 without cloud generation."
 license: MIT
 compatibility: "Pi project skill for the local creative stack: Krea 2 images, MiniMax Music 3 songs, and MiniMax H3 FL2VA/REF2VA video on serialized GPU1 workflows."
 ---
@@ -124,9 +124,10 @@ If the audio-reference path fails, use music-blind H3 movement and edit visually
 
 No video generation begins before acceptance of:
 
-- one face lock per member;
+- one accepted Krea face lock per member;
+- one user-accepted FLUX.2 Klein BF16 Realism B per visible principal, qualified through `identity-realism-production` and recorded as the H3 production face authority;
 - personless wardrobe sources and full-look screen tests;
-- one-visible-face identity sheets;
+- one-visible-face identity sheets whose sole face resolves to that accepted Realism B;
 - group palette and formation sheet;
 - one mech/vehicle bible per member;
 - cockpit and exterior correspondence;
@@ -135,7 +136,7 @@ No video generation begins before acceptance of:
 - clean location plates;
 - original logo/text assets rendered deterministically, not by video diffusion.
 
-Use `prop-continuity` for mechs, weapons, controls, hatches, and mating interfaces. Use `blocking-continuity` for formations, cockpit geography, and fight axes.
+Use `identity-realism-production` for mandatory production face finishing and H3 identity handoff. Krea-only faces may drive previews but are barred from final H3 production. Use `prop-continuity` for mechs, weapons, controls, hatches, and mating interfaces. Use `blocking-continuity` for formations, cockpit geography, and fight axes.
 
 ## Stage 5 — shot units
 
@@ -153,6 +154,8 @@ Each H3 shot unit must state:
 - music section/bar range, when applicable.
 
 Do not ask one generation to perform exterior combat, transform into a cockpit, deliver dialogue, fire a weapon, and react. Split those into causal shots.
+
+Any fight, fall, throw, impact, vehicle maneuver, collision, recoil, jump, landing, destruction event, or contact-rich prop action must pass through `action-physics-production` before the official H3 formatting pass.
 
 ### Action grammar
 
