@@ -45,11 +45,12 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    Drop a new skill directory (with a `SKILL.md`) into `pi/skills/` and it
    appears on the next activation — no rebuild. Stale links to removed skills
    are pruned.
-6. **Creative project skills**: links four reviewed third-party cinema skills and
-   the tracked `prop-continuity` skill into `~/dev/creative/.pi/skills/` through
-   Home Manager. They are not present in `~/.pi/agent/skills`, package settings,
-   or any ancestor directory, so Pi discovers them only when its working
-   directory is exactly `~/dev/creative`.
+6. **Creative project skills**: links four reviewed archive skills, MiniMax's
+   revision-pinned music-caption skill, and four MIT-licensed authored production
+   skills into `~/dev/creative/.pi/skills/` through Home Manager. They are not
+   present in `~/.pi/agent/skills`, package settings, or any ancestor directory,
+   so Pi discovers them only when its working directory is exactly
+   `~/dev/creative`.
 7. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
 
 ### Global skills (`pi/skills`)
@@ -77,11 +78,21 @@ skills:
 - `cinema-director`
 - `story-bible-builder` and its three relative reference documents
 
-The repository also owns and installs `prop-continuity`, an MIT-licensed companion
-skill under `pi/project-skills/creative/prop-continuity/`. It adds prop scale,
-orientation, receptacle, action-coverage, sampled-frame semantic QA, and
-fail-closed scene acceptance without modifying or republishing the unlicensed
-third-party skill text.
+Nix also fetches MiniMax's official `music-caption-rewriter` from the exact
+MiniMax-Music3 revision and source hash in the provenance file, including its
+relative template/index assets under the upstream community license.
+
+The repository owns four MIT-licensed companion skills:
+
+- `blocking-continuity` — normalized staging, screen direction, map qualification,
+  and fail-closed spatial QA;
+- `ensemble-action-production` — local-only Krea 2, MiniMax Music 3, and MiniMax H3
+  production orchestration;
+- `performance-direction` — playable actor and listener work with sampled-frame QA;
+- `prop-continuity` — prop scale, mating geometry, action coverage, and semantic QA.
+
+These authored skills adapt model-agnostic production lessons without modifying or
+republishing the unlicensed archive or uploaded reference text.
 
 Start Pi in the project to expose them:
 
@@ -93,7 +104,7 @@ pi
 Pi requires an explicit project-trust decision before loading `.pi/skills`.
 Approve the prompt after verifying the path is exactly `~/dev/creative`; use
 `/trust` if that decision should persist, then restart Pi as instructed. Starting
-Pi elsewhere does not discover these five skills. Pi intentionally applies
+Pi elsewhere does not discover these nine skills. Pi intentionally applies
 ancestor traversal to `.agents/skills`, not `.pi/skills`; this setup uses the
 Pi-only `.pi` location, so start the session from the creative project root.
 

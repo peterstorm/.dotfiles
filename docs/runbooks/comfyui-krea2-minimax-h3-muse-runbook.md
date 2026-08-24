@@ -1,6 +1,6 @@
-# ComfyUI creative stack — Krea 2 + MiniMax H3 + Muse Glimmer
+# ComfyUI creative stack — Krea 2 + MiniMax H3 + MiniMax Music 3 + Muse Glimmer
 
-Research snapshot: **2026-08-21**. Target: `desktop`, headless NixOS, Ryzen 9
+Research snapshot: **2026-08-24**. Target: `desktop`, headless NixOS, Ryzen 9
 9950X, 91 GiB RAM, 2× RTX PRO 6000 Blackwell 96 GiB over PCIe PHB.
 
 ## Decision
@@ -9,9 +9,9 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 
 - **Muse Glimmer 30B BF16 + DFlash** on physical GPU0 writes and compiles
   creative briefs into model-ready prompts.
-- **ComfyUI 0.31.1** on physical GPU1 runs local Krea 2 and exposes MiniMax H3
-  workflows. The UI listens only on `127.0.0.1:8188` and is reached through an
-  SSH tunnel.
+- **ComfyUI 0.33.3** on physical GPU1 runs local Krea 2, MiniMax H3, and
+  MiniMax Music 3 workflows. The UI listens only on `127.0.0.1:8188` and is
+  reached through an SSH tunnel.
 - **Krea 2 has separate BF16 production tiers.** Turbo remains the fast,
   post-trained 8–10-step inference model. RAW is the undistilled maximum-control
   tier: 52 steps and CFG 3.5 for text-to-image, or the Identity Edit model
@@ -22,12 +22,15 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
   photoreal refinement profile. It preserves the active Detail Daemon, 4 MP
   handoff, color-match, sharpen, and save path while removing embedded
   credentials and the inactive face-detector branch.
-- **MiniMax H3 API partner nodes** are the immediately usable H3 path in Denmark:
-  text-to-video, first/last-frame, multimodal reference-to-video, Context IR
-  prompt refinement, and 2K regeneration.
 - **Local H3 core nodes use the separately authorized original unpruned BF16
   reference profile; downloads remain dual-gated by license acceptance and
-  territorial authorization attestation.**
+  territorial authorization attestation.** The current ensemble project uses
+  local nodes only; hosted partner workflows remain outside its production path.
+- **MiniMax Music 3 uses the official FP16 DiT, unpruned BF16 text encoder, and
+  full DAV decoder.** Its separate downloader is license-gated, revision-pinned,
+  checksum-verified, and installed without runtime package mutation.
+- **One `creative-model-phase` command serializes Krea, H3 FL2VA, H3 REF2VA,
+  and Music 3 on GPU1.** It refuses `/free` while a graph is active or pending.
 
 This deliberately does **not** install ComfyUI-Manager or permit mutable node
 installs. Core supplies the standard generation nodes. The in-repo Muse adapter
@@ -51,17 +54,21 @@ ComfyUI remains loopback-only and systemd-confined.
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
 | Curated creative suite | 53 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
-| Full Template Library | 506 additional official workflows | Comfy package 0.11.37 in the Nix closure |
+| MiniMax Music 3 workflow | Official Comfy workflow adapted to the full-quality selectors | workflow-templates commit + exact file hash + JSON/model gate |
+| Full Template Library | official workflow browser library | Comfy package 0.11.44 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | FLUX.2 Klein 9B BF16, encoder, VAE, and two Krea LoRAs | `/models/comfyui/` | HF revisions/Civitai model versions + exact size + SHA-256 manifest |
+| MiniMax Music 3 FP16 DiT, BF16 encoder, and DAV | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest; explicit community-license gate |
 | Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
 | Comfy account/partner credits | Comfy account | external prepaid service |
 | Muse bearer key | `~/.config/muse-glimmer/api-key` | private file, never a node widget |
 
-The current flake resolves ComfyUI 0.31.1, frontend 1.48.7, workflow templates
-0.11.37, and PyTorch 2.12.0 with CUDA 13.2 libraries. ComfyUI 0.31.1 exceeds
-both upstream minimums: Krea 2 landed in 0.26 and MiniMax H3 requires 0.30+.
+The current flake resolves ComfyUI 0.33.3 at commit
+`4da9e2dbead52fc1e68beae33fe3d7ad63b63241`, frontend 1.49.6, workflow
+templates 0.11.44, comfy-kitchen 0.2.31, and PyTorch 2.12.0 with CUDA 13.2
+libraries. Music 3 native core support landed in
+`efd4e951a00e85bd92e79f1d685427912b0dad5e`; 0.33.3 contains that commit.
 
 ## Why this architecture
 
@@ -99,8 +106,22 @@ activation. The downloader requires both `MINIMAX_H3_ACCEPT_LICENSE=yes` and
 
 MiniMax's own license Q&A separately states that the **MiniMax H3 API is
 available globally** because MiniMax operates moderation and compliance
-controls. The ComfyUI H3 partner nodes use hosted generation and are the legal
-initial path, subject to Comfy/MiniMax service terms and account availability.
+controls. Hosted nodes are documented for completeness, but the current
+ensemble project permits only the separately authorized local profile.
+
+### MiniMax Music 3: community license, explicit acceptance
+
+The original `MiniMaxAI/MiniMax-Music3` repository uses the
+**MiniMax-Music3 Community License**. Do not infer Apache-2.0 from the
+Comfy-Org repack repository card. Review the original license at commit
+`945655064d59b98004dd70002e7eb5c8c6e11373` before downloading. The downloader
+requires `MINIMAX_MUSIC3_ACCEPT_LICENSE=yes`; it never records acceptance on the
+operator's behalf.
+
+Use original lyrics and generic production descriptors. Do not request a clone
+of a living artist's voice, copy protected lyrics, or represent generated vocals
+as a real performer's recording. Archive the model revision, caption, lyrics,
+seed, workflow, and output checksum with each accepted track.
 
 ### FLUX.2 Klein 9B: non-commercial weights
 
@@ -147,8 +168,8 @@ sudo nixos-rebuild switch --flake .#desktop
 The switch installs:
 
 - `comfyui` with CUDA-capable Nix binary wheels;
-- `hf` plus `hf-xet` for pinned model downloads, including H3 artifacts too
-  large for regular Hub HTTPS;
+- `hf` plus `hf-xet` for pinned model downloads, including H3 and Music 3
+  artifacts too large for regular Hub HTTPS;
 - FFmpeg;
 - `comfyui.service`, installed but intentionally not boot-started while the
   normal Qwen TP2 profile owns both GPUs;
@@ -178,8 +199,11 @@ The switch installs:
 - two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
   in separate graphs—under
   `/var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16/`;
-- the idle-queue-only `h3-model-phase` command for native model preparation and
-  release between jobs;
+- one full-quality MiniMax Music 3 workflow under
+  `/var/lib/comfyui/user/default/workflows/minimax-music3-full-quality/`;
+- the idle-queue-only `creative-model-phase` command for exclusive Krea,
+  H3-FL2VA, H3-REF2VA, and Music 3 ownership of GPU1; `h3-model-phase` remains a
+  compatibility adapter;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
 - 53 curated official workflows under
@@ -204,8 +228,9 @@ transactional profile switch. After activation, acceptance requires:
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
   one Krea/FLUX Klein workflow, two Turbo character workflows, four RAW
-  maximum-quality Krea workflows, 21 contest-production workflows, and two
-  maximum-quality H3 production workflows are installed;
+  maximum-quality Krea workflows, 21 contest-production workflows, two
+  maximum-quality H3 production workflows, and one full-quality Music 3
+  workflow are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -808,20 +833,25 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **110 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **111 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
-  maximum-quality H3 production graphs, eight Episode 29 graphs, seven pinned
-  Episode 30 graphs, and 53 curated official graphs installed into the workflow
-  browser.
+  maximum-quality H3 production graphs, one full-quality Music 3 graph, eight
+  Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated official
+  graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
-- **Models:** only Krea/Edit dependencies are covered by the production downloader.
-  Other local graphs are discoverable but remain weightless until their own model
-  profile is licensed, pinned, downloaded, and qualified.
+- **Models:** Krea/Edit, H3, FLUX/Klein, and Music 3 each have separate legal
+  gates, immutable manifests, and completion markers. Other local graphs remain
+  weightless until their own profile is licensed, pinned, downloaded, and
+  qualified.
 
-The curated 53 are selected from Comfy's official immutable template package,
-not community workflow aggregators. They provide:
+The workflow browser uses Comfy's required 0.11.44 package, while the curated 53
+remain sourced from the separately pinned and previously qualified JSON corpus
+0.1.37. The newer 0.1.50 JSON silently added active Turbo LoRA nodes to the H3
+T2V/I2V templates; those graphs are not promoted into the production suite
+without a new topology audit. The curated files come from official immutable
+sources, not community workflow aggregators. They provide:
 
 | Folder | Count | Production capabilities |
 |---|---:|---|
@@ -1154,13 +1184,13 @@ contains the exact safe command.
 Before the first FL2VA job or after changing from REF2VA:
 
 ```bash
-h3-model-phase prepare fl2va
+creative-model-phase prepare h3-fl2va
 ```
 
 Before the first REF2VA job or after changing from FL2VA:
 
 ```bash
-h3-model-phase prepare ref2va
+creative-model-phase prepare h3-ref2va
 ```
 
 The command checks both running and pending queues, fails if either is nonempty,
@@ -1170,7 +1200,7 @@ loads Qwen, its one DiT, and each VAE on demand. After the saved output complete
 and the queue is idle, either retain the same family for the next scene or run:
 
 ```bash
-h3-model-phase release
+creative-model-phase release
 ```
 
 There is intentionally no in-graph unload node. An output node that unloads its
@@ -1235,7 +1265,7 @@ fragmentation. REF2VA with `ref_image_size=max`, several videos, or long audio
 can consume much more than the weight-only table suggests. During a GPU phase,
 offloaded weights and cached node outputs also consume host RAM.
 
-ComfyUI 0.31.1 runs its RAM-pressure cache by default. On this 91 GiB host it
+ComfyUI 0.33.3 runs its RAM-pressure cache by default. On this 91 GiB host it
 tries to retain roughly 9 GiB of free RAM and evicts cached node outputs as
 pressure rises. Its model manager also supports partial GPU residency. Those are
 safety mechanisms, not a guarantee: the full BF16 profile remains unqualified
@@ -1386,7 +1416,99 @@ would have to stop. It is not part of the current single-GPU ComfyUI profile.
 | FL2VA + REF2VA in one active graph | Unsupported and unnecessary |
 | Full BF16 H3 TP2 over both GPUs | Separate future profile; Muse and ComfyUI generation must stop |
 
-## 9. Make a character-driven short film, one scene at a time
+## 9. Generate original music locally with MiniMax Music 3
+
+### Install the full-quality profile
+
+The declarative workflow is installed before the weights. Download only after
+reviewing and accepting the original community license:
+
+```bash
+cd ~/.dotfiles
+MINIMAX_MUSIC3_ACCEPT_LICENSE=yes \
+  bash scripts/comfyui/download-minimax-music3-models.sh
+```
+
+The immutable profile is `Comfy-Org/MiniMax-Music-3` at revision
+`6baad88896848433857c170ba4f05d2ea9d5f218`:
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `diffusion_models/minimax_music3_dit_fp16.safetensors` | 4,914,197,682 | `45494a2b6b69af115902ff28eaf54118d19067aa54da01000f3e3efce7ba0e34` |
+| `text_encoders/minimax_music3_text_encoder_bf16.safetensors` | 18,472,478,038 | `9805d045978ce917cd1e6327b5cd8b85df1a46e4c69b61c9acf3eb29891c3958` |
+| `vae/minimax_music3_dav.safetensors` | 216,696,128 | `2a32155b769be01445fcc2a8663b910fc9e1751e18dc1c3ec528064512d9ef0c` |
+
+Total installed bytes: **23,603,371,848** (21.98 GiB). The downloader publishes
+`/models/comfyui/.minimax-music3-full-quality-complete` only after all three
+files pass exact size and checksum verification. It preserves retry staging,
+installs with mode 0640, and never uses mutable Hub branches.
+
+Verify:
+
+```bash
+test -f /models/comfyui/.minimax-music3-full-quality-complete
+sha256sum -c <(tail -n 3 /models/comfyui/.minimax-music3-full-quality-complete)
+```
+
+### Run the full-quality workflow
+
+Open **User workflows → `minimax-music3-full-quality` → `01 MiniMax Music 3 -
+Full Quality FP16 DiT + BF16 Encoder`**. Before queueing:
+
+```bash
+creative-model-phase prepare music3
+```
+
+The graph uses:
+
+- FP16 DiT, not INT8;
+- unpruned BF16 text encoder, not the official template's pruned INT8 default;
+- full DAV audio decoder;
+- 30 Euler/simple steps;
+- CFG 1.7;
+- untiled decode on the 96 GiB GPU;
+- one fixed seed shared by text encoding and diffusion;
+- 60 seconds as the initial qualification duration.
+
+Caption input has three sections: **Global Metadata**, **Vocal Details**, and
+**Arrangement**. Lyrics use explicit structural tags such as `[Intro]`,
+`[Verse]`, `[Pre-Chorus]`, `[Chorus]`, `[Bridge]`, `[Instrumental]`, and
+`[Outro]`. Use the project-local, revision-pinned `music-caption-rewriter`
+skill for caption structure, but keep lyrics and creative identity original.
+
+Generate a 60–90 second proof track before a full song. Record caption, lyrics,
+seed, requested duration, actual duration, output path, and SHA-256. Measure the
+actual beat/downbeat map after generation; requested BPM is not acceptance
+evidence.
+
+When the queue is idle, either retain Music 3 for another track or release it:
+
+```bash
+creative-model-phase release
+```
+
+Never switch to Krea or H3 during an active Music 3 graph.
+
+### Local H3 performance synchronization
+
+Episode 29's BF16 REF2VA workflows include image-plus-audio speech and singing
+paths. This gives the local stack an audio-reference route without Seedance or
+hosted generation:
+
+1. cut an accepted Music 3 master to a 4–15 second excerpt on measured bar
+   boundaries;
+2. use one accepted identity or group keyframe and the audio excerpt;
+3. run `creative-model-phase prepare h3-ref2va`;
+4. queue only the matching local REF2VA audio-sync workflow;
+5. inspect at least nine frames plus dense mouth/formation samples;
+6. accept only if identity, choreography, mouth behavior, and audio alignment are
+   all visible.
+
+Do not claim exact lip-sync from prompt intent. If audio conditioning drifts,
+retain the song as the editorial master, generate music-blind movement, and cut
+accepted visual spans to the measured beat map.
+
+## 10. Make a character-driven short film, one scene at a time
 
 ### Are all the starting workflows present?
 
@@ -1880,7 +2002,7 @@ exercises Krea identity editing, Muse scene compilation, both H3 families,
 `/free` family transitions, native audio, and final assembly without hiding
 problems inside a long generation.
 
-## 10. Custom-node policy
+## 11. Custom-node policy
 
 | Node pack | Assessment |
 |---|---|
@@ -1902,11 +2024,12 @@ speed potential with minimal quality loss, but it requires a wheel matched to
 Torch/CUDA and introduces fallback paths for non-BF16/FP16 layers. Package and
 benchmark it separately; do not silently fold it into the reference profile.
 
-## 11. Security and privacy
+## 12. Security and privacy
 
 - Port 8188 is loopback-only. Use SSH forwarding; never add a firewall rule.
 - Muse's key stays in a mode-0600 file and is read at execution time.
-- Local Muse + local Krea prompts/references stay on the workstation.
+- Local Muse, Krea, H3, and Music 3 prompts/references stay on the workstation.
+- The ensemble project forbids partner nodes and other hosted media generation.
 - Partner nodes upload prompts and media to Comfy/provider infrastructure.
   Treat faces, voices, customer assets, unreleased products, and location data
   as external disclosure.
@@ -1918,7 +2041,7 @@ benchmark it separately; do not silently fold it into the reference profile.
   deployment's content-filter control.
 - Add AI disclosure/provenance where law or platform policy requires it.
 
-## 12. Validation gate
+## 13. Validation gate
 
 Do not call the stack qualified until:
 
@@ -1926,11 +2049,16 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
-- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 53 curated workflows, and 16 unique sample inputs are present.
+- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 53 curated workflows, one full-quality Music 3 workflow, and 16 unique sample inputs are present.
+- [ ] ComfyUI is exactly 0.33.3 with frontend 1.49.6, workflow templates 0.11.44, and comfy-kitchen 0.2.31.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.
 - [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
+- [ ] `creative-model-phase` accepts only `krea`, `h3-fl2va`, `h3-ref2va`, and `music3`, and refuses every prepare/release while the queue is active or pending.
+- [ ] The Music 3 completion marker verifies the FP16 DiT, unpruned BF16 encoder, and full DAV against all three exact checksums.
+- [ ] A fixed 30-second Music 3 qualification renders at 30 steps/CFG 1.7 with untiled decode; complete decode, duration, stereo stream, peak GPU1 VRAM, host RAM, and SHA-256 are recorded.
+- [ ] A 4–15 second excerpt of the accepted Music 3 track is qualified in the local H3 REF2VA singing/audio-sync workflow; identity, mouth behavior, formation, and measured audio alignment each receive an evidence-backed verdict.
 - [ ] `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B
       BF16` completes at 1:1/1 MP with `ref_boost=1`, exactly one generated
       subject, no source-panel outpainting, both realism LoRAs bypassed, and
@@ -1975,7 +2103,7 @@ Do not call the stack qualified until:
 - [ ] Context IR output preserves the same reference ordering.
 - [ ] H3 2K regeneration accepts the unmodified 768p source.
 - [ ] No Xid, OOM, service restart, or unexpected GPU owner occurs.
-- [ ] Partner usage/cost and remote-data handling are recorded.
+- [ ] Any partner workflow remains unused for the local-only ensemble project; if separately tested for another purpose, usage/cost and remote-data handling are recorded.
 - [ ] The separate H3 authorization is archived and the eight-artifact marker
       matches the pinned repository revision.
 
@@ -1994,7 +2122,7 @@ docker inspect muse-glimmer-30b-bf16-dflash \
   --format 'status={{.State.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}'
 ```
 
-## 13. Stop or switch away
+## 14. Stop or switch away
 
 Stop only the creative components:
 
@@ -2042,7 +2170,9 @@ Sources accessed 2026-08-21–22:
 - [ComfyUI Krea 2 local workflows](https://docs.comfy.org/tutorials/image/krea/krea-2)
 - [ComfyUI Krea 2 partner nodes](https://docs.comfy.org/tutorials/partner-nodes/krea2/krea2-t2i)
 - [ComfyUI partner-node security/account model](https://docs.comfy.org/tutorials/partner-nodes/overview)
-- [ComfyUI 0.31.1 source](https://github.com/Comfy-Org/ComfyUI/tree/v0.31.1)
+- [ComfyUI 0.33.3 source](https://github.com/Comfy-Org/ComfyUI/tree/v0.33.3)
+- [MiniMax Music 3 model and community license](https://github.com/MiniMax-AI/MiniMax-Music3/tree/945655064d59b98004dd70002e7eb5c8c6e11373)
+- [ComfyUI MiniMax Music 3 support commit](https://github.com/Comfy-Org/ComfyUI/commit/efd4e951a00e85bd92e79f1d685427912b0dad5e)
 - [ComfyUI workflow templates](https://github.com/Comfy-Org/workflow_templates)
 - [Krea 2 official repository](https://github.com/krea-ai/krea-2)
 - [Krea 2 prompting guide](https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md)

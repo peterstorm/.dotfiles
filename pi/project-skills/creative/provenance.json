@@ -3,6 +3,13 @@
   "url": "https://www.dropbox.com/scl/fo/hg1qvhqy7nd1oyn92qwtg/AMn_AFk-2hhq2qLYcG2cVzE?rlkey=lsk8kc8iazvv6wjkrl9xz5hv8&dl=1",
   "archiveSha256": "sha256-QZvKj3qeBGFLEJiwsyavX8PKt3vJ0pvBwC15d6Z5wMM=",
   "reviewedAsDocumentationOnly": true,
+  "officialMusicCaptionRewriter": {
+    "source": "MiniMax-AI/MiniMax-Music3",
+    "revision": "945655064d59b98004dd70002e7eb5c8c6e11373",
+    "sourceSha256": "sha256-vyE1U9D36Jo1/E0HJmTBGI2ThZxV7oiu+s+SwAKliYA=",
+    "path": "skills/music-caption-rewriter",
+    "license": "MiniMax-Music3 Community License"
+  },
   "files": {
     "skills/banana-pro-director-30/SKILL.md": "ff8371ba48cc05f37a3b17287b1c16b2466f1654185ad5064a40b6da2c64f6c5",
     "skills/character-builder/SKILL.md": "d5de4cc6edcb9c36df76edfc1977eefed6bb72ef1cc40a9fbc0fdcc64f496b88",

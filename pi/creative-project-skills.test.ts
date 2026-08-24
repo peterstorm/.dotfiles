@@ -17,8 +17,12 @@ import {
 
 const creativeSkillNames = Object.freeze([
 	"banana-pro-director-30",
+	"blocking-continuity",
 	"character-builder",
 	"cinema-director",
+	"ensemble-action-production",
+	"music-caption-rewriter",
+	"performance-direction",
 	"prop-continuity",
 	"story-bible-builder",
 ]);
@@ -75,7 +79,7 @@ afterEach(() => {
 });
 
 describe("creative project skill scope", () => {
-	test("discovers all five skills from the creative project root", async () => {
+	test("discovers all nine skills from the creative project root", async () => {
 		const projectRoot = temporaryDirectory("pi-creative-project-");
 		const agentDir = temporaryDirectory("pi-creative-agent-");
 		deployCreativeSkills(projectRoot);
@@ -114,20 +118,42 @@ describe("creative project skill scope", () => {
 		expect(creativeSkillsFrom(result.skills)).toEqual([]);
 	});
 
-	test("prop continuity defines scale, receptacle, coverage, and evidence gates", () => {
-		const skill = readFileSync(
-			join(import.meta.dir, "project-skills", "creative", "prop-continuity", "SKILL.md"),
-			"utf8",
-		);
+	test("authored skills define independent fail-closed production contracts", () => {
+		const contracts = Object.freeze({
+			"blocking-continuity": [
+				"normalized image coordinates",
+				"planning evidence by default",
+				"style-bleed qualification",
+				"UNVERIFIABLE",
+			],
+			"ensemble-action-production": [
+				"locally installed models only",
+				"Ensemble matrix",
+				"creative-model-phase prepare music3",
+				"Audience reappraisal",
+			],
+			"performance-direction": [
+				"Read the entire scene first",
+				"Listener task",
+				"No facial puppeteering",
+				"UNVERIFIABLE",
+			],
+			"prop-continuity": [
+				"No contradictory scale language",
+				"World and receptacle lock",
+				"Story and coverage gate",
+				"Frame-sampled semantic verification",
+			],
+		});
 
-		for (const contract of [
-			"No contradictory scale language",
-			"World and receptacle lock",
-			"Story and coverage gate",
-			"Frame-sampled semantic verification",
-			"UNVERIFIABLE",
-		]) {
-			expect(skill).toContain(contract);
+		for (const [name, expected] of Object.entries(contracts)) {
+			const skill = readFileSync(
+				join(import.meta.dir, "project-skills", "creative", name, "SKILL.md"),
+				"utf8",
+			);
+			for (const contract of expected) {
+				expect(skill).toContain(contract);
+			}
 		}
 	});
 });

@@ -16,13 +16,15 @@ PIXAROMA_STATE_TEST="$ROOT/tests/test_pixaroma_workflow_state.py"
 CONTEST_BUILDER="$ROOT/scripts/comfyui/build-contest-production-workflows.py"
 CONTEST_BUILDER_TEST="$ROOT/tests/test_contest_workflow_builder.py"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
+MUSIC3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-music3-models.sh"
+CREATIVE_PHASE="$ROOT/scripts/comfyui/creative-model-phase.sh"
 H3_PHASE="$ROOT/scripts/comfyui/h3-model-phase.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
 H3_RUNBOOK="$ROOT/docs/runbooks/local-ai-video-script-runbook.md"
 TRANSITION_TEST="$ROOT/tests/creative-stack-transitions-contract.sh"
 DOWNLOAD_TEST="$ROOT/tests/model-download-verification-contract.sh"
-H3_PHASE_TEST="$ROOT/tests/h3-model-phase-contract.sh"
+CREATIVE_PHASE_TEST="$ROOT/tests/creative-model-phase-contract.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -41,15 +43,17 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$H3_PHASE_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
 bash -n "$KLEIN_DOWNLOAD"
 bash -n "$H3_DOWNLOAD"
+bash -n "$MUSIC3_DOWNLOAD"
+bash -n "$CREATIVE_PHASE"
 bash -n "$H3_PHASE"
 bash -n "$ACTIVATE"
 nix-instantiate --parse "$MODULE" >/dev/null
@@ -69,6 +73,16 @@ contains "$MODULE" 'cudaPackages = binaryCudaPackages;'
 contains "$MODULE" '(pkgs.lib.cmakeBool "NVSHMEM_BUILD_TESTS" false)'
 contains "$MODULE" '(pkgs.lib.cmakeBool "NVSHMEM_BUILD_EXAMPLES" false)'
 contains "$MODULE" 'pkgs.comfyui.override'
+contains "$MODULE" 'version = "0.33.3";'
+contains "$MODULE" 'rev = "4da9e2dbead52fc1e68beae33fe3d7ad63b63241";'
+contains "$MODULE" 'hash = "sha256-c3a5xBKusx3Xk26U421JrK9tqb27XTq7I9HBiNHP1/0=";'
+contains "$MODULE" 'version = "0.2.31";'
+contains "$MODULE" 'rev = "7c6ca3a5b63857d42c2d49777d6afb69de23f13f";'
+contains "$MODULE" 'version = "1.49.6";'
+contains "$MODULE" 'version = "0.11.44";'
+contains "$MODULE" 'version = "0.1.50";'
+contains "$MODULE" 'version = "0.3.315";'
+contains "$MODULE" 'version = "0.1.30";'
 contains "$MODULE" 'CUDA_VISIBLE_DEVICES = "1";'
 contains "$MODULE" '--listen 127.0.0.1'
 contains "$MODULE" '--port 8188'
@@ -96,10 +110,18 @@ contains "$MODULE" 'DetailDaemonSamplerNode'
 contains "$MODULE" 'minimax-h3-production-bf16-workflows'
 contains "$MODULE" '01 MiniMax H3 BF16 FL2VA - First Frame Production.json'
 contains "$MODULE" '02 MiniMax H3 BF16 REF2VA - Character References Production.json'
-contains "$MODULE" 'h3-model-phase prepare fl2va'
-contains "$MODULE" 'h3-model-phase prepare ref2va'
+contains "$MODULE" 'creative-model-phase prepare h3-fl2va'
+contains "$MODULE" 'creative-model-phase prepare h3-ref2va'
 contains "$MODULE" 'forbidden Krea, practical H3, Turbo, mutable link, or Manager dependency'
+contains "$MODULE" 'creativeModelPhase'
 contains "$MODULE" 'h3ModelPhase'
+contains "$MODULE" 'minimax-music3-full-quality-workflow'
+contains "$MODULE" '01 MiniMax Music 3 - Full Quality FP16 DiT + BF16 Encoder.json'
+contains "$MODULE" 'minimax_music3_dit_fp16.safetensors'
+contains "$MODULE" 'minimax_music3_text_encoder_bf16.safetensors'
+contains "$MODULE" 'minimax_music3_dav.safetensors'
+contains "$MODULE" 'creative-model-phase prepare music3'
+contains "$MODULE" 'forbidden lower-quality selector, mutable model URL, or Manager dependency in Music 3 workflow'
 contains "$MODULE" 'krea2-single-view-character-bf16-workflow'
 contains "$MODULE" 'build-krea2-composed-workflows.py'
 contains "$MODULE" 'PYTHONPATH=${../../scripts/comfyui}'
@@ -182,7 +204,10 @@ contains "$MODULE" 'modelSubdirectories = ['
 contains "$MODULE" 'modelPathEntries = builtins.listToAttrs ('
 contains "$MODULE" '// modelPathEntries;'
 contains "$MODULE" '++ map (directory: "d /models/comfyui/${directory} 0750 peterstorm users - -") modelSubdirectories;'
-contains "$MODULE" 'binaryTorchPython.pkgs.comfyui-workflow-templates-json'
+contains "$MODULE" 'qualified-comfyui-workflow-templates-json-0.1.37'
+contains "$MODULE" 'hash = "sha256-Iod2Kh8he/cSBt7l/xf+rxPpbabARESFn1Zxmgjr5Ps=";'
+contains "$MODULE" 'Newer templates silently inserted active Turbo LoRAs into H3 graphs'
+contains "$MODULE" 'source_root=${qualifiedWorkflowTemplatesJson}/templates'
 contains "$MODULE" 'pkgs.gnugrep'
 contains "$MODULE" 'forbidden Episode 24 model, node, or mutable link'
 contains "$MODULE" 'forbidden Episode 29 practical selector or unsupported node'
@@ -208,6 +233,7 @@ contains "$MODULE" 'ep30_dir="$user_workflows/pixaroma-ep30"'
 contains "$MODULE" 'klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"'
 contains "$MODULE" 'character_dir="$user_workflows/krea2-character-sheet-bf16"'
 contains "$MODULE" 'h3_production_dir="$user_workflows/minimax-h3-production-bf16"'
+contains "$MODULE" 'music3_dir="$user_workflows/minimax-music3-full-quality"'
 contains "$MODULE" 'elite_dir="$user_workflows/creative-suite"'
 contains "$MODULE" 'ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"'
 contains "$MODULE" 'ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"'
@@ -215,9 +241,10 @@ contains "$MODULE" 'ep30_staging="$user_workflows/.pixaroma-ep30.new"'
 contains "$MODULE" 'klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"'
 contains "$MODULE" 'character_staging="$user_workflows/.krea2-character-sheet-bf16.new"'
 contains "$MODULE" 'h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"'
+contains "$MODULE" 'music3_staging="$user_workflows/.minimax-music3-full-quality.new"'
 contains "$MODULE" 'elite_staging="$user_workflows/.creative-suite.new"'
 contains "$MODULE" '"$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir"'
-contains "$MODULE" '"$h3_production_dir" "$elite_dir"'
+contains "$MODULE" '"$h3_production_dir" "$music3_dir" "$elite_dir"'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -388,15 +415,18 @@ contains "$CONTEST_BUILDER" 'forbidden selectors or dependencies'
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ \$[A-Z0-9_]+_REPO \$[A-Z0-9_]+_REV ' "$DOWNLOAD")" -eq 5 ]] \
   || fail "Episode 24/30 auxiliary manifest must contain exactly 5 pinned artifacts"
 
-# H3 phase control is loopback-only, queue-aware, native, and behaviorally verified.
-contains "$H3_PHASE" 'http://127.0.0.1:8188'
-contains "$H3_PHASE" 'COMFYUI_URL must use loopback HTTP'
-contains "$H3_PHASE" 'refusing model release while ComfyUI is busy'
-contains "$H3_PHASE" '--data '\''{"unload_models":true,"free_memory":true}'\'''
-contains "$H3_PHASE" 'H3_PHASE_READY family=%s; queue only the matching BF16 workflow'
-contains "$H3_PHASE" 'H3_PHASE_RELEASED family=none'
-absent "$H3_PHASE" '/interrupt'
-"$H3_PHASE_TEST"
+# One deep phase controller serializes every GPU1 model family; the H3 command
+# remains only as a compatibility adapter.
+contains "$CREATIVE_PHASE" 'http://127.0.0.1:8188'
+contains "$CREATIVE_PHASE" 'COMFYUI_URL must use loopback HTTP'
+contains "$CREATIVE_PHASE" 'refusing model release while ComfyUI is busy'
+contains "$CREATIVE_PHASE" '--data '\''{"unload_models":true,"free_memory":true}'\'''
+contains "$CREATIVE_PHASE" 'krea | h3-fl2va | h3-ref2va | music3'
+contains "$CREATIVE_PHASE" 'CREATIVE_MODEL_PHASE_READY family=%s; queue only the matching workflow'
+contains "$CREATIVE_PHASE" 'CREATIVE_MODEL_PHASE_RELEASED family=none'
+contains "$H3_PHASE" 'CREATIVE_MODEL_PHASE_BIN'
+absent "$CREATIVE_PHASE" '/interrupt'
+"$CREATIVE_PHASE_TEST"
 
 # MiniMax H3 is separately authorized, revision-pinned, complete, and atomic.
 contains "$H3_DOWNLOAD" 'MINIMAX_H3_ACCEPT_LICENSE'
@@ -414,6 +444,21 @@ contains "$H3_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
 [[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae|loras)/' "$H3_DOWNLOAD")" -eq 8 ]] \
   || fail "MiniMax H3 BF16 manifest must contain exactly 8 pinned artifacts"
 
+# MiniMax Music 3 is license-gated, revision-pinned, full quality, and atomic.
+contains "$MUSIC3_DOWNLOAD" 'MINIMAX_MUSIC3_ACCEPT_LICENSE'
+contains "$MUSIC3_DOWNLOAD" 'REV="6baad88896848433857c170ba4f05d2ea9d5f218"'
+contains "$MUSIC3_DOWNLOAD" 'minimax_music3_dit_fp16.safetensors'
+contains "$MUSIC3_DOWNLOAD" 'minimax_music3_text_encoder_bf16.safetensors'
+contains "$MUSIC3_DOWNLOAD" 'minimax_music3_dav.safetensors'
+contains "$MUSIC3_DOWNLOAD" 'MiniMax-Music3 Community License'
+contains "$MUSIC3_DOWNLOAD" "python3 -c 'import hf_xet'"
+contains "$MUSIC3_DOWNLOAD" 'sha256sum "$file"'
+contains "$MUSIC3_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
+[[ "$(grep -Fc 'rm -rf "$STAGING"' "$MUSIC3_DOWNLOAD")" -eq 1 ]] \
+  || fail "MiniMax Music 3 staging may be removed only after successful installation"
+[[ "$(grep -Ec '^[0-9a-f]{64} [0-9]+ (diffusion_models|text_encoders|vae)/' "$MUSIC3_DOWNLOAD")" -eq 3 ]] \
+  || fail "MiniMax Music 3 manifest must contain exactly 3 pinned artifacts"
+
 # Activation is explicit and rollback-aware; Comfy stays on GPU1, Muse on GPU0.
 contains "$ACTIVATE" 'prior_running=()'
 contains "$ACTIVATE" 'inference_container_running "$container"'
@@ -428,6 +473,17 @@ contains "$ACTIVATE" 'ssh -N -L 8188:127.0.0.1:8188 desktop'
 
 # The runbook distinguishes globally available API use from blocked EU weights.
 contains "$RUNBOOK" 'MINIMAX_H3_AUTHORIZED=yes'
+contains "$RUNBOOK" 'MINIMAX_MUSIC3_ACCEPT_LICENSE=yes'
+contains "$RUNBOOK" 'ComfyUI 0.33.3'
+contains "$RUNBOOK" 'workflow templates 0.11.44'
+contains "$RUNBOOK" 'minimax_music3_dit_fp16.safetensors'
+contains "$RUNBOOK" 'minimax_music3_text_encoder_bf16.safetensors'
+contains "$RUNBOOK" 'minimax_music3_dav.safetensors'
+contains "$RUNBOOK" 'minimax-music3-full-quality'
+contains "$RUNBOOK" 'creative-model-phase prepare music3'
+contains "$RUNBOOK" 'creative-model-phase prepare h3-fl2va'
+contains "$RUNBOOK" 'creative-model-phase prepare h3-ref2va'
+contains "$RUNBOOK" 'local H3 REF2VA singing/audio-sync workflow'
 contains "$RUNBOOK" 'Disk inventory is not simultaneous VRAM residency'
 contains "$RUNBOOK" 'minimax_h3_fl2va_bf16.safetensors'
 contains "$RUNBOOK" 'minimax_h3_ref2va_bf16.safetensors'
@@ -450,7 +506,7 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**110 user workflows:**'
+contains "$RUNBOOK" '**111 user workflows:**'
 contains "$RUNBOOK" 'krea2-max-quality-bf16'
 contains "$RUNBOOK" 'contest-production-bf16'
 contains "$RUNBOOK" '21 purpose-built contest workflows'
@@ -473,8 +529,8 @@ contains "$RUNBOOK" 'both realism LoRAs bypassed'
 contains "$RUNBOOK" '`ref_boost=1`'
 contains "$RUNBOOK" 'source-panel outpainting'
 contains "$RUNBOOK" 'minimax-h3-production-bf16'
-contains "$RUNBOOK" 'h3-model-phase prepare fl2va'
-contains "$RUNBOOK" 'h3-model-phase prepare ref2va'
+contains "$RUNBOOK" 'creative-model-phase prepare h3-fl2va'
+contains "$RUNBOOK" 'creative-model-phase prepare h3-ref2va'
 contains "$RUNBOOK" 'There is intentionally no in-graph unload node'
 contains "$RUNBOOK" 'character-bible.md'
 contains "$RUNBOOK" 'desktop-muse/muse-glimmer-30b'
@@ -507,4 +563,4 @@ contains "$H3_RUNBOOK" 'comfyui-krea2-minimax-h3-muse-runbook.md'
 "$TRANSITION_TEST"
 "$DOWNLOAD_TEST"
 
-printf 'PASS: Nix-managed ComfyUI + Krea 2 + MiniMax H3 + Muse contract is internally consistent\n'
+printf 'PASS: Nix-managed ComfyUI + Krea 2 + MiniMax H3 + MiniMax Music 3 + Muse contract is internally consistent\n'

@@ -15,18 +15,23 @@ let
   piAgentDir = "${config.home.homeDirectory}/.pi/agent";
   loomDir = "${config.home.homeDirectory}/dev/claude-plugins/loom";
 
-  # These reviewed cinema skills are project resources, not global Pi skills.
-  # Home Manager links them into ~/dev/creative/.pi/skills, so Pi discovers
-  # them only when that directory is Pi's cwd. The source documents carry no
-  # redistribution license, so keep them out of this public repository: fetch
-  # the user-supplied public archive immutably and fail closed on every file.
-  thirdPartyCreativeProjectSkillNames = [
+  # Creative skills are project resources, not global Pi skills. Home Manager
+  # links them into ~/dev/creative/.pi/skills, so Pi discovers them only when
+  # that exact directory is Pi's cwd. Unlicensed cinema documents stay out of
+  # this public repository and are fetched from the checksum-pinned archive.
+  archivedCreativeProjectSkillNames = [
     "banana-pro-director-30"
     "character-builder"
     "cinema-director"
     "story-bible-builder"
   ];
+  officialCreativeProjectSkillNames = [
+    "music-caption-rewriter"
+  ];
   authoredCreativeProjectSkillNames = [
+    "blocking-continuity"
+    "ensemble-action-production"
+    "performance-direction"
     "prop-continuity"
   ];
   creativeProjectSkillProvenance = builtins.fromJSON (
@@ -35,6 +40,12 @@ let
   creativeProjectSkillArchive = pkgs.fetchurl {
     inherit (creativeProjectSkillProvenance) url;
     hash = creativeProjectSkillProvenance.archiveSha256;
+  };
+  musicCaptionRewriterSource = pkgs.fetchFromGitHub {
+    owner = "MiniMax-AI";
+    repo = "MiniMax-Music3";
+    rev = creativeProjectSkillProvenance.officialMusicCaptionRewriter.revision;
+    hash = creativeProjectSkillProvenance.officialMusicCaptionRewriter.sourceSha256;
   };
   creativeProjectSkillManifest = pkgs.writeText "pi-creative-project-skills.sha256" (
     lib.concatStringsSep "\n" (
@@ -50,7 +61,7 @@ let
       ''
         mkdir -p "$out/skills" source
         cd source
-        for name in ${lib.escapeShellArgs thirdPartyCreativeProjectSkillNames}; do
+        for name in ${lib.escapeShellArgs archivedCreativeProjectSkillNames}; do
           unzip -q ${creativeProjectSkillArchive} "$name.zip"
           unzip -q "$name.zip" -d "$out/skills"
           test -f "$out/skills/$name/SKILL.md"
@@ -62,7 +73,11 @@ let
     map (name: {
       name = "dev/creative/.pi/skills/${name}";
       value.source = creativeProjectSkills + "/skills/${name}";
-    }) thirdPartyCreativeProjectSkillNames
+    }) archivedCreativeProjectSkillNames
+    ++ map (name: {
+      name = "dev/creative/.pi/skills/${name}";
+      value.source = musicCaptionRewriterSource + "/skills/${name}";
+    }) officialCreativeProjectSkillNames
     ++ map (name: {
       name = "dev/creative/.pi/skills/${name}";
       value.source = piDir + "/project-skills/creative/${name}";

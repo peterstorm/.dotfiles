@@ -22,6 +22,54 @@ let
   binaryTorchPython = pkgs.python3.override {
     self = binaryTorchPython;
     packageOverrides = final: prev: {
+      # ComfyUI 0.33.3's Music 3 text encoder uses APIs introduced in
+      # comfy-kitchen 0.2.31. Keep all exact runtime requirements aligned with
+      # the pinned ComfyUI source instead of relying on the older package set.
+      comfy-kitchen = prev.comfy-kitchen.overridePythonAttrs (_old: {
+        version = "0.2.31";
+        src = pkgs.fetchFromGitHub {
+          owner = "Comfy-Org";
+          repo = "comfy-kitchen";
+          rev = "7c6ca3a5b63857d42c2d49777d6afb69de23f13f";
+          hash = "sha256-i7v8f+ZNhYkvheufOeJYyCZYwMj79LOt1ZNC+8tgefw=";
+        };
+      });
+      comfyui-frontend-package = prev.comfyui-frontend-package.overridePythonAttrs (_old: {
+        version = "1.49.6";
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/b8/14/0d6d36fa852fe65c1a0ed983cda31fd173472a64bcdf344b73f3172cc882/comfyui_frontend_package-1.49.6.tar.gz";
+          hash = "sha256-CBChUGNYpF4PHwLAaPn4ISBXmC+A1/IFmuYU563mWNk=";
+        };
+      });
+      comfyui-workflow-templates = prev.comfyui-workflow-templates.overridePythonAttrs (_old: {
+        version = "0.11.44";
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/3c/34/e3f318e92f463e379455c3771b34a2327455166ddfc4804a71eff5970c1e/comfyui_workflow_templates-0.11.44.tar.gz";
+          hash = "sha256-6C+qy6Wx4Wrlb0macBY4o/fgJPZ3WNs4RcA0OTm0ucQ=";
+        };
+      });
+      comfyui-workflow-templates-json = prev.comfyui-workflow-templates-json.overridePythonAttrs (_old: {
+        version = "0.1.50";
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/78/eb/c1728bc38aab20294e0ba2b240cbc0740f875850a3f9b4425edbd5c982c6/comfyui_workflow_templates_json-0.1.50.tar.gz";
+          hash = "sha256-C348ww+sejtpXeInN8Q7qxk81VUxbQBfHc/nmuEs9hk=";
+        };
+      });
+      comfyui-workflow-templates-core = prev.comfyui-workflow-templates-core.overridePythonAttrs (_old: {
+        version = "0.3.315";
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/60/33/3f86ee718c21ba7f67fb23d12f8de51597fd93f281572643bbbecc4f2067/comfyui_workflow_templates_core-0.3.315.tar.gz";
+          hash = "sha256-/klBIRx7cS8OiKeOQEQY+gCg6WYyj2ehwX7fZH1R7A4=";
+        };
+      });
+      comfyui-workflow-templates-media-assets-01 =
+        prev.comfyui-workflow-templates-media-assets-01.overridePythonAttrs (_old: {
+          version = "0.1.30";
+          src = pkgs.fetchurl {
+            url = "https://files.pythonhosted.org/packages/63/48/7c276531b1274901bb9f19658118cbd53d4d44f12cad6e654fee06eae347/comfyui_workflow_templates_media_assets_01-0.1.30.tar.gz";
+            hash = "sha256-5N6pN46RdJkKMVqCC/I6Zu0o7YS90V9y8pu10IryoMY=";
+          };
+        });
       cuda-bindings = prev.cuda-bindings.override {
         cudaPackages = binaryCudaPackages;
       };
@@ -105,9 +153,16 @@ let
     ]
   );
 
-  # Reuse Nixpkgs' pinned source, patches, metadata, and native wrapper tool;
-  # replace only the Python environment captured by the generated executable.
+  # Reuse Nixpkgs' writable-runtime patch and native wrapper tool while pinning
+  # the first stable ComfyUI release that contains native MiniMax Music 3.
   comfyui = pkgs.comfyui.overrideAttrs (old: {
+    version = "0.33.3";
+    src = pkgs.fetchFromGitHub {
+      owner = "Comfy-Org";
+      repo = "ComfyUI";
+      rev = "4da9e2dbead52fc1e68beae33fe3d7ad63b63241";
+      hash = "sha256-c3a5xBKusx3Xk26U421JrK9tqb27XTq7I9HBiNHP1/0=";
+    };
     installPhase = ''
       runHook preInstall
       mkdir -p $out/share/comfyui $out/bin
@@ -128,6 +183,9 @@ let
     passthru = old.passthru // {
       python = binaryTorchPython;
       pythonEnv = comfyPythonEnv;
+    };
+    meta = old.meta // {
+      changelog = "https://github.com/Comfy-Org/ComfyUI/releases/tag/v0.33.3";
     };
   });
 
@@ -160,15 +218,24 @@ let
       "$out/muse_glimmer_prompt/__init__.py"
   '';
 
+  modelPhaseRuntimeInputs = [
+    pkgs.coreutils
+    pkgs.curl
+    pkgs.jq
+    pkgs.util-linux
+  ];
+  creativeModelPhase = pkgs.writeShellApplication {
+    name = "creative-model-phase";
+    runtimeInputs = modelPhaseRuntimeInputs;
+    text = builtins.readFile ../../scripts/comfyui/creative-model-phase.sh;
+  };
   h3ModelPhase = pkgs.writeShellApplication {
     name = "h3-model-phase";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.curl
-      pkgs.jq
-      pkgs.util-linux
-    ];
-    text = builtins.readFile ../../scripts/comfyui/h3-model-phase.sh;
+    runtimeInputs = modelPhaseRuntimeInputs;
+    text = ''
+      export CREATIVE_MODEL_PHASE_BIN=${creativeModelPhase}/bin/creative-model-phase
+      ${builtins.readFile ../../scripts/comfyui/h3-model-phase.sh}
+    '';
   };
 
   krea2EditNode = pkgs.fetchFromGitHub {
@@ -331,7 +398,7 @@ let
     Before queueing, wait for an idle queue and run:
 
     ```bash
-    h3-model-phase prepare fl2va
+    creative-model-phase prepare h3-fl2va
     ```
 
     The workflow loaders then load Qwen, FL2VA, and each VAE on demand. ComfyUI
@@ -341,7 +408,7 @@ let
     next FL2VA scene or release it with:
 
     ```bash
-    h3-model-phase release
+    creative-model-phase release
     ```
   '';
 
@@ -355,7 +422,7 @@ let
     queue and run:
 
     ```bash
-    h3-model-phase prepare ref2va
+    creative-model-phase prepare h3-ref2va
     ```
 
     The workflow loaders then load Qwen, REF2VA, and each VAE on demand. ComfyUI
@@ -365,7 +432,7 @@ let
     next REF2VA scene or release it with:
 
     ```bash
-    h3-model-phase release
+    creative-model-phase release
     ```
   '';
 
@@ -428,6 +495,31 @@ let
     cloud/api_bytedance_seed_audio1_0_t2a.json
   '';
 
+  # The workflow browser follows ComfyUI's exact 0.11.44 requirement, but the
+  # production-curated suite stays on the previously qualified 0.1.37 JSON
+  # corpus. Newer templates silently inserted active Turbo LoRAs into H3 graphs;
+  # production promotion therefore remains an explicit audited operation.
+  qualifiedWorkflowTemplatesJsonSource = pkgs.fetchurl {
+    url = "https://files.pythonhosted.org/packages/2e/ef/0d1dec2209f84fc5c5941ce58a1d46edfd578de06dfed158ce53a7863813/comfyui_workflow_templates_json-0.1.37.tar.gz";
+    hash = "sha256-Iod2Kh8he/cSBt7l/xf+rxPpbabARESFn1Zxmgjr5Ps=";
+  };
+  qualifiedWorkflowTemplatesJson =
+    pkgs.runCommand "qualified-comfyui-workflow-templates-json-0.1.37"
+      {
+        nativeBuildInputs = [
+          pkgs.findutils
+          pkgs.gnutar
+          pkgs.gzip
+        ];
+      }
+      ''
+        mkdir unpacked "$out"
+        tar -xzf ${qualifiedWorkflowTemplatesJsonSource} -C unpacked
+        source_root="$(find unpacked -type d -path '*/comfyui_workflow_templates_json/templates' -print -quit)"
+        test -n "$source_root"
+        cp -R "$source_root" "$out/templates"
+      '';
+
   eliteWorkflows =
     pkgs.runCommand "comfyui-elite-workflows"
       {
@@ -437,9 +529,8 @@ let
         ];
       }
       ''
-        source_root="$(${pkgs.findutils}/bin/find ${binaryTorchPython.pkgs.comfyui-workflow-templates-json}/lib \
-          -type d -path '*/comfyui_workflow_templates_json/templates' -print -quit)"
-        test -n "$source_root"
+        source_root=${qualifiedWorkflowTemplatesJson}/templates
+        test -d "$source_root"
         while IFS=/ read -r category filename; do
           test -n "$category" && test -n "$filename"
           source="$source_root/$filename"
@@ -504,14 +595,18 @@ let
           jq '
             walk(
               if type == "string" then
-                gsub("minimax_h3_fl2va_pruned_int8_convrot\\.safetensors";
-                  "minimax_h3_fl2va_bf16.safetensors")
-                | gsub("minimax_h3_ref2va_pruned_int8_convrot\\.safetensors";
-                    "minimax_h3_ref2va_bf16.safetensors")
-                | gsub("qwen3vl_32b_minimax_h3_nvfp4_awq\\.safetensors";
-                    "qwen3vl_32b_minimax_h3_bf16.safetensors")
-                | gsub("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/";
-                    "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/dc559027db79c174125df4d827db55cd11178860/")
+                if contains("## Model Links") then
+                  "## Workstation full-quality H3 profile\n\nThis adapted graph uses only the pinned unpruned BF16 DiT, BF16 Qwen3-VL-32B encoder, full VAEs, 50 steps, and no Turbo LoRA. Model installation is owned by the checksum-verified local downloader."
+                else
+                  gsub("minimax_h3_fl2va_pruned_int8_convrot\\.safetensors";
+                    "minimax_h3_fl2va_bf16.safetensors")
+                  | gsub("minimax_h3_ref2va_pruned_int8_convrot\\.safetensors";
+                      "minimax_h3_ref2va_bf16.safetensors")
+                  | gsub("qwen3vl_32b_minimax_h3_nvfp4_awq\\.safetensors";
+                      "qwen3vl_32b_minimax_h3_bf16.safetensors")
+                  | gsub("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/";
+                      "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/dc559027db79c174125df4d827db55cd11178860/")
+                end
               else . end
             )
             | (.. | objects | select(.type? == "BasicScheduler") | .widgets_values[1]) = 50
@@ -654,8 +749,8 @@ let
               ] | sort))
             and ([.. | objects | select(.type? == "LoraLoader")] | length == 0)
             and ([.. | objects | select(.type? == "SaveVideo" and .mode == 0)] | length == 1))
-          and ([.[0] | .. | strings | select(contains("h3-model-phase prepare fl2va"))] | length == 1)
-          and ([.[1] | .. | strings | select(contains("h3-model-phase prepare ref2va"))] | length == 1)
+          and ([.[0] | .. | strings | select(contains("creative-model-phase prepare h3-fl2va"))] | length == 1)
+          and ([.[1] | .. | strings | select(contains("creative-model-phase prepare h3-ref2va"))] | length == 1)
         ' "$i2v" "$r2v" >/dev/null
         if grep -RqiE 'krea|pruned_int8|nvfp4|minimax_h3_turbo|resolve/main|tree/main|ComfyUI-Manager' \
           "$out/workflows"; then
@@ -1529,6 +1624,80 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 21
       '';
 
+  minimaxMusic3WorkflowSource = pkgs.fetchurl {
+    url = "https://raw.githubusercontent.com/Comfy-Org/workflow_templates/23de45678592886158d1d97194e26d4dc59bb5b3/templates/audio_minimax_music_3.json";
+    hash = "sha256-AyIVMmWz54WWFRG3hJ9mWfRqj6foy2aXblJ5/xd0sig=";
+  };
+
+  minimaxMusic3Workflows =
+    pkgs.runCommand "minimax-music3-full-quality-workflow"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        destination="$out/workflows/01 MiniMax Music 3 - Full Quality FP16 DiT + BF16 Encoder.json"
+        jq \
+          --arg revision "6baad88896848433857c170ba4f05d2ea9d5f218" \
+          --arg encoder "minimax_music3_text_encoder_bf16.safetensors" \
+          --arg phase_note $'## Local full-quality Music 3\n\nBefore queueing, run `creative-model-phase prepare music3`. This graph uses the FP16 DiT, unpruned BF16 text encoder, full DAV decoder, 30 steps, CFG 1.7, and untiled decode on the 96 GiB GPU. Queue only one GPU1 graph. After the queue is idle, either retain Music 3 for another song or run `creative-model-phase release` before Krea or H3.' \
+          --arg model_note $'## Immutable local model profile\n\n- `diffusion_models/minimax_music3_dit_fp16.safetensors`\n- `text_encoders/minimax_music3_text_encoder_bf16.safetensors`\n- `vae/minimax_music3_dav.safetensors`\n\nThe downloader verifies exact byte counts and SHA-256 at Comfy-Org/MiniMax-Music-3@6baad88896848433857c170ba4f05d2ea9d5f218. The original model is governed by the MiniMax-Music3 Community License; do not infer Apache-2.0 from a repackaged repository card.' '
+          def pin_model_urls($revision):
+            walk(
+              if type == "string"
+              then gsub("Comfy-Org/MiniMax-Music-3/resolve/main";
+                        "Comfy-Org/MiniMax-Music-3/resolve/" + $revision)
+              else .
+              end
+            );
+          pin_model_urls($revision)
+          | (.nodes[] | select(.type == "ac99f841-a3de-4329-9564-953b81cf9e16")
+              | .widgets_values[5]) = $encoder
+          | (.nodes[] | select(.type == "ac99f841-a3de-4329-9564-953b81cf9e16")
+              | .widgets_values[7]) = false
+          | (.nodes[] | select(.type == "MarkdownNote" and .title == "Note: MiniMax Music 3")
+              | .widgets_values[0]) = $phase_note
+          | (.nodes[] | select(.type == "MarkdownNote" and .id == 40)
+              | .widgets_values[0]) = $model_note
+          | (.definitions.subgraphs[].nodes[] | select(.type == "CLIPLoader")
+              | .widgets_values[0]) = $encoder
+          | (.definitions.subgraphs[].nodes[] | select(.type == "CLIPLoader")
+              | .properties.models[0]) = {
+                name: $encoder,
+                url: ("https://huggingface.co/Comfy-Org/MiniMax-Music-3/resolve/" + $revision
+                  + "/text_encoders/" + $encoder),
+                directory: "text_encoders"
+              }
+        ' ${minimaxMusic3WorkflowSource} >"$destination"
+
+        jq -e '
+          ([.nodes[] | select(.type == "ac99f841-a3de-4329-9564-953b81cf9e16")
+            | .widgets_values[4:8]]
+            == [[
+              "minimax_music3_dit_fp16.safetensors",
+              "minimax_music3_text_encoder_bf16.safetensors",
+              "minimax_music3_dav.safetensors",
+              false
+            ]])
+          and ([.definitions.subgraphs[].nodes[] | select(.type == "MiniMaxMusic3TextEncode")]
+            | length == 1)
+          and ([.definitions.subgraphs[].nodes[] | select(.type == "EmptyMiniMaxMusic3LatentAudio")]
+            | length == 1)
+          and ([.definitions.subgraphs[].nodes[] | select(.type == "KSampler")
+            | .widgets_values[2:4]] == [[30, 1.7]])
+        ' "$destination" >/dev/null
+        if grep -qiE '(^|[^[:alnum:]_])pruned|int8|resolve/main|tree/main|ComfyUI-Manager' "$destination"; then
+          echo "forbidden lower-quality selector, mutable model URL, or Manager dependency in Music 3 workflow" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
+      '';
+
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
@@ -1540,6 +1709,7 @@ let
     krea_max_dir="$user_workflows/krea2-max-quality-bf16"
     contest_dir="$user_workflows/contest-production-bf16"
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
+    music3_dir="$user_workflows/minimax-music3-full-quality"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
@@ -1549,16 +1719,17 @@ let
     krea_max_staging="$user_workflows/.krea2-max-quality-bf16.new"
     contest_staging="$user_workflows/.contest-production-bf16.new"
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
+    music3_staging="$user_workflows/.minimax-music3-full-quality.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
-      "$h3_production_staging" "$elite_staging"
+      "$h3_production_staging" "$music3_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
-      "$h3_production_staging" "$elite_staging" "$input_dir"
+      "$h3_production_staging" "$music3_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -1589,6 +1760,9 @@ let
     for source in ${h3ProductionWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_production_staging/$(basename "$source")"
     done
+    for source in ${minimaxMusic3Workflows}/workflows/*.json; do
+      install -m 0600 "$source" "$music3_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -1598,7 +1772,7 @@ let
     done
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
-      "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$elite_dir"
+      "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -1607,6 +1781,7 @@ let
     mv "$krea_max_staging" "$krea_max_dir"
     mv "$contest_staging" "$contest_dir"
     mv "$h3_production_staging" "$h3_production_dir"
+    mv "$music3_staging" "$music3_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 
@@ -1621,6 +1796,7 @@ in
 {
   environment.systemPackages = [
     comfyui
+    creativeModelPhase
     h3ModelPhase
     modelTools
     pkgs.ffmpeg-full

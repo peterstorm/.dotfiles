@@ -7,6 +7,7 @@ KREA_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 MUSE_DOWNLOAD="$ROOT/scripts/inference/muse/download-muse-glimmer-30b.sh"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
+MUSIC3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-music3-models.sh"
 PROFILE_CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 
 fail() {
@@ -269,5 +270,20 @@ H3_EVENTS="$sandbox/h3-events" PATH="$sandbox/bin:$PATH" \
   bash "$H3_DOWNLOAD" >/dev/null 2>&1 || h3_status=$?
 [ "$h3_status" -eq 2 ] || fail "MiniMax missing-authorization gate returned $h3_status"
 [ ! -s "$sandbox/h3-events" ] || fail "MiniMax called hf before authorization attestation"
+
+# Music 3's community-license gate must also reject before the hf boundary.
+cat >"$sandbox/bin/hf" <<'EOF'
+#!/usr/bin/env bash
+printf 'hf-called\n' >>"$MUSIC3_EVENTS"
+exit 0
+EOF
+chmod +x "$sandbox/bin/hf"
+: >"$sandbox/music3-events"
+music3_status=0
+MUSIC3_EVENTS="$sandbox/music3-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/music3" bash "$MUSIC3_DOWNLOAD" \
+  >/dev/null 2>&1 || music3_status=$?
+[ "$music3_status" -eq 2 ] || fail "Music 3 missing-license gate returned $music3_status"
+[ ! -s "$sandbox/music3-events" ] || fail "Music 3 called hf before license acceptance"
 
 printf 'PASS: model downloads verify corruption, legal gates, and completion state\n'
