@@ -17,6 +17,8 @@ CONTEST_BUILDER="$ROOT/scripts/comfyui/build-contest-production-workflows.py"
 CONTEST_BUILDER_TEST="$ROOT/tests/test_contest_workflow_builder.py"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 MUSIC3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-music3-models.sh"
+UPSCALER_DOWNLOAD="$ROOT/scripts/comfyui/download-image-upscaler-models.sh"
+UPSCALER_TEST="$ROOT/tests/image-upscaler-contract.sh"
 CREATIVE_PHASE="$ROOT/scripts/comfyui/creative-model-phase.sh"
 H3_PHASE="$ROOT/scripts/comfyui/h3-model-phase.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
@@ -43,16 +45,17 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
 bash -n "$KLEIN_DOWNLOAD"
 bash -n "$H3_DOWNLOAD"
 bash -n "$MUSIC3_DOWNLOAD"
+bash -n "$UPSCALER_DOWNLOAD"
 bash -n "$CREATIVE_PHASE"
 bash -n "$H3_PHASE"
 bash -n "$ACTIVATE"
@@ -100,6 +103,13 @@ contains "$MODULE" 'assert received_kwargs == {"marker": marker}'
 contains "$MODULE" 'rev = "c1aaee4f6a41a69563eab50e51cd1ef7347f22e9";'
 contains "$MODULE" 'rev = "3394e44afea04ed0188fb37b21f0d9952469766b";'
 contains "$MODULE" 'rev = "3f20054214fec9f9234fd3841ae6f1e4287948f6";'
+contains "$MODULE" 'rev = "4490bd1f482e026674543386bb2a4d176da245b9";'
+contains "$MODULE" 'hash = "sha256-6nsqFflLw9vYH/du35ET46fdAm1NMjjTe2bA8JmaBE4=";'
+contains "$MODULE" 'ComfyUI-SeedVR2_VideoUpscaler'
+contains "$MODULE" 'image-upscaler-qualification-v1-workflows'
+contains "$MODULE" '00 Lanczos 4x - Zero Hallucination Control.json'
+contains "$MODULE" '04 SeedVR2 7B FP16 - Natural 4K.json'
+contains "$MODULE" 'downloadImageUpscalerModels'
 contains "$MODULE" 'sha256-Krz3Jke8aQyFkmFkS2EwN9/HHNbCdVUZhh1lA89///I='
 contains "$MODULE" 'krea2-flux2-klein9b-bf16-workflow'
 contains "$MODULE" 'flux-2-klein-9b-bf16.safetensors'
@@ -234,6 +244,7 @@ contains "$MODULE" 'klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"'
 contains "$MODULE" 'character_dir="$user_workflows/krea2-character-sheet-bf16"'
 contains "$MODULE" 'h3_production_dir="$user_workflows/minimax-h3-production-bf16"'
 contains "$MODULE" 'music3_dir="$user_workflows/minimax-music3-full-quality"'
+contains "$MODULE" 'upscaler_dir="$user_workflows/image-upscaler-qualification-v1"'
 contains "$MODULE" 'elite_dir="$user_workflows/creative-suite"'
 contains "$MODULE" 'ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"'
 contains "$MODULE" 'ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"'
@@ -242,9 +253,11 @@ contains "$MODULE" 'klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new
 contains "$MODULE" 'character_staging="$user_workflows/.krea2-character-sheet-bf16.new"'
 contains "$MODULE" 'h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"'
 contains "$MODULE" 'music3_staging="$user_workflows/.minimax-music3-full-quality.new"'
+contains "$MODULE" 'upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"'
 contains "$MODULE" 'elite_staging="$user_workflows/.creative-suite.new"'
 contains "$MODULE" '"$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir"'
-contains "$MODULE" '"$h3_production_dir" "$music3_dir" "$elite_dir"'
+contains "$MODULE" '"$h3_production_dir" "$music3_dir"'
+contains "$MODULE" '"$upscaler_dir" "$elite_dir"'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -421,12 +434,13 @@ contains "$CREATIVE_PHASE" 'http://127.0.0.1:8188'
 contains "$CREATIVE_PHASE" 'COMFYUI_URL must use loopback HTTP'
 contains "$CREATIVE_PHASE" 'refusing model release while ComfyUI is busy'
 contains "$CREATIVE_PHASE" '--data '\''{"unload_models":true,"free_memory":true}'\'''
-contains "$CREATIVE_PHASE" 'krea | h3-fl2va | h3-ref2va | music3'
+contains "$CREATIVE_PHASE" 'krea | h3-fl2va | h3-ref2va | music3 | upscale'
 contains "$CREATIVE_PHASE" 'CREATIVE_MODEL_PHASE_READY family=%s; queue only the matching workflow'
 contains "$CREATIVE_PHASE" 'CREATIVE_MODEL_PHASE_RELEASED family=none'
 contains "$H3_PHASE" 'CREATIVE_MODEL_PHASE_BIN'
 absent "$CREATIVE_PHASE" '/interrupt'
 "$CREATIVE_PHASE_TEST"
+"$UPSCALER_TEST"
 
 # MiniMax H3 is separately authorized, revision-pinned, complete, and atomic.
 contains "$H3_DOWNLOAD" 'MINIMAX_H3_ACCEPT_LICENSE'
@@ -483,6 +497,9 @@ contains "$RUNBOOK" 'minimax-music3-full-quality'
 contains "$RUNBOOK" 'creative-model-phase prepare music3'
 contains "$RUNBOOK" 'creative-model-phase prepare h3-fl2va'
 contains "$RUNBOOK" 'creative-model-phase prepare h3-ref2va'
+contains "$RUNBOOK" 'creative-model-phase prepare upscale'
+contains "$RUNBOOK" 'SeedVR2 7B FP16 natural'
+contains "$RUNBOOK" 'native masters remain authoritative'
 contains "$RUNBOOK" 'local H3 REF2VA singing/audio-sync workflow'
 contains "$RUNBOOK" 'Disk inventory is not simultaneous VRAM residency'
 contains "$RUNBOOK" 'minimax_h3_fl2va_bf16.safetensors'
@@ -506,14 +523,14 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**111 user workflows:**'
+contains "$RUNBOOK" '**117 user workflows:**'
 contains "$RUNBOOK" 'krea2-max-quality-bf16'
 contains "$RUNBOOK" 'contest-production-bf16'
 contains "$RUNBOOK" '21 purpose-built contest workflows'
 contains "$RUNBOOK" 'Picture 1 = character'
 contains "$RUNBOOK" 'Picture 1 = opening'
 contains "$RUNBOOK" 'prompt expansion and style LoRA disabled'
-contains "$RUNBOOK" 'video upscaler; the curated SeedVR2 INT8 utilities'
+contains "$RUNBOOK" 'SeedVR2 INT8 video utility is not silently promoted'
 contains "$RUNBOOK" 'eligibility, submission dates, duration, licensing, disclosure'
 contains "$RUNBOOK" 'krea2_raw_bf16.safetensors'
 contains "$RUNBOOK" '52 steps and CFG 3.5'

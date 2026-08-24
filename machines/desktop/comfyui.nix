@@ -119,15 +119,19 @@ let
       comfyui-frontend-package
       comfyui-workflow-templates
       color-matcher
+      diffusers
       einops
       filelock
+      gguf
       imageio
       imageio-ffmpeg
       kornia
       matplotlib
       mss
       numpy
+      omegaconf
       opencv4
+      peft
       pillow
       psutil
       pydantic
@@ -135,6 +139,7 @@ let
       pyopengl
       pyyaml
       requests
+      rotary-embedding-torch
       safetensors
       scipy
       sentencepiece
@@ -203,6 +208,7 @@ let
     "loras"
     "controlnet"
     "upscale_models"
+    "SEEDVR2"
     "audio_encoders"
   ];
   modelPathEntries = builtins.listToAttrs (
@@ -236,6 +242,16 @@ let
       export CREATIVE_MODEL_PHASE_BIN=${creativeModelPhase}/bin/creative-model-phase
       ${builtins.readFile ../../scripts/comfyui/h3-model-phase.sh}
     '';
+  };
+  downloadImageUpscalerModels = pkgs.writeShellApplication {
+    name = "download-image-upscaler-models";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-image-upscaler-models.sh;
   };
 
   krea2EditNode = pkgs.fetchFromGitHub {
@@ -327,6 +343,34 @@ let
     hash = "sha256-2rurJ/wvr9zcHamGZhcTrM4D20/vMLw6xtN/+ZiHJgw=";
   };
 
+  seedVR2Source = pkgs.fetchFromGitHub {
+    owner = "numz";
+    repo = "ComfyUI-SeedVR2_VideoUpscaler";
+    rev = "4490bd1f482e026674543386bb2a4d176da245b9";
+    hash = "sha256-6nsqFflLw9vYH/du35ET46fdAm1NMjjTe2bA8JmaBE4=";
+  };
+
+  seedVR2Node = pkgs.runCommand "comfyui-seedvr2-local-models-only" { } ''
+    cp -R ${seedVR2Source}/. "$out"
+    chmod -R u+w "$out"
+    install -m 0444 \
+      ${../../comfyui/custom_nodes/seedvr2_local_model_validation.py} \
+      "$out/src/utils/local_model_validation.py"
+    substituteInPlace "$out/src/interfaces/video_upscaler.py" \
+      --replace-fail \
+        'from ..utils.downloads import download_weight' \
+        'from ..utils.local_model_validation import validate_installed_weight as download_weight' \
+      --replace-fail \
+        'Checking and downloading models if needed...' \
+        'Validating immutable locally installed models...'
+    if grep -RqiE 'download_with_resume|urlopen|HUGGINGFACE_BASE_URL' \
+      "$out/src/interfaces" "$out/src/utils/local_model_validation.py"; then
+      echo "SeedVR2 execution path retains a runtime model-download boundary" >&2
+      exit 1
+    fi
+    chmod -R a-w "$out"
+  '';
+
   declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
     mkdir -p "$out"
     ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
@@ -335,6 +379,7 @@ let
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
     ln -s ${detailDaemonNode} "$out/ComfyUI-Detail-Daemon"
     ln -s ${kjNodes} "$out/ComfyUI-KJNodes"
+    ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -1698,6 +1743,138 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
       '';
 
+  imageUpscalerWorkflows =
+    pkgs.runCommand "image-upscaler-qualification-v1-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        interpolation=${qualifiedWorkflowTemplatesJson}/templates/utility_interpolation_image_upscale.json
+        gan=${qualifiedWorkflowTemplatesJson}/templates/utility-gan_upscaler.json
+
+        lanczos="$out/workflows/00 Lanczos 4x - Zero Hallucination Control.json"
+        jq '
+          .nodes |= map(select(.id != 7 and .id != 8))
+          | .links |= map(select(.[0] != 5 and .[0] != 6))
+          | (.nodes[] | select(.id == 2) | .widgets_values[0]) =
+              "upscaler-qualification.png"
+          | (.nodes[] | select(.id == 2) | .outputs[0].links) = [2]
+          | (.nodes[] | select(.id == 3)) |= (
+              .title = "Lanczos 4x — exact interpolation control"
+              | .widgets_values = ["lanczos", 4]
+              | .outputs[0].links = [4]
+            )
+          | (.nodes[] | select(.id == 5) | .widgets_values[0]) =
+              "UpscalerQualification/Lanczos4x"
+        ' "$interpolation" >"$lanczos"
+
+        for specification in \
+          "RealESRGAN_x4plus.pth|01 Real-ESRGAN x4plus - Learned Fidelity.json|UpscalerQualification/RealESRGAN_x4plus" \
+          "realesr-general-x4v3.pth|02 Real-ESRGAN General x4v3 - Compact Fidelity.json|UpscalerQualification/RealESRGAN_General_x4v3"; do
+          IFS='|' read -r model filename prefix <<<"$specification"
+          destination="$out/workflows/$filename"
+          jq --slurpfile gan "$gan" --arg model "$model" --arg prefix "$prefix" '
+            .nodes |= map(select(.id != 7 and .id != 8))
+            | .links |= map(select(.[0] != 5 and .[0] != 6))
+            | (.nodes[] | select(.id == 2) | .widgets_values[0]) =
+                "upscaler-qualification.png"
+            | (.nodes[] | select(.id == 2) | .outputs[0].links) = [2]
+            | (.nodes[] | select(.id == 3)) |= (
+                .type = "ImageUpscaleWithModel"
+                | .title = "Learned 4x fidelity candidate"
+                | .inputs = [
+                    {"name":"upscale_model","type":"UPSCALE_MODEL","link":7},
+                    {"name":"image","type":"IMAGE","link":2}
+                  ]
+                | .properties = {"Node name for S&R":"ImageUpscaleWithModel"}
+                | .widgets_values = []
+                | .outputs[0].links = [4]
+              )
+            | ($gan[0].nodes[] | select(.type == "UpscaleModelLoader")) as $loader
+            | .nodes += [$loader | .id = 9 | .pos = [80, 420]
+                | .widgets_values[0] = $model | .outputs[0].links = [7]
+                | del(.properties.models)]
+            | .links += [[7,9,0,3,0,"UPSCALE_MODEL"]]
+            | .last_node_id = 9
+            | .last_link_id = 7
+            | (.nodes[] | select(.id == 5) | .widgets_values[0]) = $prefix
+          ' "$interpolation" >"$destination"
+        done
+
+        for specification in \
+          "seedvr2_ema_3b_fp16.safetensors|03 SeedVR2 3B FP16 - Natural 4K.json|UpscalerQualification/SeedVR2_3B_FP16" \
+          "seedvr2_ema_7b_fp16.safetensors|04 SeedVR2 7B FP16 - Natural 4K.json|UpscalerQualification/SeedVR2_7B_FP16" \
+          "seedvr2_ema_7b_sharp_fp16.safetensors|05 SeedVR2 7B FP16 Sharp - Adversarial Comparison.json|UpscalerQualification/SeedVR2_7B_Sharp_FP16"; do
+          IFS='|' read -r model filename prefix <<<"$specification"
+          destination="$out/workflows/$filename"
+          jq --arg model "$model" --arg prefix "$prefix" '
+            .nodes |= map(select(.id != 19 and .id != 20))
+            | .links |= map(select(.[0] != 18 and .[0] != 19))
+            | (.nodes[] | select(.id == 14) | .inputs[]
+                | select(.name == "torch_compile_args") | .link) = null
+            | (.nodes[] | select(.id == 13) | .inputs[]
+                | select(.name == "torch_compile_args") | .link) = null
+            | (.nodes[] | select(.id == 14)) |= (
+                .title = "Immutable FP16 SeedVR2 DiT — no auto-download"
+                | .widgets_values = [$model, "cuda:0", 0, false, "none", false, "sdpa"]
+              )
+            | (.nodes[] | select(.id == 13)) |= (
+                .title = "Immutable FP16 SeedVR2 VAE — untiled on 96 GiB"
+                | .widgets_values = [
+                    "ema_vae_fp16.safetensors", "cuda:0",
+                    false, 1024, 128, false, 1024, 128, "false", "none", false
+                  ]
+              )
+            | (.nodes[] | select(.id == 10)) |= (
+                .title = "Deterministic still-image restoration — LAB color lock"
+                | .widgets_values = [
+                    42, "fixed", 4096, 4096, 1, false, "lab",
+                    0, 0, 0, 0, "none", true
+                  ]
+              )
+            | (.nodes[] | select(.id == 16) | .widgets_values[0]) =
+                "upscaler-qualification.png"
+            | (.nodes[] | select(.id == 15) | .widgets_values[0]) = $prefix
+            | (.nodes[] | select(.id == 18) | .mode) = 0
+            | (.nodes[] | select(.id == 18) | .widgets_values[0]) =
+                "FINISHING DERIVATIVE ONLY: preserve the native master. Run creative-model-phase prepare upscale before queueing. Reject identity, topology, text, palette, or medium drift."
+          ' ${seedVR2Node}/example_workflows/SeedVR2_simple_image_upscale.json >"$destination"
+        done
+
+        jq -s -e '
+          length == 6
+          and ([.[0].nodes[] | select(.type == "ImageScaleBy") | .widgets_values]
+            == [["lanczos",4]])
+          and all(.[1:3][];
+            ([.nodes[] | select(.type == "UpscaleModelLoader")] | length == 1)
+            and ([.nodes[] | select(.type == "ImageUpscaleWithModel")] | length == 1))
+          and ([.[3:6][] | .nodes[] | select(.type == "SeedVR2LoadDiTModel")
+            | .widgets_values[0]] | sort) == ([
+              "seedvr2_ema_3b_fp16.safetensors",
+              "seedvr2_ema_7b_fp16.safetensors",
+              "seedvr2_ema_7b_sharp_fp16.safetensors"
+            ] | sort)
+          and all(.[3:6][];
+            ([.nodes[] | select(.type == "SeedVR2LoadVAEModel")
+              | .widgets_values[0]] == ["ema_vae_fp16.safetensors"])
+            and ([.nodes[] | select(.type == "SeedVR2VideoUpscaler")
+              | .widgets_values[0:13]] == [[
+                42, "fixed", 4096, 4096, 1, false, "lab",
+                0, 0, 0, 0, "none", true
+              ]]))
+        ' "$out"/workflows/*.json >/dev/null
+        if grep -RqiE 'fp8|int8|resolve/main|tree/main|ComfyUI-Manager' "$out/workflows"; then
+          echo "forbidden lower-precision selector, mutable link, or Manager dependency in upscaler qualification" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 6
+      '';
+
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
     user_workflows=/var/lib/comfyui/user/default/workflows
@@ -1710,6 +1887,7 @@ let
     contest_dir="$user_workflows/contest-production-bf16"
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     music3_dir="$user_workflows/minimax-music3-full-quality"
+    upscaler_dir="$user_workflows/image-upscaler-qualification-v1"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
@@ -1720,16 +1898,17 @@ let
     contest_staging="$user_workflows/.contest-production-bf16.new"
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     music3_staging="$user_workflows/.minimax-music3-full-quality.new"
+    upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
-      "$h3_production_staging" "$music3_staging" "$elite_staging"
+      "$h3_production_staging" "$music3_staging" "$upscaler_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
-      "$h3_production_staging" "$music3_staging" "$elite_staging" "$input_dir"
+      "$h3_production_staging" "$music3_staging" "$upscaler_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -1763,6 +1942,9 @@ let
     for source in ${minimaxMusic3Workflows}/workflows/*.json; do
       install -m 0600 "$source" "$music3_staging/$(basename "$source")"
     done
+    for source in ${imageUpscalerWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$upscaler_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -1772,7 +1954,8 @@ let
     done
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
-      "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" "$elite_dir"
+      "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
+      "$upscaler_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -1782,6 +1965,7 @@ let
     mv "$contest_staging" "$contest_dir"
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$music3_staging" "$music3_dir"
+    mv "$upscaler_staging" "$upscaler_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 
@@ -1798,6 +1982,7 @@ in
     comfyui
     creativeModelPhase
     h3ModelPhase
+    downloadImageUpscalerModels
     modelTools
     pkgs.ffmpeg-full
   ];

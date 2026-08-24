@@ -474,9 +474,9 @@ cloud-product names to models actually installed here:
 - Voice descriptions and sound beds can guide H3 native audio. Exact voice cloning
   is not provided by this pack. Use the separately pinned Episode 29 speech/singing
   audio-sync workflows only with consented audio and after qualification.
-- Image finishing is available through full-BF16 Klein. There is no declared BF16
-  video upscaler; the curated SeedVR2 INT8 utilities are not silently promoted into
-  this production tier.
+- Image finishing is available through full-BF16 Klein and the separately qualified
+  still-image upscaler profile. There is no declared BF16 video upscaler; the curated
+  SeedVR2 INT8 video utility is not silently promoted into this production tier.
 
 The 21 workflows are ordered as a production path:
 
@@ -833,18 +833,19 @@ immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **111 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **117 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
-  maximum-quality H3 production graphs, one full-quality Music 3 graph, eight
-  Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated official
-  graphs installed into the workflow browser.
+  maximum-quality H3 production graphs, one full-quality Music 3 graph, six
+  still-image upscaler qualification graphs, eight Episode 29 graphs, seven pinned
+  Episode 30 graphs, and 53 curated official graphs installed into the workflow
+  browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
-- **Models:** Krea/Edit, H3, FLUX/Klein, and Music 3 each have separate legal
-  gates, immutable manifests, and completion markers. Other local graphs remain
-  weightless until their own profile is licensed, pinned, downloaded, and
-  qualified.
+- **Models:** Krea/Edit, H3, FLUX/Klein, Music 3, and still-image upscalers each
+  have immutable manifests and completion markers; restricted families retain
+  separate legal gates. Other local graphs remain weightless until their own
+  profile is licensed, pinned, downloaded, and qualified.
 
 The workflow browser uses Comfy's required 0.11.44 package, while the curated 53
 remain sourced from the separately pinned and previously qualified JSON corpus
@@ -880,6 +881,76 @@ INT8 T2I graph is absent. The three official local H3 graphs are published as
 50 steps, and exact-revision model links. Templates for Mage Flow, Qwen Image,
 Flux, Wan, LTX, Hunyuan, and other architectures were not rewritten:
 sharing a text encoder or VAE does not make a different DiT compatible.
+
+### Still-image upscaler qualification
+
+Open **User workflows → `image-upscaler-qualification-v1`**. This package is a
+finishing bake-off, not a license to mutate canon. The **native masters remain authoritative**;
+every upscaled image is a versioned derivative, and no derivative
+becomes an identity, wardrobe, composition, text, or H3 lineage parent without a
+separate explicit acceptance ledger.
+
+Install or re-verify all candidates with:
+
+```bash
+download-image-upscaler-models
+```
+
+The downloader installs six exact artifacts under a single atomic completion
+marker:
+
+- official BSD-3-Clause `RealESRGAN_x4plus.pth` and
+  `realesr-general-x4v3.pth` release assets;
+- Apache-2.0 SeedVR2 FP16 3B, 7B natural, and 7B sharp DiTs plus the FP16 VAE,
+  all pinned to `numz/SeedVR2_comfyUI@09ced71023636e9bc8cdf9cdecfb2625d1e691e8`.
+
+The node implementation is independently pinned at
+`numz/ComfyUI-SeedVR2_VideoUpscaler@4490bd1f482e026674543386bb2a4d176da245b9`.
+ComfyUI cannot write its read-only model path, so runtime auto-download is not a
+supported fallback. Missing or corrupt files must fail instead of resolving a
+mutable upstream `main` branch.
+
+Before queueing any SeedVR2 graph, wait for an idle queue and run:
+
+```bash
+creative-model-phase prepare upscale
+```
+
+The six fixed workflows compare:
+
+1. Lanczos 4× as the zero-hallucination control;
+2. Real-ESRGAN x4plus;
+3. compact Real-ESRGAN General x4v3;
+4. SeedVR2 3B FP16 natural;
+5. **SeedVR2 7B FP16 natural**;
+6. SeedVR2 7B FP16 sharp as an adversarial oversharpening check.
+
+SeedVR2 uses fixed seed 42, LAB color correction, zero injected noise, no
+quantization, and a 4096-pixel maximum edge. Torch compilation is disabled for
+single-image qualification because compile latency would dominate. The 96 GiB
+GPU runs untiled FP16 models directly; no BlockSwap or CPU offload is enabled.
+
+Do not choose one winner from apparent crispness alone. The qualification corpus
+must include canonical faces, full-body technical wardrobe, an environment, and
+small controlled text/line work. Review at 100% and 200% for:
+
+- face geometry, age, eye/lip shape, hair silhouette, and skin texture;
+- panel topology, integrated gloves/feet, tiny conductive paths, and edge halos;
+- exact palette, gradients, background grain, and medium preservation;
+- text duplication, pseudo-text amplification, invented symbols, and seams;
+- runtime, peak VRAM, dimensions, deterministic replay, and decompressed pixels.
+
+Promote two authorities only after visual review: a **faithful upscaler** for
+canonical/reference assets and an optional **restoration upscaler** for visibly
+soft presentation renders. SeedVR2 upstream explicitly warns that lightly
+degraded AIGC input can be over-detailed or oversharpened; the sharp checkpoint
+therefore starts rejected unless the evidence overturns that presumption.
+
+After the final job and an idle queue, release the family with:
+
+```bash
+creative-model-phase release
+```
 
 ### Hosted Krea partner nodes
 

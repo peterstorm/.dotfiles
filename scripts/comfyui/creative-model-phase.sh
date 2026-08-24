@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 Usage:
   creative-model-phase status
-  creative-model-phase prepare <krea|h3-fl2va|h3-ref2va|music3>
+  creative-model-phase prepare <krea|h3-fl2va|h3-ref2va|music3|upscale>
   creative-model-phase release
 
 prepare and release fail unless ComfyUI's running and pending queues are empty.
@@ -23,7 +23,7 @@ EOF
 
 normalize_family() {
   case "${1:-}" in
-    krea | h3-fl2va | h3-ref2va | music3) printf '%s\n' "$1" ;;
+    krea | h3-fl2va | h3-ref2va | music3 | upscale) printf '%s\n' "$1" ;;
     *) return 2 ;;
   esac
 }
@@ -92,7 +92,7 @@ status() {
 prepare() {
   local family
   if ! family="$(normalize_family "${1:-}")"; then
-    echo "error: family must be krea, h3-fl2va, h3-ref2va, or music3" >&2
+    echo "error: family must be krea, h3-fl2va, h3-ref2va, music3, or upscale" >&2
     return 2
   fi
   assert_idle

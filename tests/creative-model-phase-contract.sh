@@ -41,12 +41,12 @@ status="$($SCRIPT status)"
 [[ "$status" == 'CREATIVE_MODEL_PHASE_STATUS family=none running=0 pending=0' ]]
 [[ ! -e "$FAKE_FREE_LOG" ]]
 
-for family in krea h3-fl2va h3-ref2va music3; do
+for family in krea h3-fl2va h3-ref2va music3 upscale; do
   prepared="$($SCRIPT prepare "$family")"
   [[ "$prepared" == "CREATIVE_MODEL_PHASE_READY family=$family; queue only the matching workflow" ]]
   [[ "$(cat "$CREATIVE_MODEL_PHASE_STATE_DIR/active-family")" == "$family" ]]
 done
-[[ "$(wc -l <"$FAKE_FREE_LOG")" -eq 4 ]]
+[[ "$(wc -l <"$FAKE_FREE_LOG")" -eq 5 ]]
 
 printf '{"queue_running":[["active"]],"queue_pending":[]}\n' >"$FAKE_QUEUE_RESPONSE"
 if "$SCRIPT" prepare krea >"$TEMP/busy.out" 2>"$TEMP/busy.err"; then
@@ -54,8 +54,8 @@ if "$SCRIPT" prepare krea >"$TEMP/busy.out" 2>"$TEMP/busy.err"; then
   exit 1
 fi
 grep -Fq 'refusing model release while ComfyUI is busy' "$TEMP/busy.err"
-[[ "$(cat "$CREATIVE_MODEL_PHASE_STATE_DIR/active-family")" == music3 ]]
-[[ "$(wc -l <"$FAKE_FREE_LOG")" -eq 4 ]]
+[[ "$(cat "$CREATIVE_MODEL_PHASE_STATE_DIR/active-family")" == upscale ]]
+[[ "$(wc -l <"$FAKE_FREE_LOG")" -eq 5 ]]
 
 printf '{"queue_running":[],"queue_pending":[]}\n' >"$FAKE_QUEUE_RESPONSE"
 export CREATIVE_MODEL_PHASE_BIN="$SCRIPT"
@@ -69,13 +69,13 @@ export CREATIVE_MODEL_PHASE_BIN="$SCRIPT"
 released="$($SCRIPT release)"
 [[ "$released" == 'CREATIVE_MODEL_PHASE_RELEASED family=none' ]]
 [[ ! -e "$CREATIVE_MODEL_PHASE_STATE_DIR/active-family" ]]
-[[ "$(wc -l <"$FAKE_FREE_LOG")" -eq 7 ]]
+[[ "$(wc -l <"$FAKE_FREE_LOG")" -eq 8 ]]
 
 if "$SCRIPT" prepare invalid >"$TEMP/invalid.out" 2>"$TEMP/invalid.err"; then
   echo "invalid family must fail" >&2
   exit 1
 fi
-grep -Fq 'family must be krea, h3-fl2va, h3-ref2va, or music3' "$TEMP/invalid.err"
+grep -Fq 'family must be krea, h3-fl2va, h3-ref2va, music3, or upscale' "$TEMP/invalid.err"
 
 if COMFYUI_URL="http://desktop:8188" "$SCRIPT" status >"$TEMP/remote.out" 2>"$TEMP/remote.err"; then
   echo "non-loopback ComfyUI URL must fail" >&2
@@ -90,4 +90,4 @@ for unsafe_url in 'http://127.0.0.1:8188@evil.example' 'http://localhost:70000';
   fi
 done
 
-echo 'PASS: creative model phases serialize Krea, both H3 families, and Music 3 on an idle loopback queue'
+echo 'PASS: creative model phases serialize Krea, both H3 families, Music 3, and upscaling on an idle loopback queue'
