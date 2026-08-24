@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	mkdtempSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,6 +19,7 @@ const creativeSkillNames = Object.freeze([
 	"banana-pro-director-30",
 	"character-builder",
 	"cinema-director",
+	"prop-continuity",
 	"story-bible-builder",
 ]);
 
@@ -67,7 +75,7 @@ afterEach(() => {
 });
 
 describe("creative project skill scope", () => {
-	test("discovers all four skills from the creative project root", async () => {
+	test("discovers all five skills from the creative project root", async () => {
 		const projectRoot = temporaryDirectory("pi-creative-project-");
 		const agentDir = temporaryDirectory("pi-creative-agent-");
 		deployCreativeSkills(projectRoot);
@@ -104,5 +112,22 @@ describe("creative project skill scope", () => {
 		const result = await discover(creativeProject, agentDir, false);
 
 		expect(creativeSkillsFrom(result.skills)).toEqual([]);
+	});
+
+	test("prop continuity defines scale, receptacle, coverage, and evidence gates", () => {
+		const skill = readFileSync(
+			join(import.meta.dir, "project-skills", "creative", "prop-continuity", "SKILL.md"),
+			"utf8",
+		);
+
+		for (const contract of [
+			"No contradictory scale language",
+			"World and receptacle lock",
+			"Story and coverage gate",
+			"Frame-sampled semantic verification",
+			"UNVERIFIABLE",
+		]) {
+			expect(skill).toContain(contract);
+		}
 	});
 });

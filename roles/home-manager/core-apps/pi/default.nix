@@ -20,11 +20,14 @@ let
   # them only when that directory is Pi's cwd. The source documents carry no
   # redistribution license, so keep them out of this public repository: fetch
   # the user-supplied public archive immutably and fail closed on every file.
-  creativeProjectSkillNames = [
+  thirdPartyCreativeProjectSkillNames = [
     "banana-pro-director-30"
     "character-builder"
     "cinema-director"
     "story-bible-builder"
+  ];
+  authoredCreativeProjectSkillNames = [
+    "prop-continuity"
   ];
   creativeProjectSkillProvenance = builtins.fromJSON (
     builtins.readFile (piDir + "/project-skills/creative/provenance.json")
@@ -47,7 +50,7 @@ let
       ''
         mkdir -p "$out/skills" source
         cd source
-        for name in ${lib.escapeShellArgs creativeProjectSkillNames}; do
+        for name in ${lib.escapeShellArgs thirdPartyCreativeProjectSkillNames}; do
           unzip -q ${creativeProjectSkillArchive} "$name.zip"
           unzip -q "$name.zip" -d "$out/skills"
           test -f "$out/skills/$name/SKILL.md"
@@ -59,7 +62,11 @@ let
     map (name: {
       name = "dev/creative/.pi/skills/${name}";
       value.source = creativeProjectSkills + "/skills/${name}";
-    }) creativeProjectSkillNames
+    }) thirdPartyCreativeProjectSkillNames
+    ++ map (name: {
+      name = "dev/creative/.pi/skills/${name}";
+      value.source = piDir + "/project-skills/creative/${name}";
+    }) authoredCreativeProjectSkillNames
   );
 
   # models.json holds exactly one machine-dependent value: the desktop-vllm

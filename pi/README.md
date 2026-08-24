@@ -45,10 +45,11 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    Drop a new skill directory (with a `SKILL.md`) into `pi/skills/` and it
    appears on the next activation — no rebuild. Stale links to removed skills
    are pruned.
-6. **Creative project skills**: links the four reviewed cinema skills into
-   `~/dev/creative/.pi/skills/` through Home Manager. They are not present in
-   `~/.pi/agent/skills`, package settings, or any ancestor directory, so Pi
-   discovers them only when its working directory is exactly `~/dev/creative`.
+6. **Creative project skills**: links four reviewed third-party cinema skills and
+   the tracked `prop-continuity` skill into `~/dev/creative/.pi/skills/` through
+   Home Manager. They are not present in `~/.pi/agent/skills`, package settings,
+   or any ancestor directory, so Pi discovers them only when its working
+   directory is exactly `~/dev/creative`.
 7. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
 
 ### Global skills (`pi/skills`)
@@ -68,13 +69,19 @@ The user-supplied, documentation-only cinema package has no bundled redistributi
 license, so its text is not committed to this public repository. Nix fetches the
 public Dropbox archive at the immutable archive hash recorded in
 `pi/project-skills/creative/provenance.json`, then verifies every extracted file
-against its own SHA-256 before Home Manager installs exactly these project-local
+against its own SHA-256 before Home Manager installs these third-party project-local
 skills:
 
 - `banana-pro-director-30`
 - `character-builder`
 - `cinema-director`
 - `story-bible-builder` and its three relative reference documents
+
+The repository also owns and installs `prop-continuity`, an MIT-licensed companion
+skill under `pi/project-skills/creative/prop-continuity/`. It adds prop scale,
+orientation, receptacle, action-coverage, sampled-frame semantic QA, and
+fail-closed scene acceptance without modifying or republishing the unlicensed
+third-party skill text.
 
 Start Pi in the project to expose them:
 
@@ -86,7 +93,7 @@ pi
 Pi requires an explicit project-trust decision before loading `.pi/skills`.
 Approve the prompt after verifying the path is exactly `~/dev/creative`; use
 `/trust` if that decision should persist, then restart Pi as instructed. Starting
-Pi elsewhere does not discover these four skills. Pi intentionally applies
+Pi elsewhere does not discover these five skills. Pi intentionally applies
 ancestor traversal to `.agents/skills`, not `.pi/skills`; this setup uses the
 Pi-only `.pi` location, so start the session from the creative project root.
 
