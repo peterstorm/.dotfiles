@@ -1,0 +1,44 @@
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim@sha256:4f5d923c9dcea037f57bda425dd209f3ec643da2f0b74227f68d09dab0b3bb36
+
+ARG INDEXTTS_SOURCE_REV=39207d91c30899cad1e7c1b9eb678c241f678e55
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential \
+      ffmpeg \
+      git \
+      libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/index-tts/index-tts.git /opt/index-tts \
+    && git -C /opt/index-tts checkout --detach "$INDEXTTS_SOURCE_REV" \
+    && test "$(git -C /opt/index-tts rev-parse HEAD)" = "$INDEXTTS_SOURCE_REV" \
+    && git -C /opt/index-tts status --short \
+    && rm -rf /opt/index-tts/.git
+
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+
+WORKDIR /opt/index-tts
+RUN uv sync --frozen --no-dev \
+    && uv pip check \
+    && chmod -R a+rX /opt/uv-python /opt/index-tts/.venv
+
+RUN uv run python -c 'from indextts.utils.front import TextNormalizer; TextNormalizer(enable_glossary=True).load()' \
+    && chmod -R a+rX /opt/index-tts/indextts/utils/tagger_cache
+
+LABEL org.opencontainers.image.title="IndexTTS-2.5 offline no-guide acting runtime" \
+      org.opencontainers.image.source="https://github.com/index-tts/index-tts" \
+      org.opencontainers.image.revision="39207d91c30899cad1e7c1b9eb678c241f678e55" \
+      org.opencontainers.image.licenses="LicenseRef-Bilibili-IndexTTS"
+
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    TOKENIZERS_PARALLELISM=false \
+    PYTHONUNBUFFERED=1 \
+    UV_NO_SYNC=1 \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    NUMBA_CACHE_DIR=/tmp/numba \
+    XDG_CACHE_HOME=/tmp/cache
+
+WORKDIR /work
+ENTRYPOINT ["/opt/index-tts/.venv/bin/python"]
