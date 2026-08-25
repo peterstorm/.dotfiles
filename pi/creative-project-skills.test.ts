@@ -23,6 +23,7 @@ const creativeSkillNames = Object.freeze([
 	"cinema-director",
 	"ensemble-action-production",
 	"h3-prompt-writing",
+	"human-motion-realism-production",
 	"identity-realism-production",
 	"music-caption-rewriter",
 	"performance-direction",
@@ -142,6 +143,12 @@ describe("creative project skill scope", () => {
 				"Ensemble matrix",
 				"creative-model-phase prepare music3",
 				"Audience reappraisal",
+			],
+			"human-motion-realism-production": [
+				"Gaze acquisition",
+				"Blink timing is contextual",
+				"Purposeful stillness",
+				"dense QA",
 			],
 			"identity-realism-production": [
 				"Mandatory for production H3",

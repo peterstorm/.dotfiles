@@ -1,6 +1,6 @@
 ---
 name: performance-direction
-description: "Directs believable character performance for locally generated image and video scenes. Use for dialogue, reaction, listening, silent tension, cockpit acting, ensemble interaction, or any face that reads frozen, glassy, generic, melodramatic, or externally choreographed. Converts scene context into a shared scene pursuit, distinct personal motives, playable partner-directed actions, listener work, turning points, and evidence-based performance QA. Pairs with cinema-director and ensemble-action-production; it owns performance intent and acceptance, not camera, model selection, or story canon."
+description: "Directs believable character performance for locally generated image and video scenes. Use for dialogue, reaction, listening, silent tension, cockpit acting, ensemble interaction, or any face that reads frozen, glassy, generic, melodramatic, or externally choreographed. Converts scene context into a shared scene pursuit, distinct personal motives, playable partner-directed actions, listener work, turning points, and evidence-based performance QA. Pairs with human-motion-realism-production, cinema-director, and ensemble-action-production; it owns performance intent and acceptance, not physiological motion, camera, model selection, or story canon."
 license: MIT
 compatibility: "Pi project skill; model-agnostic, with conservative defaults for local Krea 2 keyframes and MiniMax H3 clips."
 ---
@@ -38,6 +38,7 @@ Do not direct an emotion as a pose. Give the character something specific to acc
 8. **Verify the render.** A well-written task does not prove that the actor performed it.
 9. **Fail closed.** Frozen attention, contradictory reactions, unmotivated gaze, or an invisible required turn rejects the clip.
 10. **Respect consent and identity.** Do not synthesize intimate, humiliating, or deceptive performance with a real person's likeness without authorization.
+11. **Hand off physiology.** Use `human-motion-realism-production` to derive eye-head sequencing, blink windows, breath/support behavior, gesture phases, fidget limits, response latency, and dense fast-event QA from the locked performance task.
 
 ## Stage 1 — scene read
 
@@ -98,7 +99,7 @@ Playable action: [active verb aimed at partner/problem].
 Attention work: [what the character is reading or testing and what new information changes it].
 Listener work: [what the character evaluates whenever not speaking].
 Turn: [single trigger] changes the action from [verb] to [verb].
-Keep attention responsive and blinking natural; avoid frozen, unfocused, or decorative gaze.
+Human-motion handoff: [attention target, support state, speech state, pressure, and required visible response channel] pass to human-motion-realism-production. Do not add generic fidget or blink-rate instructions here.
 ```
 
 Do not duplicate camera, wardrobe, prop, or lighting instructions here. Those belong to their owning skills.
@@ -127,6 +128,8 @@ For a five-second clip:
 - avoid simultaneous dialogue, complex locomotion, prop engagement, and a large camera move.
 
 When exact song lip-sync is required, use a qualified local audio-reference workflow. Do not infer sync from lyrics in the prompt.
+
+After intent is locked, apply `human-motion-realism-production`. Keep its microbehavior sparse: one attention sequence, one breath/support behavior, and at most one motivated hand or self-contact action per principal in a short clip.
 
 ## Performance QA
 

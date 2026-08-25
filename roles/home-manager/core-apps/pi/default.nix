@@ -29,6 +29,7 @@ let
     "action-physics-production"
     "blocking-continuity"
     "ensemble-action-production"
+    "human-motion-realism-production"
     "identity-realism-production"
     "performance-direction"
     "prop-continuity"

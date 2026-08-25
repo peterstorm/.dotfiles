@@ -1,6 +1,6 @@
 ---
 name: ensemble-action-production
-description: "Orchestrates an original local-only ensemble music/action production from story causality through cast, music, world, vehicles, shots, generation, and evidence-backed acceptance. Use for bands, teams, squads, mech pilots, action trailers, music videos, or episodic proof-of-concepts where every member needs distinct dramatic and capability coverage. Coordinates story-bible-builder, character-builder, identity-realism-production, action-physics-production, performance-direction, blocking-continuity, prop-continuity, cinema-director, Krea 2, MiniMax Music 3, and MiniMax H3 without cloud generation."
+description: "Orchestrates an original local-only ensemble music/action production from story causality through cast, music, world, vehicles, shots, generation, and evidence-backed acceptance. Use for bands, teams, squads, mech pilots, action trailers, music videos, or episodic proof-of-concepts where every member needs distinct dramatic and capability coverage. Coordinates story-bible-builder, character-builder, identity-realism-production, action-physics-production, performance-direction, human-motion-realism-production, blocking-continuity, prop-continuity, cinema-director, Krea 2, MiniMax Music 3, and MiniMax H3 without cloud generation."
 license: MIT
 compatibility: "Pi project skill for the local creative stack: Krea 2 images, MiniMax Music 3 songs, and MiniMax H3 FL2VA/REF2VA video on serialized GPU1 workflows."
 ---
@@ -146,6 +146,7 @@ Each H3 shot unit must state:
 - start state;
 - one primary visible action;
 - one performance task;
+- one sparse human microbehavior contract from `human-motion-realism-production`;
 - one camera behavior;
 - end state;
 - required proof moments;
@@ -197,7 +198,8 @@ Every accepted shot requires:
 - at least nine chronological full-frame samples;
 - face, formation, prop, and contact crops where relevant;
 - scene-function and action-occupancy verdicts;
-- performance verdict from `performance-direction`;
+- performance-intent verdict from `performance-direction`;
+- dense eye/blink/breath/support/gesture verdict from `human-motion-realism-production` when people are visible;
 - spatial verdict from `blocking-continuity`;
 - prop/mech verdict from `prop-continuity`;
 - music synchronization evidence for performance shots;

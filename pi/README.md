@@ -83,7 +83,7 @@ Nix also fetches MiniMax's official `music-caption-rewriter` and
 and source hashes in the provenance file, including their relative assets under
 the applicable upstream community licenses.
 
-The repository owns eight MIT-licensed companion skills:
+The repository owns nine MIT-licensed companion skills:
 
 - `action-physics-production` — support, force, contact order, momentum,
   conditioning strategy, proof coverage, and sampled-frame action QA;
@@ -91,6 +91,8 @@ The repository owns eight MIT-licensed companion skills:
   and fail-closed spatial QA;
 - `ensemble-action-production` — local-only Krea 2, MiniMax Music 3, and MiniMax H3
   production orchestration;
+- `human-motion-realism-production` — evidence-informed gaze, blink, breathing,
+  support, gesture, fidget, response-latency, and dense sampled-frame QA;
 - `identity-realism-production` — mandatory Krea/Klein face A/B qualification and
   accepted high-fidelity identity handoff to production H3;
 - `performance-direction` — playable actor and listener work with sampled-frame QA;
@@ -113,7 +115,7 @@ pi
 Pi requires an explicit project-trust decision before loading `.pi/skills`.
 Approve the prompt after verifying the path is exactly `~/dev/creative`; use
 `/trust` if that decision should persist, then restart Pi as instructed. Starting
-Pi elsewhere does not discover these fourteen skills. Pi intentionally applies
+Pi elsewhere does not discover these fifteen skills. Pi intentionally applies
 ancestor traversal to `.agents/skills`, not `.pi/skills`; this setup uses the
 Pi-only `.pi` location, so start the session from the creative project root.
 
