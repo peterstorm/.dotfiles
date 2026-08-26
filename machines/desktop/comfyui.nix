@@ -379,6 +379,13 @@ let
     hash = "sha256-a4C72dV9K9AXWD70+LIvOTQLawTfUrRzyylM16E1J/w=";
   };
 
+  minimaxH3TurboWorkflowSource = pkgs.fetchFromGitHub {
+    owner = "ModelTC";
+    repo = "Minimax-H3-Turbo";
+    rev = "a7e148b8dc7db8ad976966060dcc022adf11fc8d";
+    hash = "sha256-LG7fqEcWcuacQYK6DMyS7uCTnz0Wa66oO6SPRIqIENo=";
+  };
+
   minimaxH3DirectorNode =
     pkgs.runCommand "comfyui-minimax-h3-director-hardened"
       {
@@ -1783,6 +1790,25 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3TurboLoraWorkflows =
+    pkgs.runCommand "minimax-h3-turbo-lora-qualification-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-turbo-lora-workflows.sh} \
+          --i2v-source \
+            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_i2v_lightx2v_turbo.json \
+          --ref2v-source \
+            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+          --output-dir "$out/workflows"
+      '';
+
   imageUpscalerWorkflows =
     pkgs.runCommand "image-upscaler-qualification-v1-workflows"
       {
@@ -1982,6 +2008,7 @@ let
     music3_dir="$user_workflows/minimax-music3-full-quality"
     upscaler_dir="$user_workflows/image-upscaler-qualification-v1"
     director_dir="$user_workflows/minimax-h3-director-local-development"
+    h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
@@ -1994,18 +2021,19 @@ let
     music3_staging="$user_workflows/.minimax-music3-full-quality.new"
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
+    h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$director_staging" "$elite_staging"
+      "$director_staging" "$h3_turbo_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$director_staging" "$elite_staging" "$input_dir"
+      "$director_staging" "$h3_turbo_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -2045,6 +2073,9 @@ let
     for source in ${minimaxH3DirectorWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$director_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -2055,7 +2086,7 @@ let
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
-      "$upscaler_dir" "$director_dir" "$elite_dir"
+      "$upscaler_dir" "$director_dir" "$h3_turbo_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2067,6 +2098,7 @@ let
     mv "$music3_staging" "$music3_dir"
     mv "$upscaler_staging" "$upscaler_dir"
     mv "$director_staging" "$director_dir"
+    mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 

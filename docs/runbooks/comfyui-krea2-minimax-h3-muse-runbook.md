@@ -872,17 +872,48 @@ connector and Windows paths are preserved rather than silently rewritten.
 Director plus local Qwen3.8 is the supported local equivalent; the original
 hosted path remains research-only and optional.
 
+### MiniMax H3 Turbo-LoRA prompt and frame qualification
+
+Nix pins `ModelTC/Minimax-H3-Turbo` at
+`a7e148b8dc7db8ad976966060dcc022adf11fc8d` (Apache-2.0), adapts its native
+ComfyUI graphs to the workstation's unpruned BF16 task-family checkpoints and
+BF16 Qwen3-VL encoder, and installs four Development graphs under **User
+workflows → `minimax-h3-turbo-lora-qualification`**:
+
+1. `00 ... Prompt Only Mechanics Test` — FL2VA-family T2VA with both frame
+   inputs disconnected; eight Euler/simple steps, shifts 12/3, 864×480.
+2. `01 ... FL2VA Turbo 4-Step 768p ...` — first/last-frame test using the
+   matching 768p adapter at strength 1.0, four Euler/simple steps, and its
+   task-specific shifts **6/3** at 1344×768.
+3. `02 ... FL2VA Turbo 8-Step ...` — first/last-frame quality comparison at
+   strength 1.0, eight Euler/simple steps, shifts 12/3, 864×480.
+4. `03 ... REF2VA Turbo 4-Step ...` — the qualified appearance-reference
+   control at strength 1.0, four Euler/simple steps, shifts 12/3, 960×544,
+   and reference resize `match`.
+
+Start with workflow `00` and anonymous subjects. One prompt should contain one
+continuous 3–5 second shot, one causal physical beat, a static medium-close
+camera, and chronological opening geometry → load → path → contact → reaction →
+settle. Use four fixed seeds before changing wording. Do not introduce AEGIS,
+identity references, camera motion, or cuts until generic mechanics pass.
+
+The zero-reference graph is not zero-reference Ref2VA and is not a dedicated
+T2VA checkpoint. The four graphs are qualification tools, not Production
+profiles. Preserve compiled requests and histories externally; their Nix
+installation never promotes an output.
+
 ### Curated creative suite
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **120 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **124 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
-  maximum-quality H3 production graphs, two H3 Director Development graphs, one
-  full-quality Music 3 graph, seven still/video upscaler qualification graphs,
-  eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated official
-  graphs installed into the workflow browser.
+  maximum-quality H3 production graphs, two H3 Director Development graphs, four
+  H3 Turbo-LoRA qualification graphs, one full-quality Music 3 graph, seven
+  still/video upscaler qualification graphs, eight Episode 29 graphs, seven
+  pinned Episode 30 graphs, and 53 curated official graphs installed into the
+  workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** Krea/Edit, H3, FLUX/Klein, Music 3, and still-image upscalers each
