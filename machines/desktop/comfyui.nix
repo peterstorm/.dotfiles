@@ -141,6 +141,7 @@ let
       requests
       rotary-embedding-torch
       safetensors
+      scenedetect
       scipy
       sentencepiece
       simpleeval
@@ -371,6 +372,27 @@ let
     chmod -R a-w "$out"
   '';
 
+  minimaxH3DirectorSource = pkgs.fetchFromGitHub {
+    owner = "AIMixer";
+    repo = "ComfyUI_MiniMaxH3_Director";
+    rev = "bdefc5f8037aad286ff1aa3d908dfb3cf13b080b";
+    hash = "sha256-a4C72dV9K9AXWD70+LIvOTQLawTfUrRzyylM16E1J/w=";
+  };
+
+  minimaxH3DirectorNode =
+    pkgs.runCommand "comfyui-minimax-h3-director-hardened"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.python3
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/harden-minimax-h3-director.sh} \
+          ${minimaxH3DirectorSource} "$out"
+      '';
+
   declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
     mkdir -p "$out"
     ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
@@ -380,6 +402,7 @@ let
     ln -s ${detailDaemonNode} "$out/ComfyUI-Detail-Daemon"
     ln -s ${kjNodes} "$out/ComfyUI-KJNodes"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
+    ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -1743,6 +1766,23 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
       '';
 
+  minimaxH3DirectorWorkflows =
+    pkgs.runCommand "minimax-h3-director-local-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-director-workflows.sh} \
+          --source-workflow \
+            ${minimaxH3DirectorSource}/example_workflows/minimax_h3_director_r2v.json \
+          --output-dir "$out/workflows"
+      '';
+
   imageUpscalerWorkflows =
     pkgs.runCommand "image-upscaler-qualification-v1-workflows"
       {
@@ -1756,6 +1796,7 @@ let
         mkdir -p "$out/workflows"
         interpolation=${qualifiedWorkflowTemplatesJson}/templates/utility_interpolation_image_upscale.json
         gan=${qualifiedWorkflowTemplatesJson}/templates/utility-gan_upscaler.json
+        video=${seedVR2Node}/example_workflows/SeedVR2_HD_video_upscale.json
 
         lanczos="$out/workflows/00 Lanczos 4x - Zero Hallucination Control.json"
         jq '
@@ -1846,8 +1887,45 @@ let
           ' ${seedVR2Node}/example_workflows/SeedVR2_simple_image_upscale.json >"$destination"
         done
 
+        video_destination="$out/workflows/06 SeedVR2 7B FP16 - Natural Video 2K.json"
+        jq '
+          .nodes |= map(select(.id != 19 and .id != 20))
+          | .links |= map(select(.[0] != 18 and .[0] != 19))
+          | (.nodes[] | select(.id == 14) | .inputs[]
+              | select(.name == "torch_compile_args") | .link) = null
+          | (.nodes[] | select(.id == 13) | .inputs[]
+              | select(.name == "torch_compile_args") | .link) = null
+          | (.nodes[] | select(.id == 14)) |= (
+              .title = "Immutable FP16 SeedVR2 7B natural — no auto-download"
+              | .widgets_values = [
+                  "seedvr2_ema_7b_fp16.safetensors", "cuda:0",
+                  0, false, "none", false, "sdpa"
+                ]
+            )
+          | (.nodes[] | select(.id == 13)) |= (
+              .title = "Immutable FP16 SeedVR2 VAE — tiled video finishing"
+              | .widgets_values = [
+                  "ema_vae_fp16.safetensors", "cuda:0",
+                  true, 1024, 128, true, 1024, 128, "false", "cpu", false
+                ]
+            )
+          | (.nodes[] | select(.id == 10)) |= (
+              .title = "Deterministic temporal restoration — LAB color lock"
+              | .widgets_values = [
+                  42, "fixed", 1536, 2688, 9, true, "lab",
+                  2, 0, 0, 0, "cpu", true
+                ]
+            )
+          | (.nodes[] | select(.id == 21) | .widgets_values[0]) =
+              "upscaler-qualification.mp4"
+          | (.nodes[] | select(.id == 23) | .widgets_values[0]) =
+              "UpscalerQualification/SeedVR2_7B_FP16_Natural_Video_2K"
+          | (.nodes[] | select(.id == 18) | .widgets_values[0]) =
+              "FINISHING DERIVATIVE ONLY: preserve the native video master. Remux checksum-authoritative dialogue after visual upscaling. Reject identity, topology, text, palette, temporal, or medium drift."
+        ' "$video" >"$video_destination"
+
         jq -s -e '
-          length == 6
+          length == 7
           and ([.[0].nodes[] | select(.type == "ImageScaleBy") | .widgets_values]
             == [["lanczos",4]])
           and all(.[1:3][];
@@ -1867,12 +1945,27 @@ let
                 42, "fixed", 4096, 4096, 1, false, "lab",
                 0, 0, 0, 0, "none", true
               ]]))
+          and ([.[6].nodes[] | select(.type == "SeedVR2LoadDiTModel")
+            | .widgets_values] == [[
+              "seedvr2_ema_7b_fp16.safetensors", "cuda:0",
+              0, false, "none", false, "sdpa"
+            ]])
+          and ([.[6].nodes[] | select(.type == "SeedVR2LoadVAEModel")
+            | .widgets_values] == [[
+              "ema_vae_fp16.safetensors", "cuda:0",
+              true, 1024, 128, true, 1024, 128, "false", "cpu", false
+            ]])
+          and ([.[6].nodes[] | select(.type == "SeedVR2VideoUpscaler")
+            | .widgets_values[0:13]] == [[
+              42, "fixed", 1536, 2688, 9, true, "lab",
+              2, 0, 0, 0, "cpu", true
+            ]])
         ' "$out"/workflows/*.json >/dev/null
         if grep -RqiE 'fp8|int8|resolve/main|tree/main|ComfyUI-Manager' "$out/workflows"; then
           echo "forbidden lower-precision selector, mutable link, or Manager dependency in upscaler qualification" >&2
           exit 1
         fi
-        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 6
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 7
       '';
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
@@ -1888,6 +1981,7 @@ let
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     music3_dir="$user_workflows/minimax-music3-full-quality"
     upscaler_dir="$user_workflows/image-upscaler-qualification-v1"
+    director_dir="$user_workflows/minimax-h3-director-local-development"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
@@ -1899,16 +1993,19 @@ let
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     music3_staging="$user_workflows/.minimax-music3-full-quality.new"
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
+    director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
-      "$h3_production_staging" "$music3_staging" "$upscaler_staging" "$elite_staging"
+      "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
+      "$director_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
-      "$h3_production_staging" "$music3_staging" "$upscaler_staging" "$elite_staging" "$input_dir"
+      "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
+      "$director_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -1945,6 +2042,9 @@ let
     for source in ${imageUpscalerWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$upscaler_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3DirectorWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$director_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -1955,7 +2055,7 @@ let
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
-      "$upscaler_dir" "$elite_dir"
+      "$upscaler_dir" "$director_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -1966,6 +2066,7 @@ let
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$music3_staging" "$music3_dir"
     mv "$upscaler_staging" "$upscaler_dir"
+    mv "$director_staging" "$director_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 
@@ -2023,6 +2124,7 @@ in
       PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True";
       MUSE_GLIMMER_BASE_URL = "http://127.0.0.1:8001/v1";
       MUSE_GLIMMER_API_KEY_FILE = "/home/peterstorm/.config/muse-glimmer/api-key";
+      MINIMAX_H3_DIRECTOR_LLM_API_KEY_FILE = "/home/peterstorm/.config/qwen38/api-key";
     };
 
     serviceConfig = {

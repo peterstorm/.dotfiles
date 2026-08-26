@@ -160,6 +160,7 @@ describe("creative project skill scope", () => {
 				"Read the entire scene first",
 				"Listener task",
 				"No facial puppeteering",
+				"Write dialogue for a mouth, not a page",
 				"UNVERIFIABLE",
 			],
 			"prop-continuity": [
@@ -171,6 +172,7 @@ describe("creative project skill scope", () => {
 			"synthetic-voice-production": [
 				"VoiceAnchor",
 				"Identity/performance firewall",
+				"natural contractions",
 				"Never convert a blended chorus",
 				"new numbered output root",
 			],

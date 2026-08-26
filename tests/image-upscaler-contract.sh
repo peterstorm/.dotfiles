@@ -37,6 +37,9 @@ for expected in \
   '03 SeedVR2 3B FP16 - Natural 4K.json' \
   '04 SeedVR2 7B FP16 - Natural 4K.json' \
   '05 SeedVR2 7B FP16 Sharp - Adversarial Comparison.json' \
+  '06 SeedVR2 7B FP16 - Natural Video 2K.json' \
+  '42, "fixed", 1536, 2688, 9, true, "lab"' \
+  'Remux checksum-authoritative dialogue after visual upscaling.' \
   '"SEEDVR2"' \
   'downloadImageUpscalerModels'; do
   grep -Fq -- "$expected" "$MODULE" || fail "module does not contain: $expected"

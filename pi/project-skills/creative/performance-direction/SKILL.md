@@ -39,6 +39,7 @@ Do not direct an emotion as a pose. Give the character something specific to acc
 9. **Fail closed.** Frozen attention, contradictory reactions, unmotivated gaze, or an invisible required turn rejects the clip.
 10. **Respect consent and identity.** Do not synthesize intimate, humiliating, or deceptive performance with a real person's likeness without authorization.
 11. **Hand off physiology.** Use `human-motion-realism-production` to derive eye-head sequencing, blink windows, breath/support behavior, gesture phases, fidget limits, response latency, and dense fast-event QA from the locked performance task.
+12. **Write dialogue for a mouth, not a page.** Default conversational English to contractions and short playable thought groups. Use expanded forms only for deliberate emphasis (`It is the timing—not the song`) or a character-specific register. A contraction rendered as mechanically separated syllables fails acting QA even when the input text is correct.
 
 ## Stage 1 — scene read
 
@@ -132,6 +133,8 @@ When exact song lip-sync is required, use a qualified local audio-reference work
 After intent is locked, apply `human-motion-realism-production`. Keep its microbehavior sparse: one attention sequence, one breath/support behavior, and at most one motivated hand or self-contact action per principal in a short clip.
 
 ## Performance QA
+
+Listen without reading the script before judging visual sync. Reject dialogue that sounds mechanically segmented, equally stressed, or exposition-read even when every word is intelligible. Distinguish an authoring failure from a synthesis/prosody failure so a correctly contracted script is not rewritten to solve the wrong problem.
 
 Inspect at least nine chronological samples and denser samples around the turn.
 

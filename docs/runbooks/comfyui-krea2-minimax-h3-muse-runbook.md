@@ -829,17 +829,60 @@ video's own testers observed worse output. Sage Attention is not added from the
 video's mutable Windows add-on: the CUDA 13.2 Nix runtime must first get an
 immutable compatible pin and an A/B quality, peak-VRAM, and throughput benchmark.
 
+### MiniMax H3 Director — local Development
+
+Nix pins `AIMixer/ComfyUI_MiniMaxH3_Director` at
+`bdefc5f8037aad286ff1aa3d908dfb3cf13b080b` (Apache-2.0) and installs the
+hardened node as `ComfyUI_MiniMaxH3_Director`. The local hardening changes every
+Director cache/model deserialization to `weights_only=True`; prompt-service API
+keys are read only from the private server-side file named by
+`MINIMAX_H3_DIRECTOR_LLM_API_KEY_FILE` and are cleared from workflow widget
+state.
+
+The integrated prompt enhancer defaults to the local OpenAI-compatible Qwen3.8
+service at `http://127.0.0.1:8000/v1`. Author or enhance the prompt before
+switching GPU ownership to H3, then preserve the expanded text in the shot
+package. Ollama, OpenAI-compatible, and Zhipu/cloud endpoint choices remain
+available for deliberate future use, but no cloud credential is embedded in a
+graph. Changing providers requires changing the private server-side credential
+file and remains an explicit operator action.
+
+Open **User workflows → `minimax-h3-director-local-development`**:
+
+1. `01 MiniMax H3 Director REF2VA - BF16 Full Quality Development` — unpruned
+   BF16 Ref2VA, BF16 Qwen3-VL-32B, 1344×768, 243 frames, 50-step
+   `res_multistep`/`beta`, shifts 12/3.
+2. `02 MiniMax H3 Director REF2VA - Qualified Turbo 4-Step Development` — the
+   already qualified task-matched Ref2VA adapter
+   `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors`, strength 1.0,
+   960×544, 243 frames, four Euler/simple steps, shifts 12/3, and reference
+   resize `match`.
+
+The Turbo visual result from RHEA’s Hush timing shot was user-affirmed as great.
+That same batch’s robotic dialogue performance was rejected separately; visual
+Turbo qualification does not qualify the voice performance or H3 native audio.
+Never substitute FL2VA Turbo adapters into Ref2VA. Director histories and cached
+segments are Development evidence, not Production Authorities. Preserve the
+queued graph/request/history, and remux checksum-authoritative dialogue after
+all visual generation and finishing.
+
+The seven checksum-identical SweetValberry graphs remain in the separate
+`minimax-h3-sweetvalberry-research-only` folder. Their hosted MiniMax-M3/Mie
+connector and Windows paths are preserved rather than silently rewritten.
+Director plus local Qwen3.8 is the supported local equivalent; the original
+hosted path remains research-only and optional.
+
 ### Curated creative suite
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **117 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **120 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
-  maximum-quality H3 production graphs, one full-quality Music 3 graph, six
-  still-image upscaler qualification graphs, eight Episode 29 graphs, seven pinned
-  Episode 30 graphs, and 53 curated official graphs installed into the workflow
-  browser.
+  maximum-quality H3 production graphs, two H3 Director Development graphs, one
+  full-quality Music 3 graph, seven still/video upscaler qualification graphs,
+  eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated official
+  graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** Krea/Edit, H3, FLUX/Klein, Music 3, and still-image upscalers each
@@ -882,11 +925,11 @@ INT8 T2I graph is absent. The three official local H3 graphs are published as
 Flux, Wan, LTX, Hunyuan, and other architectures were not rewritten:
 sharing a text encoder or VAE does not make a different DiT compatible.
 
-### Still-image upscaler qualification
+### Image and video upscaler qualification
 
 Open **User workflows → `image-upscaler-qualification-v1`**. This package is a
 finishing bake-off, not a license to mutate canon. The **native masters remain authoritative**;
-every upscaled image is a versioned derivative, and no derivative
+every upscaled image or video is a versioned derivative, and no derivative
 becomes an identity, wardrobe, composition, text, or H3 lineage parent without a
 separate explicit acceptance ledger.
 
@@ -916,19 +959,25 @@ Before queueing any SeedVR2 graph, wait for an idle queue and run:
 creative-model-phase prepare upscale
 ```
 
-The six fixed workflows compare:
+The seven fixed workflows compare:
 
 1. Lanczos 4× as the zero-hallucination control;
 2. Real-ESRGAN x4plus;
 3. compact Real-ESRGAN General x4v3;
 4. SeedVR2 3B FP16 natural;
 5. **SeedVR2 7B FP16 natural**;
-6. SeedVR2 7B FP16 sharp as an adversarial oversharpening check.
+6. SeedVR2 7B FP16 sharp as an adversarial oversharpening check;
+7. **SeedVR2 7B FP16 natural video finishing** at a 1536-pixel short edge with a
+   2688-pixel maximum edge, nine-frame batches, two-frame temporal overlap,
+   tiled FP16 VAE, and original audio carried only as a convenience preview.
 
-SeedVR2 uses fixed seed 42, LAB color correction, zero injected noise, no
-quantization, and a 4096-pixel maximum edge. Torch compilation is disabled for
-single-image qualification because compile latency would dominate. The 96 GiB
-GPU runs untiled FP16 models directly; no BlockSwap or CPU offload is enabled.
+SeedVR2 uses fixed seed 42, LAB color correction, zero injected noise, and no
+quantization. Torch compilation is disabled during qualification to avoid a
+machine-specific compile boundary. The 96 GiB GPU runs image candidates untiled;
+the video graph uses 1024-pixel VAE tiles and CPU intermediate offload to bound
+long-clip memory. For dialogue shots, upscale the visual master first and then
+remux the checksum-authoritative PCM dialogue: neither the source video's codec
+track nor SeedVR2's carried audio becomes dialogue authority.
 
 Do not choose one winner from apparent crispness alone. The qualification corpus
 must include canonical faces, full-body technical wardrobe, an environment, and
@@ -938,7 +987,9 @@ small controlled text/line work. Review at 100% and 200% for:
 - panel topology, integrated gloves/feet, tiny conductive paths, and edge halos;
 - exact palette, gradients, background grain, and medium preservation;
 - text duplication, pseudo-text amplification, invented symbols, and seams;
-- runtime, peak VRAM, dimensions, deterministic replay, and decompressed pixels.
+- runtime, peak VRAM, dimensions, deterministic replay, and decompressed pixels;
+- video cadence, flicker, face/suit topology drift, batch-boundary pulses, tile
+  seams, carried-audio duration, and exact post-upscale dialogue remux timing.
 
 Promote two authorities only after visual review: a **faithful upscaler** for
 canonical/reference assets and an optional **restoration upscaler** for visibly

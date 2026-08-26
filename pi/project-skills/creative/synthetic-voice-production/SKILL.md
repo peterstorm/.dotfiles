@@ -102,6 +102,14 @@ Copy the accepted file; do not destructively normalize, trim, denoise, or replac
 
 ## Stage 4 — dialogue cloning qualification
 
+Author the line for speech before synthesis. Conversational English defaults to
+natural contractions (`it's`, `isn't`, `we're`, `don't`, `can't`) unless the
+expanded form is a deliberate stressed contrast or character choice. Read the
+line aloud and remove written-exposition stiffness, repeated full noun phrases,
+and clauses too long to carry one playable intention. Punctuation and ellipses
+may shape breath and turns, but never split one continuous performance into
+independent synthesis calls.
+
 Clone from the frozen anchor with a pinned local base model. Test at minimum:
 
 1. neutral informational speech;
@@ -111,7 +119,7 @@ Clone from the frozen anchor with a pinned local base model. Test at minimum:
 5. names, numbers, and project-specific pronunciation;
 6. optional code-switching only after the primary language passes.
 
-Inspect intelligibility, identity retention, prosody freedom, sibilants, breaths, pacing, and artifacts. Passing neutral speech does not imply urgent or intimate speech passes.
+Inspect intelligibility, identity retention, prosody freedom, sibilants, breaths, pacing, and artifacts. Compare the submitted text with the decoded performance: a written contraction that is delivered as two mechanically separated words is a prosody failure, not permission to misreport the script. Passing neutral speech does not imply urgent or intimate speech passes.
 
 ## Stage 5 — singing conversion qualification
 

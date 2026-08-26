@@ -19,6 +19,7 @@ H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 MUSIC3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-music3-models.sh"
 UPSCALER_DOWNLOAD="$ROOT/scripts/comfyui/download-image-upscaler-models.sh"
 UPSCALER_TEST="$ROOT/tests/image-upscaler-contract.sh"
+DIRECTOR_TEST="$ROOT/tests/minimax-h3-director-contract.sh"
 CREATIVE_PHASE="$ROOT/scripts/comfyui/creative-model-phase.sh"
 H3_PHASE="$ROOT/scripts/comfyui/h3-model-phase.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
@@ -45,10 +46,10 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
@@ -56,6 +57,7 @@ bash -n "$KLEIN_DOWNLOAD"
 bash -n "$H3_DOWNLOAD"
 bash -n "$MUSIC3_DOWNLOAD"
 bash -n "$UPSCALER_DOWNLOAD"
+bash "$DIRECTOR_TEST"
 bash -n "$CREATIVE_PHASE"
 bash -n "$H3_PHASE"
 bash -n "$ACTIVATE"
@@ -257,7 +259,9 @@ contains "$MODULE" 'upscaler_staging="$user_workflows/.image-upscaler-qualificat
 contains "$MODULE" 'elite_staging="$user_workflows/.creative-suite.new"'
 contains "$MODULE" '"$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir"'
 contains "$MODULE" '"$h3_production_dir" "$music3_dir"'
-contains "$MODULE" '"$upscaler_dir" "$elite_dir"'
+contains "$MODULE" '"$upscaler_dir" "$director_dir" "$elite_dir"'
+contains "$MODULE" 'director_dir="$user_workflows/minimax-h3-director-local-development"'
+contains "$MODULE" 'for source in ${minimaxH3DirectorWorkflows}/workflows/*.json; do'
 contains "$MODULE" 'ReadOnlyPaths = [ "/models/comfyui" ];'
 contains "$MODULE" 'ProtectSystem = "strict";'
 absent "$MODULE" 'wantedBy = [ "multi-user.target" ];'
@@ -523,7 +527,7 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**117 user workflows:**'
+contains "$RUNBOOK" '**120 user workflows:**'
 contains "$RUNBOOK" 'krea2-max-quality-bf16'
 contains "$RUNBOOK" 'contest-production-bf16'
 contains "$RUNBOOK" '21 purpose-built contest workflows'
