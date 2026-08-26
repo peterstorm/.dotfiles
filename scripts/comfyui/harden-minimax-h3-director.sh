@@ -83,6 +83,22 @@ replace(
 for relative in ("director/h3_latent_upscale.py", "director/segment_cache.py"):
     replace(relative, "weights_only=False", "weights_only=True")
 
+routes = "director/http_routes.py"
+replace(
+    routes,
+    "from server import PromptServer\n",
+    "from server import PromptServer\n\n"
+    "from .prompt_enhance_routes import register_prompt_enhance_routes\n",
+)
+replace(
+    routes,
+    '    _register_route(routes, "POST", "/minimax/director/detect_shots", minimax_detect_shots)\n'
+    "    _ROUTES_REGISTERED = True\n",
+    '    _register_route(routes, "POST", "/minimax/director/detect_shots", minimax_detect_shots)\n'
+    "    register_prompt_enhance_routes(routes, _register_route)\n"
+    "    _ROUTES_REGISTERED = True\n",
+)
+
 frontend = "web/js/minimax_prompt_enhancer.js"
 replace(
     frontend,
@@ -142,4 +158,6 @@ if grep -RqiE \
 fi
 grep -q 'DEFAULT_OLLAMA_MODEL = "qwen3.8-27b"' "$output_dir/lib/prompt_enhancer.py"
 grep -q 'DEFAULT_API_FORMAT = API_FORMAT_OPENAI_COMPAT' "$output_dir/lib/prompt_enhancer.py"
+grep -q 'register_prompt_enhance_routes(routes, _register_route)' \
+  "$output_dir/director/http_routes.py"
 chmod -R a-w "$output_dir"
