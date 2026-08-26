@@ -42,6 +42,10 @@ contains "$RUN" '--security-opt no-new-privileges'
 contains "$RUN" 'INDEXTTS25_EXPECTED_IMAGE_ID'
 contains "$RUN" 'usage=noncommercial-development-only'
 contains "$RUN" 'emotion-control=qwen0.6bemo4-merge-from-primary-revision'
+contains "$RUN" '--env OMP_NUM_THREADS=1'
+contains "$RUN" '--env MKL_NUM_THREADS=1'
+contains "$RUN" '--env OPENBLAS_NUM_THREADS=1'
+contains "$RUN" '--env NUMEXPR_NUM_THREADS=1'
 contains "$RUN" "--mount \"type=bind,src=\$MODEL_ROOT,dst=/models/indextts25,readonly\""
 if grep -Eq 'pip install|hf download|curl |wget ' "$RUN"; then
   echo 'runtime script must not download or install anything' >&2

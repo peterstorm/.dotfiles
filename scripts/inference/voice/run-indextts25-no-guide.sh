@@ -57,6 +57,10 @@ main() {
     --gpus "device=$GPU_DEVICE" \
     --shm-size 16g \
     --tmpfs /tmp:rw,nosuid,nodev,size=16g,mode=1777 \
+    --env OMP_NUM_THREADS=1 \
+    --env MKL_NUM_THREADS=1 \
+    --env OPENBLAS_NUM_THREADS=1 \
+    --env NUMEXPR_NUM_THREADS=1 \
     --mount "type=bind,src=$MODEL_ROOT,dst=/models/indextts25,readonly" \
     --mount "type=bind,src=$ANCHORS_ROOT,dst=/anchors,readonly" \
     --mount "type=bind,src=$SPEC,dst=/input/spec.json,readonly" \

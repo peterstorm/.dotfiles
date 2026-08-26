@@ -7,6 +7,7 @@ IMAGE="${QWEN3_TTS_IMAGE:-peterstorm/qwen3-tts:0.1.1-022e286-cu130}"
 EXPECTED_REV="022e286b98fbec7e1e916cb940cdf532cd9f488e"
 MODEL_ROOT="${QWEN3_TTS_VOICE_DESIGN_ROOT:-/models/voice/qwen3-tts/voice-design-1.7b}"
 MODEL_MARKER="${QWEN3_TTS_MODEL_MARKER:-/models/voice/qwen3-tts/.qwen3-tts-voice-design-complete}"
+GENERATOR="${QWEN3_TTS_GENERATOR:-$SCRIPT_DIR/generate_voice_design_auditions.py}"
 SPEC="${VOICE_AUDITION_SPEC:?set VOICE_AUDITION_SPEC to an absolute JSON path}"
 OUTPUT="${VOICE_AUDITION_OUTPUT:?set VOICE_AUDITION_OUTPUT to a new absolute output path}"
 GPU_DEVICE="${VOICE_GPU_DEVICE:-0}"
@@ -17,8 +18,10 @@ require_absolute() {
 
 main() {
   require_absolute "$SPEC"
+  require_absolute "$GENERATOR"
   require_absolute "$OUTPUT"
   test -f "$SPEC" || { echo "error: specification is unavailable: $SPEC" >&2; return 1; }
+  test -f "$GENERATOR" || { echo "error: generator is unavailable: $GENERATOR" >&2; return 1; }
   test -d "$MODEL_ROOT" || { echo "error: model directory is unavailable: $MODEL_ROOT" >&2; return 1; }
   grep -Fxq "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign@5ecdb67327fd37bb2e042aab12ff7391903235d3" "$MODEL_MARKER" || {
     echo "error: verified VoiceDesign marker is absent or wrong" >&2
@@ -59,7 +62,7 @@ main() {
     --env XDG_CACHE_HOME=/tmp/cache \
     --mount "type=bind,src=$MODEL_ROOT,dst=/models/voice-design,readonly" \
     --mount "type=bind,src=$SPEC,dst=/input/spec.json,readonly" \
-    --mount "type=bind,src=$SCRIPT_DIR/generate_voice_design_auditions.py,dst=/work/generate.py,readonly" \
+    --mount "type=bind,src=$GENERATOR,dst=/work/generate.py,readonly" \
     --mount "type=bind,src=$output_parent,dst=/output" \
     "$image_id" \
     python /work/generate.py --spec /input/spec.json --output "/output/$output_name"

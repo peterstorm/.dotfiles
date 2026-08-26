@@ -54,6 +54,8 @@ contains "$RUN" '--cap-drop all'
 contains "$RUN" '--security-opt no-new-privileges'
 contains "$RUN" "--gpus \"device=\$GPU_DEVICE\""
 contains "$RUN" 'dst=/models/voice-design,readonly'
+contains "$RUN" 'QWEN3_TTS_GENERATOR'
+contains "$RUN" "src=\$GENERATOR,dst=/work/generate.py,readonly"
 contains "$RUN" 'QWEN3_TTS_EXPECTED_IMAGE_ID'
 contains "$RUN" 'sha256sum -c SHA256SUMS'
 contains "$RUN_BASE" '--network none'
