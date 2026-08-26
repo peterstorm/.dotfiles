@@ -29,6 +29,17 @@ ec947271175d8cad75ec37e83aa487e27c97a0f72a303393772da5ffa84bddf2 177183712 hf_ca
 3388cf5fd3493c9ac9c69851d8e7a8badcfb4f3dc631020c4961371646d5ada8 28036335 hf_cache/campplus_cn_common.bin
 88a1f47acf747db0b21e97a389d838566147f7a5464583ff5c8d819d870f03ee 1405 hf_cache/bigvgan/config.json
 e95ba25972d3de0628d99cd156e9315a9c018899bf739988959ebe3544080ced 449228171 hf_cache/bigvgan/bigvgan_generator.pt
+986c18655a26bbbdeb486a9478c8653925c7db7111d6cf20c9991b348853cb95 360 qwen0.6bemo4-merge/Modelfile
+c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680 707 qwen0.6bemo4-merge/added_tokens.json
+a13337ea164ac47b2c1e644b6338d5e7e91cdcb58218511899c083112472730c 550 qwen0.6bemo4-merge/chat_template.jinja
+2e04bc223dfb548dde52faebe2a819964523ff749cbe26467c49380aa371594f 727 qwen0.6bemo4-merge/config.json
+6453260cdb41552215d87400ab399a760f25509ec2860ceb07817b195651626d 117 qwen0.6bemo4-merge/generation_config.json
+8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5 1671853 qwen0.6bemo4-merge/merges.txt
+11293257a8df593c154a8ecd5fc039f3076de35411e35f06d41b471e136f6641 1192135096 qwen0.6bemo4-merge/model.safetensors
+6676f091c8bc4d1b50146427cfde92073402866b87b6e39223227931b70083e9 616 qwen0.6bemo4-merge/special_tokens_map.json
+aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4 11422654 qwen0.6bemo4-merge/tokenizer.json
+147bae7844ddfb8767c1f9cc0f505d4a26839bd6fbb0656d6d6bc17c82e9108a 5433 qwen0.6bemo4-merge/tokenizer_config.json
+ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910 2776833 qwen0.6bemo4-merge/vocab.json
 EOF
 
 verify_manifest() {
@@ -57,6 +68,7 @@ write_marker() {
     printf 'source=index-tts/index-tts@%s\n' "$SOURCE_REV"
     printf 'usage=noncommercial-development-only\n'
     printf 'license-accepted-by-user=2026-08-25\n'
+    printf 'emotion-control=qwen0.6bemo4-merge-from-primary-revision\n'
     printf 'image-id=%s\n' "$image_id"
   } >"$marker_tmp"
   chmod 0640 "$marker_tmp"
@@ -83,7 +95,12 @@ main() {
     return 0
   fi
 
-  mkdir -p "$STAGING"
+  if [[ ! -d "$STAGING" ]]; then
+    mkdir -p "$STAGING"
+    if [[ -d "$DESTINATION" ]]; then
+      cp -al "$DESTINATION/." "$STAGING/"
+    fi
+  fi
   docker run --rm --init -i \
     --user "$(id -u):$(id -g)" \
     --entrypoint /opt/index-tts/.venv/bin/python \
@@ -104,6 +121,17 @@ requests = (
         'codec.pth': 'codec.pth', 'feat1.pt': 'feat1.pt', 'feat2.pt': 'feat2.pt',
         'gpt.pth': 'gpt.pth', 'multilingual_zh_ja_yue_char_del.tiktoken': 'multilingual_zh_ja_yue_char_del.tiktoken',
         's2mel.pth': 's2mel.pth', 'wav2vec2bert_stats.pt': 'wav2vec2bert_stats.pt',
+        'qwen0.6bemo4-merge/Modelfile': 'qwen0.6bemo4-merge/Modelfile',
+        'qwen0.6bemo4-merge/added_tokens.json': 'qwen0.6bemo4-merge/added_tokens.json',
+        'qwen0.6bemo4-merge/chat_template.jinja': 'qwen0.6bemo4-merge/chat_template.jinja',
+        'qwen0.6bemo4-merge/config.json': 'qwen0.6bemo4-merge/config.json',
+        'qwen0.6bemo4-merge/generation_config.json': 'qwen0.6bemo4-merge/generation_config.json',
+        'qwen0.6bemo4-merge/merges.txt': 'qwen0.6bemo4-merge/merges.txt',
+        'qwen0.6bemo4-merge/model.safetensors': 'qwen0.6bemo4-merge/model.safetensors',
+        'qwen0.6bemo4-merge/special_tokens_map.json': 'qwen0.6bemo4-merge/special_tokens_map.json',
+        'qwen0.6bemo4-merge/tokenizer.json': 'qwen0.6bemo4-merge/tokenizer.json',
+        'qwen0.6bemo4-merge/tokenizer_config.json': 'qwen0.6bemo4-merge/tokenizer_config.json',
+        'qwen0.6bemo4-merge/vocab.json': 'qwen0.6bemo4-merge/vocab.json',
     }),
     ('facebook/w2v-bert-2.0', 'da985ba0987f70aaeb84a80f2851cfac8c697a7b', {
         'config.json': 'hf_cache/w2v-bert-2.0/config.json',
@@ -124,11 +152,12 @@ requests = (
 for repo, revision, files in requests:
     cache = root / '.downloads' / repo.replace('/', '--')
     for remote, relative in files.items():
-        source = Path(hf_hub_download(repo_id=repo, filename=remote, revision=revision, local_dir=cache))
         destination = root / relative
+        if destination.exists():
+            continue
+        source = Path(hf_hub_download(repo_id=repo, filename=remote, revision=revision, local_dir=cache))
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if not destination.exists() or destination.stat().st_size != source.stat().st_size:
-            shutil.copyfile(source, destination)
+        shutil.copyfile(source, destination)
 PY
 
   verify_manifest "$STAGING"
@@ -138,6 +167,7 @@ PY
 {
   "indexTtsSource": "index-tts/index-tts@$SOURCE_REV",
   "indexTtsModel": "IndexTeam/IndexTTS-2.5@$MODEL_REV",
+  "qwenEmotion": "IndexTeam/IndexTTS-2.5@$MODEL_REV:qwen0.6bemo4-merge",
   "w2vBert": "facebook/w2v-bert-2.0@da985ba0987f70aaeb84a80f2851cfac8c697a7b",
   "semanticCodec": "amphion/MaskGCT@265c6cef07625665d0c28d2faafb1415562379dc",
   "campplus": "funasr/campplus@e4b6ede7ce16997aff4ae69fbca1f0175e2afede",

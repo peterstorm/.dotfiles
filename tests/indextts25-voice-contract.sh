@@ -29,6 +29,9 @@ contains "$DOWNLOAD" 'MODEL_REV="c39ce5ba981572cb187443877ff559dfb246ce63"'
 contains "$DOWNLOAD" 'usage=noncommercial-development-only'
 contains "$DOWNLOAD" 'amphion/MaskGCT@265c6cef07625665d0c28d2faafb1415562379dc'
 contains "$DOWNLOAD" 'ec947271175d8cad75ec37e83aa487e27c97a0f72a303393772da5ffa84bddf2 177183712 hf_cache/semantic_codec_model.safetensors'
+contains "$DOWNLOAD" '11293257a8df593c154a8ecd5fc039f3076de35411e35f06d41b471e136f6641 1192135096 qwen0.6bemo4-merge/model.safetensors'
+contains "$DOWNLOAD" 'aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4 11422654 qwen0.6bemo4-merge/tokenizer.json'
+contains "$DOWNLOAD" 'emotion-control=qwen0.6bemo4-merge-from-primary-revision'
 contains "$DOWNLOAD" "verify_manifest \"\$STAGING\""
 contains "$DOWNLOAD" "verify_manifest \"\$DESTINATION\""
 contains "$DOWNLOAD" 'license-accepted-by-user=2026-08-25'
@@ -38,6 +41,7 @@ contains "$RUN" '--cap-drop all'
 contains "$RUN" '--security-opt no-new-privileges'
 contains "$RUN" 'INDEXTTS25_EXPECTED_IMAGE_ID'
 contains "$RUN" 'usage=noncommercial-development-only'
+contains "$RUN" 'emotion-control=qwen0.6bemo4-merge-from-primary-revision'
 contains "$RUN" "--mount \"type=bind,src=\$MODEL_ROOT,dst=/models/indextts25,readonly\""
 if grep -Eq 'pip install|hf download|curl |wget ' "$RUN"; then
   echo 'runtime script must not download or install anything' >&2

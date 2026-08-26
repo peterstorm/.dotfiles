@@ -29,6 +29,10 @@ main() {
     echo 'error: noncommercial Development model marker is absent' >&2
     return 1
   }
+  grep -Fxq 'emotion-control=qwen0.6bemo4-merge-from-primary-revision' "$MODEL_MARKER" || {
+    echo 'error: verified Qwen emotion-controller marker is absent' >&2
+    return 1
+  }
 
   image_id="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
   image_rev="$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
@@ -78,7 +82,7 @@ main() {
   trap 'rm -f "$ledger_tmp"' EXIT
   (
     cd "$OUTPUT"
-    find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\0' \
+    find . -type f ! -name SHA256SUMS -printf '%P\0' \
       | LC_ALL=C sort -z \
       | xargs -0 sha256sum >"$ledger_tmp"
     mv "$ledger_tmp" SHA256SUMS
