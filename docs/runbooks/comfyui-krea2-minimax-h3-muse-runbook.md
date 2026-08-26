@@ -868,9 +868,22 @@ all visual generation and finishing.
 
 The seven checksum-identical SweetValberry graphs remain in the separate
 `minimax-h3-sweetvalberry-research-only` folder. Their hosted MiniMax-M3/Mie
-connector and Windows paths are preserved rather than silently rewritten.
-Director plus local Qwen3.8 is the supported local equivalent; the original
-hosted path remains research-only and optional.
+connector and Windows paths are preserved rather than silently rewritten. They
+are known non-runnable research fixtures: live queueing reproduced a missing
+`class_type` rejection at Mie rich-text node 139, with additional absent
+Crystools, rgthree, SolAttn, Spectrum, legacy primitive, and Video Helper Suite
+classes behind it.
+
+Use the separate manual-install folder
+`minimax-h3-sweetvalberry-local-bf16` for executable private Development
+adaptations. Its seven graphs route around hosted prompt enhancement, select the
+installed unpruned BF16 model closure, bypass unqualified acceleration patches,
+replace legacy primitives, use core `CreateVideo`/`SaveVideo`, and compile in
+live ComfyUI with no missing class types. Because the Google Drive graphs have no
+explicit workflow license, the adaptations are built from the private local
+source by `tools/adapt-sweetvalberry-h3-workflows.ts` in the AFTERSIGNAL
+repository rather than entering the declarative dotfiles closure. Director plus
+local Qwen3.8 remains the supported local prompt-author path.
 
 ### MiniMax H3 Turbo-LoRA prompt and frame qualification
 
