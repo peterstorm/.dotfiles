@@ -58,6 +58,7 @@ done
 contains "$PULL" "jq -r '.[0].RootFS.Layers[]'"
 contains "$PULL" '$((${#base_layers[@]} + 2))'
 contains "$PULL" '"${overlay_layers[$index]}" = "${base_layers[$index]}"'
+contains "$PULL" 'get_quantization_config("modelopt_mixed").__name__ == "ModelOptMixedPrecisionConfig"'
 contains "$PULL" 'FlashInferMLASparseSM120Impl.supports_dense_mha_prefill is False'
 contains "$PULL" '"self.rope_pad = 64" in init_source'
 contains "$PULL" '"return_valid_counts=True" in forward_source'

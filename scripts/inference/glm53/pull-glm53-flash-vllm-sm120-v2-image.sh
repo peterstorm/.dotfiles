@@ -65,7 +65,7 @@ from vllm.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
 supported = ModelRegistry.get_supported_archs()
 assert "Glm5NextForConditionalGeneration" in supported
 assert "Glm5NextMTPModel" in supported
-assert get_quantization_config("modelopt_mixed").get_name() == "modelopt_mixed"
+assert get_quantization_config("modelopt_mixed").__name__ == "ModelOptMixedPrecisionConfig"
 assert FlashInferMLASparseSM120Impl.supports_dense_mha_prefill is False
 assert "do_kv_cache_update" in FlashInferMLASparseSM120Impl.__dict__
 init_source = inspect.getsource(FlashInferMLASparseSM120Impl.__init__)
