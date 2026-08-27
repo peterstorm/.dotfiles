@@ -21,8 +21,10 @@ if [ -L "$DEST" ]; then
   exit 1
 fi
 
-sudo mkdir -p "$DEST"
-sudo chown "$(id -u):$(id -g)" "$DEST"
+if ! mkdir -p "$DEST" 2>/dev/null || [ ! -w "$DEST" ]; then
+  sudo mkdir -p "$DEST"
+  sudo chown "$(id -u):$(id -g)" "$DEST"
+fi
 
 TOKEN_FILE="${HF_TOKEN_FILE:-$HOME/.config/hf/token}"
 TOKEN_MOUNT=()

@@ -47,6 +47,7 @@ fi
 
 contains "$DOWNLOAD" "REV=\"$REV\""
 contains "$DOWNLOAD" "MANIFEST_SHA256=\"$MANIFEST_SHA\""
+contains "$DOWNLOAD" 'if ! mkdir -p "$DEST" 2>/dev/null || [ ! -w "$DEST" ]; then'
 contains "$DOWNLOAD" 'allow_patterns=[relative for _, _, relative in records]'
 contains "$DOWNLOAD" 'os.replace(temporary, marker)'
 contains "$VERIFY" '([.quantized_layers[].quant_algo] | unique) == ["MXFP8", "NVFP4"]'

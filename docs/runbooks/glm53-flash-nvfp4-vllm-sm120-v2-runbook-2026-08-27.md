@@ -118,7 +118,18 @@ bash scripts/inference/glm53/verify-glm53-flash-nvfp4-v1.sh
 The downloader is resumable. `.download-complete` is written only after all 53 files pass
 size and SHA-256 verification. The verifier re-reads about 184.5 GiB and checks architecture,
 1M native context metadata, ModelOpt `MIXED_PRECISION`, both NVFP4/MXFP8 groups, and indexed
-tensor bytes.
+tensor bytes. A user-writable ZFS destination can avoid interactive sudo during remote
+qualification; use the same path for every later step:
+
+```bash
+DEST="$HOME/models/GLM-5.3-Flash-NVFP4-v1" \
+  bash scripts/inference/glm53/download-glm53-flash-nvfp4-v1.sh
+MODEL_HOST="$HOME/models/GLM-5.3-Flash-NVFP4-v1" \
+  bash scripts/inference/glm53/verify-glm53-flash-nvfp4-v1.sh
+```
+
+When using that layout, export the same `MODEL_HOST` while invoking preflight or the
+switcher.
 
 ### 3. Pull and prove the image without starting a GPU service
 
