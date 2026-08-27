@@ -17,7 +17,8 @@ It does not promise scientific simulation. It makes support, cause, contact, rea
 
 ## Ubiquitous language
 
-- **Action unit** — one short H3 clip containing one dominant physical transition.
+- **Mechanics-proof unit** — one short H3 shot containing one dominant physical transition, composed so contact and support can be scored.
+- **Creative coverage unit** — one H3 generation containing several timestamped shots whose separate functions create a cinematic action impression; each shot still carries only one primary action.
 - **Support state** — every body/object contact currently carrying weight or resisting motion.
 - **Support polygon** — the ground/contact area within which a body can remain balanced.
 - **Force path** — ordered transmission from initiating source through body/object to target or environment.
@@ -47,10 +48,11 @@ Before mechanics, record:
 - normalized positions and facing directions from `blocking-continuity`;
 - screen direction and permitted camera side;
 - exact start and end states;
-- one dominant physical transition;
-- what must remain visible to prove it.
+- whether the job is `mechanics-proof` or `creative-montage`;
+- the dominant physical transition in every mechanics-proof shot;
+- what must remain visible to prove each scored contact.
 
-Split the plan when one clip asks for several independent risky transitions. Prefer 4–6 second action units. A longer H3 duration is available but does not justify packing a complete fight into one generation.
+Use a 3–6 second single-shot mechanics-proof unit when exact support, contact topology, deformation, or reaction order is the scored variable. Use a 6–10 second creative coverage unit only when the job is editorial energy, coverage discovery, or holistic fight impression. A creative montage may contain several hard-cut shots, but every shot gets one primary action and a distinct editorial function. Montage success never proves hidden mechanics.
 
 ## Stage 1 — physical-state contract
 
@@ -126,7 +128,9 @@ For high-risk mechanics prefer, in order:
 4. authored first/last keyframes when endpoints matter more than intermediate contact;
 5. text only for simple low-contact movement.
 
-## Stage 3 — proof and style coverage
+## Stage 3 — proof and creative-montage coverage
+
+### Mechanics-proof mode
 
 The critical mechanic needs a proof shot:
 
@@ -135,6 +139,29 @@ The critical mechanic needs a proof shot:
 - no cut, whip, occlusion, debris cloud, or close crop that hides undefined mechanics.
 
 A separate style shot may use an aggressive angle, tighter impact insert, orbit, whip, shake, or speed change. Never use style coverage as the only evidence that contact happened correctly.
+
+### Creative-montage mode
+
+Use H3's native timestamped multi-shot grammar when the user is evaluating cinematic impact rather than one exact collision. Build a coverage matrix before writing:
+
+- each shot has a purpose such as threat cue, geography, proof impact, material insert, subjective reversal, or wide consequence;
+- each shot changes scale, camera height, axis, lens category, and compositional information—not focal length alone;
+- each shot carries one primary action with visible cause, contact or release, reaction, and consequence;
+- adjacent detail coverage inherits an already-established action instead of inventing hidden mechanics;
+- later shots preserve visible damage and changed advantage;
+- requested hard-cut times are explicit and strictly increasing.
+
+`cinema-director` may supply the coverage matrix, degree-first FOV ladder, capture cadence, and camera physicality. The official `h3-prompt-writing` adapter still owns final Ref2VA section names, reference labels, timing notation, and audio fields.
+
+Internally generated cuts are valid Development evidence for previsualization and holistic action scouting. Use independent source generations and external editing when exact cut frames, source-shot selection, or authority continuity matters.
+
+## Stage 3.5 — Turbo scouting profile
+
+The qualified Ref2VA four-step profile is a speed control, not a universal quality ceiling. For dense action or multi-shot prompts, compare paired seeds at 4, 8, and 12 steps before declaring the model incapable of cut execution or coverage variation.
+
+The Ref2VA adapter is distilled and officially recommended for four NFEs. Any 8–12-step use is an **off-label Turbo-LoRA extrapolation** and must be labeled exactly that until a controlled local qualification passes. Hold LoRA strength, shifts, sampler, scheduler, seed, resolution, duration, reference resize, references, and prompt constant while changing step count.
+
+Prefer one appearance reference when only one subject requires exact recurrence. Add a second unusual-subject reference only through a paired-seed reference-count test; never assume that more references improve subject separation or action freedom.
 
 ## Stage 4 — official H3 handoff
 
@@ -207,13 +234,18 @@ Create a new numbered workflow/output version for changed conditioning, keyframe
 
 ## Acceptance states
 
-- `PASS` — every required atomic question has visible evidence and the user accepts the mechanics.
-- `REJECT` — a critical support, trajectory, contact, reaction, identity, or end-state invariant fails.
+- `MECHANICS_PASS` — every required atomic question has visible evidence and the user accepts the mechanics.
+- `CINEMATIC_PASS` — the requested cuts, coverage functions, action impression, and broad continuity succeed; this does not imply mechanics proof.
+- `REJECT` — a critical invariant for the declared mode fails.
 - `UNVERIFIABLE` — proof is hidden, missing, ambiguous, or dependent on a failed earlier event.
 
 ## Pre-delivery checklist
 
-- [ ] One dominant transition and readable dramatic job
+- [ ] Mode declared: mechanics-proof or creative-montage
+- [ ] One dominant transition per scored shot and readable dramatic job
+- [ ] Creative montage has distinct coverage functions, scales, heights, axes, and lenses
+- [ ] Turbo extrapolation above four steps is explicitly labeled and paired against the speed control
+- [ ] Reference count matches the narrowest identity requirement
 - [ ] Geography and screen direction locked
 - [ ] Initial supports, center of mass, motion, materials, and grips recorded
 - [ ] Initiating force and ordered force path explicit

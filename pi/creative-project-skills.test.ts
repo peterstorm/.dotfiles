@@ -128,8 +128,11 @@ describe("creative project skill scope", () => {
 		const contracts = Object.freeze({
 			"action-physics-production": [
 				"physical-state contract",
-				"Support state",
+				"Mechanics-proof unit",
+				"Creative coverage unit",
 				"Proof shot",
+				"off-label Turbo-LoRA extrapolation",
+				"CINEMATIC_PASS",
 				"sampled-frame atomic QA",
 			],
 			"blocking-continuity": [
