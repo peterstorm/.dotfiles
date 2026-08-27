@@ -8,12 +8,11 @@ in `docs/runbooks/` are the source of truth for rationale; the contract tests in
 Layout (by model, then by role):
 
 ```
-qwen38/    Qwen3.8-27B profiles: downloaders, the vLLM BF16 launcher, DSpark
-           launchers, locally validated DFlash2 launchers, and digest-pinned
-           official SGLang and vLLM DFlash2 v2 profiles with versioned switchers.
-           DSpark -v2 files are the 2026-08-18 upstream update; DFlash2 -v2
-           files have dated runbooks for their official SGLang/vLLM artifacts.
-           Un-suffixed launchers remain validated rollback pins.
+qwen38/    Qwen3.8 profiles: 27B BF16 downloaders and launchers, DSpark,
+           locally validated DFlash2, digest-pinned official SGLang/vLLM v2
+           profiles, and an isolated Flash-Next FP8 TP2 profile whose 51.2B
+           N-gram embedding is offloaded to host RAM. Existing 27B launchers
+           remain validated rollback pins.
 deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
 glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            digest-pinned custom vLLM SM120 images, a multimodal 262K NVFP4 TP2
@@ -38,6 +37,8 @@ Conventions:
   `tests/*-contract.sh` static contracts — change a pin and its contract in
   the same commit. Derived images additionally prove their pinned official-base
   rootfs prefix, exact overlay/config digest, and required runtime source markers.
+- Qwen3.8 Flash-Next is experimental until its open-PR vLLM image, PLE RAM
+  offload, TP2 capacity, multimodal, context, MTP, and soak gates pass.
 - GLM-5.3 is experimental until its dated runbooks' SM120, capacity,
   correctness, tool-use, context, and soak gates pass. The EXL3 image has an
   additional publicly unreconstructible overlay-provenance limitation. Qwen

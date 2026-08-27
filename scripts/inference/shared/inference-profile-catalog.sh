@@ -15,6 +15,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   qwen38-27b-bf16-dflash2-sglang-v2
   qwen38-27b-bf16-dflash2-vllm
   qwen38-27b-bf16-dflash2-vllm-v2
+  qwen38-flash-next-fp8-vllm-v1
   glm53-flash-nvfp4-vllm-sm120-v2
   glm53-flash-exl3-k4-vllm-sm120-v1
   glm53-flash-exl3-k4-vllm-sm120-v2

@@ -133,12 +133,13 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with five selectable models:
+with six selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-nvfp4`
 - `desktop-vllm/glm-5.3-flash-exl3-k4`
 - `desktop-vllm/qwen3.8-27b`
+- `desktop-vllm/qwen3.8-flash-next-fp8`
 - `desktop-muse/muse-glimmer-30b`
 
 DeepSeek, GLM, and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when
@@ -221,6 +222,21 @@ pi --model desktop-vllm/qwen3.8-27b:xhigh
 
 The catalog is available before the server starts. Prompts work after either Qwen launcher
 has brought `qwen3.8-27b` up on port 8000.
+
+### Qwen3.8 Flash-Next FP8
+
+The experimental Flash-Next profile serves the official 125B/6B-active multimodal FP8
+checkpoint at its native 262,144-token context. Its 51.2B-element N-gram table is kept in
+host RAM with `VLLM_PLE_CPU_OFFLOAD=1`, while TP2 places the remaining model across both
+RTX PRO 6000 GPUs. Pi exposes the checkpoint's `low`, `medium`, and `xhigh` reasoning
+levels and defaults to `xhigh`. The profile remains unqualified because its vLLM model and
+offload support are based on open PRs and the special runtime image has no embedded source
+commit identity.
+
+```bash
+pi --list-models qwen3.8-flash-next-fp8
+pi --model desktop-vllm/qwen3.8-flash-next-fp8:xhigh
+```
 
 ### Muse Glimmer 30B
 

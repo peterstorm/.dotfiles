@@ -130,6 +130,42 @@
               "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
             }
           }
+        },
+        {
+          "id": "qwen3.8-flash-next-fp8",
+          "name": "Qwen3.8 Flash-Next FP8 PLE-offload (experimental)",
+          "reasoning": true,
+          "defaultThinkingLevel": "xhigh",
+          "thinkingLevelMap": {
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": null,
+            "xhigh": "xhigh",
+            "max": null
+          },
+          "input": ["text", "image"],
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": false,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "enable_thinking": { "$var": "thinking.enabled" },
+              "preserve_thinking": true,
+              "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
+            }
+          }
         }
       ]
     },
