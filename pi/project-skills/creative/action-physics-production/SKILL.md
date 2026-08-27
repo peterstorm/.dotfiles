@@ -157,9 +157,11 @@ Internally generated cuts are valid Development evidence for previsualization an
 
 ## Stage 3.5 — Turbo scouting profile
 
-The qualified Ref2VA four-step profile is a speed control, not a universal quality ceiling. For dense action or multi-shot prompts, compare paired seeds at 4, 8, and 12 steps before declaring the model incapable of cut execution or coverage variation.
+The Ref2VA adapter is distilled and officially recommended for four NFEs. Four NFEs is the operational default for creative and mechanics work; it is not a demonstrated universal quality ceiling.
 
-The Ref2VA adapter is distilled and officially recommended for four NFEs. Any 8–12-step use is an **off-label Turbo-LoRA extrapolation** and must be labeled exactly that until a controlled local qualification passes. Hold LoRA strength, shifts, sampler, scheduler, seed, resolution, duration, reference resize, references, and prompt constant while changing step count.
+Do not increase steps because an output feels heavier, more physical, or more cinematic. Extra internal cuts, closer framing, shake, debris, and material detail can improve the impression of physics without improving contact topology or force transfer. When four-step inference cannot provide reliable internal coverage, generate independent four-step source shots and edit externally.
+
+Any separately authorized 8–12-step use is an **off-label Turbo-LoRA extrapolation** and must be labeled exactly that. Treat it as controlled Development research, not routine production. Hold LoRA strength, shifts, sampler, scheduler, seed, resolution, duration, reference resize, references, and prompt constant; score cut fidelity and mechanics independently.
 
 Prefer one appearance reference when only one subject requires exact recurrence. Add a second unusual-subject reference only through a paired-seed reference-count test; never assume that more references improve subject separation or action freedom.
 

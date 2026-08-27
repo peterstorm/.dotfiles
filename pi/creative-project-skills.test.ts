@@ -131,6 +131,7 @@ describe("creative project skill scope", () => {
 				"Mechanics-proof unit",
 				"Creative coverage unit",
 				"Proof shot",
+				"Four NFEs is the operational default",
 				"off-label Turbo-LoRA extrapolation",
 				"CINEMATIC_PASS",
 				"sampled-frame atomic QA",
