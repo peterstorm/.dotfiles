@@ -13,6 +13,8 @@ LAUNCHERS=(
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh"
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dflash2-sglang-v2.sh"
+  "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dflash2-vllm-v2.sh"
+  "$ROOT/scripts/inference/glm53/run-glm53-flash-nvfp4-vllm-sm120-v2.sh"
   "$ROOT/scripts/inference/muse/run-muse-glimmer-30b-bf16-dflash.sh"
 )
 
@@ -37,6 +39,7 @@ contains "$HELPER" 'SUDO_USER'
 contains "$HELPER" 'getent passwd "$INFERENCE_OPERATOR_USER"'
 contains "$HELPER" 'INFERENCE_DS4_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/ds4-flash/api-key"'
 contains "$HELPER" 'INFERENCE_QWEN_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/qwen38/api-key"'
+contains "$HELPER" 'INFERENCE_GLM_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/glm53/api-key"'
 contains "$HELPER" 'INFERENCE_MUSE_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/muse-glimmer/api-key"'
 contains "$HELPER" 'INFERENCE_SOPS_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/sops-nix/secrets/vllm-api-key"'
 contains "$HELPER" 'inference_install_private_dir "$INFERENCE_OPERATOR_HOME/.config"'
@@ -70,6 +73,8 @@ fi
   inference_prepare_api_key ""
   cmp -s "$HOME/.config/qwen38/api-key" "$HOME/.config/ds4-flash/api-key" \
     || fail "Qwen-only migration did not synchronize the DeepSeek key path"
+  cmp -s "$HOME/.config/qwen38/api-key" "$HOME/.config/glm53/api-key" \
+    || fail "Qwen-only migration did not synchronize the GLM key path"
   cmp -s "$HOME/.config/qwen38/api-key" "$HOME/.config/muse-glimmer/api-key" \
     || fail "Qwen-only migration did not synchronize the Muse key path"
   grep -Fxq 'qwen-fixture-key-0123456789abcdef' "$HOME/.config/ds4-flash/api-key" \
@@ -88,6 +93,8 @@ fi
   inference_prepare_api_key ""
   grep -Fxq 'canonical-ds4-key-0123456789abcdef' "$HOME/.config/qwen38/api-key" \
     || fail "diverged paths did not converge on Pi's DeepSeek-first key"
+  grep -Fxq 'canonical-ds4-key-0123456789abcdef' "$HOME/.config/glm53/api-key" \
+    || fail "GLM path did not converge on Pi's DeepSeek-first key"
   grep -Fxq 'canonical-ds4-key-0123456789abcdef' "$HOME/.config/muse-glimmer/api-key" \
     || fail "Muse path did not converge on Pi's DeepSeek-first key"
 )
@@ -105,6 +112,8 @@ fi
     || fail "sops-only migration did not seed the writable endpoint key"
   cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" \
     || fail "sops-only migration did not synchronize the Qwen key path"
+  cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/glm53/api-key" \
+    || fail "sops-only migration did not synchronize the GLM key path"
   cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/muse-glimmer/api-key" \
     || fail "sops-only migration did not synchronize the Muse key path"
 )
@@ -121,6 +130,8 @@ fi
   inference_validate_api_key "$generated_key" || fail "generated API key fails its own validator"
   cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" \
     || fail "generated key was not synchronized to Qwen"
+  cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/glm53/api-key" \
+    || fail "generated key was not synchronized to GLM"
   cmp -s "$HOME/.config/ds4-flash/api-key" "$HOME/.config/muse-glimmer/api-key" \
     || fail "generated key was not synchronized to Muse"
 )
@@ -138,11 +149,11 @@ fi
   if inference_validate_api_key 'invalid key with spaces 0123456789abcdef' 2>/dev/null; then
     fail "API key with unsafe characters passed validation"
   fi
-  for keyfile in "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" "$HOME/.config/muse-glimmer/api-key"; do
+  for keyfile in "$HOME/.config/ds4-flash/api-key" "$HOME/.config/qwen38/api-key" "$HOME/.config/glm53/api-key" "$HOME/.config/muse-glimmer/api-key"; do
     grep -Fxq 'rotated-fixture-key-0123456789abcdef' "$keyfile" || fail "explicit key was not persisted to $keyfile"
     [[ "$(stat -c '%a' "$keyfile")" = 600 ]] || fail "$keyfile is not mode 0600"
   done
-  for directory in "$HOME/.config" "$HOME/.config/ds4-flash" "$HOME/.config/qwen38" "$HOME/.config/muse-glimmer"; do
+  for directory in "$HOME/.config" "$HOME/.config/ds4-flash" "$HOME/.config/qwen38" "$HOME/.config/glm53" "$HOME/.config/muse-glimmer"; do
     [[ "$(stat -c '%a' "$directory")" = 700 ]] || fail "$directory is not mode 0700"
   done
   inference_write_private_file "$HOME/.config/qwen38/test.env" <<EOF

@@ -3,7 +3,7 @@
     "desktop-vllm": {
       "baseUrl": "http://192.168.0.80:8000/v1",
       "api": "openai-completions",
-      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/muse-glimmer/api-key ]; then cat ~/.config/muse-glimmer/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; else cat ~/.config/muse-glimmer/api-key; fi'; fi",
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/glm53/api-key ]; then cat ~/.config/glm53/api-key; elif [ -r ~/.config/muse-glimmer/api-key ]; then cat ~/.config/muse-glimmer/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/glm53/api-key ]; then cat ~/.config/glm53/api-key; else cat ~/.config/muse-glimmer/api-key; fi'; fi",
       "models": [
         {
           "id": "deepseek-v4-flash",
@@ -29,6 +29,36 @@
           },
           "compat": {
             "supportsDeveloperRole": true,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
+          "id": "glm-5.3-flash-nvfp4",
+          "name": "GLM-5.3 Flash NVFP4 (experimental local vLLM)",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": ["text", "image"],
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
             "supportsReasoningEffort": true,
             "maxTokensField": "max_tokens",
             "requiresReasoningContentOnAssistantMessages": true,
@@ -76,7 +106,7 @@
     "desktop-muse": {
       "baseUrl": "http://192.168.0.80:8001/v1",
       "api": "openai-completions",
-      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/muse-glimmer/api-key ]; then cat ~/.config/muse-glimmer/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; else cat ~/.config/muse-glimmer/api-key; fi'; fi",
+      "apiKey": "!if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/glm53/api-key ]; then cat ~/.config/glm53/api-key; elif [ -r ~/.config/muse-glimmer/api-key ]; then cat ~/.config/muse-glimmer/api-key; elif [ -r ~/.config/sops-nix/secrets/vllm-api-key ]; then cat ~/.config/sops-nix/secrets/vllm-api-key; else ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'if [ -r ~/.config/ds4-flash/api-key ]; then cat ~/.config/ds4-flash/api-key; elif [ -r ~/.config/qwen38/api-key ]; then cat ~/.config/qwen38/api-key; elif [ -r ~/.config/glm53/api-key ]; then cat ~/.config/glm53/api-key; else cat ~/.config/muse-glimmer/api-key; fi'; fi",
       "models": [
         {
           "id": "muse-glimmer-30b",

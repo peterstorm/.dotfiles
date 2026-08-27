@@ -133,15 +133,16 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with three selectable models:
+with four selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
+- `desktop-vllm/glm-5.3-flash-nvfp4`
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-muse/muse-glimmer-30b`
 
-DeepSeek and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when the
-one-model-per-GPU profile is active. Every launcher synchronizes the DeepSeek, Qwen, and
-Muse key files to one endpoint credential, so switching models, runtimes, or ports does
+DeepSeek, GLM, and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when
+GPU capacity permits. Every launcher synchronizes the DeepSeek, Qwen, GLM, and Muse key
+files to one endpoint credential, so switching models, runtimes, or ports does
 not change Pi authentication. Launching through `sudo` still resolves `SUDO_USER` and
 writes the invoking desktop user's files—never a private `/root` credential. The key is
 never committed: Pi reads it locally on `desktop`, or retrieves it through the hardened
@@ -174,6 +175,20 @@ before sending a prompt. Verify discovery without contacting the server:
 
 ```bash
 pi --list-models deepseek-v4-flash
+```
+
+### GLM-5.3 Flash NVFP4
+
+The experimental vLLM v2 profile serves text plus one image from the immutable
+`local-inference-lab/GLM-5.3-Flash-NVFP4` revision at a 262,144-token qualification
+context. Its checkpoint template supports `low`, `high`, and `max` reasoning effort;
+Pi hides the other levels and defaults GLM sessions to `max`. The model remains
+selectable while offline, but it must not replace a qualified Qwen/DeepSeek service
+until the SM120, TP2 capacity, long-context, and image gates in the dated runbook pass.
+
+```bash
+pi --list-models glm-5.3-flash-nvfp4
+pi --model desktop-vllm/glm-5.3-flash-nvfp4:max
 ```
 
 ### Qwen3.8 27B

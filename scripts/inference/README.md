@@ -9,12 +9,14 @@ Layout (by model, then by role):
 
 ```
 qwen38/    Qwen3.8-27B profiles: downloaders, the vLLM BF16 launcher, DSpark
-           launchers, locally validated DFlash2 launchers, and the digest-pinned
-           official SGLang DFlash2 v2 profile plus versioned :8000 switchers.
-           -v2 files in this folder are the 2026-08-18 upstream-updated
-           versions (see docs/research/2026-08-18-qwen38-upstream-update-research.md);
-           the un-suffixed files remain the validated 2026-08-16 pins.
+           launchers, locally validated DFlash2 launchers, and digest-pinned
+           official SGLang and vLLM DFlash2 v2 profiles with versioned switchers.
+           DSpark -v2 files are the 2026-08-18 upstream update; DFlash2 -v2
+           files have dated runbooks for their official SGLang/vLLM artifacts.
+           Un-suffixed launchers remain validated rollback pins.
 deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
+glm53/     GLM-5.3-Flash NVFP4: immutable manifest/downloader, digest-pinned
+           vLLM SM120 overlay, multimodal 262K TP2 v2 launcher, and rollback switcher.
 muse/      Muse Glimmer 30B (BF16 + DFlash) downloader + launcher.
 profiles/  Cross-model profiles (the concurrent Qwen + Muse dual switcher).
 shared/    Components more than one profile uses: the credential helper every
@@ -32,4 +34,8 @@ Conventions:
   display-manager state are checked before anything is stopped or started.
 - Image and model revisions are pinned by digest/rev and asserted by the
   `tests/*-contract.sh` static contracts — change a pin and its contract in
-  the same commit.
+  the same commit. Derived images additionally prove their pinned official-base
+  rootfs prefix, exact overlay/config digest, and required runtime source markers.
+- GLM-5.3 is preparation-only until its dated runbook's SM120, capacity,
+  correctness, tool-use, context, and soak gates pass; Qwen and DS4 remain
+  unchanged rollback profiles.
