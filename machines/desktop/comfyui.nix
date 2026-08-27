@@ -403,6 +403,7 @@ let
   declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
     mkdir -p "$out"
     ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
+    ln -s ${../../comfyui/custom_nodes/persistent_output_history} "$out/persistent_output_history"
     ln -s ${krea2EditNode} "$out/comfyui-krea2edit"
     ln -s ${krea2EnhancerNode} "$out/ComfyUI-Krea2T-Enhancer"
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"

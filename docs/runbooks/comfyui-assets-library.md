@@ -6,6 +6,13 @@ The desktop ComfyUI service enables the upstream Assets subsystem with
 original `input`, `output`, or model directory. The index does not duplicate or
 promote generated media.
 
+ComfyUI frontend 1.49.6 has an OSS integration gap: its Assets sidebar still
+reads volatile execution History rather than the persistent Assets API. The
+local `persistent_output_history` startup extension bridges that gap for video
+only. It scans existing output videos, restores deterministic synthetic History
+records under the queue lock, and uses embedded MP4 workflow/prompt metadata
+when present. It never copies, rewrites, or executes the media.
+
 ## What survives a shutdown
 
 Completed media under `/var/lib/comfyui/output` is persistent operational data
@@ -14,8 +21,10 @@ is not the authority for those files and may not retain a prior process's
 in-memory queue history. MP4 files written by ComfyUI may additionally embed the
 submitted workflow and API prompt as container metadata.
 
-Use **Assets** for durable browsing and playback. Use **History** only for the
-current process's execution records.
+The persistent Assets index remains authoritative for discovery. The startup
+bridge makes its existing videos visible in **Assets → Generated** despite the
+frontend limitation; ordinary live executions continue to populate History
+normally.
 
 ## Initial and recovery indexing
 
@@ -43,7 +52,20 @@ curl --fail --silent --show-error \
 ```
 
 After enabling the service or completing a scan, refresh the browser. Open the
-**Assets** sidebar and select **Outputs** to browse and play generated videos.
+**Assets** sidebar and select **Generated** to browse and play generated videos.
+The output seeder and startup bridge both run when ComfyUI starts; an output-only
+API rescan by itself does not repopulate frontend 1.49.6's volatile History.
+
+Verify the startup bridge independently:
+
+```bash
+curl --fail --silent --show-error \
+  'http://127.0.0.1:8188/history?max_items=1000' \
+  | jq '[to_entries[].value.prompt[3] | select(.persistent_output_history == true)] | length'
+```
+
+The count should match the existing video outputs that were not already present
+as live execution records.
 
 ## Safety rules
 

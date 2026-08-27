@@ -8,6 +8,8 @@ MODULE="$ROOT/machines/desktop/comfyui.nix"
 DESKTOP="$ROOT/machines/desktop/default.nix"
 NODE="$ROOT/comfyui/custom_nodes/muse_glimmer_prompt/__init__.py"
 NODE_TEST="$ROOT/tests/test_muse_glimmer_prompt.py"
+PERSISTENT_HISTORY_NODE="$ROOT/comfyui/custom_nodes/persistent_output_history/__init__.py"
+PERSISTENT_HISTORY_TEST="$ROOT/tests/test_persistent_output_history.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 WORKFLOW_BUILDER="$ROOT/scripts/comfyui/build-krea2-composed-workflows.py"
@@ -47,10 +49,10 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$ASSETS_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$PERSISTENT_HISTORY_NODE" "$PERSISTENT_HISTORY_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$ASSETS_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$NODE_TEST" "$PERSISTENT_HISTORY_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
@@ -289,6 +291,17 @@ if grep -Eq '"sk-[[:alnum:]]{8,}' "$NODE"; then
   fail "$NODE contains a literal API-key-shaped value"
 fi
 "$NODE_TEST"
+
+# The OSS Assets sidebar still reads volatile execution history. Restore a
+# video-only view from immutable output files without copying or regenerating media.
+contains "$MODULE" 'persistent_output_history'
+contains "$PERSISTENT_HISTORY_NODE" 'discover_persistent_videos'
+contains "$PERSISTENT_HISTORY_NODE" 'uuid.uuid5(HISTORY_NAMESPACE'
+contains "$PERSISTENT_HISTORY_NODE" 'with prompt_queue.mutex:'
+contains "$PERSISTENT_HISTORY_NODE" 'prompt_queue.history.update(merged)'
+contains "$PERSISTENT_HISTORY_NODE" '"persistent_output_history": True'
+contains "$PERSISTENT_HISTORY_NODE" '"video": [output]'
+"$PERSISTENT_HISTORY_TEST"
 
 # Krea artifacts are license-gated, revision-pinned, and checksum-verified.
 contains "$DOWNLOAD" 'KREA2_ACCEPT_LICENSE'
@@ -591,7 +604,9 @@ contains "$ASSETS_RUNBOOK" '/api/assets/seed?wait=true'
 contains "$ASSETS_RUNBOOK" "'{\"roots\":[\"output\"]}'"
 contains "$ASSETS_RUNBOOK" '/var/lib/comfyui/output'
 contains "$ASSETS_RUNBOOK" '/var/lib/comfyui/user/comfyui.db'
-contains "$ASSETS_RUNBOOK" 'Use **History** only for'
+contains "$ASSETS_RUNBOOK" '`persistent_output_history` startup extension'
+contains "$ASSETS_RUNBOOK" '**Assets → Generated**'
+contains "$ASSETS_RUNBOOK" '.persistent_output_history == true'
 
 "$TRANSITION_TEST"
 "$DOWNLOAD_TEST"
