@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016 # Static contracts intentionally match literal Nix expressions.
-# Contracts for immutable still-image upscaler models, workflows, and phase ownership.
+# Contracts for immutable image/video upscaler models, workflows, and phase ownership.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,7 +40,15 @@ for expected in \
   '06 SeedVR2 7B FP16 - Natural Video 2K.json' \
   '.nodes |= map(select(.id != 18 and .id != 19 and .id != 20))' \
   'minimax-h3-safe-upscaler-workflows' \
-  '01 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K.json' \
+  '00 MiniMax H3 Output - Lanczos 2x Zero Hallucination Video.json' \
+  '01 MiniMax H3 Output - Real-ESRGAN x4plus to 2x Video.json' \
+  '02 MiniMax H3 Output - Real-ESRGAN General x4v3 to 2x Video.json' \
+  '03 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K.json' \
+  '"RealESRGAN_x4plus.pth"' \
+  '"realesr-general-x4v3.pth"' \
+  '["lanczos", 2]' \
+  '["lanczos", 0.5]' \
+  'test "$(find "$out/workflows" -type f -name '\''*.json'\'' | wc -l)" -eq 4' \
   'h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"' \
   'blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"' \
   '42, "fixed", 1536, 2688, 9, true, "lab"' \

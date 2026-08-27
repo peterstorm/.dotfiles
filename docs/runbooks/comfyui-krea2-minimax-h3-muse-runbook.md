@@ -919,13 +919,13 @@ installation never promotes an output.
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **125 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **128 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
   maximum-quality H3 production graphs, two H3 Director Development graphs, four
   H3 Turbo-LoRA qualification graphs, one full-quality Music 3 graph, seven
-  still/video upscaler qualification graphs, one safe H3-output SeedVR2 finishing
-  graph, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
+  still/video upscaler qualification graphs, four tested H3-output finishing
+  graphs, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
   official graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
@@ -978,15 +978,19 @@ becomes an identity, wardrobe, composition, text, or H3 lineage parent without a
 separate explicit acceptance ledger.
 
 For H3 output specifically, open **User workflows →
-`minimax-h3-upscaler-local-safe` → `01 MiniMax H3 Output - SeedVR2 7B FP16
-Natural Video 2K`**. It is a task-named copy of the same pinned SeedVR2 video
-profile, not an H3 learned-latent model. The installer removes
-`minimax-h3-upscaler-research-only` from the live browser because those unchanged
-third-party examples require unavailable classes, absent quantized models, and a
-learned-latent node whose code license remains unresolved. Their checksum-identical
-JSON stays in private Development research. The declarative SeedVR2 builder also
-removes upstream's disconnected `Note` node because that cosmetic class is not
-installed in the pinned closure.
+`minimax-h3-upscaler-local-safe`**. It contains the four same-source profiles
+actually tested locally: Lanczos 2×, Real-ESRGAN x4plus→2×, Real-ESRGAN General
+x4v3→2×, and SeedVR2 7B FP16 natural video. Lanczos is the no-invention fidelity
+default; the Real-ESRGAN graphs are framewise learned alternatives that require
+temporal-shimmer review; SeedVR2 remains a generative comparison after its first
+H3 trial was rejected for invented grit, harder edges, and excess local contrast.
+None can repair semantic or geometric defects already baked into the native H3
+frames. The installer removes `minimax-h3-upscaler-research-only` from the live
+browser because those unchanged third-party examples require unavailable
+classes, absent quantized models, and a learned-latent node whose code license
+remains unresolved. Their checksum-identical JSON stays in private Development
+research. The declarative SeedVR2 builder also removes upstream's disconnected
+`Note` node because that cosmetic class is not installed in the pinned closure.
 
 Install or re-verify all candidates with:
 

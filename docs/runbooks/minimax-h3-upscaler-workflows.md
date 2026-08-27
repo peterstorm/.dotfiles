@@ -1,25 +1,34 @@
 # MiniMax H3 Upscaler Workflows
 
-## Executable local path
+## Executable local paths
 
-Use **User workflows → `minimax-h3-upscaler-local-safe` → `01 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K`**.
+Open **User workflows → `minimax-h3-upscaler-local-safe`**. The folder contains the four profiles tested against the same native H3 control clip:
 
-This graph performs visual finishing with the pinned Apache-2.0 SeedVR2 7B FP16 natural model. It is the same deterministic video profile qualified under `image-upscaler-qualification-v1`:
+1. **`00 MiniMax H3 Output - Lanczos 2x Zero Hallucination Video`** — exact 2× interpolation; the faithful default when the source already contains irreducible anatomy, topology, or texture artifacts.
+2. **`01 MiniMax H3 Output - Real-ESRGAN x4plus to 2x Video`** — pinned BSD-3-Clause learned 4× upscale followed by Lanczos reduction to a matched 2× delivery size.
+3. **`02 MiniMax H3 Output - Real-ESRGAN General x4v3 to 2x Video`** — compact pinned Real-ESRGAN alternative with the same 4×→2× path.
+4. **`03 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K`** — temporal generative restoration at a 1536-pixel short edge and 2688-pixel cap; preserved for comparison after the first H3 trial was rejected for invented surface grit, harder edges, and excess local contrast.
 
-- fixed seed `42`;
-- 1536-pixel short edge and 2688-pixel maximum edge;
-- nine-frame batches with two-frame temporal overlap;
-- tiled FP16 VAE;
-- LAB color correction;
-- zero injected noise.
+The two Real-ESRGAN graphs process frames independently. They may sharpen more pleasantly than SeedVR2, but they can amplify source defects or produce temporal shimmer. Lanczos adds no semantic detail and therefore cannot repair defects already baked into the native H3 render. No profile can reconstruct authoritative geometry absent from the source.
 
-Before queueing, wait for an idle ComfyUI queue and run:
+Before queueing a learned profile, wait for an idle ComfyUI queue and run:
 
 ```bash
 creative-model-phase prepare upscale
 ```
 
-Select the native H3 video in the input node. The result is a **Finishing Derivative**. Preserve the native H3 master, review identity/topology/text/palette/flicker at dense intervals, and remux checksum-authoritative dialogue after visual finishing.
+Select the native H3 video in the input node. Every result is a **Finishing Derivative**. Preserve the native H3 master, compare at 100% and in motion, review identity/topology/text/palette/flicker at dense intervals, and remux checksum-authoritative dialogue after visual finishing. Reopen the workflow after refreshing ComfyUI so a browser-resident obsolete graph is not reused.
+
+### Tested-control result
+
+On the 960×544, 243-frame H3 control, all three new workflows produced 1920×1088, 24 fps, 243-frame outputs with the original 10.125-second duration. Framewise SSIM against a Lanczos-resized native control was:
+
+- Lanczos 2×: `0.989363`;
+- Real-ESRGAN x4plus→2×: `0.978504`;
+- Real-ESRGAN General x4v3→2×: `0.975573`;
+- SeedVR2 7B natural at 2688×1524: `0.951704`.
+
+SSIM is only a fidelity diagnostic, not an aesthetic ranking, but it confirms that the rejected SeedVR2 result altered the source substantially more than the three added alternatives.
 
 ## Why the old workflows were removed
 

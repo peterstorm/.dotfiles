@@ -2003,7 +2003,169 @@ let
         set -euo pipefail
         mkdir -p "$out/workflows"
         source="${imageUpscalerWorkflows}/workflows/06 SeedVR2 7B FP16 - Natural Video 2K.json"
-        destination="$out/workflows/01 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K.json"
+
+        lanczos="$out/workflows/00 MiniMax H3 Output - Lanczos 2x Zero Hallucination Video.json"
+        jq '
+          .nodes |= map(select(.id != 13 and .id != 14 and .id != 17))
+          | .last_node_id = 24
+          | .last_link_id = 25
+          | .links = [
+              [20,21,0,22,0,"VIDEO"],
+              [21,22,0,10,0,"IMAGE"],
+              [22,10,0,24,0,"IMAGE"],
+              [23,24,0,23,0,"VIDEO"],
+              [24,22,2,24,2,"FLOAT"],
+              [25,22,1,24,1,"AUDIO"]
+            ]
+          | (.nodes[] | select(.id == 21)) |= (
+              .order = 0
+              | .title = "INPUT — native H3 video master; select your file"
+              | .widgets_values[0] = "h3-native-master.mp4"
+            )
+          | (.nodes[] | select(.id == 22)) |= (
+              .order = 1
+              | .outputs[0].links = [21]
+              | .outputs[1].links = [25]
+              | .outputs[2].links = [24]
+            )
+          | (.nodes[] | select(.id == 10)) |= (
+              .type = "ImageScaleBy"
+              | .pos = [700, 100]
+              | .size = [300, 102]
+              | .order = 2
+              | .title = "Faithful 2x interpolation — no invented detail"
+              | .inputs = [{"name":"image","type":"IMAGE","link":21}]
+              | .outputs = [{"name":"IMAGE","type":"IMAGE","links":[22]}]
+              | .properties = {
+                  "Node name for S&R":"ImageScaleBy",
+                  "cnr_id":"comfy-core",
+                  "ver":"0.3.68"
+                }
+              | .widgets_values = ["lanczos", 2]
+              | .widgets_values_named = {
+                  "upscale_method":"lanczos",
+                  "scale_by":2
+                }
+            )
+          | (.nodes[] | select(.id == 24)) |= (
+              .order = 3
+              | .title = "Preview audio only — remux authoritative dialogue after finishing"
+              | .inputs[0].link = 22
+              | .inputs[1].link = 25
+              | .inputs[2].link = 24
+            )
+          | (.nodes[] | select(.id == 23)) |= (
+              .order = 4
+              | .title = "SAVE — faithful H3 finishing derivative"
+              | .inputs[0].link = 23
+              | .widgets_values[0] =
+                  "H3_Finishing_Derivative/Lanczos2x_Zero_Hallucination"
+            )
+        ' "$source" >"$lanczos"
+
+        for specification in \
+          "RealESRGAN_x4plus.pth|01 MiniMax H3 Output - Real-ESRGAN x4plus to 2x Video.json|RealESRGAN_x4plus_to2x" \
+          "realesr-general-x4v3.pth|02 MiniMax H3 Output - Real-ESRGAN General x4v3 to 2x Video.json|RealESRGAN_General_x4v3_to2x"; do
+          IFS='|' read -r model filename slug <<<"$specification"
+          destination="$out/workflows/$filename"
+          jq --arg model "$model" --arg slug "$slug" '
+            .nodes |= map(select(.id != 17))
+            | .last_node_id = 24
+            | .last_link_id = 26
+            | .links = [
+                [11,14,0,10,0,"UPSCALE_MODEL"],
+                [20,21,0,22,0,"VIDEO"],
+                [21,22,0,10,1,"IMAGE"],
+                [22,10,0,13,0,"IMAGE"],
+                [23,13,0,24,0,"IMAGE"],
+                [24,24,0,23,0,"VIDEO"],
+                [25,22,2,24,2,"FLOAT"],
+                [26,22,1,24,1,"AUDIO"]
+              ]
+            | (.nodes[] | select(.id == 14)) |= (
+                .type = "UpscaleModelLoader"
+                | .pos = [420, 380]
+                | .size = [300, 82]
+                | .order = 0
+                | .title = "Pinned BSD-3-Clause Real-ESRGAN model"
+                | .inputs = []
+                | .outputs = [{"name":"UPSCALE_MODEL","type":"UPSCALE_MODEL","links":[11]}]
+                | .properties = {
+                    "Node name for S&R":"UpscaleModelLoader",
+                    "cnr_id":"comfy-core",
+                    "ver":"0.3.68"
+                  }
+                | .widgets_values = [$model]
+                | .widgets_values_named = {"model_name":$model}
+              )
+            | (.nodes[] | select(.id == 21)) |= (
+                .order = 1
+                | .title = "INPUT — native H3 video master; select your file"
+                | .widgets_values[0] = "h3-native-master.mp4"
+              )
+            | (.nodes[] | select(.id == 22)) |= (
+                .order = 2
+                | .outputs[0].links = [21]
+                | .outputs[1].links = [26]
+                | .outputs[2].links = [25]
+              )
+            | (.nodes[] | select(.id == 10)) |= (
+                .type = "ImageUpscaleWithModel"
+                | .pos = [760, 100]
+                | .size = [300, 102]
+                | .order = 3
+                | .title = "Framewise 4x learned upscale — inspect temporal shimmer"
+                | .inputs = [
+                    {"name":"upscale_model","type":"UPSCALE_MODEL","link":11},
+                    {"name":"image","type":"IMAGE","link":21}
+                  ]
+                | .outputs = [{"name":"IMAGE","type":"IMAGE","links":[22]}]
+                | .properties = {
+                    "Node name for S&R":"ImageUpscaleWithModel",
+                    "cnr_id":"comfy-core",
+                    "ver":"0.3.68"
+                  }
+                | .widgets_values = []
+                | del(.widgets_values_named)
+              )
+            | (.nodes[] | select(.id == 13)) |= (
+                .type = "ImageScaleBy"
+                | .pos = [1110, 100]
+                | .size = [300, 102]
+                | .order = 4
+                | .title = "Lanczos downsample 4x result to matched 2x delivery"
+                | .inputs = [{"name":"image","type":"IMAGE","link":22}]
+                | .outputs = [{"name":"IMAGE","type":"IMAGE","links":[23]}]
+                | .properties = {
+                    "Node name for S&R":"ImageScaleBy",
+                    "cnr_id":"comfy-core",
+                    "ver":"0.3.68"
+                  }
+                | .widgets_values = ["lanczos", 0.5]
+                | .widgets_values_named = {
+                    "upscale_method":"lanczos",
+                    "scale_by":0.5
+                  }
+              )
+            | (.nodes[] | select(.id == 24)) |= (
+                .order = 5
+                | .title = "Preview audio only — remux authoritative dialogue after finishing"
+                | .inputs[0].link = 23
+                | .inputs[1].link = 26
+                | .inputs[2].link = 25
+                | .outputs[0].links = [24]
+              )
+            | (.nodes[] | select(.id == 23)) |= (
+                .order = 6
+                | .title = "SAVE — learned framewise H3 finishing derivative"
+                | .inputs[0].link = 24
+                | .widgets_values[0] =
+                    ("H3_Finishing_Derivative/" + $slug)
+              )
+          ' "$source" >"$destination"
+        done
+
+        seedvr="$out/workflows/03 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K.json"
         jq '
           (.nodes[] | select(.id == 21)) |= (
             .title = "INPUT — native H3 video master; select your file"
@@ -2012,34 +2174,54 @@ let
           | (.nodes[] | select(.id == 14) | .title) =
               "RUN creative-model-phase prepare upscale — SeedVR2 7B FP16"
           | (.nodes[] | select(.id == 10) | .title) =
-              "H3 visual finishing derivative — fixed seed, LAB color lock"
+              "Generative H3 restoration derivative — inspect invented texture and edge halos"
           | (.nodes[] | select(.id == 24) | .title) =
               "Preview audio only — remux authoritative dialogue after finishing"
           | (.nodes[] | select(.id == 23)) |= (
-              .title = "SAVE — H3 visual finishing derivative"
+              .title = "SAVE — generative H3 finishing derivative"
               | .widgets_values[0] =
                   "H3_Finishing_Derivative/SeedVR2_7B_FP16_Natural_Video_2K"
           )
-        ' "$source" >"$destination"
-        jq -e '
-          ([.nodes[] | select(.type == "Note")] | length) == 0
-          and ([.nodes[] | select(.type == "SeedVR2LoadDiTModel")
+        ' "$source" >"$seedvr"
+
+        jq -s -e '
+          length == 4
+          and ([.[0].nodes[] | select(.type == "ImageScaleBy")
+            | .widgets_values] == [["lanczos",2]])
+          and ([.[0].nodes[] | select(.type == "UpscaleModelLoader"
+            or .type == "ImageUpscaleWithModel"
+            or (.type | startswith("SeedVR2")))] | length) == 0
+          and ([.[1:3][] | .nodes[] | select(.type == "UpscaleModelLoader")
+            | .widgets_values[0]] == [
+              "RealESRGAN_x4plus.pth",
+              "realesr-general-x4v3.pth"
+            ])
+          and all(.[1:3][];
+            ([.nodes[] | select(.type == "ImageUpscaleWithModel")] | length) == 1
+            and ([.nodes[] | select(.type == "ImageScaleBy")
+              | .widgets_values] == [["lanczos",0.5]])
+            and ([.nodes[] | select(.type == "CreateVideo")
+              | .outputs[0].links] == [[24]])
+            and ([.nodes[] | select(.type | startswith("SeedVR2"))] | length) == 0)
+          and ([.[3].nodes[] | select(.type == "SeedVR2LoadDiTModel")
             | .widgets_values[0]] == ["seedvr2_ema_7b_fp16.safetensors"])
-          and ([.nodes[] | select(.type == "SeedVR2LoadVAEModel")
+          and ([.[3].nodes[] | select(.type == "SeedVR2LoadVAEModel")
             | .widgets_values[0]] == ["ema_vae_fp16.safetensors"])
-          and ([.nodes[] | select(.type == "SeedVR2VideoUpscaler")
+          and ([.[3].nodes[] | select(.type == "SeedVR2VideoUpscaler")
             | .widgets_values[0:13]] == [[
               42, "fixed", 1536, 2688, 9, true, "lab",
               2, 0, 0, 0, "cpu", true
             ]])
-          and ([.nodes[] | select(.type == "SaveVideo") | .mode] == [0])
-        ' "$destination" >/dev/null
-        if grep -qiE 'MinimaxH3LatentUpscaler|MMH3|pruned_int8|nvfp4|resolve/main|tree/main' \
-          "$destination"; then
+          and all(.[].nodes[] | select(.type == "SaveVideo"); .mode == 0)
+          and all(.[].nodes[] | select(.type == "LoadVideo");
+            .widgets_values[0] == "h3-native-master.mp4")
+        ' "$out"/workflows/*.json >/dev/null
+        if grep -RqiE 'MinimaxH3LatentUpscaler|MMH3|pruned_int8|nvfp4|resolve/main|tree/main' \
+          "$out/workflows"; then
           echo "forbidden blocked latent upscaler, quantized selector, or mutable link" >&2
           exit 1
         fi
-        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 4
       '';
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
