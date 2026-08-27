@@ -133,10 +133,11 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with four selectable models:
+with five selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-nvfp4`
+- `desktop-vllm/glm-5.3-flash-exl3-k4`
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-muse/muse-glimmer-30b`
 
@@ -189,6 +190,20 @@ until the SM120, TP2 capacity, long-context, and image gates in the dated runboo
 ```bash
 pi --list-models glm-5.3-flash-nvfp4
 pi --model desktop-vllm/glm-5.3-flash-nvfp4:max
+```
+
+### GLM-5.3 Flash EXL3 K4
+
+The separate EXL3 K4 profile uses a digest-pinned custom Infernal Invocation vLLM
+image with B12X's NVFP4 MLA KV cache. Its initial qualification envelope is text-only,
+131,072 tokens, concurrency one, MTP off, and eager execution. The model remains
+experimental because the custom GLM image overlay is not publicly reconstructible and
+local RTX PRO 6000 correctness, capacity, performance, concurrency, and soak evidence
+is pending.
+
+```bash
+pi --list-models glm-5.3-flash-exl3-k4
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4:max
 ```
 
 ### Qwen3.8 27B

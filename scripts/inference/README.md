@@ -15,8 +15,9 @@ qwen38/    Qwen3.8-27B profiles: downloaders, the vLLM BF16 launcher, DSpark
            files have dated runbooks for their official SGLang/vLLM artifacts.
            Un-suffixed launchers remain validated rollback pins.
 deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
-glm53/     GLM-5.3-Flash NVFP4: immutable manifest/downloader, digest-pinned
-           vLLM SM120 overlay, multimodal 262K TP2 v2 launcher, and rollback switcher.
+glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
+           digest-pinned custom vLLM SM120 images, a multimodal 262K NVFP4 TP2
+           profile, and an initial text-only 128K/C1 EXL3 TP2 profile.
 muse/      Muse Glimmer 30B (BF16 + DFlash) downloader + launcher.
 profiles/  Cross-model profiles (the concurrent Qwen + Muse dual switcher).
 shared/    Components more than one profile uses: the credential helper every
@@ -36,6 +37,7 @@ Conventions:
   `tests/*-contract.sh` static contracts — change a pin and its contract in
   the same commit. Derived images additionally prove their pinned official-base
   rootfs prefix, exact overlay/config digest, and required runtime source markers.
-- GLM-5.3 is preparation-only until its dated runbook's SM120, capacity,
-  correctness, tool-use, context, and soak gates pass; Qwen and DS4 remain
-  unchanged rollback profiles.
+- GLM-5.3 is experimental until its dated runbooks' SM120, capacity,
+  correctness, tool-use, context, and soak gates pass. The EXL3 image has an
+  additional publicly unreconstructible overlay-provenance limitation. Qwen
+  and DS4 remain unchanged rollback profiles.
