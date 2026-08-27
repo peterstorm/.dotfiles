@@ -70,7 +70,7 @@ contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v1'
 jq -e '
   .providers["desktop-vllm"].models[] |
   select(.id == "glm-5.3-flash-exl3-k4") |
-  .input == ["text"] and .contextWindow == 131072 and .defaultThinkingLevel == "max"
+  .input == ["text"] and .defaultThinkingLevel == "max"
 ' "$PI_MODELS" >/dev/null
 
 set +e

@@ -67,7 +67,7 @@
         },
         {
           "id": "glm-5.3-flash-exl3-k4",
-          "name": "GLM-5.3 Flash EXL3 K4 (experimental custom vLLM)",
+          "name": "GLM-5.3 Flash EXL3 K4 v37 TP2 (experimental custom vLLM)",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
@@ -79,7 +79,7 @@
             "max": "max"
           },
           "input": ["text"],
-          "contextWindow": 131072,
+          "contextWindow": 499968,
           "maxTokens": 32768,
           "cost": {
             "input": 0,

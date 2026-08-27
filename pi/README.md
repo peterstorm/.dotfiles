@@ -195,11 +195,11 @@ pi --model desktop-vllm/glm-5.3-flash-nvfp4:max
 ### GLM-5.3 Flash EXL3 K4
 
 The separate EXL3 K4 profile uses a digest-pinned custom Infernal Invocation vLLM
-image with B12X's NVFP4 MLA KV cache. Its initial qualification envelope is text-only,
-131,072 tokens, concurrency one, MTP off, and eager execution. The model remains
-experimental because the custom GLM image overlay is not publicly reconstructible and
-local RTX PRO 6000 correctness, capacity, performance, concurrency, and soak evidence
-is pending.
+image with B12X's NVFP4 MLA KV cache. The upstream-aligned v37 TP2 candidate exposes
+499,968 text tokens, concurrency four, prefix caching, CUDA graphs, and three-token MTP;
+the v30 128K/C1/eager/MTP-off profile remains its conservative rollback. Both remain
+experimental because the custom GLM overlay is not publicly reconstructible and local
+RTX PRO 6000 correctness, long-context, performance, tool-use, and soak evidence is pending.
 
 ```bash
 pi --list-models glm-5.3-flash-exl3-k4
