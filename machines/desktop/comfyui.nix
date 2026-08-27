@@ -1880,7 +1880,7 @@ let
           IFS='|' read -r model filename prefix <<<"$specification"
           destination="$out/workflows/$filename"
           jq --arg model "$model" --arg prefix "$prefix" '
-            .nodes |= map(select(.id != 19 and .id != 20))
+            .nodes |= map(select(.id != 18 and .id != 19 and .id != 20))
             | .links |= map(select(.[0] != 18 and .[0] != 19))
             | (.nodes[] | select(.id == 14) | .inputs[]
                 | select(.name == "torch_compile_args") | .link) = null
@@ -1907,15 +1907,12 @@ let
             | (.nodes[] | select(.id == 16) | .widgets_values[0]) =
                 "upscaler-qualification.png"
             | (.nodes[] | select(.id == 15) | .widgets_values[0]) = $prefix
-            | (.nodes[] | select(.id == 18) | .mode) = 0
-            | (.nodes[] | select(.id == 18) | .widgets_values[0]) =
-                "FINISHING DERIVATIVE ONLY: preserve the native master. Run creative-model-phase prepare upscale before queueing. Reject identity, topology, text, palette, or medium drift."
           ' ${seedVR2Node}/example_workflows/SeedVR2_simple_image_upscale.json >"$destination"
         done
 
         video_destination="$out/workflows/06 SeedVR2 7B FP16 - Natural Video 2K.json"
         jq '
-          .nodes |= map(select(.id != 19 and .id != 20))
+          .nodes |= map(select(.id != 18 and .id != 19 and .id != 20))
           | .links |= map(select(.[0] != 18 and .[0] != 19))
           | (.nodes[] | select(.id == 14) | .inputs[]
               | select(.name == "torch_compile_args") | .link) = null
@@ -1946,8 +1943,6 @@ let
               "upscaler-qualification.mp4"
           | (.nodes[] | select(.id == 23) | .widgets_values[0]) =
               "UpscalerQualification/SeedVR2_7B_FP16_Natural_Video_2K"
-          | (.nodes[] | select(.id == 18) | .widgets_values[0]) =
-              "FINISHING DERIVATIVE ONLY: preserve the native video master. Remux checksum-authoritative dialogue after visual upscaling. Reject identity, topology, text, palette, temporal, or medium drift."
         ' "$video" >"$video_destination"
 
         jq -s -e '
@@ -1986,12 +1981,64 @@ let
               42, "fixed", 1536, 2688, 9, true, "lab",
               2, 0, 0, 0, "cpu", true
             ]])
+          and all(.[3:7][]; ([.nodes[] | select(.type == "Note")] | length) == 0)
         ' "$out"/workflows/*.json >/dev/null
         if grep -RqiE 'fp8|int8|resolve/main|tree/main|ComfyUI-Manager' "$out/workflows"; then
           echo "forbidden lower-precision selector, mutable link, or Manager dependency in upscaler qualification" >&2
           exit 1
         fi
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 7
+      '';
+
+  h3SafeUpscalerWorkflows =
+    pkgs.runCommand "minimax-h3-safe-upscaler-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        source="${imageUpscalerWorkflows}/workflows/06 SeedVR2 7B FP16 - Natural Video 2K.json"
+        destination="$out/workflows/01 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K.json"
+        jq '
+          (.nodes[] | select(.id == 21)) |= (
+            .title = "INPUT — native H3 video master; select your file"
+            | .widgets_values[0] = "h3-native-master.mp4"
+          )
+          | (.nodes[] | select(.id == 14) | .title) =
+              "RUN creative-model-phase prepare upscale — SeedVR2 7B FP16"
+          | (.nodes[] | select(.id == 10) | .title) =
+              "H3 visual finishing derivative — fixed seed, LAB color lock"
+          | (.nodes[] | select(.id == 24) | .title) =
+              "Preview audio only — remux authoritative dialogue after finishing"
+          | (.nodes[] | select(.id == 23)) |= (
+              .title = "SAVE — H3 visual finishing derivative"
+              | .widgets_values[0] =
+                  "H3_Finishing_Derivative/SeedVR2_7B_FP16_Natural_Video_2K"
+          )
+        ' "$source" >"$destination"
+        jq -e '
+          ([.nodes[] | select(.type == "Note")] | length) == 0
+          and ([.nodes[] | select(.type == "SeedVR2LoadDiTModel")
+            | .widgets_values[0]] == ["seedvr2_ema_7b_fp16.safetensors"])
+          and ([.nodes[] | select(.type == "SeedVR2LoadVAEModel")
+            | .widgets_values[0]] == ["ema_vae_fp16.safetensors"])
+          and ([.nodes[] | select(.type == "SeedVR2VideoUpscaler")
+            | .widgets_values[0:13]] == [[
+              42, "fixed", 1536, 2688, 9, true, "lab",
+              2, 0, 0, 0, "cpu", true
+            ]])
+          and ([.nodes[] | select(.type == "SaveVideo") | .mode] == [0])
+        ' "$destination" >/dev/null
+        if grep -qiE 'MinimaxH3LatentUpscaler|MMH3|pruned_int8|nvfp4|resolve/main|tree/main' \
+          "$destination"; then
+          echo "forbidden blocked latent upscaler, quantized selector, or mutable link" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
       '';
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
@@ -2007,6 +2054,8 @@ let
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     music3_dir="$user_workflows/minimax-music3-full-quality"
     upscaler_dir="$user_workflows/image-upscaler-qualification-v1"
+    h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"
+    blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     elite_dir="$user_workflows/creative-suite"
@@ -2020,6 +2069,7 @@ let
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     music3_staging="$user_workflows/.minimax-music3-full-quality.new"
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
+    h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     elite_staging="$user_workflows/.creative-suite.new"
@@ -2028,12 +2078,14 @@ let
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$director_staging" "$h3_turbo_staging" "$elite_staging"
+      "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
+      "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$director_staging" "$h3_turbo_staging" "$elite_staging" "$input_dir"
+      "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
+      "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -2070,6 +2122,9 @@ let
     for source in ${imageUpscalerWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$upscaler_staging/$(basename "$source")"
     done
+    for source in ${h3SafeUpscalerWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_safe_upscaler_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3DirectorWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$director_staging/$(basename "$source")"
     done
@@ -2086,7 +2141,8 @@ let
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
-      "$upscaler_dir" "$director_dir" "$h3_turbo_dir" "$elite_dir"
+      "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
+      "$director_dir" "$h3_turbo_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2097,6 +2153,7 @@ let
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$music3_staging" "$music3_dir"
     mv "$upscaler_staging" "$upscaler_dir"
+    mv "$h3_safe_upscaler_staging" "$h3_safe_upscaler_dir"
     mv "$director_staging" "$director_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$elite_staging" "$elite_dir"

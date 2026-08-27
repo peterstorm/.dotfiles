@@ -38,16 +38,30 @@ for expected in \
   '04 SeedVR2 7B FP16 - Natural 4K.json' \
   '05 SeedVR2 7B FP16 Sharp - Adversarial Comparison.json' \
   '06 SeedVR2 7B FP16 - Natural Video 2K.json' \
+  '.nodes |= map(select(.id != 18 and .id != 19 and .id != 20))' \
+  'minimax-h3-safe-upscaler-workflows' \
+  '01 MiniMax H3 Output - SeedVR2 7B FP16 Natural Video 2K.json' \
+  'h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"' \
+  'blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"' \
   '42, "fixed", 1536, 2688, 9, true, "lab"' \
-  'Remux checksum-authoritative dialogue after visual upscaling.' \
+  'remux authoritative dialogue after finishing' \
   '"SEEDVR2"' \
   'downloadImageUpscalerModels'; do
   grep -Fq -- "$expected" "$MODULE" || fail "module does not contain: $expected"
 done
-if awk '/^  imageUpscalerWorkflows =/,/^  installCreativeWorkflows =/' "$MODULE" \
-  | grep -Eqi 'seedvr2_ema_[^" ]*(fp8|int8)|https?://[^" ]*(resolve|tree)/main'; then
+upscaler_block="$(awk '/^  imageUpscalerWorkflows =/,/^  installCreativeWorkflows =/' "$MODULE")"
+if grep -Eqi 'seedvr2_ema_[^" ]*(fp8|int8)|https?://[^" ]*(resolve|tree)/main' \
+  <<<"$upscaler_block"; then
   fail "upscaler workflow package contains a lower-precision selector or mutable model URL"
 fi
+[ "$(grep -Fc '.nodes |= map(select(.id != 18 and .id != 19 and .id != 20))' \
+  <<<"$upscaler_block")" -eq 2 ] \
+  || fail "all SeedVR2 still/video graphs must remove the unavailable Note node"
+if grep -Fq 'select(.id == 18)' <<<"$upscaler_block"; then
+  fail "upscaler workflow package still configures the unavailable Note node"
+fi
+grep -Fq '"$blocked_h3_upscaler_dir"' "$MODULE" \
+  || fail "installer does not remove the blocked H3 learned-latent workflow directory"
 
 for expected in \
   'SEEDVR_REV="09ced71023636e9bc8cdf9cdecfb2625d1e691e8"' \

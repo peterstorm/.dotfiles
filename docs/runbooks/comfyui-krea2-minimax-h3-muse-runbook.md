@@ -919,14 +919,14 @@ installation never promotes an output.
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **124 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **125 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
   maximum-quality H3 production graphs, two H3 Director Development graphs, four
   H3 Turbo-LoRA qualification graphs, one full-quality Music 3 graph, seven
-  still/video upscaler qualification graphs, eight Episode 29 graphs, seven
-  pinned Episode 30 graphs, and 53 curated official graphs installed into the
-  workflow browser.
+  still/video upscaler qualification graphs, one safe H3-output SeedVR2 finishing
+  graph, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
+  official graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** Krea/Edit, H3, FLUX/Klein, Music 3, and still-image upscalers each
@@ -976,6 +976,17 @@ finishing bake-off, not a license to mutate canon. The **native masters remain a
 every upscaled image or video is a versioned derivative, and no derivative
 becomes an identity, wardrobe, composition, text, or H3 lineage parent without a
 separate explicit acceptance ledger.
+
+For H3 output specifically, open **User workflows →
+`minimax-h3-upscaler-local-safe` → `01 MiniMax H3 Output - SeedVR2 7B FP16
+Natural Video 2K`**. It is a task-named copy of the same pinned SeedVR2 video
+profile, not an H3 learned-latent model. The installer removes
+`minimax-h3-upscaler-research-only` from the live browser because those unchanged
+third-party examples require unavailable classes, absent quantized models, and a
+learned-latent node whose code license remains unresolved. Their checksum-identical
+JSON stays in private Development research. The declarative SeedVR2 builder also
+removes upstream's disconnected `Note` node because that cosmetic class is not
+installed in the pinned closure.
 
 Install or re-verify all candidates with:
 
