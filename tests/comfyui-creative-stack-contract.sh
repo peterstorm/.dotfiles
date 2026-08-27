@@ -25,6 +25,7 @@ H3_PHASE="$ROOT/scripts/comfyui/h3-model-phase.sh"
 ACTIVATE="$ROOT/scripts/comfyui/activate-creative-stack.sh"
 RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
 H3_RUNBOOK="$ROOT/docs/runbooks/local-ai-video-script-runbook.md"
+ASSETS_RUNBOOK="$ROOT/docs/runbooks/comfyui-assets-library.md"
 TRANSITION_TEST="$ROOT/tests/creative-stack-transitions-contract.sh"
 DOWNLOAD_TEST="$ROOT/tests/model-download-verification-contract.sh"
 CREATIVE_PHASE_TEST="$ROOT/tests/creative-model-phase-contract.sh"
@@ -46,7 +47,7 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$ASSETS_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 for file in "$NODE_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
@@ -94,6 +95,7 @@ contains "$MODULE" '--port 8188'
 contains "$MODULE" '"${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/comfyui/user"'
 contains "$MODULE" 'installCreativeWorkflows'
 contains "$MODULE" '--database-url sqlite:////var/lib/comfyui/user/comfyui.db'
+contains "$MODULE" '--enable-assets'
 contains "$MODULE" '--reserve-vram 8'
 contains "$MODULE" 'declarative_nodes.custom_nodes = toString declarativeNodes;'
 contains "$MODULE" 'rev = "bdfa8b267fdb13730868d435b277dcfe696ec083";'
@@ -584,6 +586,12 @@ contains "$RUNBOOK" 'full BF16'
 contains "$RUNBOOK" 'ComfyUI-Manager'
 contains "$RUNBOOK" 'manual human review'
 contains "$H3_RUNBOOK" 'comfyui-krea2-minimax-h3-muse-runbook.md'
+contains "$ASSETS_RUNBOOK" '`--enable-assets`'
+contains "$ASSETS_RUNBOOK" '/api/assets/seed?wait=true'
+contains "$ASSETS_RUNBOOK" "'{\"roots\":[\"output\"]}'"
+contains "$ASSETS_RUNBOOK" '/var/lib/comfyui/output'
+contains "$ASSETS_RUNBOOK" '/var/lib/comfyui/user/comfyui.db'
+contains "$ASSETS_RUNBOOK" 'Use **History** only for'
 
 "$TRANSITION_TEST"
 "$DOWNLOAD_TEST"

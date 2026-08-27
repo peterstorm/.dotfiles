@@ -2241,6 +2241,7 @@ in
           --disable-auto-launch \
           --base-directory /var/lib/comfyui \
           --database-url sqlite:////var/lib/comfyui/user/comfyui.db \
+          --enable-assets \
           --extra-model-paths-config ${extraPaths} \
           --reserve-vram 8 \
           --preview-method auto \
