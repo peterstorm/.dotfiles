@@ -55,6 +55,7 @@ contains "$VERIFY" '.metadata.total_size == 198042331512'
 for identity in "$BASE_DIGEST" "$IMAGE_DIGEST" "$IMAGE_CONFIG" "$OVERLAY_COMMIT" "$OVERLAY_TREE"; do
   contains "$PULL" "$identity"
 done
+contains "$PULL" "jq -r '.[0].RootFS.Layers[]'"
 contains "$PULL" '$((${#base_layers[@]} + 2))'
 contains "$PULL" '"${overlay_layers[$index]}" = "${base_layers[$index]}"'
 contains "$PULL" 'FlashInferMLASparseSM120Impl.supports_dense_mha_prefill is False'

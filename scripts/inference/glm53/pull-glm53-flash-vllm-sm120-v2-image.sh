@@ -14,6 +14,10 @@ OVERLAY_TREE="b376906774010561e22fa8e234937764f83fd221"
   echo "error: this profile is prepared only for linux/amd64 SM120 hosts" >&2
   exit 1
 }
+command -v jq >/dev/null 2>&1 || {
+  echo "error: jq is required to prove the image layer prefix" >&2
+  exit 1
+}
 
 docker pull "$BASE_IMAGE"
 docker pull "$IMAGE"
@@ -34,8 +38,8 @@ grep -Fxq 'cstechdev/vllm@sha256:0bd709e80b8ff13ae5de8f7d7f708a499fade3a26970d56
 
 # Supply-chain shape: the published overlay must be the exact official base rootfs
 # plus two layers, never a replacement filesystem.
-mapfile -t base_layers < <(docker image inspect "$BASE_IMAGE" --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
-mapfile -t overlay_layers < <(docker image inspect "$IMAGE" --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
+mapfile -t base_layers < <(docker image inspect "$BASE_IMAGE" | jq -r '.[0].RootFS.Layers[]')
+mapfile -t overlay_layers < <(docker image inspect "$IMAGE" | jq -r '.[0].RootFS.Layers[]')
 [ "${#overlay_layers[@]}" -eq "$((${#base_layers[@]} + 2))" ] || {
   echo "error: SM120 artifact is not the expected two-layer overlay" >&2
   exit 1
