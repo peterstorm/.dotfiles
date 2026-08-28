@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 qwen glm-dflash glm-mtp)
+BENCHMARK_ARM_IDS=(ds4 qwen glm-dflash glm-mtp glm-fp8)
 BENCHMARK_PROTOCOL_FILES=(
   frozen/brief.md
   frozen/ui-relay-types.ts
@@ -63,6 +63,15 @@ benchmark_arm_record() {
         'glm53-flash-exl3-k4-vllm-sm120-v5' \
         'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start' \
         'GLM-5.3 Flash EXL3 K4 v84 Vision + MTP3 384K'
+      ;;
+    glm-fp8)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max' \
+        'glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k' \
+        '393216' \
+        'glm53-flash-exl3-k4-vllm-sm120-v6' \
+        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v6.sh start' \
+        'GLM-5.3 Flash EXL3 K4 v84 Text FP8 KV + MTP3 384K'
       ;;
     *)
       printf 'unknown arm: %s (expected one of: %s)\n' \

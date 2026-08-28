@@ -13,7 +13,7 @@ TypeScript JSONL relay/reducer task and runs through:
 The run stops immediately before Wave 1. No implementer, test, reviewer, or
 wave-gate child runs, and no production or test file may change.
 
-The benchmark supports DeepSeek V4 Flash, Qwen3.8-27B, and two immutable
+The benchmark supports DeepSeek V4 Flash, Qwen3.8-27B, and three immutable
 GLM-5.3 Flash v84 runtime profiles. It remains one frozen experiment so results
 sharing a protocol hash are comparable.
 
@@ -43,6 +43,7 @@ This measures planning directly. No implementation is generated or inferred.
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
 | `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
 | `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
+| `glm-fp8` | `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v6` |
 
 List the machine-readable catalog with:
 
@@ -50,8 +51,9 @@ List the machine-readable catalog with:
 bash scripts/run-arm.sh --list
 ```
 
-`glm-mtp` is the canonical GLM quality arm. `glm-dflash` is runtime-profile
-evidence, not an independent base-model observation.
+`glm-fp8` follows the active canonical GLM route. `glm-mtp` remains the
+multimodal v5 comparison arm, and `glm-dflash` is runtime-profile evidence—not
+an independent base-model observation.
 
 ### Asymmetries that remain part of the experiment
 
@@ -101,7 +103,10 @@ firmware, Pi, protocol-hash, or Loom-baseline change inside one batch.
 Use only attended, versioned switch paths:
 
 ```bash
-# GLM MTP3 384K
+# Active GLM text FP8 KV + MTP3 384K
+bash scripts/inference/glm53/switch-glm53-exl3-profile-v6.sh start
+
+# GLM multimodal MTP3 384K rollback
 bash scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start
 
 # GLM DFlash2 98K
@@ -211,7 +216,7 @@ Before the first run:
 bash scripts/verify-harness.sh
 bash scripts/isolation.sh off
 bash scripts/isolation.sh status
-bash scripts/run-arm.sh --probe glm-mtp
+bash scripts/run-arm.sh --probe glm-fp8
 ```
 
 If the Loom baseline is stale, refresh and commit it before comparing arms:
@@ -223,7 +228,7 @@ bash scripts/baseline.sh
 Per run:
 
 ```bash
-bash scripts/run-arm.sh glm-mtp 1
+bash scripts/run-arm.sh glm-fp8 1
 ```
 
 Follow the printed launch instructions. In Pi, submit the one-line `/loom`

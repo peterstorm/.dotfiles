@@ -33,7 +33,7 @@ done
 
 # shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
 source "$ARMS"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen glm-dflash glm-mtp' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen glm-dflash glm-mtp glm-fp8' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -53,8 +53,10 @@ done
 
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
+contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max'
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v3'
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v5'
+contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v6'
 contains "$RUN" 'stale benchmark baseline:'
 contains "$RUN" 'Cortex is active; cross-arm memory would contaminate this run.'
 contains "$RUN" '~/.config/glm53/api-key'
@@ -102,6 +104,10 @@ jq -e '
     .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
     .id == "glm-5.3-flash-exl3-k4-vision-mtp-384k" and
+    .contextWindow == 393216 and
+    .thinkingLevelMap.max == "max") and
+  any(.providers["desktop-vllm"].models[];
+    .id == "glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k" and
     .contextWindow == 393216 and
     .thinkingLevelMap.max == "max")
 ' "$PI_MODELS" >/dev/null || fail "Pi lacks a compatible GLM benchmark model"
