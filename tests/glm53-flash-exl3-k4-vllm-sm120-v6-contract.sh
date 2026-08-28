@@ -55,7 +55,8 @@ contains "$RUN" '-e VLLM_B12X_GLM_NOPE_NVFP4=1'
 contains "$RUN" '-e VLLM_ENABLE_PCIE_ALLREDUCE=1'
 contains "$RUN" '-e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False'
 contains "$RUN" '--env-file "$ENVFILE"'
-for forbidden in '--chat-template /opt/glm53/chat_template.multimodal.jinja' '--limit-mm-per-prompt' '--mm-encoder-attn-backend' '--kv-cache-dtype nvfp4_ds_mla' '--no-enable-prefix-caching' 'method":"dflash'; do
+contains "$RUN" '--gpus all'
+for forbidden in '--runtime nvidia' '--chat-template /opt/glm53/chat_template.multimodal.jinja' '--limit-mm-per-prompt' '--mm-encoder-attn-backend' '--kv-cache-dtype nvfp4_ds_mla' '--no-enable-prefix-caching' 'method":"dflash'; do
   if grep -Fq -- "$forbidden" "$RUN"; then
     echo "FAIL: text FP8 v6 contains forbidden multimodal/NVFP4/DFlash fragment: $forbidden" >&2
     exit 1

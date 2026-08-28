@@ -129,7 +129,6 @@ docker run -d --init \
   --label ai.peterstorm.inference.speculation=mtp3 \
   --label ai.peterstorm.inference.kv-cache=fp8_ds_mla \
   --label ai.peterstorm.inference.image-config="$IMAGE_CONFIG" \
-  --runtime nvidia \
   --gpus all \
   --ipc=host \
   --cap-add=SYS_NICE \
