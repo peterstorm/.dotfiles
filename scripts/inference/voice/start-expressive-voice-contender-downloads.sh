@@ -6,17 +6,9 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 DOWNLOADER="$ROOT/scripts/inference/voice/download-expressive-voice-contenders.sh"
 SESSION="expressive-voice-contender-download"
 MODELS_ROOT="${VOICE_MODELS_ROOT:-/models/voice}/expressive-contenders"
-PROFILES=(
-  voxcpm2-32279eff
-  breeze-tts2-c1c8ca18
-  dramabox-404f967f
-  dramabox-gemma-826e729d
-  dramabox-reuse-76190506
-  higgs-tts3-7556c17e
-  cosyvoice3-29e01c4e
-  fish-s2-pro-1de9996b
-  moss-tts-voice-acting-aabb7b60
-)
+MANIFEST="$ROOT/scripts/inference/voice/expressive-voice-contenders.manifest.tsv"
+mapfile -t PROFILES < <(awk -F '\t' '$1 == "profile" { print $2 }' "$MANIFEST")
+(( ${#PROFILES[@]} > 0 )) || { echo "error: no profiles in $MANIFEST" >&2; exit 1; }
 
 profile_command() {
   local profile="$1" command

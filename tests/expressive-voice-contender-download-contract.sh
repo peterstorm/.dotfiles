@@ -46,8 +46,9 @@ rg -q 'EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28' "$LAUNCH
 rg -q 'tmux new-session -d' "$LAUNCHER"
 rg -q 'tmux new-window -d' "$LAUNCHER"
 rg -q 'remain-on-exit on' "$LAUNCHER"
-[[ "$(awk '/^PROFILES=\(/ { inside=1; next } inside && /^\)/ { inside=0 } inside && /^  [a-z0-9-]+$/ { count++ } END { print count + 0 }' "$LAUNCHER")" == 9 ]] \
-  || fail 'launcher must contain one detached lane per closure profile'
+rg -q 'MANIFEST=.*expressive-voice-contenders.manifest.tsv' "$LAUNCHER"
+rg -q 'mapfile -t PROFILES.*awk' "$LAUNCHER"
+rg -Fq 'for index in "${!PROFILES[@]}"' "$LAUNCHER"
 rg -q '>>%q 2>&1' "$LAUNCHER"
 rg -q 'exec \{lock_fd\}>' "$DOWNLOADER"
 rg -q -- '--continue-at - --output "\$partial"' "$DOWNLOADER"
