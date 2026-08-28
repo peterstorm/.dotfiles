@@ -44,8 +44,13 @@ grep -Fq $'artifact\tdramabox-gemma-826e729d\t5578abd3c27241a31f21c13220f44a427b
 rg -q 'EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES=yes' "$LAUNCHER"
 rg -q 'EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28' "$LAUNCHER"
 rg -q 'tmux new-session -d' "$LAUNCHER"
+rg -q 'tmux new-window -d.*lane-b' "$LAUNCHER"
+rg -q 'tmux new-window -d.*lane-c' "$LAUNCHER"
 rg -q 'remain-on-exit on' "$LAUNCHER"
 rg -q '>>%q 2>&1' "$LAUNCHER"
+rg -q 'exec \{lock_fd\}>' "$DOWNLOADER"
+! rg -q '\.expressive-voice-contenders\.lock' "$DOWNLOADER" \
+  || fail 'global lock still serializes independent model profiles'
 
 sandbox="$(mktemp -d)"
 trap 'rm -rf "$sandbox"' EXIT

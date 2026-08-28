@@ -139,7 +139,9 @@ write_completion_marker() {
 
 download_profile() {
   local slug="$1" record repository revision usage_scope repository_bytes
-  local destination staging marker manifest_sha
+  local destination staging marker manifest_sha lock_fd
+  exec {lock_fd}>"$MODELS_ROOT/.$slug.lock"
+  flock "$lock_fd"
   record="$(parse_profile "$slug")"
   IFS=$'\t' read -r repository revision usage_scope repository_bytes <<<"$record"
   destination="$MODELS_ROOT/$slug"
@@ -152,6 +154,7 @@ download_profile() {
       && grep -Fxq "manifest-sha256=$manifest_sha" "$marker" \
       && verify_manifest "$destination" "$slug"; then
     printf 'EXPRESSIVE_VOICE_MODEL_READY: %s\n' "$destination"
+    exec {lock_fd}>&-
     return 0
   fi
   [[ ! -e "$destination" ]] || fail "unverified immutable destination already exists: $destination"
@@ -171,6 +174,7 @@ download_profile() {
   write_completion_marker "$marker" "$repository" "$revision" "$usage_scope" "$manifest_sha"
   verify_manifest "$destination" "$slug"
   printf 'EXPRESSIVE_VOICE_MODEL_READY: %s\n' "$destination"
+  exec {lock_fd}>&-
 }
 
 main() {
@@ -204,8 +208,6 @@ main() {
   (( available_bytes > required_bytes + 10737418240 )) \
     || fail "insufficient free space: need model bytes plus 10 GiB headroom"
 
-  exec 9>"$MODELS_ROOT/.expressive-voice-contenders.lock"
-  flock 9
   for slug in "${selected[@]}"; do
     download_profile "$slug"
   done
