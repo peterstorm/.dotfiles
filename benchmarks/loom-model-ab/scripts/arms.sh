@@ -57,12 +57,12 @@ benchmark_arm_record() {
       ;;
     glm-mtp)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max' \
-        'glm-5.3-flash-exl3-k4-vision-mtp' \
-        '98304' \
-        'glm53-flash-exl3-k4-vllm-sm120-v4' \
-        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v4.sh start' \
-        'GLM-5.3 Flash EXL3 K4 v84 Vision + MTP3'
+        'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max' \
+        'glm-5.3-flash-exl3-k4-vision-mtp-384k' \
+        '393216' \
+        'glm53-flash-exl3-k4-vllm-sm120-v5' \
+        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start' \
+        'GLM-5.3 Flash EXL3 K4 v84 Vision + MTP3 384K'
       ;;
     *)
       printf 'unknown arm: %s (expected one of: %s)\n' \

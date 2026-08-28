@@ -45,7 +45,7 @@ parent so one arm selector controls the whole run.
 | `ds4` | `desktop-vllm/deepseek-v4-flash:max` | 1,048,576 | `ds4-infernal-invocation-cu133-r18` |
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
 | `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
-| `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v4` |
+| `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
 
 The catalog is machine-readable through `bash scripts/run-arm.sh --list`. The
 canonical GLM model-quality arm is `glm-mtp`; use `glm-dflash` for a matched
@@ -61,17 +61,18 @@ run you think it is. Each arm therefore runs at **its own maximum**, pinned on
 the command line. This compares each model at its best; it does not compare
 equal reasoning budgets.
 
-**Context windows differ by more than 10×.** GLM must fit each phase in 98,304
-tokens, Qwen in 262,144, and DS4 in 1,048,576. Do not treat context exhaustion
-as a spoiled run—it is a result. Record `context_exhausted: true` and retain the
+**Context windows differ.** GLM MTP gets 393,216 tokens, Qwen gets 262,144,
+DS4 gets 1,048,576, and the rollback DFlash profile remains at 98,304. Do not
+treat context exhaustion as a spoiled run—it is a result. Record `context_exhausted: true` and retain the
 sample. A model that cannot hold a Loom phase in its deployed context is
 answering the operational question.
 
 **GLM speculation modes are not different base models.** `glm-dflash` and
-`glm-mtp` use the same EXL3 target weights, image family, template, context, and
-reasoning level. Their difference is speculative decoding. Treat a matched pair
-as runtime-profile evidence (correctness, stability, latency), not four extra
-independent observations about GLM planning quality.
+`glm-mtp` use the same EXL3 target weights, image family, template, and reasoning
+level, but the qualified launch envelopes now differ in both speculation and
+context. Treat them as runtime-profile evidence (correctness, stability,
+latency), not a controlled speculation A/B or extra independent observations
+about GLM planning quality.
 
 ## Isolation
 
@@ -106,8 +107,8 @@ Use each versioned profile's attended switch path. Port 8000 remains exclusive;
 never improvise a second launch over a running profile:
 
 ```bash
-# → GLM v84 MTP3 (canonical GLM quality arm)
-bash scripts/inference/glm53/switch-glm53-exl3-profile-v4.sh start
+# → GLM v84 MTP3 384K (canonical GLM quality arm)
+bash scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start
 
 # → GLM v84 DFlash2 (matched runtime-profile arm)
 bash scripts/inference/glm53/switch-glm53-exl3-profile-v3.sh start

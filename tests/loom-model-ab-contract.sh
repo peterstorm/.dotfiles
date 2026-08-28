@@ -50,9 +50,9 @@ for arm in "${BENCHMARK_ARM_IDS[@]}"; do
 done
 
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max'
-contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max'
+contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v3'
-contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v4'
+contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v5'
 contains "$RUN" 'stale benchmark baseline:'
 contains "$RUN" 'Cortex is active; cross-arm memory would contaminate this run.'
 contains "$RUN" '~/.config/glm53/api-key'
@@ -79,7 +79,7 @@ jq -e '
     "thinkingLevel": "xhigh"
   } and
   .targets.glm == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp",
+    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k",
     "thinkingLevel": "max"
   }
 ' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing lacks exact qwen/glm targets"
@@ -90,25 +90,25 @@ jq -e '
     .contextWindow == 98304 and
     .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
-    .id == "glm-5.3-flash-exl3-k4-vision-mtp" and
-    .contextWindow == 98304 and
+    .id == "glm-5.3-flash-exl3-k4-vision-mtp-384k" and
+    .contextWindow == 393216 and
     .thinkingLevelMap.max == "max")
 ' "$PI_MODELS" >/dev/null || fail "Pi lacks a compatible GLM benchmark model"
 
 attestation_sandbox="$(mktemp -d)"
 trap 'rm -rf "$attestation_sandbox"' EXIT
 cat >"$attestation_sandbox/run.json" <<'JSON'
-{"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max"}
+{"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}
 JSON
 cat >"$attestation_sandbox/session.jsonl" <<'JSONL'
-{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"brainstorm-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max"}}]}}}
-{"type":"message","message":{"role":"toolResult","toolName":"loom_interactive_subagent","details":{"results":[{"agent":"specify-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"glm-5.3-flash-exl3-k4-vision-mtp","requestedModel":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max"}}]}}}
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"brainstorm-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}}]}}}
+{"type":"message","message":{"role":"toolResult","toolName":"loom_interactive_subagent","details":{"results":[{"agent":"specify-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"glm-5.3-flash-exl3-k4-vision-mtp-384k","requestedModel":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}}]}}}
 JSONL
 bash "$VERIFY_MODELS" "$attestation_sandbox" >/dev/null
 jq -e '.passed == true and .checked_children == 2' "$attestation_sandbox/model-attestation.json" >/dev/null \
   || fail "matching child model receipts did not attest"
 
-sed -i 's#desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max#desktop-vllm/qwen3.8-27b:xhigh#g' \
+sed -i 's#desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max#desktop-vllm/qwen3.8-27b:xhigh#g' \
   "$attestation_sandbox/session.jsonl"
 status=0
 bash "$VERIFY_MODELS" "$attestation_sandbox" >/dev/null 2>&1 || status=$?
