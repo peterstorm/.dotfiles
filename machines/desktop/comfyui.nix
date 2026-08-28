@@ -351,6 +351,27 @@ let
     hash = "sha256-NgKlqrLOiCoFusVixdDPKYFs1rx4X48TxzVSObxrgl8=";
   };
 
+  # v0.87.0 is the first revision containing every node used by the latest
+  # context-window workflow. It uses one H3 audio helper added after pinned
+  # ComfyUI 0.33.3; the local adapter carries that pure helper. pyproject is MIT.
+  mmh3ToolsSource = pkgs.fetchFromGitHub {
+    owner = "ckinpdx";
+    repo = "ComfyUI-MMH3Tools";
+    rev = "7194baedb1cfeb6b55d0797a3af849b73a69c6c2";
+    hash = "sha256-BhZt+97AaWvSTYTJW6U4agH1N+4YzrCYYwrO9pyS35o=";
+  };
+
+  mmh3ToolsNode = pkgs.runCommand "comfyui-mmh3tools-0.87.0-compatible" { } ''
+    cp -R ${mmh3ToolsSource}/. "$out"
+    chmod -R u+w "$out"
+    substituteInPlace "$out/mmh3tools/nodes_multiprompt.py" \
+      --replace-fail '    _encode_ref_audio,' "" \
+      --replace-fail \
+        'MMH3CondSet = io.Custom("MMH3_COND_SET")' \
+        $'try:\n    from comfy_extras.nodes_minimax_h3 import _encode_ref_audio\nexcept ImportError:\n    def _encode_ref_audio(audio_vae, audio):\n        import torchaudio\n        waveform = audio["waveform"]\n        sample_rate = audio["sample_rate"]\n        vae_sample_rate = getattr(audio_vae, "audio_sample_rate", 32000)\n        if sample_rate != vae_sample_rate:\n            waveform = torchaudio.functional.resample(waveform, sample_rate, vae_sample_rate)\n        latent = audio_vae.encode(waveform[:1].movedim(1, -1))\n        return latent, latent.shape[-1]\n\nMMH3CondSet = io.Custom("MMH3_COND_SET")'
+    chmod -R a-w "$out"
+  '';
+
   # Upstream does not declare a code license. This immutable pin is authorized
   # only for private local Development evaluation; it is not a Production or
   # redistribution grant.
@@ -427,6 +448,7 @@ let
     ln -s ${detailDaemonNode} "$out/ComfyUI-Detail-Daemon"
     ln -s ${kjNodes} "$out/ComfyUI-KJNodes"
     ln -s ${videoHelperSuiteNode} "$out/ComfyUI-VideoHelperSuite"
+    ln -s ${mmh3ToolsNode} "$out/ComfyUI-MMH3Tools"
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
