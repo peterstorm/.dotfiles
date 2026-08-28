@@ -42,3 +42,16 @@ pass before you call the work done.
 Think hard about the failure modes a real duplex transport hits — the ones a
 naive implementation gets wrong are exactly what this core exists to prevent.
 Enumerate them in the spec before you design.
+
+## Planning-only stop condition
+
+For this run, complete Loom through brainstorm, specification, architecture,
+plan alignment, and task decomposition. Produce an execution-ready task graph,
+then stop at the boundary immediately before Wave 1 would begin.
+
+**Do not start implementation. Do not launch an implementer, test, reviewer, or
+wave-gate child. Do not edit production code, tests, documentation, or the
+frozen types file.** The expected terminal graph has entered the `execute`
+phase only in the sense that decomposition is complete: `current_wave` is `1`,
+every task is still `pending`, `executing_tasks` is empty, and no wave gate has
+run.

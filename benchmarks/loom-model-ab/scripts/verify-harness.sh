@@ -88,7 +88,7 @@ for script in \
   "$BENCH_DIR/scripts/arms.sh" \
   "$BENCH_DIR/scripts/run-arm.sh" \
   "$BENCH_DIR/scripts/baseline.sh" \
-  "$BENCH_DIR/scripts/grade-implementation.sh" \
+  "$BENCH_DIR/scripts/grade-planning.sh" \
   "$RUN_MODELS" \
   "$BENCH_DIR/scripts/anonymise.sh" \
   "$BENCH_DIR/scripts/isolation.sh"; do

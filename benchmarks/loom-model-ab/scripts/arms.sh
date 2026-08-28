@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pure catalog for the Loom planning + implementation benchmark.
+# Pure catalog for the Loom planning-only benchmark.
 #
 # Arm records are tab-delimited and contain, in order:
 #   Pi model selector, served model id, context window, profile container,

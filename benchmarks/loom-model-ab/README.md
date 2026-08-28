@@ -1,42 +1,39 @@
-# Loom local-model benchmark — planning that survives implementation
+# Loom local-model benchmark — implementation-ready planning
 
-An experiment that answers one question: **which local model should drive a
-Loom feature run end to end?** Every arm gets the same meaningful TypeScript
-JSONL relay/reducer task, writes its own spec and plan, decomposes, implements,
-and passes the wave gate. The plan is not graded as prose alone: a hidden suite
-checks whether it survives implementation against requirements the model never
-sees.
+A planning-only experiment that answers: **which local model produces the most
+correct, implementation-ready Loom plan?** Every arm gets the same meaningful
+TypeScript JSONL relay/reducer task and runs through:
 
-The benchmark supports DeepSeek V4 Flash, Qwen3.8-27B, and both immutable
-GLM-5.3 Flash v84 speculation profiles. This remains one frozen experiment—not
-a second GLM-specific task—so results inside a protocol hash remain comparable.
+1. brainstorm;
+2. specification;
+3. architecture;
+4. plan alignment; and
+5. decomposition.
 
-## Why this is measurable at all
+The run stops immediately before Wave 1. No implementer, test, reviewer, or
+wave-gate child runs, and no production or test file may change.
 
-`pi/model-routing.json` carries one rule:
+The benchmark supports DeepSeek V4 Flash, Qwen3.8-27B, and two immutable
+GLM-5.3 Flash v84 runtime profiles. It remains one frozen experiment so results
+sharing a protocol hash are comparable.
 
-```json
-{ "id": "local-workloads-use-parent", "when": { "parentClass": "local" }, "use": { "kind": "parent" } }
-```
+## Why this is measurable
 
-`desktop-vllm/*` is class `local`. So when the **parent** Pi session runs on a
-`desktop-vllm` model, every Loom child Agent — specify, architecture, decompose,
-implementer, reviewers, wave gate — inherits it. Loom's own profile catalog only
-knows `openai-codex` targets, and this rule is exactly the documented escape
-hatch ("the launcher's explicit routing decision determines the effective
-model", `docs/model-profiles-and-calibration.md`).
+`pi/model-routing.json` routes local parents through the parent binding. When
+the parent Pi session uses a `desktop-vllm/*` model, every planning child must
+inherit that exact provider/model/thinking selector. Both ordinary subagents
+and interactive RPC phase children are checked by
+`scripts/verify-run-models.sh`; missing or mismatched routing evidence voids the
+run.
 
-That makes the whole pipeline swap on one flag. Both Pi child transports must
-apply the same effective binding: ordinary `subagent` children and Loom's
-interactive RPC phase children. Every completed run is checked by
-`scripts/verify-run-models.sh`; missing routing evidence or one mismatched child
-voids the repetition rather than silently attributing another model's work to
-the arm.
+The benchmark has a hidden reference specification. Grading records three
+separate discovery facts for every FR:
 
-The routing policy also publishes exact named `qwen` and `glm` targets beside
-parent inheritance. They are explicit provider/model/thinking bindings for
-workload-specific rules; the benchmark itself continues to inherit the active
-parent so one arm selector controls the whole run.
+- did `spec.md` discover it?
+- did `plan.md` account for it?
+- did the task graph preserve it?
+
+This measures planning directly. No implementation is generated or inferred.
 
 ## Arms
 
@@ -47,257 +44,239 @@ parent so one arm selector controls the whole run.
 | `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
 | `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
 
-The catalog is machine-readable through `bash scripts/run-arm.sh --list`. The
-canonical GLM model-quality arm is `glm-mtp`; use `glm-dflash` for a matched
-runtime-profile comparison, not as a second independent model.
+List the machine-readable catalog with:
 
-### Three asymmetries that must be stated, not hidden
+```bash
+bash scripts/run-arm.sh --list
+```
 
-**Thinking level cannot be equalised.** The `thinkingLevelMap` entries that are
-non-null differ: DS4 and GLM expose `low`/`high`/`max`, while Qwen exposes
-`low`/`xhigh`. A mapped-null level is *not rejected*—Pi silently falls back, so
-a run pinned to a level one model does not support looks valid but is not the
-run you think it is. Each arm therefore runs at **its own maximum**, pinned on
-the command line. This compares each model at its best; it does not compare
-equal reasoning budgets.
+`glm-mtp` is the canonical GLM quality arm. `glm-dflash` is runtime-profile
+evidence, not an independent base-model observation.
 
-**Context windows differ.** GLM MTP gets 393,216 tokens, Qwen gets 262,144,
-DS4 gets 1,048,576, and the rollback DFlash profile remains at 98,304. Do not
-treat context exhaustion as a spoiled run—it is a result. Record `context_exhausted: true` and retain the
-sample. A model that cannot hold a Loom phase in its deployed context is
-answering the operational question.
+### Asymmetries that remain part of the experiment
 
-**GLM speculation modes are not different base models.** `glm-dflash` and
-`glm-mtp` use the same EXL3 target weights, image family, template, and reasoning
-level, but the qualified launch envelopes now differ in both speculation and
-context. Treat them as runtime-profile evidence (correctness, stability,
-latency), not a controlled speculation A/B or extra independent observations
-about GLM planning quality.
+- **Thinking levels differ.** Each arm runs at its own highest supported mapped
+  level. Pi silently falls back for mapped-null levels, so selectors are pinned.
+- **Context windows differ.** Context exhaustion is a result, not a void reason.
+- **GLM speculation profiles differ in context as well as speculation.** They
+  are not a controlled speculation-only A/B.
+
+## Valid terminal state
+
+A planning run is complete only when all of the following hold:
+
+- brainstorm, spec, plan, plan-alignment, and task graph exist;
+- the graph has `current_phase: "execute"` and `current_wave: 1`;
+- every task remains `pending`;
+- `executing_tasks` is empty;
+- no wave gate has implementation, review, or test evidence;
+- no file outside `.claude/` changed after the frozen baseline;
+- the frozen types file is byte-identical;
+- the transcript contains no Cortex recall;
+- at least one planning child ran, every child matches the arm selector, and no
+  implementer, test, reviewer, ADR-writer, or wave-gate child appears.
+
+Entering `current_phase: "execute"` records that decomposition completed. It
+does **not** authorize Wave 1. If any task starts, preserve the artifacts and
+mark the repetition invalid; do not silently treat partial implementation as a
+planning result.
 
 ## Isolation
 
-Arms and repetitions must not be able to see each other's work. Four channels,
-three of them non-obvious:
+Arms and repetitions must not see each other’s work:
 
-1. **Filesystem** — each run gets its own git worktree off the same base commit:
-   `git worktree add ../loom-bench-<run-id> -b bench/<run-id> <BASE_SHA>`.
-   The worktree is destroyed after the diff is captured.
-2. **Cortex memory — the dangerous one.** Cortex recalls into every session and
-   extracts from every transcript. Without intervention, arm 1's design
-   decisions are recalled as authoritative context inside arm 2, and the leak is
-   invisible because it arrives inside a `<system-reminder>`. Disable extraction
-   and recall for the whole benchmark, or point `CORTEX_DB` at a scratch
-   database that is deleted between runs. **Verify by grepping the run
-   transcript for `CORTEX_MEMORY_START` — if it appears, void the run.**
-3. **Loom state and GitHub** — Loom creates an Issue and writes
-   `.claude/specs/<feature>/`. Two runs sharing either will collide. The
-   worktree gives a fresh `.claude/`; run with Issue creation disabled, or let
-   each run create its own and record the number.
-4. **Prefix cache** — not contamination, but it does distort latency. Only
-   compare wall-clock across runs of the same arm, never across arms.
+1. **Filesystem:** each run gets a fresh git worktree from one recorded Loom
+   base commit.
+2. **Cortex:** disable recall and extraction for the entire batch. Any
+   `CORTEX_MEMORY_START` in `session.jsonl` voids the run.
+3. **Loom state/GitHub:** each worktree owns fresh `.claude/` state. Keep Issue
+   creation disabled or record the unique issue.
+4. **Runtime:** port 8000 is exclusive. Arms cannot run concurrently.
 
-Port 8000 is exclusive, so arms cannot run concurrently. Batch by arm and swap
-the backend once per batch. Batching confounds arm with time-of-day and machine
-state—accept it, note host changes, and never cross a driver, firmware, Pi,
-protocol-hash, or Loom-baseline change inside one batch.
+Batching confounds arm with time-of-day and host state. Never cross a driver,
+firmware, Pi, protocol-hash, or Loom-baseline change inside one batch.
 
-### Swapping the backend
+## Backend switching
 
-Use each versioned profile's attended switch path. Port 8000 remains exclusive;
-never improvise a second launch over a running profile:
+Use only attended, versioned switch paths:
 
 ```bash
-# → GLM v84 MTP3 384K (canonical GLM quality arm)
+# GLM MTP3 384K
 bash scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start
 
-# → GLM v84 DFlash2 (matched runtime-profile arm)
+# GLM DFlash2 98K
 bash scripts/inference/glm53/switch-glm53-exl3-profile-v3.sh start
 
-# → Qwen (stop a non-Qwen profile first; this switcher fails closed on port conflicts)
+# Qwen
 bash scripts/inference/qwen38/switch-qwen38-backend-v4.sh sglang
 
-# → DS4 (stop the current mutually-exclusive :8000 profile first)
+# DS4
 bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
 ```
 
-Then run `bash scripts/run-arm.sh --probe <arm>`. It refuses stale Loom
-baselines, active Cortex memory, malformed/multi-model responses, failed
-authentication, and served-model mismatches. Health alone has already lied once
-during a cutover.
+Then authenticate and attest the served model:
+
+```bash
+bash scripts/run-arm.sh --probe <arm>
+```
+
+Health alone is insufficient; the probe requires exactly one served model with
+the expected id.
 
 ## Repetitions
 
-Three per arm. That is enough to separate a model that fails a requirement every
-time from one that fails it once, and it is not enough for a significance claim
-on anything graded by judgement.
+Run three repetitions per arm. Report:
 
-Report accordingly:
+- mechanical planning completion as counts out of three;
+- requirement discovery as per-FR counts out of three; and
+- blind rubric quality as a range with the spread shown, never as a falsely
+  precise mean.
 
-- **Mechanical outcomes** (typecheck clean, own tests pass, hidden tests passed,
-  wave gate passed, frozen file untouched, scope respected) — report as counts
-  out of 3. These are binary and usually separate cleanly.
-- **Judged quality** — report as a range across repetitions with the spread
-  shown, never as a mean of three numbers presented as a measurement.
-
-A split result (2/3 vs 3/3) is a signal to run more repetitions, not a winner.
+A 2/3 versus 3/3 split calls for more repetitions, not a winner declaration.
 
 ## Grading
 
-Four instruments, in decreasing objectivity. Run them in this order and do not
-let a later one overturn an earlier one.
+### 1. Mechanical planning boundary
 
-**1. Hidden acceptance suite** — `hidden/ui-relay.hidden.test.ts`, written
-before either arm ran, traced test-by-test to `hidden/reference-spec.md`. Copy
-it into the finished worktree, run it, record pass/fail per requirement, then
-delete it. It imports the frozen signatures, which is the entire reason the
-types file is frozen and given as an input.
+`scripts/grade-planning.sh` captures model-authored artifacts from the graph and
+fails closed unless the run stopped exactly before implementation. It writes:
 
-> This is I2 — *"Types first, as a wave-0 artifact"* — from
-> [[loom-deterministic-implementation]], used as an experimental control rather
-> than as a determinism measure. I2's claim is that "the types *are* the task
-> contract"; if that holds, two models handed the same frozen contract produce
-> implementations that one suite can grade, and the benchmark is possible. If it
-> does not hold, the arms diverge on API shape and nothing here works. Either
-> way the run tells you something about I2 as well as about the models.
->
-**Calibrated floor.** The suite is 52 tests. Run against a stub that implements
-`parseRequestId` and returns empty results from everything else, it scores
-**12/52** — and all 12 are honest passes, not false positives (the stub really
-does parse ids, really doesn't throw, and a no-op reducer really is
-deterministic). So 12 is the do-nothing baseline: an arm scoring near it has
-produced nothing, and any score must be read against 12, not against 0. Re-run
-this calibration whenever a test is added.
+- `outcome.planning.json`;
+- `changed-files.txt` and `diff.patch`;
+- `model-attestation.json`; and
+- `discovery-checklist.tsv`.
 
-> Note what is deliberately **not** supplied: I4 exemplar anchoring. The brief
-> gives no "closest existing module" to imitate, so idiom variance stays in the
-> measurement. That is intentional — idiom discipline without an exemplar is a
-> real difference between these models, and handing over an exemplar would mask
-> it. If you later want to measure I4's value, re-run one arm with exemplars
-> added and compare against its own baseline.
+### 2. Requirement discovery
 
-**2. Requirement discovery** — for each FR in the reference spec, mark three
-independent facts: did the arm's own `spec.md` state it, did `plan.md` account
-for it, does the implementation satisfy it. Discovery and satisfaction are
-scored separately. Passing a requirement you never identified is luck; stating
-one precisely and then failing it is a different defect. This column is the
-reason the models write their own spec — it measures whether the model *found
-the problem*, which is most of what a spec phase is for.
+Complete every row in `discovery-checklist.tsv` against
+`hidden/reference-spec.md`. Score spec discovery, plan accounting, and graph
+accounting independently. A self-consistent spec and plan can still both be
+wrong; alignment is not evidence of requirement discovery by itself.
 
-**3. Mutation score** — every arm writes its own tests, and "tests pass" is
-gameable by writing vacuous ones. Run mutation testing over `ui-relay.ts` using
-only the arm's own suite. A high hidden-suite score with a low mutation score
-means the implementation is good and the tests are theatre; report both.
+`hidden/ui-relay.hidden.test.ts` remains a frozen executable encoding of the
+reference requirements and an integrity cross-check, but planning runs never
+copy or execute it.
 
-**4. Blind rubric** — `rubric.md`, scored from an anonymised diff. See below.
+### 3. Blind rubric
 
-### Blinding
+Score `rubric.md` from anonymised brainstorm, spec, interview, plan, alignment,
+and task graph artifacts. The rubric covers only planning. It contains no
+implementation, test-result, mutation, or wave-gate dimensions.
 
-The grader knows these models' reputations, and that is a bias with a known
-direction. Before grading:
+Mechanical protocol failures are gates: prose quality cannot rescue a run that
+started implementation, used another child model, or was contaminated.
+
+## Blinding
 
 ```bash
-bash scripts/anonymise.sh   # emits arm-A / arm-B, mapping written to a file the grader does not open
+bash scripts/anonymise.sh batch-1 runs/2026*
 ```
 
-Grade every artifact under the anonymous label. Reveal the mapping only after
-every score is written down and saved. If the grader has already seen a run's
-transcript live, that run is unblinded — record it as such rather than
-pretending otherwise.
+The script shuffles arm labels and removes model/backend tells. Do not open the
+mapping until every score and citation is saved. If the grader watched a live
+run, record it as unblinded.
 
-### Voiding a run
+## Voiding and invalidating
 
-Void and re-run only for: a harness crash unrelated to the model, a backend that
-died mid-run, cortex recall observed in the transcript, child-model routing
-that is missing or differs from the arm selector, or operator error answering
-off-script. **Do not void** for: context exhaustion, a model that
-loops, a model that edits the frozen file, a model that gives up. Those are
-results, and discarding them is how a benchmark ends up measuring nothing.
+**Void and rerun** only for harness failure, backend death, Cortex recall,
+missing/mismatched child routing, or operator answer drift.
+
+**Retain as model evidence** context exhaustion, looping, phase timeout, model
+give-up, bad requirements, bad architecture, or bad decomposition.
+
+**Mark invalid at the stop boundary** if implementation starts. Preserve the
+record because failure to obey the explicit stop condition is process evidence,
+but do not mix it into planning-quality comparisons.
 
 ## Layout
 
-```
-frozen/                   identical in every arm
-  brief.md                the verbatim /loom argument
-  ui-relay-types.ts       frozen wave-0 contract, copied into the worktree
-  answer-key.md           the operator's scripted interview answers
-hidden/                   never enters a worktree
-  reference-spec.md       the answer key: FRs + discovery checklist
-  ui-relay.hidden.test.ts the acceptance suite
-rubric.md                 blind scoring sheet
-runs/<run-id>/            per-run record: diff, artifacts, interview log, scores
+```text
+frozen/
+  brief.md                task and explicit planning-only stop condition
+  ui-relay-types.ts       frozen wave-0 contract copied into the worktree
+  answer-key.md           scripted operator answers
+hidden/
+  reference-spec.md       FR answer key and discovery checklist source
+  ui-relay.hidden.test.ts frozen executable cross-check; never run by an arm
+rubric.md                 blind planning rubric
+operator-tmux.md          attended tmux procedure
+runs/<run-id>/            receipts, artifacts, transcript, and scores
 ```
 
 ## Running a batch
 
-**Once, before the first run:**
+Before the first run:
 
 ```bash
-bash scripts/verify-harness.sh     # catalog, Pi maps, hidden FR parity, baseline
-bash scripts/isolation.sh off      # unregister cortex; keeps a backup
-bash scripts/isolation.sh status   # must say "safe to run"
+bash scripts/verify-harness.sh
+bash scripts/isolation.sh off
+bash scripts/isolation.sh status
 bash scripts/run-arm.sh --probe glm-mtp
 ```
 
-If verification reports a stale baseline, refresh it with
-`bash scripts/baseline.sh`, commit that receipt with the harness change, and
-verify again. Never compare runs carrying different `protocol_sha256` values.
+If the Loom baseline is stale, refresh and commit it before comparing arms:
 
-**Per run:**
+```bash
+bash scripts/baseline.sh
+```
+
+Per run:
 
 ```bash
 bash scripts/run-arm.sh glm-mtp 1
 ```
 
-It refuses to continue unless `:8000` is authenticating and serving the arm's
-model, then creates the worktree, commits the frozen types, and records
-`base_sha`. Follow the instructions it prints:
+Follow the printed launch instructions. In Pi, submit the one-line `/loom`
+command exactly as printed. Answer only from `frozen/answer-key.md`, recording
+every exchange in the run’s `interview.md`.
+
+When decomposition completes, stop before Wave 1. Copy the parent Pi transcript
+to `session.jsonl`, then run:
 
 ```bash
-cd <worktree>
-pi --model desktop-vllm/deepseek-v4-flash:max
+bash scripts/verify-run-models.sh runs/<run-id>
+bash scripts/grade-planning.sh <worktree> runs/<run-id>
+grep -l CORTEX_MEMORY_START runs/<run-id>/session.jsonl  # any hit voids
 ```
 
-Pin the model and level on the command line even though pi has defaults —
-`~/.pi/agent/settings.json` currently defaults to `qwen3.8-27b` at thinking
-level `high`, which is a **mapped-null** level for Qwen and silently falls back.
-An unpinned run is not the run you think it is.
+`grade-planning.sh` copies brainstorm, spec, plan, alignment, and the active task
+graph directly from the worktree. `interview.md` and `session.jsonl` must already
+be present in the run directory.
 
-In the session: `/loom` with `frozen/brief.md` pasted verbatim. Answer only from
-`frozen/answer-key.md` and log every exchange to `runs/<run-id>/interview.md`.
-
-**After each run**, copy into `runs/<run-id>/`: `spec.md`, `plan.md`, the task
-graph, the wave-gate result, and the session transcript path and wall-clock.
-Then:
+After preserving all artifacts:
 
 ```bash
-bash scripts/verify-run-models.sh runs/<run-id>  # every child must match run.json.model
-bash scripts/grade-implementation.sh <worktree> runs/<run-id>
-grep -l CORTEX_MEMORY_START <transcript>        # any hit voids the run
 git -C ~/dev/claude-plugins/loom worktree remove <worktree>
 ```
 
-**Once, after the last run:**
+After the batch:
 
 ```bash
-bash scripts/isolation.sh on                       # restore cortex
-bash scripts/anonymise.sh batch-1 runs/2026*       # then grade blind
+bash scripts/isolation.sh on
+bash scripts/anonymise.sh batch-1 runs/2026*
 ```
 
-## Recording an outcome
+See `operator-tmux.md` for reliable attended operation and transcript capture.
 
-Record these as **independent** facts, never collapsed into one verdict — a
-process can time out and still exit 0, and a suite that was killed must never
-read as a suite that passed:
+## Outcome record
+
+Keep process outcomes orthogonal:
 
 ```json
 {
-  "run_id": "...", "arm": "ds4", "base_sha": "...", "wall_clock_s": 0,
-  "phases_completed": ["specify", "architecture", "decompose", "execute"],
-  "context_exhausted": false, "looped": false, "gave_up": false,
-  "frozen_file_intact": true, "scope_respected": true,
+  "run_id": "...",
+  "arm": "glm-mtp",
+  "wall_clock_s": 0,
+  "phases_completed": ["brainstorm", "specify", "architecture", "plan-alignment", "decompose"],
+  "context_exhausted": false,
+  "looped": false,
+  "gave_up": false,
+  "implementation_started": false,
+  "task_graph_at_execution_boundary": true,
   "child_models_attested": true,
-  "typecheck_clean": true, "own_tests_pass": true, "own_test_count": 0,
-  "wave_gate_passed": true, "hidden_suite": { "passed": 0, "failed": 0 },
-  "mutation_score": 0.0, "voided": false, "voided_reason": null
+  "cortex_contaminated": false,
+  "planning_complete": true,
+  "voided": false,
+  "voided_reason": null
 }
 ```

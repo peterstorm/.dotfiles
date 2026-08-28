@@ -9,9 +9,11 @@ ARMS="$BENCH/scripts/arms.sh"
 RUN="$BENCH/scripts/run-arm.sh"
 VERIFY="$BENCH/scripts/verify-harness.sh"
 VERIFY_MODELS="$BENCH/scripts/verify-run-models.sh"
-GRADE="$BENCH/scripts/grade-implementation.sh"
+GRADE="$BENCH/scripts/grade-planning.sh"
 ANON="$BENCH/scripts/anonymise.sh"
 README="$BENCH/README.md"
+BRIEF="$BENCH/frozen/brief.md"
+OPERATOR="$BENCH/operator-tmux.md"
 PI_MODELS="$ROOT/pi/models.json"
 
 fail() {
@@ -63,11 +65,20 @@ contains "$RUN" 'verify-run-models.sh'
 contains "$VERIFY" '.thinkingLevelMap[$level] != null'
 contains "$VERIFY" 'Pi routing lacks exact qwen/glm named targets'
 contains "$GRADE" 'child_models_attested'
+contains "$GRADE" '.current_phase == "execute"'
+contains "$GRADE" '.tasks | type == "array" and length > 0 and all(.status == "pending")'
+contains "$GRADE" 'planning_only_receipt'
+contains "$GRADE" 'implementation_started'
+contains "$GRADE" 'forbidden_execution_child'
+contains "$GRADE" 'discovery-checklist.tsv'
+contains "$BRIEF" 'Do not start implementation.'
+contains "$BRIEF" '`current_wave` is `1`'
+contains "$OPERATOR" 'Stop at the planning boundary'
 contains "$VERIFY" 'hidden suite and reference specification cover different FR sets'
 contains "$ANON" 'glm[-_ ]?5\.?3'
 contains "$ANON" 'dflash2?'
 contains "$README" 'glm-mtp'
-contains "$README" 'meaningful TypeScript'
+contains "$README" 'implementation-ready planning'
 
 if grep -Eq -- 'curl .*Authorization: Bearer' "$RUN"; then
   fail "run-arm puts its bearer token in argv"
@@ -123,4 +134,85 @@ jq -e '.passed == true and .checked_children == 0' "$attestation_sandbox/model-a
 
 rm -rf "$attestation_sandbox"
 trap - EXIT
-printf 'PASS: Loom TypeScript benchmark supports fail-closed GLM MTP and DFlash arms\n'
+
+planning_sandbox="$(mktemp -d)"
+trap 'rm -rf "$planning_sandbox"' EXIT
+planning_worktree="$planning_sandbox/worktree"
+planning_run="$planning_sandbox/run"
+mkdir -p \
+  "$planning_worktree/engine/src/core" \
+  "$planning_worktree/.claude/specs/ui-relay" \
+  "$planning_worktree/.claude/plans" \
+  "$planning_worktree/.claude/state" \
+  "$planning_run"
+cp "$BENCH/frozen/ui-relay-types.ts" "$planning_worktree/engine/src/core/ui-relay-types.ts"
+git -C "$planning_worktree" init -q
+git -C "$planning_worktree" add engine/src/core/ui-relay-types.ts
+git -C "$planning_worktree" -c user.name=benchmark -c user.email=bench@local commit -qm baseline
+git -C "$planning_worktree" rev-parse HEAD > "$planning_run/base_sha"
+for artifact in brainstorm spec plan-alignment; do
+  printf '# %s\n' "$artifact" > "$planning_worktree/.claude/specs/ui-relay/$artifact.md"
+done
+printf '# plan\n' > "$planning_worktree/.claude/plans/ui-relay.md"
+cat > "$planning_worktree/.claude/state/active_task_graph.json" <<'JSON'
+{
+  "current_phase": "execute",
+  "current_wave": 1,
+  "spec_dir": ".claude/specs/ui-relay",
+  "spec_file": ".claude/specs/ui-relay/spec.md",
+  "plan_file": ".claude/plans/ui-relay.md",
+  "tasks": [{"id":"T1","status":"pending"}],
+  "executing_tasks": [],
+  "wave_gates": {"1":{"impl_complete":false,"reviews_complete":false,"tests_passed":null}}
+}
+JSON
+cat > "$planning_run/run.json" <<'JSON'
+{
+  "benchmark_kind":"planning-only",
+  "stop_before":"wave-1-implementation",
+  "model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"
+}
+JSON
+cat > "$planning_run/session.jsonl" <<'JSONL'
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"decompose-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}}]}}}
+JSONL
+printf 'No interview questions.\n' > "$planning_run/interview.md"
+bash "$GRADE" "$planning_worktree" "$planning_run" >/dev/null
+jq -e '
+  .planning_complete == true and
+  .protocol.planning_only_receipt == true and
+  .protocol.implementation_started == false and
+  .protocol.forbidden_execution_child == false and
+  .protocol.task_graph_at_execution_boundary == true
+' "$planning_run/outcome.planning.json" >/dev/null \
+  || fail "valid pre-implementation planning boundary did not pass"
+
+planning_child="$planning_sandbox/run-execution-child"
+mkdir -p "$planning_child"
+cp "$planning_run"/{base_sha,run.json,session.jsonl,interview.md} "$planning_child/"
+sed -i 's/decompose-agent/code-implementer-agent/' "$planning_child/session.jsonl"
+status=0
+bash "$GRADE" "$planning_worktree" "$planning_child" >/dev/null 2>&1 || status=$?
+[[ "$status" -eq 1 ]] || fail "planning grader accepted an implementation child"
+jq -e '.planning_complete == false and .protocol.forbidden_execution_child == true' \
+  "$planning_child/outcome.planning.json" >/dev/null \
+  || fail "planning grader did not record the forbidden execution child"
+
+printf 'implementation must make this run invalid\n' > "$planning_worktree/engine/src/core/ui-relay.ts"
+planning_bad="$planning_sandbox/run-bad"
+mkdir -p "$planning_bad"
+cp "$planning_run"/{base_sha,run.json,session.jsonl,interview.md} "$planning_bad/"
+status=0
+bash "$GRADE" "$planning_worktree" "$planning_bad" >/dev/null 2>&1 || status=$?
+[[ "$status" -eq 1 ]] || fail "planning grader accepted a started implementation"
+jq -e '.planning_complete == false and .protocol.implementation_started == true' \
+  "$planning_bad/outcome.planning.json" >/dev/null \
+  || fail "planning grader did not record implementation start"
+
+rm -rf "$planning_sandbox"
+trap - EXIT
+if rg -n 'grade-implementation\.sh|planning \+ implementation benchmark' "$BENCH"; then
+  fail "planning-only benchmark retains implementation-era harness references"
+fi
+
+printf 'PASS: Loom planning benchmark stops before implementation across all local-model arms\n'

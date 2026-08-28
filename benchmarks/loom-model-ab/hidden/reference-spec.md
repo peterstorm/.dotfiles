@@ -3,19 +3,21 @@
 **Status:** HIDDEN. Never enters a benchmark worktree and is never shown to a
 model or to a live run.
 
-This is not the input the arms receive — they receive `frozen/brief.md` and must
-write their own spec. This document is the grader's answer key. It serves two
+This is not input to the arms — they receive `frozen/brief.md` and must write
+their own spec. This document is the grader's answer key. It serves two
 purposes:
 
-1. it is the requirement set the hidden acceptance suite enforces; and
-2. it is the **discovery checklist** — for each FR below, record whether the
-   arm's own `spec.md` identified the requirement, whether its `plan.md`
-   accounted for it, and whether its implementation satisfies it.
+1. it defines the requirement set an implementation-ready plan must preserve;
+   the frozen acceptance suite remains an executable consistency check but is
+   never copied into or run inside a planning arm; and
+2. it is the **discovery checklist** — for each FR below, independently record
+   whether `spec.md` identified it, `plan.md` accounted for it, and the task
+   graph preserved it in executable task context.
 
-Discovery and satisfaction are scored as orthogonal facts. An arm that never
-wrote down the CRLF rule but happens to pass FR-013 got there by luck, and an
-arm that specified it precisely and then failed the test has a different defect.
-Do not collapse the two columns.
+These columns are orthogonal. A plan can faithfully decompose a wrong spec, and
+an alignment report can prove internal consistency while missing the actual
+protocol. Do not collapse discovery, architecture, and decomposition into one
+score.
 
 ## Context
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Anonymise finished benchmark runs for blind grading.
+# Anonymise finished planning benchmark runs for blind grading.
 #
 #   bash scripts/anonymise.sh <batch-id> runs/<run-id> [runs/<run-id> ...]
 #
@@ -33,7 +33,7 @@ chmod 600 "$MAP"
 # Shuffle so label order carries no information about run order.
 mapfile -t SHUFFLED < <(printf '%s\n' "$@" | shuf)
 
-letter_for() { printf "\\$(printf '%03o' $((65 + $1)))"; }
+letter_for() { printf '%b' "\\$(printf '%03o' $((65 + $1)))"; }
 
 # Tells that would unblind the grader if left in the artifacts.
 scrub() {
@@ -56,17 +56,19 @@ for i in "${!SHUFFLED[@]}"; do
   dest="$OUT/$label"
   mkdir -p "$dest"
 
-  for artifact in spec.md plan.md interview.md task-graph.json wave-gate.md diff.patch; do
+  for artifact in brainstorm.md spec.md interview.md plan.md plan-alignment.md task-graph.json discovery-checklist.tsv; do
     src="$run/$artifact"
     [[ -f "$src" ]] || continue
     scrub "$src" > "$dest/$artifact"
   done
 
-  # Outcome facts are graded too, but the arm field is a tell.
-  if [[ -f "$run/outcome.json" ]]; then
-    scrub "$run/outcome.json" \
-      | sed -E 's/"(arm|run_id)"[[:space:]]*:[[:space:]]*"[^"]*"/"\1": "REDACTED"/g' \
-      > "$dest/outcome.json"
+  # Mechanical planning facts are gates too, but paths and model ids are tells.
+  if [[ -f "$run/outcome.planning.json" ]]; then
+    scrub "$run/outcome.planning.json" \
+      | sed -E \
+          -e 's/"(arm|run_id)"[[:space:]]*:[[:space:]]*"[^"]*"/"\1": "REDACTED"/g' \
+          -e 's#"worktree"[[:space:]]*:[[:space:]]*"[^"]*"#"worktree": "REDACTED"#g' \
+      > "$dest/outcome.planning.json"
   fi
 
   printf '%s\t%s\n' "$label" "$run" >> "$MAP"

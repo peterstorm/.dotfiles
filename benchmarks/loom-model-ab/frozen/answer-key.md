@@ -18,6 +18,9 @@ experiments. Answer **only** from this sheet.
 4. Log every question asked and every answer given to
    `runs/<run-id>/interview.md`. The transcript is graded.
 5. If a phase asks the same question twice, answer it twice and note the repeat.
+6. Approving decompose 4c approves only the task graph. Once the graph is ready
+   for Wave 1, end the run. Never approve or steer execution, and never answer
+   an implementation, review, test, or wave-gate child.
 
 ## Scripted answers
 

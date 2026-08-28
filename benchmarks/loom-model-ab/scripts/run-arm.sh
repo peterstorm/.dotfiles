@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Prepare one benchmark arm: isolated worktree, frozen contract, recorded
-# baseline. Stops short of launching Pi — the run itself is interactive,
-# because the whole point is that the model conducts its own interview.
+# Prepare one planning-only benchmark arm: isolated worktree, frozen contract,
+# and recorded baseline. Stops short of launching Pi because the model conducts
+# its own interview. The model must stop after decomposition, before Wave 1.
 #
 #   bash scripts/run-arm.sh --list
 #   bash scripts/run-arm.sh --probe glm-mtp
@@ -193,6 +193,8 @@ jq -n \
   --arg baseline_typecheck "$BASELINE_TSC" \
   --arg started "$STARTED" \
   '{
+    benchmark_kind: "planning-only",
+    stop_before: "wave-1-implementation",
     run_id: $run_id,
     arm: $arm,
     repetition: $repetition,
@@ -255,11 +257,16 @@ Answer only from frozen/answer-key.md, logging every exchange to:
 
   $RUN_DIR/interview.md
 
-When the run ends, capture spec.md, plan.md, the task graph, wave-gate result,
-and session transcript as session.jsonl into $RUN_DIR. Attest every executed
-child before grading; either command records a failure without disguising it:
+The valid stop point is immediately after decomposition: the active graph may
+say phase=execute/current_wave=1, but every task must still be pending and no
+Wave 1 child may have started. If implementation starts, stop and preserve the
+run as an invalid stop-boundary result.
 
-  bash scripts/verify-run-models.sh "$RUN_DIR"
-  bash scripts/grade-implementation.sh "$WORKTREE" "$RUN_DIR"
+Copy the parent Pi transcript to $RUN_DIR/session.jsonl. The planning grader
+captures brainstorm, spec, plan, alignment, and task graph from the worktree.
+It also attests every executed child and fails closed on missing evidence:
+
+  bash "$BENCH_DIR/scripts/verify-run-models.sh" "$RUN_DIR"
+  bash "$BENCH_DIR/scripts/grade-planning.sh" "$WORKTREE" "$RUN_DIR"
 
 EOF
