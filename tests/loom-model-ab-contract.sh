@@ -90,7 +90,7 @@ jq -e '
     "thinkingLevel": "xhigh"
   } and
   .targets.glm == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k",
+    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k",
     "thinkingLevel": "max"
   }
 ' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing lacks exact qwen/glm targets"

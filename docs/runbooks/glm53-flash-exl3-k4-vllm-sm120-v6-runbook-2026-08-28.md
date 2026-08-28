@@ -1,8 +1,8 @@
 # GLM-5.3 Flash EXL3 K4 v84 text FP8-DS-MLA + MTP3 384K v6
 
-**Status:** immutable, prepared, and unqualified. Static contracts and remote image identity
-checks are complete. The profile has not been launched. The currently running v5 multimodal
-NVFP4 profile must remain online until an attended v6 qualification window.
+**Status:** immutable, booted, authenticated, and basic-smoke-qualified on 2026-08-28. Full
+long-context, prefix-cache, tool, concurrency, restart, and soak qualification remains pending.
+v6 is currently serving; v5 is stopped but retained as the transactional rollback.
 
 ## Purpose
 
@@ -10,10 +10,9 @@ v6 reproduces the supplied author's text-only recipe without modifying v5. In th
 “same KV cache” means the recipe's exact `fp8_ds_mla` mode. It does **not** mean v5's
 `nvfp4_ds_mla`; the two profiles intentionally remain separate.
 
-The author's statement that the configuration should expose approximately 700,000 KV tokens
-is recorded only as an unverified expectation. Capacity is a boot-time result, not a launcher
-constant. Do not mark v6 qualified until local logs on both RTX PRO 6000 cards report the
-allocated token capacity.
+The author's approximately 700,000-token expectation was disproven by the exact local boot.
+The engine allocated 403,989 FP8 DS MLA KV tokens, only 1.03× the 393,216-token request
+ceiling. Capacity remains a boot-time result rather than a launcher constant.
 
 ## Immutable identities
 
@@ -86,7 +85,7 @@ Results therefore compare whole runtime envelopes, not one isolated optimization
   transactional rollback are retained. The API key is passed through a private env file, never
   Docker argv.
 
-## Preparation without stopping v5
+## Re-preflight without stopping the active profile
 
 The following operations do not stop the active v5 container, but the puller starts a short
 CPU-side capability probe and preflight hashes the checkpoint. Run them only when that I/O is
@@ -100,9 +99,7 @@ CACHE_HOST="$HOME/.cache/glm53-flash-exl3-k4-sm120-v6" \
   bash scripts/inference/glm53/run-glm53-flash-exl3-k4-vllm-sm120-v6.sh --preflight
 ```
 
-Do **not** invoke `switch-glm53-exl3-profile-v6.sh start` while v5 is in use.
-
-## Future attended launch
+## Attended re-launch
 
 Only during an approved interruption:
 
@@ -119,30 +116,35 @@ The switcher preflights before stopping anything, requires authenticated discove
 `glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`, and restores the previous repository-owned
 profile if launch or readiness fails.
 
-## First-boot capacity gate
+## First-boot results — 2026-08-28
 
-Capture the complete startup log and record:
+- Exact served model: `glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`.
+- Engine-reported FP8 DS MLA KV pool: **403,989 tokens**.
+- Maximum full-ceiling concurrency: **1.03×** at 393,216 tokens.
+- Available KV memory reported by the worker: **2.02 GiB**.
+- Runtime envelope confirmed: 393,216 context, TP2/EP2/DCP2, FP8 DS MLA,
+  `FLASHINFER_MLA_SPARSE_SM120`, InstantTensor, prefix caching, chunked prefill, and MTP3.
+- InstantTensor loaded 164 GiB per TP worker in approximately 50–52 seconds.
+- Engine profile/KV/cache/warmup initialization took 113.74 seconds.
+- CUDA-graph memory profiling reported effective utilization equivalent to 0.9821 without its
+  estimate; no utilization change is authorized without a separate immutable profile.
+- Container reached authenticated exact-model readiness with restart count zero.
+- A low-reasoning deterministic smoke request returned exactly `V6_READY` with valid usage and
+  per-request metrics.
 
-1. total allocated KV token capacity and whether the log reports it globally or per worker;
-2. per-GPU model, non-torch, activation, and KV memory;
-3. effective max model length, maximum concurrency, KV dtype, attention backend, loader,
-   prefix-cache state, and MTP configuration;
-4. any InstantTensor cache materialization or fallback;
-5. container restart count, GPU Xids, corrected errors, and host RAM pressure.
+The approximately 700K claim was 296,011 tokens, or 42.3%, above the measured pool. Two
+simultaneous 393,216-token requests cannot fit, and representative concurrency must remain
+well below the four-sequence scheduler ceiling until tested.
 
-Treat approximately 700K as confirmed only if the exact v6 boot reports it. A materially lower
-pool that cannot admit one 393,216-token request is a startup/qualification failure. A pool
-between one and two full contexts requires concurrency tests to avoid overcommit.
+## Remaining runtime qualification
 
-## Runtime qualification
-
-1. Authentication rejection and exact authenticated model discovery.
-2. Exact text, reasoning, streaming, malformed request, and usage-field tests.
+1. Authentication rejection, streaming, malformed request, and complete usage-field tests.
+2. Exact text and reasoning behavior across supported effort levels.
 3. Single and parallel tool calls with `glm45`/`glm47` parsers.
 4. Retrieval at 98K, 128K, 256K, and 384K.
 5. Prefix-cache cold/warm equivalence and cache-hit accounting.
-6. One 384K request, then representative four-way concurrency; attempt two full 384K requests
-   only if measured capacity is at least 786,432 tokens.
+6. Representative concurrency within the measured 403,989-token pool; do not attempt two full
+   384K requests.
 7. Restart twice and soak while monitoring Xids, thermals, restart count, and correctness.
 8. Confirm image input is rejected because v6 is intentionally text-only.
 

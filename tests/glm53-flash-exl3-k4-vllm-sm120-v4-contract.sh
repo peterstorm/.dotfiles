@@ -64,11 +64,8 @@ contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v3'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v4'
 jq -e '
-  .providers["desktop-vllm"].models[] |
-  select(.id == "glm-5.3-flash-exl3-k4-vision-mtp") |
-  .input == ["text", "image"] and
-  .contextWindow == 98304 and
-  .defaultThinkingLevel == "max"
+  [.providers["desktop-vllm"].models[] | select(.id == "glm-5.3-flash-exl3-k4-vision-mtp")] |
+  length == 0
 ' "$PI_MODELS" >/dev/null
 
 set +e

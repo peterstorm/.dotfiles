@@ -124,25 +124,8 @@ contains "$CATALOG" 'glm53-flash-nvfp4-vllm-sm120-v2'
 jq -e '
   .providers."desktop-vllm" as $provider |
   ($provider.apiKey | contains("~/.config/glm53/api-key")) and
-  ($provider.models | any(
-    .id == "glm-5.3-flash-nvfp4" and
-    .reasoning == true and
-    .defaultThinkingLevel == "max" and
-    .thinkingLevelMap == {
-      "minimal": null,
-      "low": "low",
-      "medium": null,
-      "high": "high",
-      "xhigh": null,
-      "max": "max"
-    } and
-    .input == ["text", "image"] and
-    .contextWindow == 262144 and
-    .compat.supportsReasoningEffort == true and
-    .compat.supportsDeveloperRole == false and
-    .compat.thinkingFormat == "deepseek"
-  ))
-' "$PI_MODELS" >/dev/null || fail "Pi GLM profile does not match multimodal v2"
+  ([$provider.models[] | select(.id == "glm-5.3-flash-nvfp4")] | length == 0)
+' "$PI_MODELS" >/dev/null || fail "retired NVFP4 v2 profile remains in the Pi picker"
 
 for identity in "$REV" "$BASE_DIGEST" "$IMAGE_DIGEST" "$IMAGE_CONFIG" "$OVERLAY_COMMIT" "$OVERLAY_TREE"; do
   contains "$RUNBOOK" "$identity"

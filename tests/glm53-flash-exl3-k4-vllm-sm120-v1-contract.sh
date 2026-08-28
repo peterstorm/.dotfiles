@@ -68,9 +68,8 @@ contains "$SWITCH" 'inference_quiesce_failed_container "$TARGET"'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v1'
 jq -e '
-  .providers["desktop-vllm"].models[] |
-  select(.id == "glm-5.3-flash-exl3-k4") |
-  .input == ["text"] and .defaultThinkingLevel == "max"
+  [.providers["desktop-vllm"].models[] | select(.id == "glm-5.3-flash-exl3-k4")] |
+  length == 0
 ' "$PI_MODELS" >/dev/null
 
 set +e

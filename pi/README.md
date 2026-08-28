@@ -133,14 +133,11 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with eleven selectable models:
+with eight selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
-- `desktop-vllm/glm-5.3-flash-nvfp4`
-- `desktop-vllm/glm-5.3-flash-exl3-k4`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision` (DFlash benchmark arm)
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k` (v5 rollback)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7`
 - `desktop-vllm/qwen3.8-27b`
@@ -184,21 +181,12 @@ before sending a prompt. Verify discovery without contacting the server:
 pi --list-models deepseek-v4-flash
 ```
 
-### GLM-5.3 Flash NVFP4
-
-The experimental vLLM v2 profile serves text plus one image from the immutable
-`local-inference-lab/GLM-5.3-Flash-NVFP4` revision at a 262,144-token qualification
-context. Its checkpoint template supports `low`, `high`, and `max` reasoning effort;
-Pi hides the other levels and defaults GLM sessions to `max`. The model remains
-selectable while offline, but it must not replace a qualified Qwen/DeepSeek service
-until the SM120, TP2 capacity, long-context, and image gates in the dated runbook pass.
-
-```bash
-pi --list-models glm-5.3-flash-nvfp4
-pi --model desktop-vllm/glm-5.3-flash-nvfp4:max
-```
-
 ### GLM-5.3 Flash EXL3 K4
+
+Legacy NVFP4 v2, EXL3 v1/v2, and 98K MTP v4 launchers remain immutable deployment
+rollbacks, but are intentionally omitted from Pi's model picker. The picker exposes only
+the DFlash benchmark arm, validated v5 rollback, active text FP8 v6, and vision NVFP4 v7
+candidate.
 
 The separate EXL3 K4 profile uses a digest-pinned custom Infernal Invocation vLLM
 image with B12X's NVFP4 MLA KV cache. The upstream-aligned v37 TP2 candidate exposes
@@ -225,17 +213,14 @@ InstantTensor, prefix-cache, and MTP3 recipe without changing v5. Immutable v7 i
 from the multimodal v5 envelope: it retains calibrated `nvfp4_ds_mla`, B12X sparse MLA,
 TORCH_SDPA vision, four-image support, and MTP3, then enables prefix caching and adds a
 512-token `long_prefill_token_threshold`. The cap prevents one cold long prefill from consuming
-the full 2,072-token scheduler iteration and starving an active decode request. v6 and v7
-remain unqualified until boot and runtime tests establish capacity, prefix-cache correctness,
-long-context behavior, vision correctness, and v7 cold-prefill/decode latency.
+the full 2,072-token scheduler iteration and starving an active decode request. v6 is active
+and its exact boot measured 403,989 KV tokens—1.03× its 393,216-token ceiling and far below
+the author's roughly 700K claim. Full v6 runtime qualification and all v7 boot, prefix-cache,
+vision, and cold-prefill/decode qualification remain pending.
 
 ```bash
-pi --list-models glm-5.3-flash-exl3-k4
-pi --model desktop-vllm/glm-5.3-flash-exl3-k4:max
 pi --list-models glm-5.3-flash-exl3-k4-vision
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision:max
-pi --list-models glm-5.3-flash-exl3-k4-vision-mtp
-pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max
 pi --list-models glm-5.3-flash-exl3-k4-vision-mtp-384k
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max
 pi --list-models glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k
@@ -336,7 +321,7 @@ tracked policy publishes `qwen` and `glm` as named exact targets beside parent i
       "thinkingLevel": "xhigh"
     },
     "glm": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k",
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k",
       "thinkingLevel": "max"
     }
   }
