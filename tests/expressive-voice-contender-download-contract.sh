@@ -77,6 +77,11 @@ set -euo pipefail
 printf 'curl %s\n' "$*" >>"$CURL_EVENTS"
 while (( $# > 0 )); do
   case "$1" in
+    --config)
+      stat -c %a "$2" >"$CURL_CONFIG_MODE"
+      cp "$2" "$CURL_CONFIG_COPY"
+      shift 2
+      ;;
     --output) target="$2"; shift 2 ;;
     https://*) url="$1"; shift ;;
     *) shift ;;
@@ -91,6 +96,8 @@ esac
 EOF
 chmod +x "$sandbox/bin/curl"
 : >"$sandbox/curl-events"
+printf 'hf_abcdefghijklmnopqrstuvwxyz123456\n' >"$sandbox/hf-token"
+chmod 0600 "$sandbox/hf-token"
 
 run_downloader() {
   EXPRESSIVE_VOICE_MANIFEST="$sandbox/fixture.tsv" \
@@ -98,8 +105,11 @@ run_downloader() {
   EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28 \
   EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES="${1:-}" \
   CURL_EVENTS="$sandbox/curl-events" \
+  CURL_CONFIG_MODE="$sandbox/curl-config-mode" \
+  CURL_CONFIG_COPY="$sandbox/curl-config-copy" \
   CURL_FIRST="$sandbox/first.bin" \
   CURL_SECOND="$sandbox/second.bin" \
+  HF_TOKEN_FILE="$sandbox/hf-token" \
   PATH="$sandbox/bin:$PATH" \
     "$DOWNLOADER" fixture-restricted
 }
@@ -118,6 +128,11 @@ ready="$sandbox/models/expressive-contenders/fixture-restricted"
 jq -e '.gpuRuntimeStarted == false and .productionAuthority == false' "$ready/download-receipt.json" >/dev/null \
   || fail 'receipt crossed the GPU or Production boundary'
 [[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'fixture did not download each artifact exactly once'
+[[ "$(cat "$sandbox/curl-config-mode")" == 600 ]] || fail 'curl auth config was not private'
+grep -Fq 'hf_abcdefghijklmnopqrstuvwxyz123456' "$sandbox/curl-config-copy" \
+  || fail 'curl auth config did not receive the token'
+! grep -Fq 'hf_abcdefghijklmnopqrstuvwxyz123456' "$sandbox/curl-events" \
+  || fail 'Hugging Face token leaked through process arguments'
 
 run_downloader yes >/dev/null
 [[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'verified rerun was not idempotent'
@@ -127,5 +142,11 @@ corruption_status=0
 run_downloader yes >/dev/null 2>&1 || corruption_status=$?
 [[ "$corruption_status" != 0 ]] || fail 'corrupt immutable destination was accepted or overwritten'
 [[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'corruption triggered an implicit overwrite download'
+
+chmod 0644 "$sandbox/hf-token"
+token_mode_status=0
+run_downloader yes >/dev/null 2>&1 || token_mode_status=$?
+[[ "$token_mode_status" != 0 ]] || fail 'group/world-readable Hugging Face token was accepted'
+[[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'unsafe token mode crossed the network boundary'
 
 printf 'EXPRESSIVE_VOICE_CONTENDER_DOWNLOAD_CONTRACT_PASS\n'

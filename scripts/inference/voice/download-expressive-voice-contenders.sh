@@ -7,6 +7,8 @@ MANIFEST_FILE="${EXPRESSIVE_VOICE_MANIFEST:-$SCRIPT_DIR/expressive-voice-contend
 MODELS_ROOT="${VOICE_MODELS_ROOT:-/models/voice}/expressive-contenders"
 RESTRICTED_LICENSE_ACCEPTANCE="${EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES:-}"
 DOWNLOAD_AUTHORIZATION="${EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION:-}"
+HF_TOKEN_FILE="${HF_TOKEN_FILE:-$HOME/.config/hf/token}"
+CURL_AUTH_CONFIG=""
 
 fail() {
   printf 'error: %s\n' "$*" >&2
@@ -45,6 +47,23 @@ profile_is_restricted() {
       return 0
       ;;
   esac
+}
+
+prepare_curl_auth() {
+  local mode token
+  [[ -f "$HF_TOKEN_FILE" ]] || return 0
+  mode="$(stat -c %a "$HF_TOKEN_FILE")"
+  [[ "$mode" == 600 || "$mode" == 400 ]] || fail "Hugging Face token must be mode 0600 or 0400: $HF_TOKEN_FILE"
+  IFS= read -r token <"$HF_TOKEN_FILE"
+  [[ "$token" =~ ^hf_[A-Za-z0-9]{20,}$ ]] || fail 'Hugging Face token has an invalid format'
+  CURL_AUTH_CONFIG="$(mktemp)"
+  chmod 0600 "$CURL_AUTH_CONFIG"
+  printf 'header = "Authorization: Bearer %s"\n' "$token" >"$CURL_AUTH_CONFIG"
+  unset token
+}
+
+cleanup_curl_auth() {
+  [[ -z "$CURL_AUTH_CONFIG" ]] || rm -f "$CURL_AUTH_CONFIG"
 }
 
 verify_manifest() {
@@ -107,9 +126,11 @@ stage_verified_existing() {
 download_artifact() {
   local repository="$1" revision="$2" staging="$3" expected_sha="$4" expected_size="$5" relative="$6"
   local target="$staging/$relative" partial="$staging/$relative.part" actual_sha actual_size
+  local -a auth_args=()
   [[ -f "$target" ]] && return 0
   mkdir -p "$(dirname -- "$target")"
-  curl --location --fail --show-error \
+  [[ -z "$CURL_AUTH_CONFIG" ]] || auth_args=(--config "$CURL_AUTH_CONFIG")
+  curl "${auth_args[@]}" --location --fail --show-error \
     --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 \
     --continue-at - --output "$partial" \
     "https://huggingface.co/$repository/resolve/$revision/$relative"
@@ -232,6 +253,8 @@ main() {
     required_bytes=$((required_bytes + repository_bytes))
   done
 
+  prepare_curl_auth
+  trap cleanup_curl_auth EXIT
   mkdir -p "$MODELS_ROOT"
   available_bytes="$(df -PB1 "$MODELS_ROOT" | awk 'NR == 2 { print $4 }')"
   (( available_bytes > required_bytes + 10737418240 )) \
