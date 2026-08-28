@@ -372,6 +372,26 @@ let
     chmod -R a-w "$out"
   '';
 
+  h3MotionContextSource = pkgs.fetchFromGitHub {
+    owner = "seitanism";
+    repo = "ComfyUI-H3-Motion-Context-MultiRef";
+    rev = "87de57ba619297503fa49c9594c0c021d5b0c261";
+    hash = "sha256-tu5Q7keXuZTUN8y4qSeGJqInDNm8WWwB3UQmmGWc4ek=";
+  };
+
+  h3MotionContextNode =
+    pkgs.runCommand "comfyui-h3-motion-context-multiref-87de57b-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${h3MotionContextSource}/. "$out"
+        chmod -R u+w "$out"
+        cd "$out"
+        ${comfyPythonEnv}/bin/python tests/run_tests.py
+        chmod -R a-w "$out"
+      '';
+
   # Upstream does not declare a code license. This immutable pin is authorized
   # only for private local Development evaluation; it is not a Production or
   # redistribution grant.
@@ -449,6 +469,7 @@ let
     ln -s ${kjNodes} "$out/ComfyUI-KJNodes"
     ln -s ${videoHelperSuiteNode} "$out/ComfyUI-VideoHelperSuite"
     ln -s ${mmh3ToolsNode} "$out/ComfyUI-MMH3Tools"
+    ln -s ${h3MotionContextNode} "$out/ComfyUI-H3-Motion-Context-MultiRef"
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
@@ -1851,6 +1872,22 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3MotionContextWorkflows =
+    pkgs.runCommand "minimax-h3-motion-context-local-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-motion-context-workflows.sh} \
+          --source-dir ${h3MotionContextNode} \
+          --output-dir "$out/workflows"
+      '';
+
   imageUpscalerWorkflows =
     pkgs.runCommand "image-upscaler-qualification-v1-workflows"
       {
@@ -2282,6 +2319,7 @@ let
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
+    h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
@@ -2296,6 +2334,7 @@ let
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
+    h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
     rm -rf \
@@ -2303,13 +2342,13 @@ let
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$elite_staging"
+      "$h3_motion_context_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$elite_staging" "$input_dir"
+      "$h3_motion_context_staging" "$elite_staging" "$input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -2355,6 +2394,9 @@ let
     for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3MotionContextWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_motion_context_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -2366,7 +2408,7 @@ let
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
-      "$director_dir" "$h3_turbo_dir" "$elite_dir"
+      "$director_dir" "$h3_turbo_dir" "$h3_motion_context_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2380,6 +2422,7 @@ let
     mv "$h3_safe_upscaler_staging" "$h3_safe_upscaler_dir"
     mv "$director_staging" "$director_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
+    mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$elite_staging" "$elite_dir"
   '';
 
