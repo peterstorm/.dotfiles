@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Contract for the shared multi-endpoint inference credential and sudo-safe ownership.
-# shellcheck disable=SC2016 # Assertions intentionally match literal shell source.
+# shellcheck disable=SC2016,SC2088 # Assertions intentionally match literal shell source.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -58,6 +58,7 @@ if grep -Eq -- 'curl .*Authorization: Bearer' "$SWITCH"; then
   fail "$SWITCH puts the API key in curl argv"
 fi
 contains "$BENCHMARK_ARM" 'curl --config -'
+contains "$BENCHMARK_ARM" '~/.config/glm53/api-key'
 if grep -Eq -- 'curl .*Authorization: Bearer' "$BENCHMARK_ARM"; then
   fail "$BENCHMARK_ARM puts the API key in curl argv"
 fi

@@ -1,9 +1,15 @@
-# Loom model A/B — DeepSeek V4 Flash vs Qwen3.8-27B
+# Loom local-model benchmark — planning that survives implementation
 
 An experiment that answers one question: **which local model should drive a
-Loom feature run end to end?** Both arms get the same brief, write their own
-spec and plan, decompose, implement, and pass the wave gate. They are graded
-against a suite neither of them ever sees.
+Loom feature run end to end?** Every arm gets the same meaningful TypeScript
+JSONL relay/reducer task, writes its own spec and plan, decomposes, implements,
+and passes the wave gate. The plan is not graded as prose alone: a hidden suite
+checks whether it survives implementation against requirements the model never
+sees.
+
+The benchmark supports DeepSeek V4 Flash, Qwen3.8-27B, and both immutable
+GLM-5.3 Flash v84 speculation profiles. This remains one frozen experiment—not
+a second GLM-specific task—so results inside a protocol hash remain comparable.
 
 ## Why this is measurable at all
 
@@ -26,34 +32,43 @@ hand-waving.
 
 ## Arms
 
-| | Arm DS4 | Arm QWEN |
-|---|---|---|
-| Launch | `pi --model desktop-vllm/deepseek-v4-flash:max` | `pi --model desktop-vllm/qwen3.8-27b:xhigh` |
-| Context window | 1,048,576 | 262,144 |
-| Backend | vLLM, `ds4-infernal-invocation-cu133-r18` | SGLang DSpark, `qwen38-27b-bf16-dspark-sglang` |
+| Arm | Pi launch selector | Context | Immutable runtime profile |
+|---|---|---:|---|
+| `ds4` | `desktop-vllm/deepseek-v4-flash:max` | 1,048,576 | `ds4-infernal-invocation-cu133-r18` |
+| `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
+| `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
+| `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v4` |
 
-### Two asymmetries that must be stated, not hidden
+The catalog is machine-readable through `bash scripts/run-arm.sh --list`. The
+canonical GLM model-quality arm is `glm-mtp`; use `glm-dflash` for a matched
+runtime-profile comparison, not as a second independent model.
+
+### Three asymmetries that must be stated, not hidden
 
 **Thinking level cannot be equalised.** The `thinkingLevelMap` entries that are
-non-null differ: DS4 exposes `low`/`high`/`max`, Qwen exposes
-`low`/`medium`/`xhigh`. Only `low` is valid for both, and a mapped-null level is
-*not rejected* — Pi silently falls back, so a run pinned to a level one model
-does not support looks fine and is not the run you think it is. Each arm
-therefore runs at **its own maximum**, pinned explicitly on the command line so
-the value lands in the transcript. This compares each model at its best, which
-is the decision you are actually making. It does not compare them at equal
-reasoning budget, and no claim of that kind may be made from these results.
+non-null differ: DS4 and GLM expose `low`/`high`/`max`, while Qwen exposes
+`low`/`xhigh`. A mapped-null level is *not rejected*—Pi silently falls back, so
+a run pinned to a level one model does not support looks valid but is not the
+run you think it is. Each arm therefore runs at **its own maximum**, pinned on
+the command line. This compares each model at its best; it does not compare
+equal reasoning budgets.
 
-**Context windows differ 4×.** Qwen must fit the run in 256k. Do not treat
-context exhaustion as a spoiled run — it is a result. Record it as its own
-outcome fact (`context_exhausted: true`) and keep the run in the sample. A model
-that cannot hold a Loom feature run in its window is answering the question you
-asked, just not the way you hoped.
+**Context windows differ by more than 10×.** GLM must fit each phase in 98,304
+tokens, Qwen in 262,144, and DS4 in 1,048,576. Do not treat context exhaustion
+as a spoiled run—it is a result. Record `context_exhausted: true` and retain the
+sample. A model that cannot hold a Loom phase in its deployed context is
+answering the operational question.
+
+**GLM speculation modes are not different base models.** `glm-dflash` and
+`glm-mtp` use the same EXL3 target weights, image family, template, context, and
+reasoning level. Their difference is speculative decoding. Treat a matched pair
+as runtime-profile evidence (correctness, stability, latency), not four extra
+independent observations about GLM planning quality.
 
 ## Isolation
 
-The two arms must not be able to see each other's work. Four channels, three of
-them non-obvious:
+Arms and repetitions must not be able to see each other's work. Four channels,
+three of them non-obvious:
 
 1. **Filesystem** — each run gets its own git worktree off the same base commit:
    `git worktree add ../loom-bench-<run-id> -b bench/<run-id> <BASE_SHA>`.
@@ -72,29 +87,34 @@ them non-obvious:
 4. **Prefix cache** — not contamination, but it does distort latency. Only
    compare wall-clock across runs of the same arm, never across arms.
 
-Port 8000 is exclusive, so the arms cannot run concurrently anyway. Batch by
-arm: all DS4 repetitions, swap the backend once, then all Qwen repetitions.
-Batching confounds arm with time-of-day and machine state — accept it, note the
-date and any host changes in each run record, and do not batch across a driver,
-firmware, or Loom version change.
+Port 8000 is exclusive, so arms cannot run concurrently. Batch by arm and swap
+the backend once per batch. Batching confounds arm with time-of-day and machine
+state—accept it, note host changes, and never cross a driver, firmware, Pi,
+protocol-hash, or Loom-baseline change inside one batch.
 
 ### Swapping the backend
 
-Qwen's own switcher only moves between vLLM and SGLang. Crossing to DS4 needs
-the Qwen container stopped first, or the launcher dies on a port bind:
+Use each versioned profile's attended switch path. Port 8000 remains exclusive;
+never improvise a second launch over a running profile:
 
 ```bash
-# → DS4
-docker rm -f qwen38-27b-bf16-dspark-sglang qwen38-27b-bf16-dspark-vllm 2>/dev/null || true
-bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
+# → GLM v84 MTP3 (canonical GLM quality arm)
+bash scripts/inference/glm53/switch-glm53-exl3-profile-v4.sh start
 
-# → Qwen
-docker rm -f ds4-infernal-invocation-cu133-r18 2>/dev/null || true
-bash scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh
+# → GLM v84 DFlash2 (matched runtime-profile arm)
+bash scripts/inference/glm53/switch-glm53-exl3-profile-v3.sh start
+
+# → Qwen (stop a non-Qwen profile first; this switcher fails closed on port conflicts)
+bash scripts/inference/qwen38/switch-qwen38-backend-v4.sh sglang
+
+# → DS4 (stop the current mutually-exclusive :8000 profile first)
+bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
 ```
 
-Wait for `/health` **and** an authenticated `/v1/models` before starting a run —
-health alone has already lied once during a cutover.
+Then run `bash scripts/run-arm.sh --probe <arm>`. It refuses stale Loom
+baselines, active Cortex memory, malformed/multi-model responses, failed
+authentication, and served-model mismatches. Health alone has already lied once
+during a cutover.
 
 ## Repetitions
 
@@ -154,7 +174,7 @@ one precisely and then failing it is a different defect. This column is the
 reason the models write their own spec — it measures whether the model *found
 the problem*, which is most of what a spec phase is for.
 
-**3. Mutation score** — both arms write their own tests, and "tests pass" is
+**3. Mutation score** — every arm writes its own tests, and "tests pass" is
 gameable by writing vacuous ones. Run mutation testing over `ui-relay.ts` using
 only the arm's own suite. A high hidden-suite score with a low mutation score
 means the implementation is good and the tests are theatre; report both.
@@ -202,14 +222,20 @@ runs/<run-id>/            per-run record: diff, artifacts, interview log, scores
 **Once, before the first run:**
 
 ```bash
+bash scripts/verify-harness.sh     # catalog, Pi maps, hidden FR parity, baseline
 bash scripts/isolation.sh off      # unregister cortex; keeps a backup
 bash scripts/isolation.sh status   # must say "safe to run"
+bash scripts/run-arm.sh --probe glm-mtp
 ```
+
+If verification reports a stale baseline, refresh it with
+`bash scripts/baseline.sh`, commit that receipt with the harness change, and
+verify again. Never compare runs carrying different `protocol_sha256` values.
 
 **Per run:**
 
 ```bash
-bash scripts/run-arm.sh ds4 1
+bash scripts/run-arm.sh glm-mtp 1
 ```
 
 It refuses to continue unless `:8000` is authenticating and serving the arm's
