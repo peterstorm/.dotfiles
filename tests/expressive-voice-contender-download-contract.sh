@@ -96,7 +96,7 @@ esac
 EOF
 chmod +x "$sandbox/bin/curl"
 : >"$sandbox/curl-events"
-printf 'hf_abcdefghijklmnopqrstuvwxyz123456\n' >"$sandbox/hf-token"
+printf 'hf_abcdefghijklmnopqrstuvwxyz123456' >"$sandbox/hf-token"
 chmod 0600 "$sandbox/hf-token"
 
 run_downloader() {

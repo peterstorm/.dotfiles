@@ -54,7 +54,7 @@ prepare_curl_auth() {
   [[ -f "$HF_TOKEN_FILE" ]] || return 0
   mode="$(stat -c %a "$HF_TOKEN_FILE")"
   [[ "$mode" == 600 || "$mode" == 400 ]] || fail "Hugging Face token must be mode 0600 or 0400: $HF_TOKEN_FILE"
-  IFS= read -r token <"$HF_TOKEN_FILE"
+  IFS= read -r token <"$HF_TOKEN_FILE" || [[ -n "$token" ]]
   [[ "$token" =~ ^hf_[A-Za-z0-9]{20,}$ ]] || fail 'Hugging Face token has an invalid format'
   CURL_AUTH_CONFIG="$(mktemp)"
   chmod 0600 "$CURL_AUTH_CONFIG"
