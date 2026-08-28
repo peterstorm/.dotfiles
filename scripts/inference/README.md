@@ -19,11 +19,13 @@ glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            profile, a conservative 128K/C1 EXL3 rollback, an upstream-aligned
            v37 500K/C4/MTP3 text candidate, isolated v84 98K multimodal
            TP2/EP2/DCP2 rollback profiles for DFlash2-7 or built-in MTP3, a
-           v84 384K multimodal MTP3 candidate backed by measured 830K-token
-           NVFP4 KV capacity, and an isolated text-only v6 reproduction using
-           FP8 DS MLA KV, FlashInfer SM120 sparse MLA, InstantTensor, prefix
-           caching, and MTP3. The v6 author's roughly 700K-token capacity claim
-           remains unqualified until its first local boot.
+           v84 384K multimodal MTP3 profile backed by its measured 625,112-token
+           NVFP4 KV capacity, an isolated text-only v6 reproduction using FP8 DS
+           MLA KV, FlashInfer SM120 sparse MLA, InstantTensor, prefix caching,
+           and MTP3, plus multimodal NVFP4 v7 with prefix caching and a 512-token
+           long-prefill fairness cap. The FP8 author's roughly 700K-token capacity
+           claim and v7's cache correctness/latency remain unqualified until local
+           runtime tests.
 muse/      Muse Glimmer 30B (BF16 + DFlash) downloader + launcher.
 profiles/  Cross-model profiles (the concurrent Qwen + Muse dual switcher).
 shared/    Components more than one profile uses: the credential helper every

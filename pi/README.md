@@ -133,7 +133,7 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with nine selectable models:
+with eleven selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-nvfp4`
@@ -141,6 +141,8 @@ with nine selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7`
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
 - `desktop-muse/muse-glimmer-30b`
@@ -213,10 +215,19 @@ from the 499,968-token text-only v37 profile. A second v84 entry uses the checkp
 built-in MTP head for three draft tokens instead of the external DFlash2 model. It retains the
 same 98,304-token multimodal boundary but follows the supplied 0.986-utilization recipe.
 The immutable v5 profile retains that exact image, target, calibrated NVFP4 MLA KV cache,
-vision path, and MTP3 settings while raising only the request ceiling to 393,216. Its v4
-startup allocated 830,668 KV tokens after reserving the vision encoder, providing the capacity
-basis for a conservative 384K candidate; long-context vision and concurrency still require
+vision path, and MTP3 settings while raising only the request ceiling to 393,216. Its own
+startup allocated 625,112 KV tokens after reserving the vision encoder, providing 1.59×
+theoretical full-context concurrency; long-context vision and concurrency still require
 separate local qualification.
+
+The text-only FP8 v6 profile reproduces the supplied FP8 DS MLA, FlashInfer SM120 sparse MLA,
+InstantTensor, prefix-cache, and MTP3 recipe without changing v5. Immutable v7 instead derives
+from the multimodal v5 envelope: it retains calibrated `nvfp4_ds_mla`, B12X sparse MLA,
+TORCH_SDPA vision, four-image support, and MTP3, then enables prefix caching and adds a
+512-token `long_prefill_token_threshold`. The cap prevents one cold long prefill from consuming
+the full 2,072-token scheduler iteration and starving an active decode request. v6 and v7
+remain unqualified until boot and runtime tests establish capacity, prefix-cache correctness,
+long-context behavior, vision correctness, and v7 cold-prefill/decode latency.
 
 ```bash
 pi --list-models glm-5.3-flash-exl3-k4
@@ -227,6 +238,10 @@ pi --list-models glm-5.3-flash-exl3-k4-vision-mtp
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max
 pi --list-models glm-5.3-flash-exl3-k4-vision-mtp-384k
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max
+pi --list-models glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max
+pi --list-models glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7:max
 ```
 
 ### Qwen3.8 27B
