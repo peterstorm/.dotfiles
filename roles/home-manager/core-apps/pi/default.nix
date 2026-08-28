@@ -106,11 +106,13 @@ let
   # that would route around it. There the endpoint arrives on loopback, via the
   # `vllm-forward` Access-authenticated tunnel from the darwin role.
   #
-  # The apiKey command in models.json needs no such split — it probes for a local
-  # key file, then the sops secret, then falls back to `ssh desktop`, so one
-  # string covers every host.
+  # Authentication is also host-specific. Darwin consumes the SOPS-managed
+  # credential shipped by dotfiles directly; endpoint-specific files can be stale
+  # after a server-side rotation and must never shadow that source of truth. Other
+  # hosts retain the launcher-compatible resolution order from models.json.
   isLoopbackVllm = pkgs.stdenv.hostPlatform.isDarwin;
   vllmBaseUrl = "http://localhost:8000/v1";
+  vllmApiKeyCommand = "!cat \"$HOME/.config/sops-nix/secrets/vllm-api-key\"";
 
 in
 {
@@ -161,10 +163,12 @@ in
       # Replaces any inherited symlink from before this host became loopback.
       link="$piAgentDir/models.json"
       [ -L "$link" ] && rm "$link"
-      ${pkgs.jq}/bin/jq --arg url "${vllmBaseUrl}" \
-        '.providers."desktop-vllm".baseUrl = $url' \
+      ${pkgs.jq}/bin/jq \
+        --arg url "${vllmBaseUrl}" \
+        --arg apiKey '${vllmApiKeyCommand}' \
+        '.providers."desktop-vllm" |= (.baseUrl = $url | .apiKey = $apiKey)' \
         "${piSrcDir}/models.json" > "$link.tmp" && mv "$link.tmp" "$link"
-      echo "pi: models.json generated with baseUrl ${vllmBaseUrl}"
+      echo "pi: models.json generated with loopback endpoint and SOPS-managed authentication"
     ''}
   '';
 

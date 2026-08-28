@@ -7,6 +7,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$ROOT/scripts/inference/shared/inference-api-key.sh"
 SWITCH="$ROOT/scripts/inference/qwen38/switch-qwen38-backend.sh"
 BENCHMARK_ARM="$ROOT/benchmarks/loom-model-ab/scripts/run-arm.sh"
+DARWIN_ROLE="$ROOT/roles/home-manager/core-apps/darwin/default.nix"
+PI_ROLE="$ROOT/roles/home-manager/core-apps/pi/default.nix"
+DARWIN_INFERENCE_SECRET="$ROOT/secrets/users/hansen142/inference-api.yaml"
+DARWIN_CLOUDFLARE_SECRETS="$ROOT/secrets/users/hansen142/cloudflare-access.yaml"
 LAUNCHERS=(
   "$ROOT/scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh"
   "$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
@@ -43,6 +47,33 @@ contains "$HELPER" 'INFERENCE_GLM_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/glm5
 contains "$HELPER" 'INFERENCE_MUSE_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/muse-glimmer/api-key"'
 contains "$HELPER" 'INFERENCE_SOPS_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/sops-nix/secrets/vllm-api-key"'
 contains "$HELPER" 'inference_install_private_dir "$INFERENCE_OPERATOR_HOME/.config"'
+
+# Darwin consumes the current encrypted dotfiles credential directly. Stale
+# endpoint-specific files from a prior rotation may not shadow the SOPS source.
+contains "$DARWIN_ROLE" '(util.sops.userSecret "vllm-api-key" "inference-api.yaml" "vllm_api_key")'
+contains "$PI_ROLE" 'vllmApiKeyCommand = "!cat \"$HOME/.config/sops-nix/secrets/vllm-api-key\"";'
+contains "$PI_ROLE" '--arg apiKey'
+contains "$PI_ROLE" '.providers."desktop-vllm" |= (.baseUrl = $url | .apiKey = $apiKey)'
+grep -Eq '^vllm_api_key: ENC\[AES256_GCM,' "$DARWIN_INFERENCE_SECRET" \
+  || fail "$DARWIN_INFERENCE_SECRET does not contain an encrypted API key"
+contains "$DARWIN_INFERENCE_SECRET" 'sops:'
+if grep -Eq '^vllm_api_key: [^E]' "$DARWIN_INFERENCE_SECRET"; then
+  fail "$DARWIN_INFERENCE_SECRET contains a plaintext API key"
+fi
+if grep -q '^vllm_api_key:' "$DARWIN_CLOUDFLARE_SECRETS"; then
+  fail "$DARWIN_CLOUDFLARE_SECRETS still duplicates the inference API key"
+fi
+
+generated_models="$sandbox/darwin-models.json"
+jq \
+  --arg url 'http://localhost:8000/v1' \
+  --arg apiKey '!cat "$HOME/.config/sops-nix/secrets/vllm-api-key"' \
+  '.providers."desktop-vllm" |= (.baseUrl = $url | .apiKey = $apiKey)' \
+  "$ROOT/pi/models.json" >"$generated_models"
+jq -e '
+  .providers."desktop-vllm".baseUrl == "http://localhost:8000/v1"
+  and .providers."desktop-vllm".apiKey == "!cat \"$HOME/.config/sops-nix/secrets/vllm-api-key\""
+' "$generated_models" >/dev/null || fail "Darwin Pi generation did not select the SOPS credential"
 
 for launcher in "${LAUNCHERS[@]}"; do
   bash -n "$launcher"

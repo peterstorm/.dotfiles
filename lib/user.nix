@@ -1,6 +1,6 @@
 { pkgs, home-manager, lib, overlays, inputs, ... }:
 with builtins;
-{
+rec {
 
  # extraModules is the per-machine layer on top of the shared roles. Roles are
  # plain home-manager modules, so a machine that wants a role with different

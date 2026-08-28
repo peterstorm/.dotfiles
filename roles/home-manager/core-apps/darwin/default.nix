@@ -14,7 +14,9 @@
     (util.sops.userSecret "keycloak-admin-password-opr" "keycloak.yaml" "keycloak_admin_password_opr")
     (util.sops.userSecret "cf-access-vllm-id" "cloudflare-access.yaml" "vllm_client_id")
     (util.sops.userSecret "cf-access-vllm-secret" "cloudflare-access.yaml" "vllm_client_secret")
-    (util.sops.userSecret "vllm-api-key" "cloudflare-access.yaml" "vllm_api_key")
+    # Kept separate from the long-lived Cloudflare service-token file so an
+    # inference-only rotation can be shipped through dotfiles and applied atomically.
+    (util.sops.userSecret "vllm-api-key" "inference-api.yaml" "vllm_api_key")
   ]
   
   # Define templates
