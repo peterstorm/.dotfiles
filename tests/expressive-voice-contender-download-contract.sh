@@ -44,9 +44,10 @@ grep -Fq $'artifact\tdramabox-gemma-826e729d\t5578abd3c27241a31f21c13220f44a427b
 rg -q 'EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES=yes' "$LAUNCHER"
 rg -q 'EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28' "$LAUNCHER"
 rg -q 'tmux new-session -d' "$LAUNCHER"
-rg -q 'tmux new-window -d.*lane-b' "$LAUNCHER"
-rg -q 'tmux new-window -d.*lane-c' "$LAUNCHER"
+rg -q 'tmux new-window -d' "$LAUNCHER"
 rg -q 'remain-on-exit on' "$LAUNCHER"
+[[ "$(awk '/^PROFILES=\(/ { inside=1; next } inside && /^\)/ { inside=0 } inside && /^  [a-z0-9-]+$/ { count++ } END { print count + 0 }' "$LAUNCHER")" == 9 ]] \
+  || fail 'launcher must contain one detached lane per closure profile'
 rg -q '>>%q 2>&1' "$LAUNCHER"
 rg -q 'exec \{lock_fd\}>' "$DOWNLOADER"
 rg -q -- '--continue-at - --output "\$partial"' "$DOWNLOADER"

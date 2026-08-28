@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
-# Start all expressive-voice downloads in three balanced, detached tmux lanes.
+# Start every expressive-voice model closure in its own detached tmux lane.
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 DOWNLOADER="$ROOT/scripts/inference/voice/download-expressive-voice-contenders.sh"
 SESSION="expressive-voice-contender-download"
 MODELS_ROOT="${VOICE_MODELS_ROOT:-/models/voice}/expressive-contenders"
+PROFILES=(
+  voxcpm2-32279eff
+  breeze-tts2-c1c8ca18
+  dramabox-404f967f
+  dramabox-gemma-826e729d
+  dramabox-reuse-76190506
+  higgs-tts3-7556c17e
+  cosyvoice3-29e01c4e
+  fish-s2-pro-1de9996b
+  moss-tts-voice-acting-aabb7b60
+)
 
-lane_command() {
-  local log="$1"
-  shift
-  local command profile
-  printf -v command 'exec env VOICE_MODELS_ROOT=%q EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES=yes EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28 %q' \
-    "${VOICE_MODELS_ROOT:-/models/voice}" "$DOWNLOADER"
-  for profile in "$@"; do
-    printf -v command '%s %q' "$command" "$profile"
-  done
-  printf -v command '%s >>%q 2>&1' "$command" "$log"
+profile_command() {
+  local profile="$1" command
+  local log="$MODELS_ROOT/download-$profile.log"
+  printf -v command 'exec env VOICE_MODELS_ROOT=%q EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES=yes EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28 %q %q >>%q 2>&1' \
+    "${VOICE_MODELS_ROOT:-/models/voice}" "$DOWNLOADER" "$profile" "$log"
   printf '%s\n' "$command"
 }
 
@@ -32,16 +38,16 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   tmux kill-session -t "$SESSION"
 fi
 
-lane_a="$(lane_command "$MODELS_ROOT/download-lane-a.log" \
-  voxcpm2-32279eff higgs-tts3-7556c17e moss-tts-voice-acting-aabb7b60)"
-lane_b="$(lane_command "$MODELS_ROOT/download-lane-b.log" \
-  breeze-tts2-c1c8ca18 cosyvoice3-29e01c4e fish-s2-pro-1de9996b)"
-lane_c="$(lane_command "$MODELS_ROOT/download-lane-c.log" \
-  dramabox-404f967f dramabox-gemma-826e729d dramabox-reuse-76190506)"
-
-tmux new-session -d -s "$SESSION" -n lane-a "$lane_a"
-tmux new-window -d -t "$SESSION" -n lane-b "$lane_b"
-tmux new-window -d -t "$SESSION" -n lane-c "$lane_c"
+for index in "${!PROFILES[@]}"; do
+  profile="${PROFILES[$index]}"
+  command="$(profile_command "$profile")"
+  if [[ "$index" == 0 ]]; then
+    tmux new-session -d -s "$SESSION" -n "$profile" "$command"
+  else
+    tmux new-window -d -t "$SESSION" -n "$profile" "$command"
+  fi
+done
 tmux set-option -t "$SESSION" remain-on-exit on >/dev/null
 
-printf 'EXPRESSIVE_VOICE_DOWNLOAD_STARTED: tmux=%s lanes=3 logs=%s/download-lane-{a,b,c}.log\n' "$SESSION" "$MODELS_ROOT"
+printf 'EXPRESSIVE_VOICE_DOWNLOAD_STARTED: tmux=%s lanes=%s logs=%s/download-<profile>.log\n' \
+  "$SESSION" "${#PROFILES[@]}" "$MODELS_ROOT"
