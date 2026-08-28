@@ -133,11 +133,12 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with six selectable models:
+with seven selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-nvfp4`
 - `desktop-vllm/glm-5.3-flash-exl3-k4`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision`
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
 - `desktop-muse/muse-glimmer-30b`
@@ -202,9 +203,17 @@ the v30 128K/C1/eager/MTP-off profile remains its conservative rollback. Both re
 experimental because the custom GLM overlay is not publicly reconstructible and local
 RTX PRO 6000 correctness, long-context, performance, tool-use, and soak evidence is pending.
 
+The separate v84 vision entry uses the same verified target tensors with a pinned DFlash2
+checkpoint, native-PyTorch vision-RoPE fallback, the official Z.ai multimodal template,
+TORCH_SDPA encoder attention, at most four images, no video, and a conservative 98,304-token
+ceiling. It intentionally has a distinct model ID because its context and input contract differ
+from the 499,968-token text-only v37 profile.
+
 ```bash
 pi --list-models glm-5.3-flash-exl3-k4
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4:max
+pi --list-models glm-5.3-flash-exl3-k4-vision
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision:max
 ```
 
 ### Qwen3.8 27B

@@ -16,8 +16,9 @@ qwen38/    Qwen3.8 profiles: 27B BF16 downloaders and launchers, DSpark,
 deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
 glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            digest-pinned custom vLLM SM120 images, a multimodal 262K NVFP4 TP2
-           profile, a conservative 128K/C1 EXL3 rollback, and an upstream-aligned
-           v37 500K/C4/MTP3 EXL3 TP2 daily-driver candidate.
+           profile, a conservative 128K/C1 EXL3 rollback, an upstream-aligned
+           v37 500K/C4/MTP3 text candidate, and an isolated v84 98K multimodal
+           TP2/EP2/DCP2 profile with DFlash2-7 and vision-RoPE fallback.
 muse/      Muse Glimmer 30B (BF16 + DFlash) downloader + launcher.
 profiles/  Cross-model profiles (the concurrent Qwen + Muse dual switcher).
 shared/    Components more than one profile uses: the credential helper every
