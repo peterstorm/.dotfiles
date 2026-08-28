@@ -20,6 +20,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   glm53-flash-exl3-k4-vllm-sm120-v1
   glm53-flash-exl3-k4-vllm-sm120-v2
   glm53-flash-exl3-k4-vllm-sm120-v3
+  glm53-flash-exl3-k4-vllm-sm120-v4
   muse-glimmer-30b-bf16-dflash
   muse-glimmer-30b-abliterated-bf16-dflash
 )

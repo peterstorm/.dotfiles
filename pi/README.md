@@ -133,12 +133,13 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with seven selectable models:
+with eight selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-nvfp4`
 - `desktop-vllm/glm-5.3-flash-exl3-k4`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp`
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
 - `desktop-muse/muse-glimmer-30b`
@@ -207,13 +208,18 @@ The separate v84 vision entry uses the same verified target tensors with a pinne
 checkpoint, native-PyTorch vision-RoPE fallback, the official Z.ai multimodal template,
 TORCH_SDPA encoder attention, at most four images, no video, and a conservative 98,304-token
 ceiling. It intentionally has a distinct model ID because its context and input contract differ
-from the 499,968-token text-only v37 profile.
+from the 499,968-token text-only v37 profile. A second v84 entry uses the checkpoint's
+built-in MTP head for three draft tokens instead of the external DFlash2 model. It retains the
+same 98,304-token multimodal boundary but follows the supplied 0.986-utilization recipe and
+requires separate local capacity, vision, and output-parity qualification.
 
 ```bash
 pi --list-models glm-5.3-flash-exl3-k4
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4:max
 pi --list-models glm-5.3-flash-exl3-k4-vision
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision:max
+pi --list-models glm-5.3-flash-exl3-k4-vision-mtp
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max
 ```
 
 ### Qwen3.8 27B

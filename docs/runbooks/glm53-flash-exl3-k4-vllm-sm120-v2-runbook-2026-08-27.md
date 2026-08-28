@@ -1,6 +1,6 @@
 # GLM-5.3 Flash EXL3 K4 v37 TP2/MTP3 v2
 
-**Status:** v37 image pulled and statically verified; checkpoint download resumed; not booted or locally qualified. Upstream v84 now supersedes v37 for the multimodal/DFlash2 path; this v2 remains the immutable 500K text-only rollback candidate.
+**Status:** v37 image pulled and statically verified; checkpoint download resumed; not booted or locally qualified. Upstream v84 now supersedes v37 for the multimodal DFlash2/MTP3 paths; this v2 remains the immutable 500K text-only rollback candidate.
 
 This profile follows Brandon Music's published SM120 TP2 daily-driver settings rather than the
 conservative v1 qualification envelope. It is a new profile: v1 remains available as the

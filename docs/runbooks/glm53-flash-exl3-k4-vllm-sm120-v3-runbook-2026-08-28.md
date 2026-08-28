@@ -5,7 +5,8 @@ checkpoint is still downloading; no local model boot or qualification.
 
 This is a new multimodal profile. It does not alter the conservative v1 or 500K text-only v2
 launchers. It uses the same target tensors as the active EXL3 download, adds a small DFlash2
-draft checkpoint, and moves to the v84 runtime that packages the vision fix.
+draft checkpoint, and moves to the v84 runtime that packages the vision fix. The separate v4
+profile uses the same v84 target and vision path with built-in MTP3 instead of DFlash2.
 
 ## What changed since v37
 
