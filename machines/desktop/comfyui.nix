@@ -344,6 +344,23 @@ let
     hash = "sha256-2rurJ/wvr9zcHamGZhcTrM4D20/vMLw6xtN/+ZiHJgw=";
   };
 
+  videoHelperSuiteNode = pkgs.fetchFromGitHub {
+    owner = "Kosinkadink";
+    repo = "ComfyUI-VideoHelperSuite";
+    rev = "115de7a9d9e34410cffb9ecfd268e993b11a50fb";
+    hash = "sha256-NgKlqrLOiCoFusVixdDPKYFs1rx4X48TxzVSObxrgl8=";
+  };
+
+  # Upstream does not declare a code license. This immutable pin is authorized
+  # only for private local Development evaluation; it is not a Production or
+  # redistribution grant.
+  minimaxH3LatentUpscalerNode = pkgs.fetchFromGitHub {
+    owner = "LBH-123-AI";
+    repo = "Comfyui_Minimax_h3_latent_Upscaler";
+    rev = "d7c01b9011f2e8439493f6c02c29995a27df276f";
+    hash = "sha256-QIvU/ioTPw00AzoGsw3h7Y3Pbn7g9gyXWTvdhYULUHk=";
+  };
+
   seedVR2Source = pkgs.fetchFromGitHub {
     owner = "numz";
     repo = "ComfyUI-SeedVR2_VideoUpscaler";
@@ -409,6 +426,8 @@ let
     ln -s ${pixaromaNode} "$out/ComfyUI-Pixaroma"
     ln -s ${detailDaemonNode} "$out/ComfyUI-Detail-Daemon"
     ln -s ${kjNodes} "$out/ComfyUI-KJNodes"
+    ln -s ${videoHelperSuiteNode} "$out/ComfyUI-VideoHelperSuite"
+    ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
   '';

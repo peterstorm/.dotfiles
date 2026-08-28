@@ -30,16 +30,12 @@ On the 960×544, 243-frame H3 control, all three new workflows produced 1920×10
 
 SSIM is only a fidelity diagnostic, not an aesthetic ranking, but it confirms that the rejected SeedVR2 result altered the source substantially more than the three added alternatives.
 
-## Why the old workflows were removed
+## Development-only H3 latent upscaler
 
-`minimax-h3-upscaler-research-only` contained three unchanged third-party examples that could not execute in the pinned workstation closure:
+The desktop closure pins VideoHelperSuite at `115de7a9d9e34410cffb9ecfd268e993b11a50fb` and `Comfyui_Minimax_h3_latent_Upscaler` at `d7c01b9011f2e8439493f6c02c29995a27df276f`. The upscaler repository has no declared code license; its local installation is explicitly restricted to private Development evaluation. It grants no Production, commercial-use, public-display, or redistribution rights.
 
-- the I2V and R2V examples require unavailable `MinimaxH3LatentUpscaler3D` and `VHS_VideoCombine` classes;
-- the Ultimate example requires unavailable `MMH3*` split/upscale classes and `CLIPLoaderGGUF`;
-- all three select missing quantized/pruned H3 models or incompatible/missing Turbo LoRAs;
-- the learned 3D latent-upscaler checkpoint is not installed;
-- the companion learned-upscaler node repository has no explicit code license at the audited revision.
+The exact Veteran AI R2V graph and its active selectors are preserved in `development/research/minimax-h3-video-editing-workflow-05/`. Its three missing weights are checksum-gated and queued serially after the active FLUX.2 Klein Base download. Do not queue the graph until its completion marker exists, and treat every result as an unqualified Development derivative pending identity, topology, temporal-stability, audio-latent, and refinement benchmarks.
 
-The installer now removes that broken browser directory. Checksum-identical originals remain preserved as private Development research in `development/research/minimax-h3-encyclopedia-01/workflows/h3-latent-upscaler/`; they are not executable authorities.
+The older `minimax-h3-upscaler-research-only` browser folder remains removed because its unchanged third-party examples select missing quantized/pruned H3 models, incompatible Turbo LoRAs, and—in the Ultimate graph—additional unavailable `MMH3*`/`CLIPLoaderGGUF` classes. Checksum-identical originals remain preserved as private Development evidence in `development/research/minimax-h3-encyclopedia-01/workflows/h3-latent-upscaler/`; they are not executable authorities.
 
 The four SeedVR2 qualification graphs also had a cosmetic upstream `Note` node unavailable in the pinned ComfyUI closure. The declarative builder now removes that disconnected node from every installed SeedVR2 graph.
