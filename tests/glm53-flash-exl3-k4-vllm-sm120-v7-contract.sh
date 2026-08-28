@@ -28,7 +28,9 @@ contains "$PULL" 'sha256:0f1cdcc8891f1cc3a444121eb61d366289a1cbba285f0892dcbb24b
 contains "$PULL" 'native-pytorch-fallback-when-vllm-flash-attn-layers-absent'
 contains "$PULL" '"TORCH_SDPA" in AttentionBackendEnum.__members__'
 contains "$PULL" '"B12X_MLA_SPARSE" in AttentionBackendEnum.__members__'
-contains "$PULL" 'SchedulerConfig.model_fields["long_prefill_token_threshold"].default == 0'
+contains "$PULL" 'field for field in fields(SchedulerConfig)'
+contains "$PULL" 'if field.name == "long_prefill_token_threshold"'
+contains "$PULL" 'long_prefill_field.default.default == 0'
 
 contains "$RUN" 'MAX_MODEL_LEN="${MAX_MODEL_LEN:-393216}"'
 contains "$RUN" 'MAX_NUM_SEQS="${MAX_NUM_SEQS:-4}"'

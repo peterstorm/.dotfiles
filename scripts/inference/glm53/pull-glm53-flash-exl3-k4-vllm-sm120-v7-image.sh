@@ -52,6 +52,7 @@ jq -e '.[0] |
 docker run --rm -i --entrypoint /opt/venv/bin/python "$IMAGE" - <<'PY'
 import hashlib
 import json
+from dataclasses import fields
 from pathlib import Path
 
 import torch
@@ -84,7 +85,11 @@ assert "Glm5NextForConditionalGeneration" in supported
 assert "DFlash2DraftModel" in supported
 assert "TORCH_SDPA" in AttentionBackendEnum.__members__
 assert "B12X_MLA_SPARSE" in AttentionBackendEnum.__members__
-assert SchedulerConfig.model_fields["long_prefill_token_threshold"].default == 0
+long_prefill_field = next(
+    field for field in fields(SchedulerConfig)
+    if field.name == "long_prefill_token_threshold"
+)
+assert long_prefill_field.default.default == 0
 assert DFlash2Speculator is not None
 rotary = ApplyRotaryEmb.__new__(ApplyRotaryEmb)
 object.__setattr__(rotary, "is_neox_style", True)
