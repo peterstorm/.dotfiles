@@ -26,9 +26,17 @@ knows `openai-codex` targets, and this rule is exactly the documented escape
 hatch ("the launcher's explicit routing decision determines the effective
 model", `docs/model-profiles-and-calibration.md`).
 
-That makes the whole pipeline swap on one flag. It is the cleanest lever
-available, and it is why this experiment is worth running rather than
-hand-waving.
+That makes the whole pipeline swap on one flag. Both Pi child transports must
+apply the same effective binding: ordinary `subagent` children and Loom's
+interactive RPC phase children. Every completed run is checked by
+`scripts/verify-run-models.sh`; missing routing evidence or one mismatched child
+voids the repetition rather than silently attributing another model's work to
+the arm.
+
+The routing policy also publishes exact named `qwen` and `glm` targets beside
+parent inheritance. They are explicit provider/model/thinking bindings for
+workload-specific rules; the benchmark itself continues to inherit the active
+parent so one arm selector controls the whole run.
 
 ## Arms
 
@@ -198,8 +206,9 @@ pretending otherwise.
 ### Voiding a run
 
 Void and re-run only for: a harness crash unrelated to the model, a backend that
-died mid-run, cortex recall observed in the transcript, or operator error
-answering off-script. **Do not void** for: context exhaustion, a model that
+died mid-run, cortex recall observed in the transcript, child-model routing
+that is missing or differs from the arm selector, or operator error answering
+off-script. **Do not void** for: context exhaustion, a model that
 loops, a model that edits the frozen file, a model that gives up. Those are
 results, and discarding them is how a benchmark ends up measuring nothing.
 
@@ -260,8 +269,9 @@ graph, the wave-gate result, and the session transcript path and wall-clock.
 Then:
 
 ```bash
+bash scripts/verify-run-models.sh runs/<run-id>  # every child must match run.json.model
 bash scripts/grade-implementation.sh <worktree> runs/<run-id>
-grep -l CORTEX_MEMORY_START <transcript>   # any hit voids the run
+grep -l CORTEX_MEMORY_START <transcript>        # any hit voids the run
 git -C ~/dev/claude-plugins/loom worktree remove <worktree>
 ```
 
@@ -284,6 +294,7 @@ read as a suite that passed:
   "phases_completed": ["specify", "architecture", "decompose", "execute"],
   "context_exhausted": false, "looped": false, "gave_up": false,
   "frozen_file_intact": true, "scope_respected": true,
+  "child_models_attested": true,
   "typecheck_clean": true, "own_tests_pass": true, "own_test_count": 0,
   "wave_gate_passed": true, "hidden_suite": { "passed": 0, "failed": 0 },
   "mutation_score": 0.0, "voided": false, "voided_reason": null

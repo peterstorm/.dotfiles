@@ -303,38 +303,28 @@ class, and SHA-256 policy digest for auditability.
 
 Rules can select by `parentClass`, `parentModel`, `workload`, Loom `model-profile`, and
 agent name. Every additional selector increases specificity; the most-specific matching
-rule wins. Equal-specificity rules that could match the same request are rejected. Named
-exact targets support future exceptions without embedding model IDs in extension code:
+rule wins. Equal-specificity rules that could match the same request are rejected. The
+tracked policy publishes `qwen` and `glm` as named exact targets beside parent inheritance:
 
 ```json
 {
   "targets": {
-    "fast-local": {
-      "model": "desktop-vllm/future-fast-model",
-      "thinkingLevel": "high"
+    "qwen": {
+      "model": "desktop-vllm/qwen3.8-27b",
+      "thinkingLevel": "xhigh"
+    },
+    "glm": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp",
+      "thinkingLevel": "max"
     }
-  },
-  "rules": [
-    {
-      "id": "local-reviewers-use-fast-model",
-      "when": {
-        "parentClass": "local",
-        "workload": "subagent",
-        "profile": "general-review"
-      },
-      "use": {
-        "kind": "named",
-        "target": "fast-local"
-      }
-    }
-  ]
+  }
 }
 ```
 
-This fragment illustrates the extension points; merge targets and rules into the complete
-tracked policy rather than replacing its required fields. A `declared` target preserves an
-agent declaration, `parent` uses the snapshotted parent binding, and `named` chooses a
-configured exact target.
+A `declared` target preserves an agent declaration, `parent` uses the snapshotted parent
+binding, and `named` chooses one configured exact target. Add a more-specific rule referring
+to `qwen` or `glm` when a workload should intentionally differ from its parent; do not embed
+model IDs in extension code.
 
 Cortex already preserves its declared cheap cloud extraction target for known cloud
 providers and reuses unknown/custom active models, including both desktop providers; DeepSeek's

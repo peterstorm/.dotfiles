@@ -255,9 +255,11 @@ Answer only from frozen/answer-key.md, logging every exchange to:
 
   $RUN_DIR/interview.md
 
-When the run ends, capture spec.md, plan.md, the task graph and the wave-gate
-result into $RUN_DIR, then:
+When the run ends, capture spec.md, plan.md, the task graph, wave-gate result,
+and session transcript as session.jsonl into $RUN_DIR. Attest every executed
+child before grading; either command records a failure without disguising it:
 
+  bash scripts/verify-run-models.sh "$RUN_DIR"
   bash scripts/grade-implementation.sh "$WORKTREE" "$RUN_DIR"
 
 EOF

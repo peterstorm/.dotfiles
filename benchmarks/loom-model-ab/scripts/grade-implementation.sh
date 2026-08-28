@@ -113,6 +113,16 @@ $IMPL_EXISTS && IMPL_LOC=$(grep -cve '^\s*$' "$WORKTREE/$IMPL" || true)
 
 git -C "$WORKTREE" diff --cached "$BASE_SHA" > "$RUN_DIR/diff.patch" || true
 
+# Child routing is part of protocol integrity: a clean implementation produced
+# by another model is not evidence for this arm. Keep grading to preserve all
+# orthogonal facts, but record the attestation failure so the run is voidable.
+log "Child model attestation"
+MODEL_ATTESTATION_PASS=false
+if bash "$BENCH_DIR/scripts/verify-run-models.sh" "$RUN_DIR"; then
+  MODEL_ATTESTATION_PASS=true
+fi
+MODEL_ATTESTATION_JSON="$(cat "$RUN_DIR/model-attestation.json")"
+
 # --- 2. typecheck ------------------------------------------------------------
 
 log "Typecheck"
@@ -299,7 +309,9 @@ cat > "$RUN_DIR/outcome.mechanical.json" <<JSON
     "scope_respected": $(json_bool "$SCOPE_RESPECTED"),
     "implementation_exists": $(json_bool "$IMPL_EXISTS"),
     "implementation_loc": $IMPL_LOC,
-    "any_occurrences": $ANY_COUNT
+    "any_occurrences": $ANY_COUNT,
+    "child_models_attested": $(json_bool "$MODEL_ATTESTATION_PASS"),
+    "model_attestation": $MODEL_ATTESTATION_JSON
   },
   "typecheck": {
     "baseline_was_clean": $BASELINE_TSC_CLEAN,

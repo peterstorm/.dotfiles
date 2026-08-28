@@ -7,7 +7,16 @@
       "desktop-muse/*"
     ]
   },
-  "targets": {},
+  "targets": {
+    "qwen": {
+      "model": "desktop-vllm/qwen3.8-27b",
+      "thinkingLevel": "xhigh"
+    },
+    "glm": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp",
+      "thinkingLevel": "max"
+    }
+  },
   "rules": [
     {
       "id": "local-workloads-use-parent",

@@ -12,6 +12,7 @@ source "$BENCH_DIR/scripts/arms.sh"
 PI_MODELS="$ROOT/pi/models.json"
 PROFILE_CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 BASELINE="$BENCH_DIR/baseline/known-failures.json"
+RUN_MODELS="$BENCH_DIR/scripts/verify-run-models.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -59,6 +60,18 @@ while IFS= read -r arm; do
     || fail "$arm profile is absent from the inference profile catalog: $profile"
 done < <(benchmark_arm_ids)
 
+ROUTING="$ROOT/pi/model-routing.json"
+jq -e '
+  .targets.qwen == {
+    "model": "desktop-vllm/qwen3.8-27b",
+    "thinkingLevel": "xhigh"
+  } and
+  .targets.glm == {
+    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp",
+    "thinkingLevel": "max"
+  }
+' "$ROUTING" >/dev/null || fail "Pi routing lacks exact qwen/glm named targets"
+
 reference_frs="$(mktemp)"
 test_frs="$(mktemp)"
 trap 'rm -f "$reference_frs" "$test_frs"' EXIT
@@ -76,6 +89,7 @@ for script in \
   "$BENCH_DIR/scripts/run-arm.sh" \
   "$BENCH_DIR/scripts/baseline.sh" \
   "$BENCH_DIR/scripts/grade-implementation.sh" \
+  "$RUN_MODELS" \
   "$BENCH_DIR/scripts/anonymise.sh" \
   "$BENCH_DIR/scripts/isolation.sh"; do
   bash -n "$script" || fail "shell syntax check failed: $script"
