@@ -10,9 +10,11 @@ v6 reproduces the supplied author's text-only recipe without modifying v5. In th
 “same KV cache” means the recipe's exact `fp8_ds_mla` mode. It does **not** mean v5's
 `nvfp4_ds_mla`; the two profiles intentionally remain separate.
 
-The author's approximately 700,000-token expectation was disproven by the exact local boot.
-The engine allocated 403,989 FP8 DS MLA KV tokens, only 1.03× the 393,216-token request
-ceiling. Capacity remains a boot-time result rather than a launcher constant.
+The author's approximately 700,000-token expectation is reproduced on a warm persistent-cache
+boot: the engine allocated 737,953 FP8 DS MLA KV tokens, or 1.88× the 393,216-token request
+ceiling. The first cold-cache boot allocated only 403,989 tokens because one-time kernel
+compilation inflated non-KV memory profiling. Capacity is cache-state-dependent boot evidence,
+not a launcher constant.
 
 ## Immutable identities
 
@@ -52,10 +54,9 @@ The dedicated v6 puller additionally proves that the image contains the
 | Speculation | built-in MTP, 3 probabilistic draft tokens |
 | Served model | `glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k` |
 
-If the local pool is exactly 700,000 tokens, theoretical full-ceiling concurrency is only
-`700000 / 393216 = 1.78×`. `--max-num-seqs 4` is a scheduler limit, not evidence that four
-384K requests fit concurrently. Even two simultaneous full-length requests would exceed that
-claimed pool.
+The measured warm pool provides `737953 / 393216 = 1.88×` theoretical full-ceiling
+concurrency. `--max-num-seqs 4` is a scheduler limit, not evidence that four 384K requests fit.
+Even two simultaneous maximum-length requests require 786,432 tokens and exceed the warm pool.
 
 ## Differences from qualified v5
 
@@ -116,25 +117,41 @@ The switcher preflights before stopping anything, requires authenticated discove
 `glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`, and restores the previous repository-owned
 profile if launch or readiness fails.
 
-## First-boot results — 2026-08-28
+## Cold- and warm-cache boot results — 2026-08-28
 
-- Exact served model: `glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`.
-- Engine-reported FP8 DS MLA KV pool: **403,989 tokens**.
-- Maximum full-ceiling concurrency: **1.03×** at 393,216 tokens.
-- Available KV memory reported by the worker: **2.02 GiB**.
-- Runtime envelope confirmed: 393,216 context, TP2/EP2/DCP2, FP8 DS MLA,
-  `FLASHINFER_MLA_SPARSE_SM120`, InstantTensor, prefix caching, chunked prefill, and MTP3.
-- InstantTensor loaded 164 GiB per TP worker in approximately 50–52 seconds.
-- Engine profile/KV/cache/warmup initialization took 113.74 seconds.
-- CUDA-graph memory profiling reported effective utilization equivalent to 0.9821 without its
-  estimate; no utilization change is authorized without a separate immutable profile.
-- Container reached authenticated exact-model readiness with restart count zero.
-- A low-reasoning deterministic smoke request returned exactly `V6_READY` with valid usage and
-  per-request metrics.
+Both boots used the same checkpoint, image, launcher arguments, 0.986 utilization, model weight
+footprint, 1.37 GiB activation peak, and 0.37 GiB CUDA-graph estimate. Only the persistent
+kernel-cache state differed materially.
 
-The approximately 700K claim was 296,011 tokens, or 42.3%, above the measured pool. Two
-simultaneous 393,216-token requests cannot fit, and representative concurrency must remain
-well below the four-sequence scheduler ceiling until tested.
+| Measurement | First cold-cache boot | Warm-cache boot |
+|---|---:|---:|
+| Model loading | 82.07 GiB/GPU | 82.07 GiB/GPU |
+| Weights + non-torch consumed | 90.24 GiB/GPU | 88.60 GiB/GPU |
+| Extra non-weight/non-torch above loaded model | 8.17 GiB/GPU | 6.53 GiB/GPU |
+| Available FP8 KV memory | 2.02 GiB/GPU | 3.67 GiB/GPU |
+| Engine KV capacity | 403,989 tokens | **737,953 tokens** |
+| Full-ceiling concurrency | 1.03× | **1.88×** |
+
+The 1.64 GiB reduction in measured non-KV consumption maps directly to the 1.65 GiB increase
+in KV allocation. Effective FP8 hybrid-cache cost remained stable at roughly 5.3 KiB/token,
+so this was not a KV layout change.
+
+The first run populated 2,458 persistent Triton, TorchInductor, DeepGEMM, TileLang, FlashInfer,
+and model-info cache artifacts. vLLM profiles memory while calling kernel warmup; on a cold
+cache, one-time compiler/runtime CUDA allocations remained visible as non-torch consumption.
+The second process reused the compiled artifacts and did not retain that 1.64 GiB overhead.
+Independent v5 boots showed the same pattern: 625,112 NVFP4 tokens with 89.92 GiB consumed on
+a cold boot versus 1,129,235 tokens with 88.56 GiB consumed after cache warmup.
+
+CUDA-graph estimation was not the cause: both v6 boots reserved the same 0.37 GiB estimate.
+The actual graph pool changed only from 0.13 to 0.24 GiB after allocation and cannot explain
+the 1.65 GiB KV delta. The fixed model weight size, attention backend, MTP3, DCP2, prefix-cache
+setting, and external free memory also matched.
+
+The warm boot reached authenticated exact-model readiness with restart count zero. A
+low-reasoning deterministic smoke request returned exactly `V6_READY` with valid usage and
+per-request metrics. Preserve the profile's fingerprinted `/cache` mount: deleting it or
+changing the runtime fingerprint can return the next boot to the 403,989-token cold floor.
 
 ## Remaining runtime qualification
 
@@ -143,8 +160,8 @@ well below the four-sequence scheduler ceiling until tested.
 3. Single and parallel tool calls with `glm45`/`glm47` parsers.
 4. Retrieval at 98K, 128K, 256K, and 384K.
 5. Prefix-cache cold/warm equivalence and cache-hit accounting.
-6. Representative concurrency within the measured 403,989-token pool; do not attempt two full
-   384K requests.
+6. Representative concurrency within the measured 737,953-token warm pool; do not attempt two
+   full 384K requests.
 7. Restart twice and soak while monitoring Xids, thermals, restart count, and correctness.
 8. Confirm image input is rejected because v6 is intentionally text-only.
 
@@ -164,4 +181,5 @@ Pi selector for v6, only while v6 is actually serving:
 desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max
 ```
 
-The canonical `glm` routing target and Loom benchmark arm remain pinned to v5.
+The canonical `glm` routing target follows active v6. The frozen Loom benchmark arm remains
+pinned to v5 for comparison continuity.

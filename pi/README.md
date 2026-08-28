@@ -203,20 +203,21 @@ from the 499,968-token text-only v37 profile. A second v84 entry uses the checkp
 built-in MTP head for three draft tokens instead of the external DFlash2 model. It retains the
 same 98,304-token multimodal boundary but follows the supplied 0.986-utilization recipe.
 The immutable v5 profile retains that exact image, target, calibrated NVFP4 MLA KV cache,
-vision path, and MTP3 settings while raising only the request ceiling to 393,216. Its own
-startup allocated 625,112 KV tokens after reserving the vision encoder, providing 1.59×
-theoretical full-context concurrency; long-context vision and concurrency still require
-separate local qualification.
+vision path, and MTP3 settings while raising only the request ceiling to 393,216. It allocated
+625,112 KV tokens on a cold kernel-cache boot and 1,129,235 after cache warmup, providing
+1.59× and 2.87× theoretical full-context concurrency respectively. Long-context vision and
+concurrency still require separate local qualification.
 
 The text-only FP8 v6 profile reproduces the supplied FP8 DS MLA, FlashInfer SM120 sparse MLA,
 InstantTensor, prefix-cache, and MTP3 recipe without changing v5. Immutable v7 instead derives
 from the multimodal v5 envelope: it retains calibrated `nvfp4_ds_mla`, B12X sparse MLA,
 TORCH_SDPA vision, four-image support, and MTP3, then enables prefix caching and adds a
 512-token `long_prefill_token_threshold`. The cap prevents one cold long prefill from consuming
-the full 2,072-token scheduler iteration and starving an active decode request. v6 is active
-and its exact boot measured 403,989 KV tokens—1.03× its 393,216-token ceiling and far below
-the author's roughly 700K claim. Full v6 runtime qualification and all v7 boot, prefix-cache,
-vision, and cold-prefill/decode qualification remain pending.
+the full 2,072-token scheduler iteration and starving an active decode request. v6 is active:
+its cold JIT-cache boot measured 403,989 KV tokens, while its warm-cache boot measured 737,953
+(1.88× its 393,216-token ceiling), reproducing the author's roughly 700K expectation. Full v6
+runtime qualification and all v7 boot, prefix-cache, vision, and latency qualification remain
+pending.
 
 ```bash
 pi --list-models glm-5.3-flash-exl3-k4-vision

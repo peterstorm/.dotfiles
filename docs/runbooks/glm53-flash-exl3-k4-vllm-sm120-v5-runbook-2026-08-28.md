@@ -1,8 +1,7 @@
 # GLM-5.3 Flash EXL3 K4 v84 multimodal + MTP3 384K v5
 
-**Status:** immutable long-context candidate; static contract complete; local startup and runtime
-qualification recorded below as it is performed. The qualified 98,304-token v4 profile remains
-unchanged and is the automatic rollback target.
+**Status:** immutable, locally booted, and retained as the validated multimodal rollback for
+v6/v7. The 98,304-token v4 profile remains an unchanged launch-only rollback.
 
 ## Why this is a separate profile
 
@@ -19,9 +18,12 @@ The v4 startup supplied direct local capacity evidence:
 - allocated calibrated NVFP4 MLA KV capacity: 830,668 tokens;
 - maximum full-length concurrency at 98,304: 8.45×.
 
-A 393,216-token ceiling therefore has a theoretical KV concurrency of 2.11× without changing
-the already allocated KV pool. That is capacity evidence, not correctness qualification:
-retrieval, image behavior, tools, concurrency, restart, and soak must still pass locally.
+v5 itself later exposed a cold/warm cache split: 625,112 tokens (1.59×) on its cold JIT-cache
+boot and 1,129,235 tokens (2.87×) after the persistent kernel cache was warm. The model weight
+footprint remained 83.03 GiB/GPU, while weights-plus-non-torch consumption fell from 89.92 to
+88.56 GiB/GPU. The 1.36 GiB reduction became 1.40 GiB of additional NVFP4 KV memory. This is
+the same cache-state-dependent profiling behavior independently observed by v6; preserve the
+fingerprinted cache mount and treat cold capacity as the fail-safe floor.
 
 ## Immutable identities
 
@@ -47,7 +49,7 @@ hashes are strong identity evidence, not independent supply-chain reproducibilit
 | Inputs | text and up to four images; video disabled |
 | Context ceiling | 393,216 tokens |
 | Target parallelism | TP2 / EP2 / DCP2 |
-| Maximum sequences | 4; only about two can simultaneously occupy the full ceiling |
+| Maximum sequences | 4; cold capacity admits one full ceiling, warm capacity admits two |
 | Batched tokens | 2,072 |
 | GPU memory utilization | 0.986, fixed |
 | Target KV | calibrated `nvfp4_ds_mla` |
@@ -105,7 +107,7 @@ The API key remains in a private env file and never appears in Docker argv.
 5. Exercise retrieval at 98K, 128K, 256K, and at least 384K while recording TTFT, prefill,
    decode, queueing, KV usage, and output correctness.
 6. Exercise two concurrent long requests and four representative concurrent requests; do not
-   claim four simultaneous 384K requests from an 830,668-token pool.
+   claim three simultaneous 384K requests from the 1,129,235-token warm pool.
 7. Restart twice and soak while monitoring Xids, corrected errors, thermals, GPU memory, and
    host RAM.
 
@@ -119,6 +121,5 @@ MODEL_HOST="$HOME/models/GLM-5.3-Flash-EXL3-K4-v1" \
   bash scripts/inference/glm53/switch-glm53-exl3-profile-v4.sh start
 ```
 
-Pi keeps both IDs. Use `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp:max` for the qualified
-98K rollback and `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` only while v5 is
-serving.
+Pi exposes v5 as `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max`. The v4 launcher
+remains available for operational rollback but is intentionally omitted from the curated picker.

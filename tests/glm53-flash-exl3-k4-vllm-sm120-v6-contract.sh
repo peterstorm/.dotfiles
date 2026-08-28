@@ -10,6 +10,7 @@ SWITCH="$ROOT/scripts/inference/glm53/switch-glm53-exl3-profile-v6.sh"
 V5_RUN="$ROOT/scripts/inference/glm53/run-glm53-flash-exl3-k4-vllm-sm120-v5.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 PI_MODELS="$ROOT/pi/models.json"
+RUNBOOK="$ROOT/docs/runbooks/glm53-flash-exl3-k4-vllm-sm120-v6-runbook-2026-08-28.md"
 
 contains() {
   local file="$1" text="$2"
@@ -76,6 +77,10 @@ contains "$SWITCH" '"$RUN" --preflight'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v5'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v6'
+contains "$RUNBOOK" '403,989 tokens'
+contains "$RUNBOOK" '737,953 tokens'
+contains "$RUNBOOK" '1.64 GiB reduction in measured non-KV consumption'
+contains "$RUNBOOK" '2,458 persistent Triton, TorchInductor, DeepGEMM, TileLang, FlashInfer'
 
 jq -e '
   .providers["desktop-vllm"].models[] |
