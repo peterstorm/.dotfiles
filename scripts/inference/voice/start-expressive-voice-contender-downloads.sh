@@ -11,7 +11,7 @@ lane_command() {
   local log="$1"
   shift
   local command profile
-  printf -v command 'exec env VOICE_MODELS_ROOT=%q EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES=yes EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28 HF_HUB_DISABLE_XET=0 %q' \
+  printf -v command 'exec env VOICE_MODELS_ROOT=%q EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES=yes EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28 %q' \
     "${VOICE_MODELS_ROOT:-/models/voice}" "$DOWNLOADER"
   for profile in "$@"; do
     printf -v command '%s %q' "$command" "$profile"

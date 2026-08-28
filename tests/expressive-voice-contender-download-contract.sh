@@ -49,6 +49,9 @@ rg -q 'tmux new-window -d.*lane-c' "$LAUNCHER"
 rg -q 'remain-on-exit on' "$LAUNCHER"
 rg -q '>>%q 2>&1' "$LAUNCHER"
 rg -q 'exec \{lock_fd\}>' "$DOWNLOADER"
+rg -q -- '--continue-at - --output "\$partial"' "$DOWNLOADER"
+rg -q 'resolve/\$revision/\$relative' "$DOWNLOADER"
+! rg -q 'hf download' "$DOWNLOADER" || fail 'non-resumable randomized Xet adapter remains'
 ! rg -q '\.expressive-voice-contenders\.lock' "$DOWNLOADER" \
   || fail 'global lock still serializes independent model profiles'
 
@@ -67,35 +70,35 @@ second_size="$(stat -c %s "$sandbox/second.bin")"
   printf 'artifact\tfixture-restricted\t%s\t%s\tmodel.bin\n' "$first_sha" "$first_size"
   printf 'artifact\tfixture-restricted\t%s\t%s\tnested/tokenizer.json\n' "$second_sha" "$second_size"
 } >"$sandbox/fixture.tsv"
-cat >"$sandbox/bin/hf" <<'EOF'
+cat >"$sandbox/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'hf %s\n' "$*" >>"$HF_EVENTS"
-[[ "$1" == download && "$2" == fixture/repository ]]
+printf 'curl %s\n' "$*" >>"$CURL_EVENTS"
 while (( $# > 0 )); do
-  if [[ "$1" == --local-dir ]]; then
-    target="$2"
-    break
-  fi
-  shift
+  case "$1" in
+    --output) target="$2"; shift 2 ;;
+    https://*) url="$1"; shift ;;
+    *) shift ;;
+  esac
 done
-[[ -n "${target:-}" ]]
-mkdir -p "$target/nested" "$target/.cache/huggingface/download"
-cp "$HF_FIRST" "$target/model.bin"
-cp "$HF_SECOND" "$target/nested/tokenizer.json"
-printf 'resumable metadata\n' >"$target/.cache/huggingface/download/state"
+[[ -n "${target:-}" && -n "${url:-}" ]]
+case "$url" in
+  */model.bin) cp "$CURL_FIRST" "$target" ;;
+  */nested/tokenizer.json) cp "$CURL_SECOND" "$target" ;;
+  *) exit 64 ;;
+esac
 EOF
-chmod +x "$sandbox/bin/hf"
-: >"$sandbox/hf-events"
+chmod +x "$sandbox/bin/curl"
+: >"$sandbox/curl-events"
 
 run_downloader() {
   EXPRESSIVE_VOICE_MANIFEST="$sandbox/fixture.tsv" \
   VOICE_MODELS_ROOT="$sandbox/models" \
   EXPRESSIVE_VOICE_DOWNLOAD_AUTHORIZATION=user-request-2026-08-28 \
   EXPRESSIVE_VOICE_ACCEPT_RESTRICTED_LICENSES="${1:-}" \
-  HF_EVENTS="$sandbox/hf-events" \
-  HF_FIRST="$sandbox/first.bin" \
-  HF_SECOND="$sandbox/second.bin" \
+  CURL_EVENTS="$sandbox/curl-events" \
+  CURL_FIRST="$sandbox/first.bin" \
+  CURL_SECOND="$sandbox/second.bin" \
   PATH="$sandbox/bin:$PATH" \
     "$DOWNLOADER" fixture-restricted
 }
@@ -103,7 +106,7 @@ run_downloader() {
 license_status=0
 run_downloader >/dev/null 2>&1 || license_status=$?
 [[ "$license_status" != 0 ]] || fail 'restricted model downloaded without explicit acceptance'
-[[ ! -s "$sandbox/hf-events" ]] || fail 'network boundary was crossed before license acceptance'
+[[ ! -s "$sandbox/curl-events" ]] || fail 'network boundary was crossed before license acceptance'
 
 run_downloader yes >/dev/null
 ready="$sandbox/models/expressive-contenders/fixture-restricted"
@@ -113,15 +116,15 @@ ready="$sandbox/models/expressive-contenders/fixture-restricted"
 [[ -f "$sandbox/models/expressive-contenders/.fixture-restricted.complete" ]] || fail 'completion marker was not published'
 jq -e '.gpuRuntimeStarted == false and .productionAuthority == false' "$ready/download-receipt.json" >/dev/null \
   || fail 'receipt crossed the GPU or Production boundary'
-[[ "$(wc -l <"$sandbox/hf-events")" == 1 ]] || fail 'fixture did not use exactly one download call'
+[[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'fixture did not download each artifact exactly once'
 
 run_downloader yes >/dev/null
-[[ "$(wc -l <"$sandbox/hf-events")" == 1 ]] || fail 'verified rerun was not idempotent'
+[[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'verified rerun was not idempotent'
 
 printf 'corrupt\n' >"$ready/model.bin"
 corruption_status=0
 run_downloader yes >/dev/null 2>&1 || corruption_status=$?
 [[ "$corruption_status" != 0 ]] || fail 'corrupt immutable destination was accepted or overwritten'
-[[ "$(wc -l <"$sandbox/hf-events")" == 1 ]] || fail 'corruption triggered an implicit overwrite download'
+[[ "$(wc -l <"$sandbox/curl-events")" == 2 ]] || fail 'corruption triggered an implicit overwrite download'
 
 printf 'EXPRESSIVE_VOICE_CONTENDER_DOWNLOAD_CONTRACT_PASS\n'

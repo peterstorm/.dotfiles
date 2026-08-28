@@ -104,6 +104,35 @@ stage_verified_existing() {
   done < <(artifact_manifest "$slug")
 }
 
+download_artifact() {
+  local repository="$1" revision="$2" staging="$3" expected_sha="$4" expected_size="$5" relative="$6"
+  local target="$staging/$relative" partial="$staging/$relative.part" actual_sha actual_size
+  [[ -f "$target" ]] && return 0
+  mkdir -p "$(dirname -- "$target")"
+  curl --location --fail --show-error \
+    --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 \
+    --continue-at - --output "$partial" \
+    "https://huggingface.co/$repository/resolve/$revision/$relative"
+  actual_size="$(stat -c %s "$partial")"
+  actual_sha="$(sha256sum "$partial" | cut -d' ' -f1)"
+  if [[ "$actual_size" != "$expected_size" || "$actual_sha" != "$expected_sha" ]]; then
+    printf 'download verification failed: %s (expected %s/%s, got %s/%s)\n' \
+      "$relative" "$expected_size" "$expected_sha" "$actual_size" "$actual_sha" >&2
+    rm -f "$partial"
+    exit 1
+  fi
+  mv "$partial" "$target"
+}
+
+download_profile_artifacts() {
+  local repository="$1" revision="$2" staging="$3" slug="$4"
+  local expected_sha expected_size relative
+  while IFS=$'\t' read -r expected_sha expected_size relative; do
+    [[ -n "$relative" ]] || continue
+    download_artifact "$repository" "$revision" "$staging" "$expected_sha" "$expected_size" "$relative"
+  done < <(artifact_manifest "$slug")
+}
+
 write_receipt() {
   local destination="$1" slug="$2" repository="$3" revision="$4" usage_scope="$5" repository_bytes="$6" manifest_sha="$7"
   cat >"$destination/download-receipt.json" <<EOF
@@ -161,7 +190,7 @@ download_profile() {
 
   mkdir -p "$staging"
   stage_verified_existing "$destination" "$staging" "$slug"
-  hf download "$repository" --revision "$revision" --local-dir "$staging"
+  download_profile_artifacts "$repository" "$revision" "$staging" "$slug"
   verify_manifest "$staging" "$slug"
   rm -rf "$staging/.cache"
   find "$staging" -type l -print -quit | grep -q . && fail "symlink found in staged closure: $slug"
@@ -180,7 +209,7 @@ download_profile() {
 main() {
   local -a selected=()
   local slug record usage_scope required_bytes=0 available_bytes
-  for dependency in awk cmp cp cut diff find flock grep hf mktemp sha256sum sort stat; do
+  for dependency in awk cmp cp curl cut diff find flock grep mktemp sha256sum sort stat; do
     command -v "$dependency" >/dev/null 2>&1 || fail "missing command: $dependency"
   done
   [[ -s "$MANIFEST_FILE" ]] || fail "missing manifest: $MANIFEST_FILE"
