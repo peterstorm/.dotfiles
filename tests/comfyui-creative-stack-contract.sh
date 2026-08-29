@@ -12,6 +12,7 @@ PERSISTENT_HISTORY_NODE="$ROOT/comfyui/custom_nodes/persistent_output_history/__
 PERSISTENT_HISTORY_TEST="$ROOT/tests/test_persistent_output_history.py"
 DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
+REALISM_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-realism-lora.sh"
 WORKFLOW_BUILDER="$ROOT/scripts/comfyui/build-krea2-composed-workflows.py"
 PIXAROMA_STATE="$ROOT/scripts/comfyui/pixaroma_workflow_state.py"
 PIXAROMA_STATE_TEST="$ROOT/tests/test_pixaroma_workflow_state.py"
@@ -50,14 +51,15 @@ absent() {
   fi
 }
 
-for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$PERSISTENT_HISTORY_NODE" "$PERSISTENT_HISTORY_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$MOTION_CONTEXT_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$ASSETS_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$MODULE" "$DESKTOP" "$NODE" "$NODE_TEST" "$PERSISTENT_HISTORY_NODE" "$PERSISTENT_HISTORY_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$REALISM_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$MOTION_CONTEXT_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$RUNBOOK" "$H3_RUNBOOK" "$ASSETS_RUNBOOK" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-for file in "$NODE_TEST" "$PERSISTENT_HISTORY_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$MOTION_CONTEXT_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
+for file in "$NODE_TEST" "$PERSISTENT_HISTORY_TEST" "$DOWNLOAD" "$KLEIN_DOWNLOAD" "$REALISM_DOWNLOAD" "$WORKFLOW_BUILDER" "$PIXAROMA_STATE" "$PIXAROMA_STATE_TEST" "$CONTEST_BUILDER" "$CONTEST_BUILDER_TEST" "$H3_DOWNLOAD" "$MUSIC3_DOWNLOAD" "$UPSCALER_DOWNLOAD" "$UPSCALER_TEST" "$DIRECTOR_TEST" "$MOTION_CONTEXT_TEST" "$CREATIVE_PHASE" "$H3_PHASE" "$ACTIVATE" "$TRANSITION_TEST" "$DOWNLOAD_TEST" "$CREATIVE_PHASE_TEST"; do
   [[ -x "$file" ]] || fail "$file is not executable"
 done
 bash -n "$DOWNLOAD"
 bash -n "$KLEIN_DOWNLOAD"
+bash -n "$REALISM_DOWNLOAD"
 bash -n "$H3_DOWNLOAD"
 bash -n "$MUSIC3_DOWNLOAD"
 bash -n "$UPSCALER_DOWNLOAD"
@@ -259,7 +261,7 @@ contains "$MODULE" '"qwen3vl_32b_minimax_h3_bf16.safetensors"'
 contains "$MODULE" 'select(.type? == "BasicScheduler") | .widgets_values[1]) = 50'
 contains "$MODULE" 'resolve/e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96/'
 contains "$MODULE" 'resolve/dc559027db79c174125df4d827db55cd11178860/'
-contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out" -type f -name '\''*.json'\'' | wc -l)" -eq 53'
+contains "$MODULE" 'test "$(${pkgs.findutils}/bin/find "$out" -type f -name '\''*.json'\'' | wc -l)" -eq 54'
 contains "$MODULE" 'ep24_dir="$user_workflows/pixaroma-ep24-krea2-bf16"'
 contains "$MODULE" 'ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"'
 contains "$MODULE" 'ep30_dir="$user_workflows/pixaroma-ep30"'
@@ -362,6 +364,21 @@ contains "$KLEIN_DOWNLOAD" '40ce4ebd8af41f985ef7ff0b15c4989eacec155b9975c9649dbc
 contains "$KLEIN_DOWNLOAD" 'CIVITAI_TOKEN_FILE'
 contains "$KLEIN_DOWNLOAD" 'curl --config "$config"'
 contains "$KLEIN_DOWNLOAD" 'mv -f "$destination.new" "$destination"'
+
+# The video-backed Gokay realism lane is revision-pinned, BF16-native, and independent.
+contains "$REALISM_DOWNLOAD" 'KREA2_ACCEPT_LICENSE'
+contains "$REALISM_DOWNLOAD" 'gokaygokay/Krea-2-Realism-LoRA 32f0436ac10e985134364e7555898c9f121a46ce'
+contains "$REALISM_DOWNLOAD" '6c38a7934c54a56e0f67753660a4500a094d6dce28a0ee4a0d1dc9f4975d32d2 469288512'
+contains "$REALISM_DOWNLOAD" 'krea2_realism_lora.safetensors loras/krea2_realism_lora.safetensors'
+contains "$REALISM_DOWNLOAD" 'krea2_turbo_bf16.safetensors'
+contains "$REALISM_DOWNLOAD" 'KREA2_REALISM_LORA_READY'
+contains "$MODULE" 'image_krea2_turbo_bf16_realism.json'
+contains "$MODULE" 'krea2_realism_lora.safetensors'
+contains "$MODULE" 'Pinned from `gokaygokay/Krea-2-Realism-LoRA@32f0436ac10e985134364e7555898c9f121a46ce`'
+contains "$MODULE" '.widgets_values[7] = true'
+contains "$MODULE" '.widgets_values[9] = 1'
+contains "$MODULE" '.widgets_values[1] = false'
+
 if grep -Eq 'hf download .*--token|curl .*token' "$KLEIN_DOWNLOAD"; then
   fail "$KLEIN_DOWNLOAD exposes a credential through process arguments"
 fi
@@ -563,7 +580,7 @@ contains "$RUNBOOK" 'LoraLoaderModelOnly'
 contains "$RUNBOOK" 'three later experimental topologies'
 contains "$RUNBOOK" 'huihui_qwen3vl_4b_abliterated_bf16.safetensors'
 contains "$RUNBOOK" '8,875,719,408 bytes'
-contains "$RUNBOOK" '**128 user workflows:**'
+contains "$RUNBOOK" '**129 user workflows:**'
 contains "$RUNBOOK" 'four tested H3-output finishing'
 contains "$RUNBOOK" 'Real-ESRGAN x4plus→2×'
 contains "$RUNBOOK" 'Lanczos is the no-invention fidelity'
@@ -604,9 +621,12 @@ contains "$RUNBOOK" 'MinimaxHailuo03ContextIRNode'
 contains "$RUNBOOK" 'MinimaxHailuo03RegenerateNode'
 contains "$RUNBOOK" 'MiniMaxH3ReferenceToVideo'
 contains "$RUNBOOK" 'Muse Glimmer Creative Prompt'
-contains "$RUNBOOK" '53 curated official workflows'
+contains "$RUNBOOK" '54 curated workflows'
 contains "$RUNBOOK" 'image_krea2_turbo_t2i'
+contains "$RUNBOOK" 'image_krea2_turbo_bf16_realism'
 contains "$RUNBOOK" 'image_krea2_turbo_bf16_image_style_reference'
+contains "$RUNBOOK" 'gokaygokay/Krea-2-Realism-LoRA@32f0436ac10e985134364e7555898c9f121a46ce'
+contains "$RUNBOOK" 'Never stack Gokay, FameGrid, and UltraReal in one run.'
 contains "$RUNBOOK" 'no curated or Episode 30 workflow selects them'
 contains "$RUNBOOK" 'Do not open the similarly named'
 contains "$RUNBOOK" 'lower-precision selectors'

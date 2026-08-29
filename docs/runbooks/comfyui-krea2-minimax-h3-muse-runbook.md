@@ -53,11 +53,12 @@ ComfyUI remains loopback-only and systemd-confined.
 | Krea 2 + FLUX.2 Klein 9B workflow | The AI Blueprint/Google Drive, installed under `/var/lib/comfyui/` | exact SHA-256; BF16/model/node/link/credential gate |
 | Episode 29 H3 video workflows + 11 inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; deterministic BF16 adaptation; 8/8 JSON gate |
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
-| Curated creative suite | 53 official Comfy workflows under six task folders | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
+| Curated creative suite | 54 workflows under six task folders: 53 official adaptations plus one pinned Krea realism derivation | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
 | MiniMax Music 3 workflow | Official Comfy workflow adapted to the full-quality selectors | workflow-templates commit + exact file hash + JSON/model gate |
 | Full Template Library | official workflow browser library | Comfy package 0.11.44 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | FLUX.2 Klein 9B BF16, encoder, VAE, and two Krea LoRAs | `/models/comfyui/` | HF revisions/Civitai model versions + exact size + SHA-256 manifest |
+| Gokay Krea 2 Realism LoRA | `/models/comfyui/loras/krea2_realism_lora.safetensors` | HF revision `32f0436...` + exact 469,288,512-byte size + SHA-256 |
 | MiniMax Music 3 FP16 DiT, BF16 encoder, and DAV | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest; explicit community-license gate |
 | Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
@@ -206,9 +207,10 @@ The switch installs:
   compatibility adapter;
 - the 11 Episode 29 and six Episode 30 sample inputs under
   `/var/lib/comfyui/input/` (one identical shared image, 16 unique files);
-- 53 curated official workflows under
+- 54 curated workflows under
   `/var/lib/comfyui/user/default/workflows/creative-suite/`, grouped into image,
-  video, audio, 3D, enhancement, and hosted-frontier folders.
+  video, audio, 3D, enhancement, and hosted-frontier folders: 53 official
+  adaptations plus one pinned BF16 Krea realism derivation.
 
 Verify that the unit is installed, explicitly inactive, and pinned to GPU1:
 
@@ -376,6 +378,44 @@ through a private curl config, never argv. Downloads resume in a same-filesystem
 staging tree and publish only after full verification. The script also verifies
 the standard Krea BF16 DiT, encoder, and VAE before doing network I/O.
 
+### Install the video-backed Gokay Krea 2 Realism LoRA
+
+The video [This Workflow Makes Krea 2 Look Scary Real](https://www.youtube.com/watch?v=38GPmAVL3lc)
+and its free Gumroad description identify
+`gokaygokay/Krea-2-Realism-LoRA`. This exact adapter was not previously in the
+stack; UltraReal v2 and FameGrid are different realism LoRAs. Install the exact
+public release after acknowledging the same Krea 2 Community License already
+used by the base model:
+
+```bash
+KREA2_ACCEPT_LICENSE=yes \
+  bash scripts/comfyui/download-krea2-realism-lora.sh
+```
+
+The downloader pins
+`gokaygokay/Krea-2-Realism-LoRA@32f0436ac10e985134364e7555898c9f121a46ce`:
+
+- file: `loras/krea2_realism_lora.safetensors`;
+- size: 469,288,512 bytes;
+- SHA-256: `6c38a7934c54a56e0f67753660a4500a094d6dce28a0ee4a0d1dc9f4975d32d2`;
+- intended inference base: Krea 2 Turbo;
+- recommended settings: eight steps, CFG 1/guidance 0, LoRA scale 1.0, no
+  trigger word, and direct natural-language documentary prompts.
+
+Open **User workflows → `creative-suite/image` →
+`image_krea2_turbo_bf16_realism`**. The workstation derivation reuses the
+qualified official full-BF16 Turbo subgraph, disables prompt expansion, enables
+only this realism adapter at 1.0, saves the native Krea decode, and introduces
+no custom nodes. Test a lower 0.7–0.8 strength only as a separately recorded
+A/B when 1.0 overstates pores, contrast, age, or documentary grime.
+
+The downloadable creator graph uses Raw FP8 plus a Turbo LoRA at 0.6, this
+realism LoRA at 1.0, and an optional SeedVR2 comparison. We do not import that
+lower-precision reconstruction: the LoRA author's own model card recommends
+direct Krea 2 Turbo inference, and our merged BF16 Turbo checkpoint already
+represents that target. SeedVR2 remains a separate derivative-finishing gate;
+its output must never replace the native Krea master automatically. Never stack Gokay, FameGrid, and UltraReal in one run.
+
 Krea's official guidance is nuanced: RAW is the undistilled base and Turbo is
 an 8-step post-trained model that Krea recommends for routine inference. RAW is
 not guaranteed to win every prompt. It is installed as a separate
@@ -391,7 +431,9 @@ the checkpoint loads.
 Open **User workflows → `creative-suite/image`**:
 
 1. **Krea-2: Text to Image — BF16** (`image_krea2_turbo_t2i`)
-2. **Krea-2 Style Reference — BF16**
+2. **Krea-2 Turbo BF16 + Gokay Realism LoRA**
+   (`image_krea2_turbo_bf16_realism`)
+3. **Krea-2 Style Reference — BF16**
    (`image_krea2_turbo_bf16_image_style_reference`)
 
 These are deterministic workstation copies of official Comfy templates using
@@ -919,14 +961,14 @@ installation never promotes an output.
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **128 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **129 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
   maximum-quality H3 production graphs, two H3 Director Development graphs, four
   H3 Turbo-LoRA qualification graphs, one full-quality Music 3 graph, seven
   still/video upscaler qualification graphs, four tested H3-output finishing
-  graphs, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 53 curated
-  official graphs installed into the workflow browser.
+  graphs, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 54 curated
+  graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains
   available through **Templates** without duplicating every graph into user state.
 - **Models:** Krea/Edit, H3, FLUX/Klein, Music 3, and still-image upscalers each
@@ -934,7 +976,7 @@ There are three distinct workflow inventories; do not conflate them:
   separate legal gates. Other local graphs remain weightless until their own
   profile is licensed, pinned, downloaded, and qualified.
 
-The workflow browser uses Comfy's required 0.11.44 package, while the curated 53
+The workflow browser uses Comfy's required 0.11.44 package, while the curated 54
 remain sourced from the separately pinned and previously qualified JSON corpus
 0.1.37. The newer 0.1.50 JSON silently added active Turbo LoRA nodes to the H3
 T2V/I2V templates; those graphs are not promoted into the production suite
@@ -943,7 +985,7 @@ sources, not community workflow aggregators. They provide:
 
 | Folder | Count | Production capabilities |
 |---|---:|---|
-| `image` | 10 | Krea 2 BF16 T2I/style reference; Qwen Image 2512; Qwen Edit 2511/INT8/relight/layers; Flux.2 Klein 9B generation/edit; Z-Image Turbo INT8 |
+| `image` | 11 | Krea 2 BF16 T2I, Gokay realism, and style reference; Qwen Image 2512; Qwen Edit 2511/INT8/relight/layers; Flux.2 Klein 9B generation/edit; Z-Image Turbo INT8 |
 | `video` | 12 | BF16 MiniMax H3 T2V/I2V/R2V; LTX-2.3 T2V/I2V/FLF/IA2V; HunyuanVideo 1.5 T2V/I2V; Wan 2.2 T2V/I2V/FLF |
 | `audio` | 3 | ACE-Step 1.5 music and Stable Audio 3 Medium |
 | `3d` | 2 | Hunyuan3D single-view and turbo multiview reconstruction |
@@ -1711,6 +1753,7 @@ The starting surface is:
 | Production job | Open this | Where it appears | Additional readiness requirement |
 |---|---|---|---|
 | Canonical character image | `image_krea2_turbo_t2i` | User workflows → `creative-suite/image` | Krea production marker in `/models/comfyui` |
+| Documentary-photoreal Krea exploration | `image_krea2_turbo_bf16_realism` | User workflows → `creative-suite/image` | Krea production marker plus `.krea2-realism-lora-32f0436-v1.complete`; Development A/B before authority use |
 | Fast/direct Krea generation | `1a. Krea 2 Text to Image - Simple` | User workflows → `pixaroma-ep24-krea2-bf16` | Krea BF16 marker and pinned enhancer/Pixaroma nodes |
 | Detailed or 2K Krea generation | `2a. ... Extra Pass` or `2d. ... - 2K` | User workflows → `pixaroma-ep24-krea2-bf16` | Additional GPU time and memory for the 1.5× latent pass |
 | Lower-refusal Krea experiment | `3a`, `3b`, or `3c` Abliterated BF16 | User workflows → `pixaroma-ep24-krea2-bf16` | Verified abliterated BF16 encoder; compare against the matching standard graph |
@@ -1762,7 +1805,7 @@ test "$(find /var/lib/comfyui/user/default/workflows/contest-production-bf16 \
 test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16 \
   -type f -name '*.json' | wc -l)" -eq 2
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
-  -type f -name '*.json' | wc -l)" -eq 53
+  -type f -name '*.json' | wc -l)" -eq 54
 ```
 
 Verify local model publication separately:
@@ -1770,6 +1813,7 @@ Verify local model publication separately:
 ```bash
 test -f /models/comfyui/.krea2-production-complete
 test -f /models/comfyui/.krea2-flux2-klein9b-bf16-v1.complete
+test -f /models/comfyui/.krea2-realism-lora-32f0436-v1.complete
 test -f /models/comfyui/.minimax-h3-bf16-complete
 
 MUSE_VARIANT="${MUSE_VARIANT:-standard}"
@@ -2230,7 +2274,7 @@ Do not call the stack qualified until:
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
 - [ ] Comfy logs load Muse plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
-- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 53 curated workflows, one full-quality Music 3 workflow, and 16 unique sample inputs are present.
+- [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 54 curated workflows, one full-quality Music 3 workflow, and 16 unique sample inputs are present.
 - [ ] ComfyUI is exactly 0.33.3 with frontend 1.49.6, workflow templates 0.11.44, and comfy-kitchen 0.2.31.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
@@ -2271,6 +2315,10 @@ Do not call the stack qualified until:
 - [ ] H3 BF16 REF2VA then completes with one matched-size image at 768p/124
       frames, without either DiT co-residing, host swapping, or a GPU OOM.
 - [ ] Standard Muse→Krea BF16 1K and 2K images complete.
+- [ ] The Gokay realism workflow completes with only
+      `krea2_realism_lora.safetensors` active at 1.0; compare the native output
+      against plain Turbo, FameGrid, and UltraReal with one fixed prompt/seed,
+      and review identity, skin, age, lighting, texture, and prompt adherence.
 - [ ] The Krea→FLUX Klein workflow completes with only FameGrid active, saves a
       four-megapixel result, and records peak GPU1 VRAM/host RAM; repeat with
       only UltraReal active and retain the stronger result.
@@ -2327,6 +2375,8 @@ The Comfy state, Krea models, inputs, outputs, and workflows remain on disk.
 Sources accessed 2026-08-21–22:
 
 - [The AI Blueprint Krea 2 + FLUX Klein workflow](https://www.youtube.com/watch?v=AvoZYzIH2Ss)
+- [The AI Brief Krea 2 realism workflow video](https://www.youtube.com/watch?v=38GPmAVL3lc)
+- [Gokay Krea 2 Realism LoRA](https://huggingface.co/gokaygokay/Krea-2-Realism-LoRA/tree/32f0436ac10e985134364e7555898c9f121a46ce)
 - [Pinned public workflow post](https://www.patreon.com/posts/165369288)
 - [Official ComfyUI FLUX.2 Klein guide](https://docs.comfy.org/tutorials/flux/flux-2-klein)
 - [FLUX.2 Klein 9B repository and license](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B)

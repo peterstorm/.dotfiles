@@ -704,6 +704,42 @@ let
           mv "$krea_bf16.new" "$krea_bf16"
         done
 
+        # Reuse the qualified official Turbo subgraph for the independently
+        # pinned gokaygokay realism LoRA. Keep prompt expansion off and expose
+        # only one realism adapter so stacked style drift is unrepresentable.
+        krea_realism="$out/image/image_krea2_turbo_bf16_realism.json"
+        jq '
+          (.nodes[] | select(.id == 30)) |= (
+            .title = "Krea 2 Turbo BF16 + Gokay Realism LoRA — 8 steps"
+            | .widgets_values[0] = "A candid documentary portrait of a young woman waiting beside a rain-streaked station window, relaxed posture, natural skin texture, soft overcast daylight, ordinary contemporary clothing, and an unposed expression."
+            | .widgets_values[1] = false
+            | .widgets_values[7] = true
+            | .widgets_values[8] = "krea2_realism_lora.safetensors"
+            | .widgets_values[9] = 1
+            | .widgets_values[10] = ""
+          )
+          | (.nodes[] | select(.id == 29)) |= (
+              .title = "PRIMARY OUTPUT — native Krea realism"
+              | .widgets_values[0] = "Krea2_Realism_BF16"
+            )
+          | (.nodes[] | select(.id == 47)) |= (
+              .title = "Realism LoRA contract"
+              | .widgets_values[0] = "## Gokay Krea 2 Realism LoRA\n\nPinned from `gokaygokay/Krea-2-Realism-LoRA@32f0436ac10e985134364e7555898c9f121a46ce`. Use one realism LoRA at a time. The author recommends Krea 2 Turbo, 8 steps, guidance 0/CFG 1, scale 1.0, and natural descriptive prompts; no trigger word is required. The local full-BF16 Turbo checkpoint replaces the video Raw-FP8-plus-Turbo-LoRA reconstruction."
+            )
+        ' "$out/image/image_krea2_turbo_t2i.json" >"$krea_realism"
+
+        jq -e '
+          ([.nodes[] | select(.type == "b0e5ca93-2731-42b9-8e0a-d28ea851ff81")]
+            | length == 1)
+          and ([.nodes[] | select(.id == 30) | .widgets_values[1]] == [false])
+          and ([.nodes[] | select(.id == 30) | .widgets_values[7:11]]
+            == [[true, "krea2_realism_lora.safetensors", 1, ""]])
+          and ([.nodes[] | select(.id == 30) | .widgets_values[11:14]]
+            == [["krea2_turbo_bf16.safetensors", "qwen3vl_4b_bf16.safetensors", "qwen_image_vae.safetensors"]])
+          and ([.nodes[] | select(.id == 29) | .widgets_values[0]]
+            == ["Krea2_Realism_BF16"])
+        ' "$krea_realism" >/dev/null
+
         jq -s -e '
           length == 2
           and all(.[];
@@ -718,7 +754,8 @@ let
           "$krea_style_bf16" >/dev/null
         if grep -RqiE 'krea2_turbo_(int8|fp8)|qwen3vl_4b_fp8|resolve/main|tree/main' \
           "$out/image/image_krea2_turbo_t2i.json" \
-          "$krea_style_bf16"; then
+          "$krea_style_bf16" \
+          "$krea_realism"; then
           echo "forbidden lower-precision Krea selector or mutable link" >&2
           exit 1
         fi
@@ -773,7 +810,7 @@ let
           exit 1
         fi
 
-        test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 53
+        test "$(${pkgs.findutils}/bin/find "$out" -type f -name '*.json' | wc -l)" -eq 54
       '';
 
   h3ProductionWorkflows =
