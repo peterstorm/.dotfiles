@@ -13,9 +13,9 @@ TypeScript JSONL relay/reducer task and runs through:
 The run stops immediately before Wave 1. No implementer, test, reviewer, or
 wave-gate child runs, and no production or test file may change.
 
-The benchmark supports DeepSeek V4 Flash, Qwen3.8-27B, and three immutable
-GLM-5.3 Flash v84 runtime profiles. It remains one frozen experiment so results
-sharing a protocol hash are comparable.
+The benchmark supports DeepSeek V4 Flash, two immutable Qwen3.8-27B runtime
+profiles, and three immutable GLM-5.3 Flash v84 runtime profiles. It remains one
+frozen experiment so results sharing a protocol hash are comparable.
 
 ## Why this is measurable
 
@@ -41,6 +41,7 @@ This measures planning directly. No implementation is generated or inferred.
 |---|---|---:|---|
 | `ds4` | `desktop-vllm/deepseek-v4-flash:max` | 1,048,576 | `ds4-infernal-invocation-cu133-r18` |
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
+| `qwen-vllm-bf16kv` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dflash2-vllm-v3` |
 | `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
 | `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
 | `glm-fp8` | `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v6` |
@@ -51,6 +52,8 @@ List the machine-readable catalog with:
 bash scripts/run-arm.sh --list
 ```
 
+`qwen-vllm-bf16kv` measures the active single-GPU vLLM DFlash2/BF16-KV
+profile; `qwen` remains the historical TP2 SGLang/DSpark arm.
 `glm-fp8` follows the active canonical GLM route. `glm-mtp` remains the
 multimodal v5 comparison arm, and `glm-dflash` is runtime-profile evidence—not
 an independent base-model observation.
@@ -112,8 +115,11 @@ bash scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start
 # GLM DFlash2 98K
 bash scripts/inference/glm53/switch-glm53-exl3-profile-v3.sh start
 
-# Qwen
+# Qwen TP2 SGLang/DSpark
 bash scripts/inference/qwen38/switch-qwen38-backend-v4.sh sglang
+
+# Qwen TP1 vLLM/DFlash2 with BF16 KV on physical GPU0
+bash scripts/inference/qwen38/switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv
 
 # DS4
 bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh

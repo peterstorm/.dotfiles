@@ -18,11 +18,11 @@ usage() {
 }
 
 if (($# == 1)) && [[ "$1" == --list ]]; then
-  printf '%-12s %-58s %-42s %s\n' ARM PI_MODEL SERVED_MODEL CONTEXT
+  printf '%-20s %-58s %-42s %s\n' ARM PI_MODEL SERVED_MODEL CONTEXT
   while IFS= read -r listed_arm; do
     IFS=$'\t' read -r listed_model listed_served listed_context _ \
       <<<"$(benchmark_arm_record "$listed_arm")"
-    printf '%-12s %-58s %-42s %s\n' \
+    printf '%-20s %-58s %-42s %s\n' \
       "$listed_arm" "$listed_model" "$listed_served" "$listed_context"
   done < <(benchmark_arm_ids)
   exit 0
@@ -125,6 +125,18 @@ Attended startup hint for $PROFILE_LABEL:
   $START_HINT
 
 Wait for an authenticated /v1/models before retrying — a cold start takes minutes.
+EOF
+  exit 1
+fi
+
+PROFILE_RUNNING="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
+  "docker inspect --format='{{.State.Running}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
+if [[ "$PROFILE_RUNNING" != true ]]; then
+  cat >&2 <<EOF
+Runtime profile mismatch: arm '$ARM' requires running container '$PROFILE_CONTAINER'.
+
+Attended startup hint for $PROFILE_LABEL:
+  $START_HINT
 EOF
   exit 1
 fi

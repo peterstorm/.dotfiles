@@ -33,7 +33,7 @@ done
 
 # shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
 source "$ARMS"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen glm-dflash glm-mtp glm-fp8' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen qwen-vllm-bf16kv glm-dflash glm-mtp glm-fp8' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -51,6 +51,8 @@ for arm in "${BENCHMARK_ARM_IDS[@]}"; do
   grep -Eq "^${arm}[[:space:]]" <<<"$list_output" || fail "--list omits $arm"
 done
 
+contains "$ARMS" 'qwen38-27b-bf16-dflash2-vllm-v3'
+contains "$ARMS" 'switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max'
@@ -63,6 +65,8 @@ contains "$RUN" '~/.config/glm53/api-key'
 contains "$RUN" 'curl --config -'
 contains "$RUN" 'protocol.sha256'
 contains "$RUN" 'select(type == "array" and length == 1)'
+contains "$RUN" 'docker inspect --format='
+contains "$RUN" 'Runtime profile mismatch:'
 contains "$RUN" 'verify-run-models.sh'
 contains "$VERIFY" '.thinkingLevelMap[$level] != null'
 contains "$VERIFY" 'Pi routing lacks exact qwen/glm named targets'

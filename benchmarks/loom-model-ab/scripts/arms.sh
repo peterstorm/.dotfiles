@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 qwen glm-dflash glm-mtp glm-fp8)
+BENCHMARK_ARM_IDS=(ds4 qwen qwen-vllm-bf16kv glm-dflash glm-mtp glm-fp8)
 BENCHMARK_PROTOCOL_FILES=(
   frozen/brief.md
   frozen/ui-relay-types.ts
@@ -45,6 +45,15 @@ benchmark_arm_record() {
         'qwen38-27b-bf16-dspark-sglang-v2' \
         'bash ~/.dotfiles/scripts/inference/qwen38/switch-qwen38-backend-v4.sh sglang' \
         'Qwen3.8-27B BF16 DSpark'
+      ;;
+    qwen-vllm-bf16kv)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/qwen3.8-27b:xhigh' \
+        'qwen3.8-27b' \
+        '262144' \
+        'qwen38-27b-bf16-dflash2-vllm-v3' \
+        'bash ~/.dotfiles/scripts/inference/qwen38/switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv' \
+        'Qwen3.8-27B BF16 DFlash2 vLLM TP1 BF16 KV'
       ;;
     glm-dflash)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
