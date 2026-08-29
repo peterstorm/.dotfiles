@@ -36,9 +36,13 @@ json_bool() { [[ "$1" == true ]] && echo true || echo false; }
 # Model-authored paths in the graph are untrusted. Resolve each artifact and
 # refuse to copy anything outside the isolated worktree.
 capture_graph_artifact() {
-  local graph_key="$1" destination="$2" candidate resolved
+  local graph_key="$1" destination="$2" candidate unresolved resolved
   candidate="$(jq -er "$graph_key | select(type == \"string\" and length > 0)" "$GRAPH_SOURCE" 2>/dev/null)" || return 1
-  resolved="$(realpath -e "$WORKTREE/$candidate" 2>/dev/null)" || return 1
+  case "$candidate" in
+    /*) unresolved="$candidate" ;;
+    *) unresolved="$WORKTREE/$candidate" ;;
+  esac
+  resolved="$(realpath -e "$unresolved" 2>/dev/null)" || return 1
   [[ "$resolved" == "$WORKTREE/"* ]] || return 1
   cp "$resolved" "$RUN_DIR/$destination"
 }

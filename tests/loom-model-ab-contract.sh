@@ -176,6 +176,12 @@ cat > "$planning_worktree/.claude/state/active_task_graph.json" <<'JSON'
   "wave_gates": {"1":{"impl_complete":false,"reviews_complete":false,"tests_passed":null}}
 }
 JSON
+absolute_spec="$planning_worktree/.claude/specs/ui-relay/spec.md"
+jq --arg spec "$absolute_spec" '.spec_file = $spec' \
+  "$planning_worktree/.claude/state/active_task_graph.json" \
+  > "$planning_worktree/.claude/state/active_task_graph.json.tmp"
+mv "$planning_worktree/.claude/state/active_task_graph.json.tmp" \
+  "$planning_worktree/.claude/state/active_task_graph.json"
 cat > "$planning_run/run.json" <<'JSON'
 {
   "benchmark_kind":"planning-only",
