@@ -8,8 +8,8 @@ source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
 source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 
-IMAGE="vllm/vllm-openai@sha256:0aea30240f3e3d9ffae8526643950e170eb5fa07fc427016a9dd90892afa2aa3"
-IMAGE_CONFIG="sha256:bd995759b5b8ac51062e04c9e4d7c91c382d1ba377bb787e24dca2ccb39925e9"
+IMAGE="sha256:32a26fee4a4225b565017c36ce4f6589d716d608b59bbaa93c712a31a8433a32"
+IMAGE_CONFIG="sha256:32a26fee4a4225b565017c36ce4f6589d716d608b59bbaa93c712a31a8433a32"
 MODEL_HOST="${MODEL_HOST:-/models/Qwen3.8-Flash-Next-FP8-v1}"
 MODEL_CONTAINER="/model"
 CACHE_HOST="${CACHE_HOST:-/models/vllm-cache/qwen38-flash-next-fp8-v1}"
@@ -141,6 +141,7 @@ docker run -d --init \
   --label ai.peterstorm.inference.profile=qwen38-flash-next-fp8-vllm-v1 \
   --label ai.peterstorm.inference.checkpoint=Qwen/Qwen3.8-Flash-Next-FP8@970c569adaca6b35532111fd6b27351b2baefe50 \
   --label ai.peterstorm.inference.image-config="$IMAGE_CONFIG" \
+  --label ai.peterstorm.inference.qsa-topk=exact-canonical-mode-3 \
   --gpus all \
   --ipc=host \
   --shm-size 32g \
@@ -157,6 +158,7 @@ docker run -d --init \
   -e CUDA_DEVICE_ORDER=PCI_BUS_ID \
   -e HF_HUB_OFFLINE=1 \
   -e VLLM_PLE_CPU_OFFLOAD=1 \
+  -e VLLM_QSA_EXACT_TOPK=3 \
   -e TMPDIR=/container-tmp \
   -e TRITON_CACHE_DIR=/cache/triton \
   -e PYTHONHASHSEED=0 \
@@ -171,7 +173,7 @@ docker run -d --init \
   --max-model-len "$MAX_MODEL_LEN" \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
   --max-num-seqs "$MAX_NUM_SEQS" \
-  --enable-prefix-caching \
+  --no-enable-prefix-caching \
   --no-enable-flashinfer-autotune \
   --enable-auto-tool-choice \
   --tool-call-parser qwen3_coder \
@@ -181,4 +183,4 @@ docker run -d --init \
 
 printf "Started experimental profile '%s'. Follow: docker logs -f %s\n" "$NAME" "$NAME"
 printf "API key: %s (send as 'Authorization: Bearer <key>')\n" "$KEYFILE"
-printf '%s\n' 'The 51.2B-element FP8 N-gram table is mandatory-offloaded to host RAM; do not disable VLLM_PLE_CPU_OFFLOAD.'
+printf '%s\n' 'PLE CPU offload and deterministic QSA exact top-k mode 3 are mandatory for this profile.'

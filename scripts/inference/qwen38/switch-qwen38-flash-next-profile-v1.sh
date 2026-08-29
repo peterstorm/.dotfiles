@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 
 TARGET="qwen38-flash-next-fp8-vllm-v1"
 RUN="$SCRIPT_DIR/run-qwen38-flash-next-fp8-vllm-v1.sh"
+PROBE="$SCRIPT_DIR/probe-qwen38-flash-next-determinism.sh"
 MODE="${1:-status}"
 STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-3600}"
 
@@ -110,6 +111,7 @@ case "$MODE" in
     for container in "${previous[@]}"; do
       if [ "$container" = "$TARGET" ]; then
         wait_for_target
+        "$PROBE"
         exit 0
       fi
     done
@@ -127,7 +129,7 @@ case "$MODE" in
       restore_profiles "${previous[@]}" || true
       exit 1
     fi
-    if ! wait_for_target; then
+    if ! wait_for_target || ! "$PROBE"; then
       docker logs --tail 200 "$TARGET" >&2 || true
       inference_quiesce_failed_container "$TARGET" || true
       echo "error: Flash-Next acceptance failed; restoring previous profile set" >&2

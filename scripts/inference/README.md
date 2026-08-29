@@ -13,7 +13,8 @@ qwen38/    Qwen3.8 profiles: 27B BF16 downloaders and launchers, DSpark,
            profiles, and a vLLM TP1/BF16-KV v3 profile pinned to physical GPU0
            so physical GPU1 remains available to ComfyUI. The isolated
            Flash-Next FP8 TP2 profile offloads its 51.2B N-gram embedding to
-           host RAM. Existing 27B launchers remain validated rollback pins.
+           host RAM and uses a hash-gated exact-top-k3 overlay because the stock
+           family-12 QSA kernel is non-deterministic. Existing 27B launchers remain validated rollback pins.
 deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
 glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            digest-pinned custom vLLM SM120 images, a multimodal 262K NVFP4 TP2

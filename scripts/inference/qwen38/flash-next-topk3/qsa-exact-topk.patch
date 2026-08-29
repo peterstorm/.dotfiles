@@ -1,0 +1,71 @@
+--- ./qsa_orig.py	2026-08-26 11:13:56.000000000 +0200
++++ ./topk-image/qsa.py	2026-08-28 13:02:05.449700162 +0200
+@@ -740,6 +740,51 @@
+     return out
+ 
+ 
++
++# --- DIAGNOSZTIKA (docai, 2026-08-28): determinisztikus top-k utak a persistent_topk helyett/melle ---
++import os as _os
++_QSA_EXACT_TOPK = int(_os.environ.get("VLLM_QSA_EXACT_TOPK", "0") or 0)
++
++
++def _exact_topk(logits, lengths, output, workspace, k, max_seq_len):
++    """1. mod: referencia-szemantika + kanonikus sorrend (stabil rendezes, kisebb index nyer)."""
++    x = logits[:, :max_seq_len].float()
++    cols = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
++    len_c = lengths.to(torch.int64).clamp(min=0, max=x.shape[1]).unsqueeze(1)
++    x = x.masked_fill(cols >= len_c, float("-inf"))
++    idx = torch.sort(x, dim=1, descending=True, stable=True).indices
++    kk = min(k, idx.shape[1])
++    out = torch.full((x.shape[0], k), -1, dtype=torch.int32, device=x.device)
++    pos = torch.arange(kk, device=x.device).unsqueeze(0)
++    out[:, :kk] = torch.where(pos < len_c, idx[:, :kk], torch.full_like(idx[:, :kk], -1)).to(torch.int32)
++    output[:, :k].copy_(out)
++
++
++def _canon_order(blocks):
++    """2. mod: a kernel kimenetet (-1 = padding) helyben novekvo indexsorrendbe rakja, a -1-ek a vegen."""
++    b = blocks.to(torch.int64)
++    key = torch.where(b >= 0, b, torch.full_like(b, 2**40))
++    blocks.copy_(torch.sort(key, dim=1).values.clamp(max=2**31 - 1).where(torch.sort(key, dim=1).values < 2**40, torch.full_like(b, -1)).to(torch.int32))
++
++
++def _fast_topk(logits, lengths, output, k, max_seq_len):
++    """3. mod: torch.topk (radix select, nem teljes sort) + a k kivalasztott kanonikus rendezese."""
++    x = logits[:, :max_seq_len].float()
++    cols = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
++    len_c = lengths.to(torch.int64).clamp(min=0, max=x.shape[1]).unsqueeze(1)
++    x = x.masked_fill(cols >= len_c, float("-inf"))
++    kk = min(k, x.shape[1])
++    vals, idx = torch.topk(x, kk, dim=1, largest=True, sorted=False)
++    # kanonikus: ertek csokkeno, azonos erteknel index novekvo -> ket stabil rendezes
++    o1 = torch.sort(idx, dim=1, stable=True)
++    vals, idx = vals.gather(1, o1.indices), o1.values
++    o2 = torch.sort(vals, dim=1, descending=True, stable=True)
++    idx = idx.gather(1, o2.indices)
++    out = torch.full((x.shape[0], k), -1, dtype=torch.int32, device=x.device)
++    pos = torch.arange(kk, device=x.device).unsqueeze(0)
++    out[:, :kk] = torch.where(pos < len_c, idx, torch.full_like(idx, -1)).to(torch.int32)
++    output[:, :k].copy_(out)
++
+ def qsa_select_paged_tokens(
+     q: torch.Tensor,
+     k_cache: torch.Tensor,
+@@ -796,7 +841,15 @@
+             if use_cooperative_topk
+             else torch.ops._C.persistent_topk
+         )
+-        topk_op(logits, visible_blocks, blocks, topk_workspace, block_topk, columns)
++        if _QSA_EXACT_TOPK == 1:
++            _exact_topk(logits, visible_blocks, blocks, topk_workspace, block_topk, columns)
++        elif _QSA_EXACT_TOPK == 2:
++            topk_op(logits, visible_blocks, blocks, topk_workspace, block_topk, columns)
++            _canon_order(blocks)
++        elif _QSA_EXACT_TOPK == 3:
++            _fast_topk(logits, visible_blocks, blocks, block_topk, columns)
++        else:
++            topk_op(logits, visible_blocks, blocks, topk_workspace, block_topk, columns)
+         expand_qsa_block_indices_cuda(
+             blocks,
+             query_positions[row_slice],

@@ -1,6 +1,6 @@
 # Qwen3.8 Flash-Next FP8 vLLM TP2 + PLE RAM offload v1
 
-**Status:** checkpoint and image verified; v1 booted and locally qualified on 2026-08-29. Experimental, not promoted over the Qwen3.8-27B rollback.
+**Status:** checkpoint and deterministic-QSA image verified; stock v1 was rejected for non-deterministic prefill. Exact-top-k3 with prefix caching disabled was deployed and passed the live 10-run prefill gate on 2026-08-29. Experimental, not promoted over the Qwen3.8-27B rollback.
 
 This is an isolated experimental profile for the official Qwen3.8-Flash-Next FP8 checkpoint.
 It does not replace the qualified Qwen3.8-27B launchers. Flash-Next, Qwen 27B, DeepSeek, and
@@ -15,9 +15,12 @@ GLM are mutually exclusive on port 8000.
 | Indexed tensors | 152,089 tensors, 185,502,232,570 bytes |
 | Image index | `vllm/vllm-openai:qwen38-flash-next@sha256:fc120ece0a388cc0aa1caad4a9f1cd92113484ab7ec2fd0efadd62585be05bf8` |
 | AMD64 image | `vllm/vllm-openai@sha256:0aea30240f3e3d9ffae8526643950e170eb5fa07fc427016a9dd90892afa2aa3` |
-| Image config | `sha256:bd995759b5b8ac51062e04c9e4d7c91c382d1ba377bb787e24dca2ccb39925e9` |
+| Base image config | `sha256:bd995759b5b8ac51062e04c9e4d7c91c382d1ba377bb787e24dca2ccb39925e9` |
+| Deterministic-QSA image config | `sha256:32a26fee4a4225b565017c36ce4f6589d716d608b59bbaa93c712a31a8433a32` |
+| QSA patch | DocAI evals `522430ac96a4847583c3b0069757338cf27ab7ff`, patch SHA-256 `b2d642b9a54c504d8ad109888767cbbf2eda760f8c4edda6b12732ac22c174e4` |
+| Patched `qsa.py` | SHA-256 `79d13ab4a3805bd568e3b930cd0cc193fbf5997403f9d4e809838193c14204dc` |
 
-The mutable tag is never used by the launcher. The 172.82 GiB serving manifest includes all
+The mutable tags are never used by the launcher. It starts the exact deterministic-QSA image config. The derived image proves the 32-layer base rootfs prefix, adds only the patch layers, and fails its build if either the original `qsa.py` or vendored patch hash differs. The 172.82 GiB serving manifest includes all
 131 weight shards and the complete tokenizer, multimodal processor, template, metadata, README,
 and license surface.
 
@@ -61,7 +64,7 @@ image tag `local/vllm-openai:dev`. The installed wheel reports
 `0.1.dev20073+g8e685d198`, but that abbreviated commit was not resolvable in either the public
 vLLM repository or the contributor fork. Its exact image digest and runtime capabilities are
 provable; its source commit is not. Treat it as experimental until a reconstructible official
-build or merged release exists. A GPU-assisted `vllm serve --help=all` probe succeeded on the
+build or merged release exists. The stock image also contains a correctness defect on capability-family 12.x: `qsa_select_paged_tokens` excludes that family from `cooperative_topk` and routes through the racy `persistent_topk` kernel. The derived image applies the published `torch.topk(sorted=False)` plus canonical ordering repair and fixes `VLLM_QSA_EXACT_TOPK=3`; see [the DocAI investigation](https://docai.hu/en/blog/qwen38-flash-next-nondeterministic-vllm-kernel) and vLLM issue #51782. A GPU-assisted `vllm serve --help=all` probe succeeded on the
 desktop's driver and confirmed the prefix-cache, MTP, multimodal-limit, reasoning, and tool
 arguments. That parses the CLI only; it does not load weights or execute model kernels.
 
@@ -75,7 +78,8 @@ arguments. That parses the CLI only; it does not load weights or execute model k
 | GPU memory utilization | 0.94 |
 | PLE/N-gram placement | Host RAM, mandatory |
 | MTP | 3 draft tokens |
-| Prefix caching | Enabled |
+| Prefix caching | Disabled; cold/warm output equivalence failed the repaired-image gate |
+| QSA selection | Exact `torch.topk` + canonical ordering (`VLLM_QSA_EXACT_TOPK=3`), mandatory |
 | FlashInfer autotune | Disabled |
 | Tool parser | `qwen3_coder` |
 | Reasoning parser | `qwen3` |
@@ -110,7 +114,7 @@ MODEL_HOST="$HOME/models/Qwen3.8-Flash-Next-FP8-v1" \
   bash scripts/inference/qwen38/verify-qwen38-flash-next-fp8-v1.sh
 ```
 
-Pull and prove the special image:
+Pull the special base, build the one-file deterministic-QSA overlay, and prove the exact base prefix, patch, resulting source, and derived image:
 
 ```bash
 bash scripts/inference/qwen38/pull-qwen38-flash-next-vllm-v1-image.sh
@@ -161,8 +165,8 @@ Attended boot used both GPUs with ComfyUI inactive:
 - KV allocation: 21.72–21.84 GiB per worker;
 - logical KV capacity: 1,459,504 tokens, or 5.57× at 262,144;
 - authenticated model id exact; unauthenticated discovery returned 401;
-- deterministic text, SSE `[DONE]`, tool JSON, and generated-red-PNG vision
-  gates passed;
+- a single-response greedy text gate, SSE `[DONE]`, tool JSON, and generated-red-PNG vision
+  gates passed; the later repeated-logprob probe invalidated the original determinism claim;
 - C1: 172.1 decode tok/s; C4: 518.3 aggregate end-to-end tok/s;
 - MTP3 effective acceptance length: 2.61 C1 and 2.51 C4;
 - fresh 249,336-token retrieval: exact marker in 23.059 seconds; identical
@@ -176,6 +180,40 @@ There was no sustained zram churn during idle or qualification, but ComfyUI and
 other memory-heavy workloads must remain stopped. See
 `benchmarks/vllm-tps/2026-08-29-qwen-flash-next-fp8.md` for full measurements.
 
+
+## Determinism incident and repair — 2026-08-29
+
+The stock deployment was rejected after the published prefill probe was applied. Its exact vLLM
+build (`0.1.dev20073+g8e685d198`) and Blackwell family-12 path call
+`torch.ops._C.persistent_topk`; no exact-top-k overlay was present. Ten identical greedy requests
+(`temperature=0`, `max_tokens=1`, `top_logprobs=20`) against the 3,205-token published T3-01
+fixture produced ten distinct top-20 vectors. Other Pi sessions were active during that first
+measurement, so it was not used as the sole kernel attribution; the installed affected source
+path and absent repair independently establish that the deployment was vulnerable.
+
+The remediation is a two-layer image derived from the exact base. Its Dockerfile hash-gates the
+original source and the vendored upstream experiment patch, applies with zero fuzz, hash-gates the
+result, syntax-compiles it, and sets mode 3. The launcher pins the resulting image config and
+reasserts mode 3. The transactional switcher now runs the same ten-request probe on an idle engine
+and rolls back if even two vectors differ.
+
+The first repaired-image gate still produced three vectors: cold run 1, partially cached run 2,
+and one stable vector for runs 3–10. Prefix caching was therefore disabled as another
+correctness requirement; the original 249K cached-replay latency result no longer applies.
+
+After restart without prefix caching, all ten runs were byte-identical from the first request:
+first token `We`, logprob `-0.36722856760025024`, top-20 SHA-256
+`3e490b4aedbdcaeac14f5e79af620c4ac210b305bbf13ccd9fcf025f5145b845`.
+A second independent ten-run gate produced the same vector. Three complete greedy T3-01
+responses were also byte-identical (message SHA-256
+`5b95afe5bcfbbb12002b3d8cee861ec5616b8da92c6f1e637f27a6db5382917f`, 1,706 completion
+tokens each) and returned the correct `2026-11-10` / `munkanap` JSON.
+
+This repair addresses the QSA selected-context race only. MTP3 remains enabled because disabling
+it substantially reduces decode throughput and does not remove the model's greedy-thinking
+repetition tendency. MTP is not promised to be output-equivalent to plain greedy; parity and a
+reasoning-loop retry policy remain separate promotion gates.
+
 ## Qualification gates
 
 1. Prove unauthenticated requests fail and authenticated `/v1/models` returns only
@@ -184,8 +222,9 @@ other memory-heavy workloads must remain stopped. See
    GPU-resident or non-speculative fallback.
 3. During load and warmup, monitor `free -h`, process RSS, cgroup OOM events, GPU VRAM, Xids, and
    kernel logs. Fail if swap thrashes or available RAM approaches zero.
-4. Qualify deterministic text, code, multilingual, reasoning levels, streaming, and preserved
-   reasoning history.
+4. Require `probe-qwen38-flash-next-determinism.sh` to produce one byte-identical top-20
+   vector across ten idle-engine runs; then qualify code, multilingual, reasoning levels,
+   streaming, and preserved reasoning history.
 5. Exercise single, malformed, parallel, and multi-turn `qwen3_coder` tool calls.
 6. Qualify one-image prompts separately; video remains disabled.
 7. Measure MTP acceptance, C1/C4 TTFT, prefill, decode, queueing, and output parity with MTP off.
