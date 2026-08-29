@@ -13,11 +13,22 @@
       "thinkingLevel": "xhigh"
     },
     "glm": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k",
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
       "thinkingLevel": "max"
     }
   },
   "rules": [
+    {
+      "id": "glm-v8-subagents-use-max",
+      "when": {
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8"
+      },
+      "use": {
+        "kind": "named",
+        "target": "glm"
+      }
+    },
     {
       "id": "local-workloads-use-parent",
       "when": {
@@ -25,6 +36,17 @@
       },
       "use": {
         "kind": "parent"
+      }
+    },
+    {
+      "id": "rpc-driver-headless-parent-reconciliation",
+      "when": {
+        "parentClass": "cloud",
+        "parentModel": "openai-codex/gpt-5.6-sol"
+      },
+      "use": {
+        "kind": "named",
+        "target": "glm"
       }
     }
   ]

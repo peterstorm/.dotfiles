@@ -156,6 +156,36 @@
           }
         },
         {
+          "id": "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
+          "name": "GLM-5.3 Flash EXL3 K4 Vision FP8 KV + MTP3 359K v8 (experimental)",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": ["text", "image"],
+          "contextWindow": 359000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
           "id": "qwen3.8-27b",
           "name": "Qwen3.8 27B BF16 (local RTX workstation)",
           "reasoning": true,
