@@ -91,6 +91,9 @@ main() {
     --gpus "device=$GPU_DEVICE" \
     --shm-size 16g \
     --tmpfs /tmp:rw,nosuid,nodev,size=16g,mode=1777 \
+    --env HOME=/tmp/home \
+    --env USER=voice \
+    --env LOGNAME=voice \
     --env HF_HOME=/tmp/huggingface \
     --env XDG_CACHE_HOME=/tmp/cache \
     --mount "type=bind,src=$MODEL_ROOT,dst=/models/model,readonly" \

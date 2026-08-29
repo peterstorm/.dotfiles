@@ -46,6 +46,9 @@ contains "$RUN" '--security-opt no-new-privileges'
 # shellcheck disable=SC2016
 contains "$RUN" '--gpus "device=$GPU_DEVICE"'
 contains "$RUN" 'dst=/models/model,readonly'
+contains "$RUN" '--env HOME=/tmp/home'
+contains "$RUN" '--env USER=voice'
+contains "$RUN" '--env LOGNAME=voice'
 contains "$RUN" 'sha256sum -c SHA256SUMS'
 contains "$RUN" 'productionAuthority: false'
 
