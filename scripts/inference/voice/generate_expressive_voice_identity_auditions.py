@@ -324,22 +324,35 @@ def _generate_voxcpm2(spec: AuditionSpec, output: Path) -> list[dict[str, Any]]:
 
 def _generate_breeze(spec: AuditionSpec, output: Path) -> list[dict[str, Any]]:
     import soundfile as sf
+    import torch
     from breeze_infer.runtime import (
-        load_runtime,
         resolve_device,
         set_all_seeds,
         update_generation_config_for_breeze,
     )
     from breeze_infer.templates import get_template, prepare_inputs
+    from models.breeze import BreezeForConditionalGeneration
+    from models.breeze_config import BreezeConfig
     from models.fast_streaming import FastBreezeStreamingRuntime, FastStreamingConfig
+    from qwen_tts import Qwen3TTSTokenizer
+    from transformers import AutoTokenizer
 
     parameters = spec.generation
     if not isinstance(parameters, BreezeParameters):
         raise SpecError("breeze-tts2 requires BreezeParameters")
-    tokenizer, model, audio_tokenizer = load_runtime(
+    device = resolve_device()
+    tokenizer = AutoTokenizer.from_pretrained(spec.model.path, fix_mistral_regex=True)
+    config = BreezeConfig.from_pretrained(spec.model.path)
+    config.text_encoder_config.preferred_attn_implementation = "eager"
+    model = BreezeForConditionalGeneration.from_pretrained(
         spec.model.path,
-        device=resolve_device(),
+        config=config,
+        dtype=torch.bfloat16,
         attn_implementation="eager",
+    )
+    model.to(device).eval()
+    audio_tokenizer = Qwen3TTSTokenizer.from_pretrained(
+        str(spec.model.path / "audio_tokenizer"), device_map=device
     )
     update_generation_config_for_breeze(model)
     runtime = FastBreezeStreamingRuntime(
@@ -431,6 +444,13 @@ def _generate(spec: AuditionSpec, output: Path) -> None:
             "text": spec.identity.text,
         },
         "generation": asdict(spec.generation),
+        "compatibilityAdaptations": (
+            [
+                "Breeze nested text_encoder preferred_attn_implementation: flash_attention_2 -> eager"
+            ]
+            if spec.engine == "breeze-tts2"
+            else []
+        ),
         "outputs": outputs,
         "technicalQaOnly": True,
         "userSelectionRequired": True,
