@@ -131,8 +131,8 @@ EOF
   exit 1
 fi
 PROFILE_INSPECT="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
-  "docker inspect --format='{{.State.Running}}\t{{index .Config.Labels \"ai.peterstorm.inference.profile\"}}\t{{index .Config.Labels \"ai.peterstorm.inference.image-config\"}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
-IFS=$'\t' read -r PROFILE_RUNNING OBSERVED_PROFILE IMAGE_CONFIG <<<"$PROFILE_INSPECT"
+  "docker inspect --format='{{.State.Running}}|{{index .Config.Labels \"ai.peterstorm.inference.profile\"}}|{{index .Config.Labels \"ai.peterstorm.inference.image-config\"}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
+IFS='|' read -r PROFILE_RUNNING OBSERVED_PROFILE IMAGE_CONFIG <<<"$PROFILE_INSPECT"
 [[ "$PROFILE_RUNNING" == true && "$OBSERVED_PROFILE" == "$PROFILE_CONTAINER" && "$IMAGE_CONFIG" =~ ^sha256:[0-9a-f]{64}$ ]] || {
   echo "runtime profile identity mismatch: expected running $PROFILE_CONTAINER, observed '${OBSERVED_PROFILE:-<none>}' with image config '${IMAGE_CONFIG:-<none>}'" >&2
   echo "start with: $START_HINT" >&2
