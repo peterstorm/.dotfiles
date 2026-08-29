@@ -69,6 +69,7 @@ import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { existsSync, realpathSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { extname, isAbsolute, join, resolve } from "node:path";
+import { CODE_EXTENSIONS, firstBashCodeMutationTarget } from "./loom-rules-gate-shell";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -93,30 +94,6 @@ const EXTENSION_TO_RULE: Record<string, string> = {
 	".java": "java-patterns.md",
 	".rs": "rust-patterns.md",
 };
-
-/** Extensions considered "implementing code". Non-code files (md, json, ...) are not gated. */
-const CODE_EXTENSIONS = new Set([
-	...Object.keys(EXTENSION_TO_RULE),
-	".kt",
-	".scala",
-	".py",
-	".go",
-	".rb",
-	".php",
-	".c",
-	".h",
-	".cpp",
-	".cc",
-	".cxx",
-	".hpp",
-	".cs",
-	".swift",
-	".sh",
-	".zsh",
-	".bash",
-	".vue",
-	".svelte",
-]);
 
 /** Skills (SKILL.md) the orchestrator must have in context before implementing code. */
 const REQUIRED_SKILLS = ["deepen", "distill"];
@@ -377,36 +354,6 @@ function missingRequirements(reqs: Requirement[], evidence: Evidence): Requireme
 // Bash mutation heuristics
 // ---------------------------------------------------------------------------
 
-const CODE_EXT_ALTERNATION = [...CODE_EXTENSIONS].map((e) => e.slice(1)).join("|");
-
-function bashTargetsCodeFile(command: string): boolean {
-	// Redirect whose target is a code file:  > out.ts   >> src/x.ts   2> err.go
-	if (new RegExp(`>>?\\s*["']?[^\\s|;&>"'\\u0060]{1,200}?\\.(?:${CODE_EXT_ALTERNATION})\\b`, "i").test(command)) return true;
-
-	// Mutator commands mentioning any code file
-	const mentionsCodeFile = new RegExp(`\\b[\\w.$/~@-]+\\.(?:${CODE_EXT_ALTERNATION})\\b`, "i").test(command);
-	if (!mentionsCodeFile) return false;
-	return (
-		/\btee\b/.test(command) ||
-		/\bcp\b/.test(command) ||
-		/\bmv\b/.test(command) ||
-		/\bsed\b[^|;&\n]{0,80}\s-i\b/.test(command) ||
-		/\bpatch\b/.test(command) ||
-		/\brsync\b/.test(command) ||
-		/\binstall\b/.test(command)
-	);
-}
-
-/** Find the first code-file path token mentioned in a shell command. */
-function firstCodeFileToken(command: string): string | null {
-	const tokens = command.split(/[\s|&;()<>=]+/);
-	for (const raw of tokens) {
-		const t = raw.replace(/^["']+|["']+$/g, "").replace(/^[`]+|[`]+$/g, "");
-		if (!t) continue;
-		if (CODE_EXTENSIONS.has(extname(t).toLowerCase())) return t;
-	}
-	return null;
-}
 
 // ---------------------------------------------------------------------------
 // Gate control: who is gated?
@@ -484,11 +431,9 @@ export default function (pi: ExtensionAPI) {
 		} else if (GATE_BASH && isToolCallEventType("bash", event)) {
 			const cmd = event.input?.command;
 			if (typeof cmd !== "string") return;
-			if (!bashTargetsCodeFile(cmd)) return;
-			// For bash we gate on the same requirements as a write to the first
-			// code file mentioned (falls back to always-rules + skills).
-			const mentioned = firstCodeFileToken(cmd);
-			targetPath = mentioned ?? "/x/unknown.py";
+			const target = firstBashCodeMutationTarget(cmd);
+			if (target === null) return;
+			targetPath = target;
 			action = `mutate code files via bash: ${cmd.length > 120 ? cmd.slice(0, 120) + "…" : cmd}`;
 		} else {
 			return;
