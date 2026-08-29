@@ -341,7 +341,7 @@ def _generate_breeze(spec: AuditionSpec, output: Path) -> list[dict[str, Any]]:
     if not isinstance(parameters, BreezeParameters):
         raise SpecError("breeze-tts2 requires BreezeParameters")
     device = resolve_device()
-    tokenizer = AutoTokenizer.from_pretrained(spec.model.path, fix_mistral_regex=True)
+    tokenizer = AutoTokenizer.from_pretrained(spec.model.path)
     config = BreezeConfig.from_pretrained(spec.model.path)
     config.text_encoder_config.preferred_attn_implementation = "eager"
     model = BreezeForConditionalGeneration.from_pretrained(
