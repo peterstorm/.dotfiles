@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import random
 import re
 import sys
 from dataclasses import asdict, dataclass
@@ -417,7 +416,6 @@ def _generate(spec: AuditionSpec, output: Path) -> None:
     if not spec.model.path.is_dir():
         raise FileNotFoundError(f"model directory is unavailable: {spec.model.path}")
     output.mkdir(parents=True, exist_ok=False)
-    random.seed(0)
     outputs = (
         _generate_voxcpm2(spec, output)
         if spec.engine == "voxcpm2"
