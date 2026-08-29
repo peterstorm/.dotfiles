@@ -69,7 +69,7 @@ import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { existsSync, realpathSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { extname, isAbsolute, join, resolve } from "node:path";
-import { CODE_EXTENSIONS, firstBashCodeMutationTarget } from "./loom-rules-gate-shell";
+import { CODE_EXTENSIONS, firstBashCodeMutationTarget } from "./loom-rules-gate/shell";
 
 // ---------------------------------------------------------------------------
 // Configuration

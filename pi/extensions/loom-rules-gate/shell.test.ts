@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { firstBashCodeMutationTarget } from "./loom-rules-gate-shell";
+import { firstBashCodeMutationTarget } from "./shell";
 
 describe("Loom rules gate Bash mutation classification", () => {
 	it("does not combine an artifact copy with a later read-only TypeScript CLI invocation", () => {

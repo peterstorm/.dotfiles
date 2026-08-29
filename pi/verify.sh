@@ -39,7 +39,8 @@ if [ "${1:-}" = "--tests" ]; then
   bun test \
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \
-    "$here/extensions/loom-rules-gate-shell.test.ts" \
+    "$here/extensions/loom-rules-gate/shell.test.ts" \
+    "$here/root-extensions.test.ts" \
     "$here/creative-project-skills.test.ts" \
     "$@"
   exit $?
