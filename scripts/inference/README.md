@@ -10,9 +10,10 @@ Layout (by model, then by role):
 ```
 qwen38/    Qwen3.8 profiles: 27B BF16 downloaders and launchers, DSpark,
            locally validated DFlash2, digest-pinned official SGLang/vLLM v2
-           profiles, and an isolated Flash-Next FP8 TP2 profile whose 51.2B
-           N-gram embedding is offloaded to host RAM. Existing 27B launchers
-           remain validated rollback pins.
+           profiles, and a vLLM TP1/BF16-KV v3 profile pinned to physical GPU0
+           so physical GPU1 remains available to ComfyUI. The isolated
+           Flash-Next FP8 TP2 profile offloads its 51.2B N-gram embedding to
+           host RAM. Existing 27B launchers remain validated rollback pins.
 deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
 glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            digest-pinned custom vLLM SM120 images, a multimodal 262K NVFP4 TP2
