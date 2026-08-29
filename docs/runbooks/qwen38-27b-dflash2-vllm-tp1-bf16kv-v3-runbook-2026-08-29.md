@@ -90,18 +90,31 @@ cutover and retain it as the rollback.
 
 ## Qualification receipt — 2026-08-29
 
-The attended cold boot succeeded in 241 seconds with no restart or OOM:
+The attended cold boot succeeded in 241 seconds with no restart or OOM. A
+second boot against the populated 44 MiB persistent kernel cache succeeded in 91
+seconds and directly loaded all three AOT artifacts:
 
-```text
-fixed model/runtime memory: 55.23 GiB
-peak activation memory:      3.65 GiB
-CUDA graph memory:           0.25 GiB
-available BF16 KV memory:   28.49 GiB
-GPU KV capacity:           343,968 tokens
-262,144-token concurrency:    1.31x
-steady GPU0 allocation:      87.7–88.5 GiB
-steady GPU1 allocation:       2 MiB
-```
+| Measurement | Cold cache | Warm cache |
+|---|---:|---:|
+| Fixed model/runtime memory | 55.23 GiB | 55.23 GiB |
+| Peak activation memory | 3.65 GiB | 2.73 GiB |
+| CUDA graph memory | 0.25 GiB | 0.25 GiB |
+| Available BF16 KV memory | 28.49 GiB | 29.41 GiB |
+| GPU KV capacity | 343,968 tokens | 355,082 tokens |
+| 262,144-token concurrency | 1.31x | 1.35x |
+| Boot time | 241 s | 91 s |
+
+The cache therefore recovers 11,114 tokens (3.2%), not the much larger GLM
+cold/warm delta. The fixed 55.23 GiB target/draft/runtime allocation dominates
+this profile. BF16 hybrid KV plus alignment/padding costs roughly 85 KiB per
+token, and `gpu-memory-utilization=0.92` deliberately leaves about 7.6 GiB
+outside vLLM's allocation. The warm boot reported 36.04 GiB as the theoretical
+full-card KV allocation, which projects to roughly 435K tokens, but reaching it
+would require near-total GPU utilization and would still not fit two 262K
+requests. The retained headroom is preferable until the observed long-context
+preemptions are explained.
+
+Steady allocation is approximately 88.7 GiB on GPU0 and 2 MiB on GPU1.
 
 Authenticated model discovery returned only `qwen3.8-27b`. Exact text output,
 stream termination, automatic tool calling with valid JSON arguments, four-way
