@@ -1,6 +1,6 @@
 # Qwen3.8 Flash-Next FP8 vLLM TP2 + PLE RAM offload v1
 
-**Status:** pinned image pulled and statically verified; checkpoint download and runtime boot not started.
+**Status:** checkpoint and image verified; v1 booted and locally qualified on 2026-08-29. Experimental, not promoted over the Qwen3.8-27B rollback.
 
 This is an isolated experimental profile for the official Qwen3.8-Flash-Next FP8 checkpoint.
 It does not replace the qualified Qwen3.8-27B launchers. Flash-Next, Qwen 27B, DeepSeek, and
@@ -143,6 +143,38 @@ docker logs -f qwen38-flash-next-fp8-vllm-v1
 The launcher fails closed on checkpoint identity, image identity, GPU count/type/memory/power,
 host RAM availability, cache access, and port conflicts. API credentials are supplied through a
 private env file and never appear in process arguments.
+
+## Local qualification receipt — 2026-08-29
+
+The first preflight found that the pinned `LICENSE` uses CRLF. Its bytes matched
+the immutable manifest, but the verifier compared the first line as LF-only.
+The verifier now removes exactly one trailing carriage return before checking
+`Qwen Community License 1.0`; all 144 manifest records and metadata gates then
+passed.
+
+Attended boot used both GPUs with ComfyUI inactive:
+
+- container start to authenticated readiness: approximately 312 seconds;
+- PLE CPU offload registered one layer and both TP workers;
+- model allocation: 64.58 GiB per worker;
+- peak activation / CUDA graphs: 1.03 / 0.29 GiB per worker;
+- KV allocation: 21.72–21.84 GiB per worker;
+- logical KV capacity: 1,459,504 tokens, or 5.57× at 262,144;
+- authenticated model id exact; unauthenticated discovery returned 401;
+- deterministic text, SSE `[DONE]`, tool JSON, and generated-red-PNG vision
+  gates passed;
+- C1: 172.1 decode tok/s; C4: 518.3 aggregate end-to-end tok/s;
+- MTP3 effective acceptance length: 2.61 C1 and 2.51 C4;
+- fresh 249,336-token retrieval: exact marker in 23.059 seconds; identical
+  prefix-cached replay in 0.743 seconds with 246,400 cache-hit tokens;
+- zero preemptions, OOMs, restarts, and observed Xids.
+
+Host memory remains the operational constraint. After startup the 91 GiB host
+reported 29 GiB available while zram held 43.6 GiB logical data compressed to
+34.6 GiB. The PLE worker was roughly 7.6 GiB resident and 41.2 GiB swapped.
+There was no sustained zram churn during idle or qualification, but ComfyUI and
+other memory-heavy workloads must remain stopped. See
+`benchmarks/vllm-tps/2026-08-29-qwen-flash-next-fp8.md` for full measurements.
 
 ## Qualification gates
 
