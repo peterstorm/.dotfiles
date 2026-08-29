@@ -157,7 +157,7 @@
         },
         {
           "id": "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
-          "name": "GLM-5.3 Flash EXL3 K4 Vision FP8 KV + MTP3 359K v8 (experimental)",
+          "name": "GLM-5.3 Flash EXL3 K4 v84 Vision FP8 KV + MTP3 359K v8 (experimental)",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
