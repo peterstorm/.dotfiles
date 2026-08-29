@@ -6,8 +6,10 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-
-MODULE_PATH = Path(__file__).parents[1] / "scripts/inference/voice/generate_voice_design_auditions.py"
+MODULE_PATH = (
+    Path(__file__).parents[1]
+    / "scripts/inference/voice/generate_voice_design_auditions.py"
+)
 SPEC = importlib.util.spec_from_file_location("voice_auditions", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 voice_auditions = importlib.util.module_from_spec(SPEC)
@@ -26,7 +28,9 @@ def valid_spec() -> dict:
                 "text": "This deliberately long audition sentence provides enough spoken material to compare identity and delivery.",
                 "candidates": [
                     {"id": identifier, "seed": member_index * 100 + candidate_index}
-                    for candidate_index, identifier in enumerate(("a", "b", "c"), start=1)
+                    for candidate_index, identifier in enumerate(
+                        ("a", "b", "c"), start=1
+                    )
                 ],
             }
         )
@@ -54,7 +58,9 @@ class ParseAuditionSpecTest(unittest.TestCase):
     def test_rejects_non_english_qualification(self) -> None:
         raw = valid_spec()
         raw["language"] = "Korean"
-        with self.assertRaisesRegex(voice_auditions.SpecError, "language must equal English"):
+        with self.assertRaisesRegex(
+            voice_auditions.SpecError, "language must equal English"
+        ):
             voice_auditions.parse_spec(raw)
 
     def test_rejects_unknown_keys_instead_of_ignoring_typos(self) -> None:
@@ -65,7 +71,9 @@ class ParseAuditionSpecTest(unittest.TestCase):
 
     def test_rejects_duplicate_seed_across_members(self) -> None:
         raw = valid_spec()
-        raw["members"][1]["candidates"][0]["seed"] = raw["members"][0]["candidates"][0]["seed"]
+        raw["members"][1]["candidates"][0]["seed"] = raw["members"][0]["candidates"][0][
+            "seed"
+        ]
         with self.assertRaisesRegex(voice_auditions.SpecError, "global seed"):
             voice_auditions.parse_spec(raw)
 
@@ -75,10 +83,29 @@ class ParseAuditionSpecTest(unittest.TestCase):
         with self.assertRaisesRegex(voice_auditions.SpecError, "slug must match"):
             voice_auditions.parse_spec(raw)
 
-    def test_rejects_mutated_member_count(self) -> None:
+    def test_parses_single_member_identity_round(self) -> None:
         raw = valid_spec()
-        raw["members"] = deepcopy(raw["members"][:3])
-        with self.assertRaisesRegex(voice_auditions.SpecError, "exactly four"):
+        raw["members"] = deepcopy(raw["members"][:1])
+        parsed = voice_auditions.parse_spec(raw)
+        self.assertEqual(("RHEA",), tuple(member.name for member in parsed.members))
+
+    def test_rejects_empty_member_set(self) -> None:
+        raw = valid_spec()
+        raw["members"] = []
+        with self.assertRaisesRegex(voice_auditions.SpecError, "one through four"):
+            voice_auditions.parse_spec(raw)
+
+    def test_rejects_more_than_four_members(self) -> None:
+        raw = valid_spec()
+        fifth = deepcopy(raw["members"][0])
+        fifth["name"] = "FIFTH"
+        fifth["slug"] = "fifth"
+        fifth["candidates"] = [
+            {"id": identifier, "seed": 500 + candidate_index}
+            for candidate_index, identifier in enumerate(("a", "b", "c"), start=1)
+        ]
+        raw["members"].append(fifth)
+        with self.assertRaisesRegex(voice_auditions.SpecError, "one through four"):
             voice_auditions.parse_spec(raw)
 
 

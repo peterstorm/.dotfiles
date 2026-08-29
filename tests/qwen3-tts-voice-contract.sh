@@ -41,7 +41,7 @@ contains "$DOWNLOAD_BASE" "verify_manifest \"\$STAGING\""
 
 contains "$GENERATE" '@dataclass(frozen=True)'
 contains "$GENERATE" 'language must equal English'
-contains "$GENERATE" 'members must contain exactly four entries'
+contains "$GENERATE" 'members must contain from one through four entries'
 contains "$GENERATE" 'candidates must contain exactly three entries'
 contains "$GENERATE" 'local_files_only=True'
 contains "$GENERATE" 'attn_implementation="sdpa"'

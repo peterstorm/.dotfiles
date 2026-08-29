@@ -1,0 +1,47 @@
+FROM pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime@sha256:60f22fb80755fd0b470fb47928dbd55816aa9f847edd95cf43c93253507a9ddf
+
+ARG BREEZE_SOURCE_REV=ca632ce6c4d05f7985da4eab29b1a5d445b43f7b
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      git \
+      libsndfile1 \
+      sox \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/breezeblue-ai/breeze-tts.git /opt/breeze-tts \
+    && git -C /opt/breeze-tts checkout --detach "$BREEZE_SOURCE_REV" \
+    && test "$(git -C /opt/breeze-tts rev-parse HEAD)" = "$BREEZE_SOURCE_REV" \
+    && python -m pip install --no-cache-dir \
+      qwen-tts==0.1.1 \
+      transformers==4.57.3 \
+      numpy==2.2.6 \
+      pytest==8.4.2 \
+      soundfile==0.13.1 \
+    && python -m pip check \
+    && rm -rf /opt/breeze-tts/.git
+
+RUN cd /opt/breeze-tts \
+    && python -m pytest -q \
+      tests/test_logits_process.py \
+      tests/test_templates.py \
+      tests/test_warmup_profile.py \
+    && python - <<'PY'
+from breeze_infer.runtime import load_runtime
+from models.fast_streaming import FastStreamingConfig
+assert load_runtime is not None
+assert FastStreamingConfig(fast_all=False).fast_all is False
+PY
+
+LABEL org.opencontainers.image.title="Breeze TTS 2 offline Development voice identity audition runtime" \
+      org.opencontainers.image.source="https://github.com/breezeblue-ai/breeze-tts" \
+      org.opencontainers.image.revision="ca632ce6c4d05f7985da4eab29b1a5d445b43f7b" \
+      org.opencontainers.image.licenses="Apache-2.0-code; BreezeBlue-Research-and-Non-Commercial-weights-and-outputs"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/breeze-tts \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    TOKENIZERS_PARALLELISM=false
+
+WORKDIR /opt/breeze-tts

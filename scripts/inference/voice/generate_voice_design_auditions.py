@@ -128,8 +128,8 @@ def parse_spec(raw: Any) -> AuditionSpec:
     )
 
     raw_members = root["members"]
-    if not isinstance(raw_members, list) or len(raw_members) != 4:
-        raise SpecError("members must contain exactly four entries")
+    if not isinstance(raw_members, list) or not 1 <= len(raw_members) <= 4:
+        raise SpecError("members must contain from one through four entries")
 
     members: list[Member] = []
     seen_names: set[str] = set()
