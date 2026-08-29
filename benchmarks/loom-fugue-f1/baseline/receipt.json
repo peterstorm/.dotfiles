@@ -1,0 +1,10 @@
+{
+  "suite_id": "fugue-f1-map-v1",
+  "target_base_sha": "274cadbdbf0438ae5c43e7ca225e27b7724f7e3d",
+  "loom_runtime_sha": "3815f65bfab4351f49f0e21e7b7415cdab1fda86",
+  "pi_version": "0.83.0",
+  "typecheck": "clean",
+  "tests": "clean",
+  "total_tests": 3305,
+  "created_at": "2026-08-29T20:43:04+02:00"
+}

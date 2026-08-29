@@ -13,6 +13,13 @@ TypeScript JSONL relay/reducer task and runs through:
 The run stops immediately before Wave 1. No implementer, test, reviewer, or
 wave-gate child runs, and no production or test file may change.
 
+This relay suite is retained for brownfield relay-comprehension evidence, but it
+is self-referential because Loom uses the RPC transport being planned. The
+primary novel-feature planning benchmark now lives at
+`../loom-fugue-f1/` and targets Fugue's unimplemented bounded runtime-width
+fan-out feature. Scores are never comparable between the two benchmark
+families.
+
 The benchmark supports DeepSeek V4 Flash, two immutable Qwen3.8-27B runtime
 profiles, the experimental Qwen3.8 Flash-Next FP8 runtime, and three immutable
 GLM-5.3 Flash v84 runtime profiles. Results are comparable only when both

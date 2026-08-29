@@ -1,0 +1,6 @@
+runs/*
+!runs/.gitkeep
+blind/*
+!blind/.gitkeep
+baseline/*.log
+*.mapping.txt
