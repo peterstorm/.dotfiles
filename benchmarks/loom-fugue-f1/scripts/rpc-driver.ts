@@ -45,6 +45,28 @@ type ParseResult =
   | Readonly<{ ok: true; value: DriverConfig }>
   | Readonly<{ ok: false; error: string }>;
 
+type ModelEnvironmentResult =
+  | Readonly<{ ok: true; value: Readonly<{ PI_PROVIDER: string; PI_MODEL: string; PI_REASONING_LEVEL: string }> }>
+  | Readonly<{ ok: false; error: string }>;
+
+export const parseModelEnvironment = (selector: string): ModelEnvironmentResult => {
+  const slash = selector.indexOf("/");
+  const thinkingSeparator = selector.lastIndexOf(":");
+  if (slash < 1 || thinkingSeparator <= slash + 1 || thinkingSeparator === selector.length - 1) {
+    return { ok: false, error: `model selector must be provider/model:thinking, received ${selector}` };
+  }
+  const provider = selector.slice(0, slash);
+  const model = selector.slice(slash + 1, thinkingSeparator);
+  const reasoning = selector.slice(thinkingSeparator + 1);
+  if (!/^(off|minimal|low|medium|high|xhigh|max)$/.test(reasoning)) {
+    return { ok: false, error: `unsupported reasoning level in selector: ${selector}` };
+  }
+  return {
+    ok: true,
+    value: { PI_PROVIDER: provider, PI_MODEL: model, PI_REASONING_LEVEL: reasoning },
+  };
+};
+
 export const parseDriverArgs = (args: readonly string[]): ParseResult => {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
@@ -127,6 +149,16 @@ const run = async (config: DriverConfig): Promise<number> => {
   const events = createWriteStream(eventsPath, { flags: "wx", mode: 0o600 });
   const commands = createWriteStream(commandsPath, { flags: "wx", mode: 0o600 });
   const operator = createInterface({ input: process.stdin, output: process.stderr });
+  const parsedModelEnvironment = parseModelEnvironment(config.model);
+  if (!parsedModelEnvironment.ok) throw new Error(parsedModelEnvironment.error);
+  const childEnvironment = { ...process.env };
+  delete childEnvironment.PI_SESSION_ID;
+  delete childEnvironment.PI_SESSION_FILE;
+  delete childEnvironment.PI_CODING_AGENT;
+  Object.assign(childEnvironment, parsedModelEnvironment.value, {
+    PI_SKIP_VERSION_CHECK: "1",
+    PI_TELEMETRY: "0",
+  });
   const child = spawn("pi", [
     "--mode", "rpc",
     "--model", config.model,
@@ -135,11 +167,7 @@ const run = async (config: DriverConfig): Promise<number> => {
     "--approve",
   ], {
     cwd: config.worktree,
-    env: {
-      ...process.env,
-      PI_SKIP_VERSION_CHECK: "1",
-      PI_TELEMETRY: "0",
-    },
+    env: childEnvironment,
     stdio: ["pipe", "pipe", "inherit"],
   });
 

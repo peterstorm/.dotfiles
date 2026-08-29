@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isPlanningBoundary, parseDriverArgs, splitJsonl } from "./rpc-driver";
+import { isPlanningBoundary, parseDriverArgs, parseModelEnvironment, splitJsonl } from "./rpc-driver";
 
 const boundary = {
   current_phase: "execute",
@@ -45,6 +45,24 @@ describe("isPlanningBoundary", () => {
   ])("rejects non-boundary state %#", (value) => {
     expect(isPlanningBoundary(value)).toBe(false);
   });
+});
+
+describe("parseModelEnvironment", () => {
+  test("derives exact Pi process metadata from an arm selector", () => {
+    expect(parseModelEnvironment("desktop-vllm/glm-v8:max")).toEqual({
+      ok: true,
+      value: {
+        PI_PROVIDER: "desktop-vllm",
+        PI_MODEL: "glm-v8",
+        PI_REASONING_LEVEL: "max",
+      },
+    });
+  });
+
+  test.each(["glm-v8", "/glm-v8:max", "desktop-vllm/:max", "desktop-vllm/glm-v8:future"])(
+    "rejects malformed selector %s",
+    (selector) => expect(parseModelEnvironment(selector).ok).toBe(false),
+  );
 });
 
 describe("parseDriverArgs", () => {

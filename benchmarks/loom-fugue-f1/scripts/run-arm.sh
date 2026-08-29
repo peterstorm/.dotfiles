@@ -40,7 +40,8 @@ fi
 IFS=$'\t' read -r MODEL EXPECTED CONTEXT_WINDOW PROFILE_CONTAINER START_HINT PROFILE_LABEL \
   <<<"$(fugue_benchmark_arm_record "$ARM")"
 
-SELECTOR="${MODEL#desktop-vllm/}"
+MODEL_PROVIDER="${MODEL%%/*}"
+SELECTOR="${MODEL#*/}"
 MODEL_ID="${SELECTOR%%:*}"
 THINKING_LEVEL="${SELECTOR##*:}"
 PI_MODELS="$ROOT/pi/models.json"
@@ -160,6 +161,16 @@ if [[ ! -e "$WORKTREE/packages/framework/node_modules" && -d "$FUGUE/packages/fr
 fi
 mkdir -p "$RUN_DIR"
 printf '%s\n' "$TARGET_SHA" > "$RUN_DIR/base_sha"
+PI_PROVIDER="$MODEL_PROVIDER" \
+PI_MODEL="$MODEL_ID" \
+PI_REASONING_LEVEL="$THINKING_LEVEL" \
+  "$LOOM_RUNTIME/scripts/sync-pi-agents.sh" > "$RUN_DIR/agent-render.log"
+EXPECTED_AGENT_ROOT="$(printf '%s' "$LOOM_RUNTIME" | base64 -w0)"
+if ! grep -Fq "model: $MODEL" "$HOME/.pi/agent/agents/brainstorm-agent.md" ||
+   ! grep -Fq "loom-package-root: $EXPECTED_AGENT_ROOT" "$HOME/.pi/agent/agents/brainstorm-agent.md"; then
+  echo 'rendered phase-agent binding does not match the arm and pinned Loom runtime' >&2
+  exit 1
+fi
 
 (cd "$WORKTREE" && timeout 300 bun run --filter @fuguejs/framework typecheck) \
   > "$RUN_DIR/baseline-typecheck.log" 2>&1 || {
