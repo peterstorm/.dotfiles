@@ -37,17 +37,6 @@
       "use": {
         "kind": "parent"
       }
-    },
-    {
-      "id": "rpc-driver-headless-parent-reconciliation",
-      "when": {
-        "parentClass": "cloud",
-        "parentModel": "openai-codex/gpt-5.6-sol"
-      },
-      "use": {
-        "kind": "named",
-        "target": "glm"
-      }
     }
   ]
 }

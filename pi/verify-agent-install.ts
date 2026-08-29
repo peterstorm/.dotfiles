@@ -130,6 +130,26 @@ if (
 ) {
   fail("Muse is not classified as a local parent for nested workloads");
 }
+const cloudRoute = resolveModelRoute(
+  loadedRouting.value.policy,
+  {
+    parent: { model: cloudModel.value, thinkingLevel: "high" },
+    declared: { model: cloudModel.value, thinkingLevel: "high" },
+    workload: "subagent",
+    profile: "architecture-finalize",
+    agent: "architecture-agent",
+  },
+  loadedRouting.value.digest,
+);
+if (
+  !cloudRoute.ok ||
+  cloudRoute.value.kind !== "declared" ||
+  cloudRoute.value.effective?.model.provider !== "openai-codex" ||
+  cloudRoute.value.effective?.model.id !== "gpt-5.6-sol" ||
+  cloudRoute.value.effective?.thinkingLevel !== "high"
+) {
+  fail("cloud parent does not preserve a subagent's declared cloud binding");
+}
 
 const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
   providers?: Record<
