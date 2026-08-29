@@ -23,9 +23,11 @@ for command in git jq node sha256sum; do
   command -v "$command" >/dev/null || fail "required command is unavailable: $command"
 done
 required_files=("$PI_MODELS" "$PROFILE_CATALOG" "$BASELINE")
-while IFS= read -r protocol_file; do
-  required_files+=("$BENCH_DIR/$protocol_file")
-done < <(benchmark_protocol_files)
+while IFS= read -r protocol_version; do
+  while IFS= read -r protocol_file; do
+    required_files+=("$BENCH_DIR/$protocol_file")
+  done < <(benchmark_protocol_files "$protocol_version")
+done < <(benchmark_protocol_versions)
 for file in "${required_files[@]}"; do
   [[ -r "$file" ]] || fail "required benchmark artifact is unreadable: $file"
 done
@@ -75,14 +77,28 @@ jq -e '
 reference_frs="$(mktemp)"
 test_frs="$(mktemp)"
 trap 'rm -f "$reference_frs" "$test_frs"' EXIT
-grep -oE '^- \*\*FR-[0-9]+' "$BENCH_DIR/hidden/reference-spec.md" \
-  | grep -oE 'FR-[0-9]+' | sort -u > "$reference_frs"
-grep -oE '\[FR-[0-9]+\]' "$BENCH_DIR/hidden/ui-relay.hidden.test.ts" \
-  | tr -d '[]' | sort -u > "$test_frs"
-if ! cmp -s "$reference_frs" "$test_frs"; then
-  diff -u "$reference_frs" "$test_frs" >&2 || true
-  fail "hidden suite and reference specification cover different FR sets"
-fi
+while IFS= read -r protocol_version; do
+  reference="$(benchmark_protocol_path "$protocol_version" hidden/reference-spec.md)"
+  hidden_test="$(benchmark_protocol_path "$protocol_version" hidden/ui-relay.hidden.test.ts)"
+  grep -oE '^- \*\*FR-[0-9]+' "$BENCH_DIR/$reference" \
+    | grep -oE 'FR-[0-9]+' | sort -u > "$reference_frs"
+  grep -oE '\[FR-[0-9]+\]' "$BENCH_DIR/$hidden_test" \
+    | tr -d '[]' | sort -u > "$test_frs"
+  if ! cmp -s "$reference_frs" "$test_frs"; then
+    diff -u "$reference_frs" "$test_frs" >&2 || true
+    fail "$protocol_version hidden suite and reference specification cover different FR sets"
+  fi
+done < <(benchmark_protocol_versions)
+
+V2_SOURCE_LOCK="$BENCH_DIR/protocols/v2/source-lock.json"
+V2_SOURCE_SHA="$(jq -er '.loom_base_sha' "$V2_SOURCE_LOCK")" \
+  || fail "v2 source lock has no Loom base SHA"
+while IFS=$'\t' read -r source_path expected_sha; do
+  observed_sha="$(git -C "$LOOM" show "$V2_SOURCE_SHA:$source_path" | sha256sum | cut -d' ' -f1)" \
+    || fail "cannot read v2 locked source $source_path at $V2_SOURCE_SHA"
+  [[ "$observed_sha" == "$expected_sha" ]] \
+    || fail "v2 source lock mismatch for $source_path: expected $expected_sha, observed $observed_sha"
+done < <(jq -r '.sources[] | [.path, .sha256] | @tsv' "$V2_SOURCE_LOCK")
 
 for script in \
   "$BENCH_DIR/scripts/arms.sh" \
@@ -95,14 +111,12 @@ for script in \
   bash -n "$script" || fail "shell syntax check failed: $script"
 done
 
-mapfile -t PROTOCOL_FILES < <(benchmark_protocol_files)
-PROTOCOL_SHA="$({
-  cd "$BENCH_DIR"
-  sha256sum "${PROTOCOL_FILES[@]}"
-} | sha256sum | cut -d' ' -f1)"
-
 printf 'PASS: benchmark harness is internally consistent\n'
 printf '  Loom baseline: %s\n' "$LOOM_SHA"
-printf '  Protocol SHA: %s\n' "$PROTOCOL_SHA"
+while IFS= read -r protocol_version; do
+  PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH_DIR" "$protocol_version")"
+  printf '  Protocol %s SHA: %s%s\n' "$protocol_version" "$PROTOCOL_SHA" \
+    "$([[ "$protocol_version" == "$BENCHMARK_DEFAULT_PROTOCOL_VERSION" ]] && printf ' (default)' || true)"
+done < <(benchmark_protocol_versions)
 printf '  Arms: %s\n' "${BENCHMARK_ARM_IDS[*]}"
 printf 'Run an authenticated online check with: bash scripts/run-arm.sh --probe <arm>\n'

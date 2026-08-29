@@ -8,7 +8,13 @@
 - Runtime container: `qwen38-27b-bf16-dflash2-vllm-v3`
 - Context: 262,144
 - Loom baseline: `3815f65bfab4351f49f0e21e7b7415cdab1fda86`
+- Protocol: retired `v1`
 - Protocol SHA-256: `17908b755b8a9a7a1fda554c62fcb2a6379a1bb8dd606333ec74154be2756dd3`
+
+> **Historical-score caveat:** v1's visible brief named the shipped Pi RPC
+> envelope while its hidden reference expected a synthetic direct-method wire.
+> Preserve these scores for v1 reproducibility only; new v2 scores are not
+> numerically comparable.
 
 Cortex remained disabled for the whole batch. Every executed child attested to
 the exact parent selector. No implementation, test, reviewer, ADR-writer, or
@@ -56,12 +62,12 @@ Strongest finding: the plan correctly identified that `JSON.parse` accepts a
 trailing carriage return as JSON whitespace and required explicit pre-parse CR
 rejection.
 
-Principal defects:
+Original v1 grading findings:
 
 1. It treated decoded `ChildFrame` tags as the hostile method-based wire
    envelope.
-2. It declared recursive delegation unreachable instead of mapping reserved
-   wire methods to `recursive-delegation`.
+2. It declared recursive delegation unreachable instead of mapping v1's hidden
+   reserved methods to `recursive-delegation`.
 3. It accepted empty select option arrays.
 4. It made `done` a no-op instead of cancelling pending requests, closing the
    relay, and emitting `close-child`.
@@ -72,11 +78,12 @@ Principal defects:
 
 ## Interpretation
 
-This batch does not support a winner claim against GLM or the historical Qwen
-pilot. Qwen produced one detailed but over-engineered and semantically flawed
-plan, then failed to complete two repetitions. The valid score range overlaps
-the lower GLM-v6 repetition but the mechanical completion rate is only 1/3.
-Additional repetitions would be required before any quality comparison.
+This retired-v1 batch does not support a current-contract winner claim. Qwen
+produced one detailed but over-engineered plan, then failed to complete two
+repetitions. The wire and recursive-delegation findings above partly reflect
+v1's stale hidden contract rather than current Loom. A fresh v2 batch is
+required before comparing implementation readiness; the 1/3 process completion
+fact remains valid historical evidence.
 
 Serving performance is recorded separately in
 `benchmarks/vllm-tps/2026-08-29-qwen-vllm-tp1-bf16kv.md`; it must not be mixed

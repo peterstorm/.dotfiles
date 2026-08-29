@@ -1,0 +1,14 @@
+{
+  "protocol_version": "v2",
+  "loom_base_sha": "3815f65bfab4351f49f0e21e7b7415cdab1fda86",
+  "sources": [
+    {
+      "path": "pi/interactive-rpc.ts",
+      "sha256": "96db189bf2012378c1874b9168d328108a199df9b6d0633a23f18a9355bc21e0"
+    },
+    {
+      "path": "docs/pi-phase-agent-interviews.md",
+      "sha256": "89fbb5fe9a4ce5e686884f10ca87a16412b22daccb61b9fdfae89450c0b23fc3"
+    }
+  ]
+}

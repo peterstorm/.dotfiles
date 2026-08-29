@@ -9,7 +9,9 @@
 # or launch anything.
 
 BENCHMARK_ARM_IDS=(ds4 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8)
-BENCHMARK_PROTOCOL_FILES=(
+BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
+BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
+BENCHMARK_V1_PROTOCOL_FILES=(
   frozen/brief.md
   frozen/ui-relay-types.ts
   frozen/answer-key.md
@@ -17,13 +19,67 @@ BENCHMARK_PROTOCOL_FILES=(
   hidden/ui-relay.hidden.test.ts
   rubric.md
 )
+BENCHMARK_V2_PROTOCOL_FILES=(
+  protocols/v2/source-lock.json
+  protocols/v2/frozen/brief.md
+  protocols/v2/frozen/ui-relay-types.ts
+  protocols/v2/frozen/wire-contract.md
+  protocols/v2/frozen/answer-key.md
+  protocols/v2/hidden/reference-spec.md
+  protocols/v2/hidden/ui-relay.hidden.test.ts
+  protocols/v2/rubric.md
+)
 
 benchmark_arm_ids() {
   printf '%s\n' "${BENCHMARK_ARM_IDS[@]}"
 }
 
+benchmark_protocol_versions() {
+  printf '%s\n' "${BENCHMARK_PROTOCOL_VERSIONS[@]}"
+}
+
+benchmark_protocol_version() {
+  case "${1:-$BENCHMARK_DEFAULT_PROTOCOL_VERSION}" in
+    v1|v2) printf '%s\n' "${1:-$BENCHMARK_DEFAULT_PROTOCOL_VERSION}" ;;
+    *)
+      printf 'unknown protocol: %s (expected one of: %s)\n' \
+        "${1:-<empty>}" "${BENCHMARK_PROTOCOL_VERSIONS[*]}" >&2
+      return 2
+      ;;
+  esac
+}
+
 benchmark_protocol_files() {
-  printf '%s\n' "${BENCHMARK_PROTOCOL_FILES[@]}"
+  local version
+  version="$(benchmark_protocol_version "${1:-}")" || return $?
+  case "$version" in
+    v1) printf '%s\n' "${BENCHMARK_V1_PROTOCOL_FILES[@]}" ;;
+    v2) printf '%s\n' "${BENCHMARK_V2_PROTOCOL_FILES[@]}" ;;
+  esac
+}
+
+benchmark_protocol_path() {
+  local version relative
+  version="$(benchmark_protocol_version "${1:-}")" || return $?
+  relative="${2:-}"
+  [[ -n "$relative" ]] || { echo "protocol-relative path is required" >&2; return 2; }
+  case "$version" in
+    v1) printf '%s\n' "$relative" ;;
+    v2) printf 'protocols/v2/%s\n' "$relative" ;;
+  esac
+}
+
+benchmark_protocol_manifest() {
+  local bench_dir="${1:-}" version
+  local -a files
+  [[ -d "$bench_dir" ]] || { echo "benchmark directory is not readable: ${bench_dir:-<empty>}" >&2; return 2; }
+  version="$(benchmark_protocol_version "${2:-}")" || return $?
+  mapfile -t files < <(benchmark_protocol_files "$version")
+  (cd "$bench_dir" && sha256sum "${files[@]}")
+}
+
+benchmark_protocol_sha() {
+  benchmark_protocol_manifest "$1" "$2" | sha256sum | cut -d' ' -f1
 }
 
 benchmark_arm_record() {

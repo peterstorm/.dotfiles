@@ -8,7 +8,14 @@
 - Profile: `qwen38-flash-next-fp8-vllm-v1`
 - Context: 262,144
 - Loom baseline: `3815f65bfab4351f49f0e21e7b7415cdab1fda86`
+- Protocol: retired `v1`
 - Protocol SHA-256: `17908b755b8a9a7a1fda554c62fcb2a6379a1bb8dd606333ec74154be2756dd3`
+
+> **Historical-score caveat:** v1's visible brief required the shipped Pi
+> `extension_ui_request` envelope while its hidden reference expected a
+> synthetic direct-method grammar. This report preserves the original blind
+> score, but it is not evidence of current Loom contract fidelity. New runs use
+> protocol v2 and are not numerically comparable.
 
 ## Mechanical outcomes
 
@@ -42,7 +49,11 @@ Canonical discovery across 25 hidden requirements:
 
 Strongest finding: the reducer transition table correctly specifies duplicate requests, unknown/stale IDs, method and select-range mismatch, cancellation, done, child exit, parent shutdown, progress, and universal closed-state no-op behavior.
 
-Principal defect: the artifacts planned the shipped Pi envelope grammar—`extension_ui_request`, `agent_settled`, `title`, and `prefill`—instead of the benchmark's frozen direct method-based grammar. They also used `subagent` plus `loom_interactive_subagent` for recursive delegation rather than the hidden `spawn`, `subagent`, and `task` set. This makes hidden FR-015 a miss and FR-016/017 partial, and the error propagates into the implementation/test task and its verification task.
+The decisive v1 grading finding was that the artifacts planned the shipped Pi
+envelope—`extension_ui_request`, `agent_settled`, `title`, and `prefill`—rather
+than v1's hidden direct-method grammar. That is now recognized as a benchmark
+contract defect, not a current-Loom defect. Protocol v2 makes the shipped raw
+wire explicit and retires the hidden `spawn`/`subagent`/`task` wire rule.
 
 Secondary weaknesses:
 
@@ -53,6 +64,10 @@ Secondary weaknesses:
 
 ## Interpretation
 
-The valid Flash-Next result is mechanically stronger than the earlier incomplete attempt and its **51–58/104** range is directionally above the completed Qwen3.8-27B result (**45–47/104**), while overlapping the GLM-v6 result around **51/104**. One valid Flash-Next run is insufficient for a winner claim or completion-rate comparison; additional repetitions remain necessary.
+Within retired v1 only, the valid Flash-Next result is mechanically stronger
+than the earlier incomplete attempt and its **51–58/104** range is directionally
+above Qwen3.8-27B (**45–47/104**) while overlapping GLM-v6 around **51/104**.
+Because the decisive contract dimension was stale, those totals should not be
+used to choose an implementation model. A fresh v2 batch is required.
 
 Serving performance is independent and recorded in `benchmarks/vllm-tps/2026-08-29-qwen-flash-next-fp8.md`.

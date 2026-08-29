@@ -76,8 +76,9 @@ Do not infer a timeout from an unchanged pane alone.
 
 ## 5. Answer interviews deterministically
 
-Answer only from `frozen/answer-key.md` and append every question and exact
-answer to the run’s `interview.md`.
+Answer only from the protocol-specific answer-key path printed by
+`run-arm.sh` (`protocols/v2/frozen/answer-key.md` for default v2) and append
+every question and exact answer to the run’s `interview.md`.
 
 For free-text prompts, insert the exact answer literally, then submit once:
 

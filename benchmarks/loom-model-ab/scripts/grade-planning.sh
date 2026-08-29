@@ -9,6 +9,8 @@
 set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
+source "$BENCH_DIR/scripts/arms.sh"
 
 (($# == 2)) || { echo "usage: $0 <worktree> <run-dir>" >&2; exit 2; }
 WORKTREE="$(cd "$1" && pwd)"
@@ -22,10 +24,15 @@ RUN_DIR="$(cd "$2" && pwd)"
 BASE_SHA="$(<"$RUN_DIR/base_sha")"
 GRAPH_SOURCE="$WORKTREE/.claude/state/active_task_graph.json"
 RUN_RECEIPT="$RUN_DIR/run.json"
+PROTOCOL_VERSION_RAW="$(jq -r '.protocol_version // "v1"' "$RUN_RECEIPT" 2>/dev/null || true)"
+PROTOCOL_VERSION="$(benchmark_protocol_version "$PROTOCOL_VERSION_RAW")" || exit $?
+EXPECTED_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH_DIR" "$PROTOCOL_VERSION")"
 
 RUN_RECEIPT_VALID=false
-if jq -e '
+if jq -e --arg protocol_version "$PROTOCOL_VERSION" --arg protocol_sha "$EXPECTED_PROTOCOL_SHA" '
   .benchmark_kind == "planning-only" and
+  (.protocol_version // "v1") == $protocol_version and
+  .protocol_sha256 == $protocol_sha and
   .stop_before == "wave-1-implementation"
 ' "$RUN_RECEIPT" >/dev/null 2>&1; then
   RUN_RECEIPT_VALID=true
@@ -71,12 +78,20 @@ mapfile -t CHANGED < <(git -C "$WORKTREE" diff --cached --name-only "$BASE_SHA" 
 printf '%s\n' "${CHANGED[@]}" > "$RUN_DIR/changed-files.txt"
 git -C "$WORKTREE" diff --cached "$BASE_SHA" > "$RUN_DIR/diff.patch" || true
 
-FROZEN_INTACT=false
-if cmp -s "$BENCH_DIR/frozen/ui-relay-types.ts" "$WORKTREE/engine/src/core/ui-relay-types.ts"; then
-  FROZEN_INTACT=true
-else
-  diff -u "$BENCH_DIR/frozen/ui-relay-types.ts" "$WORKTREE/engine/src/core/ui-relay-types.ts" \
-    > "$RUN_DIR/frozen-file.diff" || true
+FROZEN_INTACT=true
+FROZEN_TYPES="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/ui-relay-types.ts)"
+if ! cmp -s "$BENCH_DIR/$FROZEN_TYPES" "$WORKTREE/engine/src/core/ui-relay-types.ts"; then
+  FROZEN_INTACT=false
+  diff -u "$BENCH_DIR/$FROZEN_TYPES" "$WORKTREE/engine/src/core/ui-relay-types.ts" \
+    > "$RUN_DIR/frozen-types.diff" || true
+fi
+if [[ "$PROTOCOL_VERSION" == v2 ]]; then
+  FROZEN_WIRE="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/wire-contract.md)"
+  if ! cmp -s "$BENCH_DIR/$FROZEN_WIRE" "$WORKTREE/engine/src/core/ui-relay-wire-contract.md"; then
+    FROZEN_INTACT=false
+    diff -u "$BENCH_DIR/$FROZEN_WIRE" "$WORKTREE/engine/src/core/ui-relay-wire-contract.md" \
+      > "$RUN_DIR/frozen-wire-contract.diff" || true
+  fi
 fi
 
 PLANNING_SCOPE_RESPECTED=true
@@ -147,7 +162,8 @@ fi
 # This worksheet is intentionally semantic and human-scored. Generate it once;
 # never overwrite a grader's completed decisions on a re-run.
 if [[ ! -e "$RUN_DIR/discovery-checklist.tsv" ]]; then
-  node - "$BENCH_DIR/hidden/reference-spec.md" "$RUN_DIR/discovery-checklist.tsv" <<'NODE'
+  REFERENCE_SPEC="$(benchmark_protocol_path "$PROTOCOL_VERSION" hidden/reference-spec.md)"
+  node - "$BENCH_DIR/$REFERENCE_SPEC" "$RUN_DIR/discovery-checklist.tsv" <<'NODE'
 const fs = require("node:fs");
 const [referencePath, outputPath] = process.argv.slice(2);
 const source = fs.readFileSync(referencePath, "utf8");
@@ -185,6 +201,8 @@ fi
 jq -n \
   --arg worktree "$WORKTREE" \
   --arg base_sha "$BASE_SHA" \
+  --arg protocol_version "$PROTOCOL_VERSION" \
+  --arg protocol_sha256 "$EXPECTED_PROTOCOL_SHA" \
   --argjson planning_only_receipt "$(json_bool "$RUN_RECEIPT_VALID")" \
   --argjson frozen_file_intact "$(json_bool "$FROZEN_INTACT")" \
   --argjson planning_scope_respected "$(json_bool "$PLANNING_SCOPE_RESPECTED")" \
@@ -205,6 +223,8 @@ jq -n \
   '{
     worktree: $worktree,
     base_sha: $base_sha,
+    protocol_version: $protocol_version,
+    protocol_sha256: $protocol_sha256,
     protocol: {
       planning_only_receipt: $planning_only_receipt,
       frozen_file_intact: $frozen_file_intact,
@@ -231,8 +251,10 @@ jq -n \
 
 cat "$RUN_DIR/outcome.planning.json"
 echo
-echo "Semantic grading still required:"
-echo "  * complete discovery-checklist.tsv against hidden/reference-spec.md"
-echo "  * score anonymised artifacts with rubric.md"
+REFERENCE_SPEC="$(benchmark_protocol_path "$PROTOCOL_VERSION" hidden/reference-spec.md)"
+PROTOCOL_RUBRIC="$(benchmark_protocol_path "$PROTOCOL_VERSION" rubric.md)"
+echo "Semantic grading still required for $PROTOCOL_VERSION:"
+echo "  * complete discovery-checklist.tsv against $REFERENCE_SPEC"
+echo "  * score anonymised artifacts with $PROTOCOL_RUBRIC"
 
 [[ "$PLANNING_COMPLETE" == true ]]

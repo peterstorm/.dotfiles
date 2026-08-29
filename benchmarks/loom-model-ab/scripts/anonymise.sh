@@ -22,11 +22,27 @@ MAP="blind/$BATCH.mapping.txt"
 
 [[ -e "$OUT" || -e "$MAP" ]] && { echo "refusing to overwrite existing batch $BATCH" >&2; exit 1; }
 
+BATCH_PROTOCOL_VERSION=''
+BATCH_PROTOCOL_SHA=''
 for run in "$@"; do
   [[ -d "$run" ]] || { echo "not a run directory: $run" >&2; exit 1; }
+  [[ -r "$run/run.json" ]] || { echo "missing run receipt: $run/run.json" >&2; exit 1; }
+  protocol_version="$(jq -er '.protocol_version // "v1"' "$run/run.json")" \
+    || { echo "invalid protocol version in $run/run.json" >&2; exit 1; }
+  protocol_sha="$(jq -er '.protocol_sha256 | select(type == "string" and length > 0)' "$run/run.json")" \
+    || { echo "missing protocol SHA in $run/run.json" >&2; exit 1; }
+  if [[ -z "$BATCH_PROTOCOL_VERSION" ]]; then
+    BATCH_PROTOCOL_VERSION="$protocol_version"
+    BATCH_PROTOCOL_SHA="$protocol_sha"
+  elif [[ "$protocol_version" != "$BATCH_PROTOCOL_VERSION" || "$protocol_sha" != "$BATCH_PROTOCOL_SHA" ]]; then
+    echo "refusing mixed-protocol blind batch: expected $BATCH_PROTOCOL_VERSION/$BATCH_PROTOCOL_SHA, got $protocol_version/$protocol_sha in $run" >&2
+    exit 1
+  fi
 done
 
 mkdir -p "$OUT"
+jq -n --arg version "$BATCH_PROTOCOL_VERSION" --arg sha256 "$BATCH_PROTOCOL_SHA" \
+  '{protocol_version: $version, protocol_sha256: $sha256}' > "$OUT/protocol.json"
 : > "$MAP"
 chmod 600 "$MAP"
 
@@ -39,6 +55,7 @@ letter_for() { printf '%b' "\\$(printf '%03o' $((65 + $1)))"; }
 scrub() {
   sed -E \
     -e 's/deepseek[-_ ]?v4[-_ ]?flash/MODEL-UNDER-TEST/gI' \
+    -e 's/qwen ?3\.?8[-_ ]?flash[-_ ]?next[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
     -e 's/qwen ?3\.?8[-_ ]?27b/MODEL-UNDER-TEST/gI' \
     -e 's/glm[-_ ]?5\.?3[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
     -e 's/glm53[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
@@ -77,6 +94,7 @@ done
 
 echo
 echo "Blind artifacts: $OUT"
+echo "Protocol:        $BATCH_PROTOCOL_VERSION / $BATCH_PROTOCOL_SHA"
 echo "Mapping:         $MAP  (do not open until scores are saved)"
 echo
 echo "Residual tells to check by eye before grading — the scrubber cannot catch them:"

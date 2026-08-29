@@ -3,9 +3,9 @@
 # and recorded baseline. Stops short of launching Pi because the model conducts
 # its own interview. The model must stop after decomposition, before Wave 1.
 #
-#   bash scripts/run-arm.sh --list
-#   bash scripts/run-arm.sh --probe glm-mtp
-#   bash scripts/run-arm.sh glm-mtp 1
+#   bash scripts/run-arm.sh [--protocol v1|v2] --list
+#   bash scripts/run-arm.sh [--protocol v1|v2] --probe glm-mtp
+#   bash scripts/run-arm.sh [--protocol v1|v2] glm-mtp 1
 set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,8 +14,14 @@ LOOM="${LOOM_REPO:-$HOME/dev/claude-plugins/loom}"
 source "$BENCH_DIR/scripts/arms.sh"
 
 usage() {
-  echo "usage: $0 --list | --probe <arm> | <arm> <repetition>" >&2
+  echo "usage: $0 [--protocol v1|v2] (--list | --probe <arm> | <arm> <repetition>)" >&2
 }
+
+PROTOCOL_VERSION="$BENCHMARK_DEFAULT_PROTOCOL_VERSION"
+if (($# >= 2)) && [[ "$1" == --protocol ]]; then
+  PROTOCOL_VERSION="$(benchmark_protocol_version "$2")" || exit $?
+  shift 2
+fi
 
 if (($# == 1)) && [[ "$1" == --list ]]; then
   printf '%-20s %-58s %-42s %s\n' ARM PI_MODEL SERVED_MODEL CONTEXT
@@ -142,8 +148,8 @@ EOF
 fi
 
 if [[ "$PROBE_ONLY" == true ]]; then
-  printf 'READY: arm=%s model=%s served=%s context=%s profile=%s baseline=%s\n' \
-    "$ARM" "$MODEL" "$SERVED" "$CONTEXT_WINDOW" "$PROFILE_CONTAINER" "$BASE_SHA"
+  printf 'READY: arm=%s model=%s served=%s context=%s profile=%s baseline=%s protocol=%s\n' \
+    "$ARM" "$MODEL" "$SERVED" "$CONTEXT_WINDOW" "$PROFILE_CONTAINER" "$BASE_SHA" "$PROTOCOL_VERSION"
   exit 0
 fi
 
@@ -160,10 +166,16 @@ if [[ ! -e "$WORKTREE/node_modules" && -d "$LOOM/node_modules" ]]; then
   ln -s "$LOOM/node_modules" "$WORKTREE/node_modules"
 fi
 
-cp "$BENCH_DIR/frozen/ui-relay-types.ts" "$WORKTREE/engine/src/core/ui-relay-types.ts"
+FROZEN_TYPES="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/ui-relay-types.ts)"
+cp "$BENCH_DIR/$FROZEN_TYPES" "$WORKTREE/engine/src/core/ui-relay-types.ts"
 git -C "$WORKTREE" add engine/src/core/ui-relay-types.ts
+if [[ "$PROTOCOL_VERSION" == v2 ]]; then
+  FROZEN_WIRE="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/wire-contract.md)"
+  cp "$BENCH_DIR/$FROZEN_WIRE" "$WORKTREE/engine/src/core/ui-relay-wire-contract.md"
+  git -C "$WORKTREE" add engine/src/core/ui-relay-wire-contract.md
+fi
 git -C "$WORKTREE" -c user.name=benchmark -c user.email=bench@local \
-  commit -qm "bench: frozen wave-0 types artifact"
+  commit -qm "bench: frozen $PROTOCOL_VERSION relay contract"
 
 mkdir -p "$RUN_DIR"
 git -C "$WORKTREE" rev-parse HEAD > "$RUN_DIR/base_sha"
@@ -179,11 +191,7 @@ if [[ "$BASELINE_TSC" == dirty ]]; then
   echo "preserving $WORKTREE and $RUN_DIR for diagnosis" >&2
   exit 1
 fi
-mapfile -t PROTOCOL_FILES < <(benchmark_protocol_files)
-(
-  cd "$BENCH_DIR"
-  sha256sum "${PROTOCOL_FILES[@]}"
-) > "$RUN_DIR/protocol.sha256"
+benchmark_protocol_manifest "$BENCH_DIR" "$PROTOCOL_VERSION" > "$RUN_DIR/protocol.sha256"
 PROTOCOL_SHA="$(sha256sum "$RUN_DIR/protocol.sha256" | cut -d' ' -f1)"
 BENCHMARK_COMMIT="$(git -C "$BENCH_DIR" rev-parse HEAD)"
 PI_VERSION="$(pi --version 2>/dev/null || printf unknown)"
@@ -199,6 +207,7 @@ jq -n \
   --argjson context_window "$CONTEXT_WINDOW" \
   --arg loom_base_sha "$BASE_SHA" \
   --arg benchmark_commit "$BENCHMARK_COMMIT" \
+  --arg protocol_version "$PROTOCOL_VERSION" \
   --arg protocol_sha256 "$PROTOCOL_SHA" \
   --arg pi_version "$PI_VERSION" \
   --arg worktree "$WORKTREE" \
@@ -206,6 +215,7 @@ jq -n \
   --arg started "$STARTED" \
   '{
     benchmark_kind: "planning-only",
+    protocol_version: $protocol_version,
     stop_before: "wave-1-implementation",
     run_id: $run_id,
     arm: $arm,
@@ -234,7 +244,9 @@ jq -n \
 # The path is deliberately neutral: nothing in it says "benchmark", names a
 # model, or hints that the run is being compared.
 TASK_FILE="/tmp/task-brief.md"
-sed -n '/^---$/,$p' "$BENCH_DIR/frozen/brief.md" | tail -n +2 > "$TASK_FILE"
+PROTOCOL_BRIEF="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/brief.md)"
+PROTOCOL_ANSWER_KEY="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/answer-key.md)"
+sed -n '/^---$/,$p' "$BENCH_DIR/$PROTOCOL_BRIEF" | tail -n +2 > "$TASK_FILE"
 LOOM_ARG="Read $TASK_FILE and carry out the task it describes."
 
 cat <<EOF
@@ -246,7 +258,7 @@ Run $RUN_ID prepared.
   model    : $MODEL  (serving '$SERVED')
   profile  : $PROFILE_CONTAINER
   context  : $CONTEXT_WINDOW
-  protocol : $PROTOCOL_SHA
+  protocol : $PROTOCOL_VERSION / $PROTOCOL_SHA
 
 Before launching, confirm cortex is disabled for this session — recalled memory
 from an earlier arm is the one contamination channel that leaves no trace in
@@ -265,7 +277,7 @@ Sanity check before you answer anything: the model's first move must be to read
 $TASK_FILE and talk about a JSONL relay codec. If it starts planning some other
 project, the task did not arrive — abort and re-run this script.
 
-Answer only from frozen/answer-key.md, logging every exchange to:
+Answer only from $BENCH_DIR/$PROTOCOL_ANSWER_KEY, logging every exchange to:
 
   $RUN_DIR/interview.md
 

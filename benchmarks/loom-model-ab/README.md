@@ -15,8 +15,23 @@ wave-gate child runs, and no production or test file may change.
 
 The benchmark supports DeepSeek V4 Flash, two immutable Qwen3.8-27B runtime
 profiles, the experimental Qwen3.8 Flash-Next FP8 runtime, and three immutable
-GLM-5.3 Flash v84 runtime profiles. It remains one frozen experiment so results
-sharing a protocol hash are comparable.
+GLM-5.3 Flash v84 runtime profiles. Results are comparable only when both
+`protocol_version` and the complete protocol SHA match.
+
+## Protocol versions
+
+- **v2 (default):** aligns the visible contract, hidden reference, and executable
+  suite with Loom's shipped Pi 0.83.0 `extension_ui_request` RPC wire. Its source
+  provenance is pinned in `protocols/v2/source-lock.json`, and its raw schema is
+  explicit model-visible input rather than hidden grader knowledge.
+- **v1 (retired):** preserved byte-for-byte at the original `frozen/`, `hidden/`,
+  and `rubric.md` paths. Its brief named the shipped Pi envelope while its hidden
+  answer expected a synthetic direct-method grammar. Historical v1 scores remain
+  reproducible measures of that protocol, but they are not evidence of current
+  Loom implementation readiness and must not be compared with v2 totals.
+
+Do not mutate a protocol in place. Add a new version whenever the task contract,
+answer key, hidden requirements, or rubric changes.
 
 ## Why this is measurable
 
@@ -51,7 +66,8 @@ This measures planning directly. No implementation is generated or inferred.
 List the machine-readable catalog with:
 
 ```bash
-bash scripts/run-arm.sh --list
+bash scripts/run-arm.sh --list                 # default v2
+bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 ```
 
 `qwen-vllm-bf16kv` measures the single-GPU vLLM DFlash2/BF16-KV profile;
@@ -165,12 +181,12 @@ fails closed unless the run stopped exactly before implementation. It writes:
 
 ### 2. Requirement discovery
 
-Complete every row in `discovery-checklist.tsv` against
-`hidden/reference-spec.md`. Score spec discovery, plan accounting, and graph
-accounting independently. A self-consistent spec and plan can still both be
-wrong; alignment is not evidence of requirement discovery by itself.
+Complete every row in `discovery-checklist.tsv` against the run's recorded
+protocol reference. `grade-planning.sh` resolves v1 for legacy receipts without
+a version and requires explicit `protocol_version: "v2"` for v2. Score spec
+discovery, plan accounting, and graph accounting independently.
 
-`hidden/ui-relay.hidden.test.ts` remains a frozen executable encoding of the
+The selected protocol's hidden suite remains an executable encoding of its
 reference requirements and an integrity cross-check, but planning runs never
 copy or execute it.
 
@@ -189,9 +205,11 @@ started implementation, used another child model, or was contaminated.
 bash scripts/anonymise.sh batch-1 runs/2026*
 ```
 
-The script shuffles arm labels and removes model/backend tells. Do not open the
-mapping until every score and citation is saved. If the grader watched a live
-run, record it as unblinded.
+The script first rejects any batch mixing protocol versions or protocol hashes,
+then shuffles arm labels and removes model/backend tells. It writes the shared
+protocol identity to `blind/<batch>/protocol.json`. Do not open the mapping
+until every score and citation is saved. If the grader watched a live run,
+record it as unblinded.
 
 ## Voiding and invalidating
 
@@ -208,16 +226,18 @@ but do not mix it into planning-quality comparisons.
 ## Layout
 
 ```text
-frozen/
-  brief.md                task and explicit planning-only stop condition
-  ui-relay-types.ts       frozen wave-0 contract copied into the worktree
-  answer-key.md           scripted operator answers
-hidden/
-  reference-spec.md       FR answer key and discovery checklist source
-  ui-relay.hidden.test.ts frozen executable cross-check; never run by an arm
-rubric.md                 blind planning rubric
-operator-tmux.md          attended tmux procedure
-runs/<run-id>/            receipts, artifacts, transcript, and scores
+frozen/, hidden/, rubric.md       immutable retired v1 protocol
+protocols/v2/
+  source-lock.json                pinned Loom source provenance
+  frozen/brief.md                 task and planning-only stop condition
+  frozen/ui-relay-types.ts        frozen ADTs/signatures copied to worktree
+  frozen/wire-contract.md         explicit current Pi raw-wire authority
+  frozen/answer-key.md            scripted operator answers
+  hidden/reference-spec.md        v2 FR checklist
+  hidden/ui-relay.hidden.test.ts  v2 executable cross-check
+  rubric.md                       v2 blind planning rubric
+operator-tmux.md                  attended procedure, outside protocol
+runs/<run-id>/                    receipts, artifacts, transcript, scores
 ```
 
 ## Running a batch
@@ -240,8 +260,12 @@ bash scripts/baseline.sh
 Per run:
 
 ```bash
-bash scripts/run-arm.sh glm-fp8 1
+bash scripts/run-arm.sh glm-fp8 1  # v2 by default
 ```
+
+`run.json` records `protocol_version` and the hash over every selected protocol
+artifact. The launcher prints the matching answer-key path; use that path rather
+than assuming the retired root `frozen/` directory.
 
 Follow the printed launch instructions. In Pi, submit the one-line `/loom`
 command exactly as printed. Answer only from `frozen/answer-key.md`, recording
@@ -283,6 +307,8 @@ Keep process outcomes orthogonal:
 {
   "run_id": "...",
   "arm": "glm-mtp",
+  "protocol_version": "v2",
+  "protocol_sha256": "...",
   "wall_clock_s": 0,
   "phases_completed": ["brainstorm", "specify", "architecture", "plan-alignment", "decompose"],
   "context_exhausted": false,
