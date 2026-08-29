@@ -33,7 +33,7 @@ done
 
 # shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
 source "$ARMS"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen qwen-vllm-bf16kv glm-dflash glm-mtp glm-fp8' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -53,6 +53,9 @@ done
 
 contains "$ARMS" 'qwen38-27b-bf16-dflash2-vllm-v3'
 contains "$ARMS" 'switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv'
+contains "$ARMS" 'desktop-vllm/qwen3.8-flash-next-fp8:xhigh'
+contains "$ARMS" 'qwen38-flash-next-fp8-vllm-v1'
+contains "$ARMS" 'switch-qwen38-flash-next-profile-v1.sh start'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max'

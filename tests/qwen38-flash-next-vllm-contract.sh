@@ -38,6 +38,7 @@ contains "$DOWNLOAD" 'os.replace(temporary, marker)'
 contains "$VERIFY" 'inference_require_pinned_checkpoint'
 contains "$VERIFY" '.metadata.total_size == 185502232570'
 contains "$VERIFY" '(.weight_map | length) == 152089'
+contains "$VERIFY" 'license_identity%$'"'"'\r'"'"''
 
 contains "$PULL" 'sha256:fc120ece0a388cc0aa1caad4a9f1cd92113484ab7ec2fd0efadd62585be05bf8'
 contains "$PULL" 'sha256:0aea30240f3e3d9ffae8526643950e170eb5fa07fc427016a9dd90892afa2aa3'

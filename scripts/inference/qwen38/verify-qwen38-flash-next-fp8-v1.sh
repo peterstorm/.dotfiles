@@ -58,7 +58,11 @@ jq -e '
   echo "error: checkpoint tensor or 128-way N-gram sharding contract differs" >&2
   exit 1
 }
-grep -Fqx 'Qwen Community License 1.0' <(head -n 1 "$MODEL_HOST/LICENSE") || {
+IFS= read -r license_identity < "$MODEL_HOST/LICENSE" || {
+  echo "error: checkpoint license identity is unreadable" >&2
+  exit 1
+}
+[ "${license_identity%$'\r'}" = 'Qwen Community License 1.0' ] || {
   echo "error: checkpoint license identity differs" >&2
   exit 1
 }
