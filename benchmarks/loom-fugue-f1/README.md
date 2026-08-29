@@ -51,8 +51,8 @@ bash benchmarks/loom-fugue-f1/scripts/isolation.sh on
 
 ```bash
 bash benchmarks/loom-fugue-f1/scripts/run-arm.sh --list
-bash benchmarks/loom-fugue-f1/scripts/run-arm.sh --probe qwen-flash-next
-bash benchmarks/loom-fugue-f1/scripts/run-arm.sh qwen-flash-next 1
+bash benchmarks/loom-fugue-f1/scripts/run-arm.sh --probe glm-v8
+bash benchmarks/loom-fugue-f1/scripts/run-arm.sh glm-v8 1
 ```
 
 The final command creates a detached target worktree and prints one RPC-driver

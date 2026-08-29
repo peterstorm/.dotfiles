@@ -8,6 +8,8 @@ FUGUE="${FUGUE_REPO:-$HOME/dev/agentic/fugue}"
 LOOM_RUNTIME="${LOOM_RUNTIME_REPO:-$HOME/dev/claude-plugins/loom-benchmark-runtime-3815f65}"
 # shellcheck source=benchmarks/loom-fugue-f1/suite.sh
 source "$BENCH_DIR/suite.sh"
+# shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
+source "$ROOT/benchmarks/loom-model-ab/scripts/arms.sh"
 
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 for command in bun git jq node pi sha256sum; do command -v "$command" >/dev/null || fail "missing command: $command"; done
@@ -32,6 +34,19 @@ RUNTIME_SHA="$(fugue_source_lock_value "$BENCH_DIR" '.loom_runtime.base_sha')"
 [[ "$(git -C "$LOOM_RUNTIME" rev-parse HEAD)" == "$RUNTIME_SHA" ]] || fail 'Loom runtime checkout mismatch'
 [[ "$(pi --version)" == "$(fugue_source_lock_value "$BENCH_DIR" '.pi.version')" ]] || fail 'Pi version mismatch'
 bash "$BENCH_DIR/scripts/isolation.sh" status >/dev/null || fail 'benchmark isolation is inactive'
+
+PI_MODELS="$ROOT/pi/models.json"
+while IFS= read -r arm; do
+  IFS=$'\t' read -r model served context _ <<<"$(fugue_benchmark_arm_record "$arm")"
+  selector="${model#desktop-vllm/}"
+  model_id="${selector%%:*}"
+  thinking_level="${selector##*:}"
+  [[ "$served" == "$model_id" ]] || fail "$arm selector and served model differ"
+  jq -e --arg id "$model_id" --arg level "$thinking_level" --argjson context "$context" '
+    any(.providers["desktop-vllm"].models[];
+      .id == $id and .contextWindow == $context and .thinkingLevelMap[$level] != null)
+  ' "$PI_MODELS" >/dev/null || fail "$arm is absent or incompatible in pi/models.json"
+done < <(fugue_benchmark_arm_ids)
 
 while IFS=$'\t' read -r path expected; do
   observed="$(git -C "$FUGUE" show "$TARGET_SHA:$path" | sha256sum | cut -d' ' -f1)" \

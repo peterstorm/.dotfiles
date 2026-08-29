@@ -18,9 +18,9 @@ usage() {
 if (($# == 1)) && [[ "$1" == --list ]]; then
   printf '%-20s %-58s %-42s %s\n' ARM PI_MODEL SERVED_MODEL CONTEXT
   while IFS= read -r arm; do
-    IFS=$'\t' read -r model served context _ <<<"$(benchmark_arm_record "$arm")"
+    IFS=$'\t' read -r model served context _ <<<"$(fugue_benchmark_arm_record "$arm")"
     printf '%-20s %-58s %-42s %s\n' "$arm" "$model" "$served" "$context"
-  done < <(benchmark_arm_ids)
+  done < <(fugue_benchmark_arm_ids)
   exit 0
 fi
 
@@ -38,7 +38,20 @@ else
 fi
 [[ "$REP" =~ ^[0-9]+$ ]] || { echo 'repetition must be an integer' >&2; exit 2; }
 IFS=$'\t' read -r MODEL EXPECTED CONTEXT_WINDOW PROFILE_CONTAINER START_HINT PROFILE_LABEL \
-  <<<"$(benchmark_arm_record "$ARM")"
+  <<<"$(fugue_benchmark_arm_record "$ARM")"
+
+SELECTOR="${MODEL#desktop-vllm/}"
+MODEL_ID="${SELECTOR%%:*}"
+THINKING_LEVEL="${SELECTOR##*:}"
+PI_MODELS="$ROOT/pi/models.json"
+jq -e --arg id "$MODEL_ID" --arg level "$THINKING_LEVEL" --argjson context "$CONTEXT_WINDOW" '
+  any(.providers["desktop-vllm"].models[];
+    .id == $id and .contextWindow == $context and .thinkingLevelMap[$level] != null)
+' "$PI_MODELS" >/dev/null || {
+  echo "Pi model catalog does not expose exact arm selector $MODEL at context $CONTEXT_WINDOW" >&2
+  exit 1
+}
+PI_MODELS_SHA="$(sha256sum "$PI_MODELS" | cut -d' ' -f1)"
 
 TARGET_SHA="$(fugue_source_lock_value "$BENCH_DIR" '.target.base_sha')"
 TARGET_REMOTE="$(fugue_source_lock_value "$BENCH_DIR" '.target.repository')"
@@ -117,17 +130,18 @@ Start $PROFILE_LABEL with:
 EOF
   exit 1
 fi
-PROFILE_RUNNING="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
-  "docker inspect --format='{{.State.Running}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
-[[ "$PROFILE_RUNNING" == true ]] || {
-  echo "runtime profile is not running: $PROFILE_CONTAINER" >&2
+PROFILE_INSPECT="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
+  "docker inspect --format='{{.State.Running}}\t{{index .Config.Labels \"ai.peterstorm.inference.profile\"}}\t{{index .Config.Labels \"ai.peterstorm.inference.image-config\"}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
+IFS=$'\t' read -r PROFILE_RUNNING OBSERVED_PROFILE IMAGE_CONFIG <<<"$PROFILE_INSPECT"
+[[ "$PROFILE_RUNNING" == true && "$OBSERVED_PROFILE" == "$PROFILE_CONTAINER" && "$IMAGE_CONFIG" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+  echo "runtime profile identity mismatch: expected running $PROFILE_CONTAINER, observed '${OBSERVED_PROFILE:-<none>}' with image config '${IMAGE_CONFIG:-<none>}'" >&2
   echo "start with: $START_HINT" >&2
   exit 1
 }
 
 if [[ "$PROBE_ONLY" == true ]]; then
-  printf 'READY: suite=%s arm=%s model=%s served=%s context=%s target=%s runtime=%s protocol=%s\n' \
-    "$FUGUE_SUITE_ID" "$ARM" "$MODEL" "$SERVED" "$CONTEXT_WINDOW" "$TARGET_SHA" "$RUNTIME_SHA" "$PROTOCOL_SHA"
+  printf 'READY: suite=%s arm=%s model=%s served=%s context=%s profile=%s image_config=%s target=%s runtime=%s protocol=%s\n' \
+    "$FUGUE_SUITE_ID" "$ARM" "$MODEL" "$SERVED" "$CONTEXT_WINDOW" "$OBSERVED_PROFILE" "$IMAGE_CONFIG" "$TARGET_SHA" "$RUNTIME_SHA" "$PROTOCOL_SHA"
   exit 0
 fi
 
@@ -169,6 +183,8 @@ jq -n \
   --arg model "$MODEL" \
   --arg served_model "$SERVED" \
   --arg profile_container "$PROFILE_CONTAINER" \
+  --arg image_config "$IMAGE_CONFIG" \
+  --arg pi_models_sha256 "$PI_MODELS_SHA" \
   --argjson context_window "$CONTEXT_WINDOW" \
   --arg target_repository "$TARGET_REMOTE" \
   --arg target_base_sha "$TARGET_SHA" \
@@ -189,6 +205,8 @@ jq -n \
     model: $model,
     served_model: $served_model,
     profile_container: $profile_container,
+    image_config: $image_config,
+    pi_models_sha256: $pi_models_sha256,
     context_window: $context_window,
     target: { repository: $target_repository, base_sha: $target_base_sha },
     loom_runtime_sha: $loom_runtime_sha,

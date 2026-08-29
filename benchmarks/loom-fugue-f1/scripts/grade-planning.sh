@@ -6,6 +6,8 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(git -C "$BENCH_DIR" rev-parse --show-toplevel)"
 # shellcheck source=benchmarks/loom-fugue-f1/suite.sh
 source "$BENCH_DIR/suite.sh"
+# shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
+source "$ROOT/benchmarks/loom-model-ab/scripts/arms.sh"
 
 (($# == 2)) || { echo "usage: $0 <worktree> <run-dir>" >&2; exit 2; }
 WORKTREE="$(cd "$1" && pwd)"
@@ -21,19 +23,28 @@ TARGET_REPOSITORY="$(fugue_source_lock_value "$BENCH_DIR" '.target.repository')"
 RUNTIME_SHA="$(fugue_source_lock_value "$BENCH_DIR" '.loom_runtime.base_sha')"
 EXPECTED_PI="$(fugue_source_lock_value "$BENCH_DIR" '.pi.version')"
 PROTOCOL_SHA="$(fugue_protocol_sha "$BENCH_DIR")"
+PI_MODELS_SHA="$(sha256sum "$ROOT/pi/models.json" | cut -d' ' -f1)"
+RUN_ARM="$(jq -r '.arm // ""' "$RUN_RECEIPT" 2>/dev/null || true)"
+ARM_RECORD="$(fugue_benchmark_arm_record "$RUN_ARM" 2>/dev/null || true)"
+IFS=$'\t' read -r EXPECTED_MODEL EXPECTED_SERVED EXPECTED_CONTEXT EXPECTED_PROFILE _ <<<"$ARM_RECORD"
 
 json_bool() { [[ "$1" == true ]] && echo true || echo false; }
 artifact_present() { [[ -s "$RUN_DIR/$1" ]] && echo true || echo false; }
 
 RUN_RECEIPT_VALID=false
-if [[ "$BASE_SHA" == "$TARGET_SHA" ]] && jq -e \
+if [[ "$BASE_SHA" == "$TARGET_SHA" && -n "$ARM_RECORD" ]] && jq -e \
   --arg suite "$FUGUE_SUITE_ID" \
   --arg version "$FUGUE_PROTOCOL_VERSION" \
   --arg protocol "$PROTOCOL_SHA" \
   --arg target "$TARGET_SHA" \
   --arg repository "$TARGET_REPOSITORY" \
   --arg runtime "$RUNTIME_SHA" \
-  --arg pi "$EXPECTED_PI" '
+  --arg pi "$EXPECTED_PI" \
+  --arg model "$EXPECTED_MODEL" \
+  --arg served "$EXPECTED_SERVED" \
+  --arg profile "$EXPECTED_PROFILE" \
+  --argjson context "$EXPECTED_CONTEXT" \
+  --arg pi_models_sha "$PI_MODELS_SHA" '
     .benchmark_kind == "planning-only" and
     .suite_id == $suite and
     .protocol_version == $version and
@@ -42,6 +53,12 @@ if [[ "$BASE_SHA" == "$TARGET_SHA" ]] && jq -e \
     .target == {repository: $repository, base_sha: $target} and
     .loom_runtime_sha == $runtime and
     .pi_version == $pi and
+    .model == $model and
+    .served_model == $served and
+    .profile_container == $profile and
+    .context_window == $context and
+    .pi_models_sha256 == $pi_models_sha and
+    (.image_config | test("^sha256:[0-9a-f]{64}$")) and
     .baseline_typecheck == "clean"
   ' "$RUN_RECEIPT" >/dev/null 2>&1; then
   RUN_RECEIPT_VALID=true

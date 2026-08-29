@@ -22,10 +22,13 @@ for script in "$SUITE" "$RUN" "$GRADE" "$ANON" "$ISOLATION" "$CHILD_OUTPUTS" "$B
 done
 # shellcheck source=benchmarks/loom-fugue-f1/suite.sh
 source "$SUITE"
+# shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
+source "$ROOT/benchmarks/loom-model-ab/scripts/arms.sh"
 PROTOCOL_SHA="$(fugue_protocol_sha "$BENCH")"
 [[ "$FUGUE_SUITE_ID" == 'fugue-f1-map-v1' && "$FUGUE_PROTOCOL_VERSION" == v1 ]] || fail 'suite identity drifted'
 [[ "$PROTOCOL_SHA" == 'd2629e9eb966e25364e24a34423e55247040344115874dc2f2de5fee415beed1' ]] || fail 'immutable protocol hash changed'
-[[ "$(bash "$RUN" --list | tail -n +2 | wc -l)" -eq 7 ]] || fail 'arm list is incomplete'
+[[ "$(bash "$RUN" --list | tail -n +2 | wc -l)" -eq 8 ]] || fail 'arm list is incomplete'
+[[ "$(fugue_benchmark_arm_record glm-v8 | cut -f2)" == 'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8' ]] || fail 'v8 arm identity drifted'
 
 contains "$BENCH/frozen/brief.md" 'one statically declared worker computation'
 contains "$BENCH/frozen/brief.md" 'Do not implement anything.'
@@ -87,7 +90,9 @@ TARGET_SHA="$(fugue_source_lock_value "$BENCH" '.target.base_sha')"
 RUNTIME_SHA="$(fugue_source_lock_value "$BENCH" '.loom_runtime.base_sha')"
 TARGET_REPOSITORY="$(fugue_source_lock_value "$BENCH" '.target.repository')"
 PI_VERSION="$(fugue_source_lock_value "$BENCH" '.pi.version')"
-MODEL='desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
+ARM='glm-mtp'
+IFS=$'\t' read -r MODEL SERVED CONTEXT PROFILE _ <<<"$(fugue_benchmark_arm_record "$ARM")"
+PI_MODELS_SHA="$(sha256sum "$ROOT/pi/models.json" | cut -d' ' -f1)"
 sandbox="$(mktemp -d)"
 worktree="$sandbox/worktree"
 valid_run="$sandbox/valid-run"
@@ -137,10 +142,14 @@ cat > "$valid_run/driver-receipt.json" <<'JSON'
 JSON
 jq -n \
   --arg suite "$FUGUE_SUITE_ID" --arg version "$FUGUE_PROTOCOL_VERSION" --arg protocol "$PROTOCOL_SHA" \
-  --arg model "$MODEL" --arg repository "$TARGET_REPOSITORY" --arg target "$TARGET_SHA" \
+  --arg arm "$ARM" --arg model "$MODEL" --arg served "$SERVED" --arg profile "$PROFILE" \
+  --argjson context "$CONTEXT" --arg image_config 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  --arg pi_models_sha "$PI_MODELS_SHA" --arg repository "$TARGET_REPOSITORY" --arg target "$TARGET_SHA" \
   --arg runtime "$RUNTIME_SHA" --arg pi "$PI_VERSION" '{
     benchmark_kind:"planning-only", suite_id:$suite, protocol_version:$version,
-    protocol_sha256:$protocol, stop_before:"wave-1-implementation", model:$model,
+    protocol_sha256:$protocol, stop_before:"wave-1-implementation", arm:$arm, model:$model,
+    served_model:$served, profile_container:$profile, context_window:$context,
+    image_config:$image_config, pi_models_sha256:$pi_models_sha,
     target:{repository:$repository,base_sha:$target}, loom_runtime_sha:$runtime,
     pi_version:$pi, baseline_typecheck:"clean"
   }' > "$valid_run/run.json"
