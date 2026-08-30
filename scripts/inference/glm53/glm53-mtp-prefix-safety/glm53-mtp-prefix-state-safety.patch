@@ -1,0 +1,353 @@
+--- a/vllm/model_executor/layers/mamba/ops/causal_conv1d.py
++++ b/vllm/model_executor/layers/mamba/ops/causal_conv1d.py
+@@ -871,9 +871,21 @@
+         # - accept 1 tokens: [history2, ..., historyM, draft1]
+         # - accept 2 tokens: [history3, ..., historyM, draft1, draft2]
+         # - and so on.
+-        conv_state_token_offset = (
+-            tl.load(num_accepted_tokens_ptr + idx_seq).to(tl.int64) - 1
+-        )
++        num_accepted = tl.load(num_accepted_tokens_ptr + idx_seq).to(tl.int64)
++        if (num_accepted < 1) | (num_accepted > seqlen):
++            zero = tl.zeros((BLOCK_N,), dtype=tl.float32)
++            for idx_token in tl.range(seqlen):
++                o_ptrs = (
++                    o_ptr
++                    + o_offset
++                    + idx_token * stride_o_token
++                    + idx_feats * stride_o_dim
++                )
++                tl.store(o_ptrs, zero, mask=idx_feats < dim)
++            if launch_pdl:
++                tl.extra.cuda.gdc_launch_dependents()
++            return
++        conv_state_token_offset = num_accepted - 1
+     else:
+         conv_state_token_offset = 0
+ 
+--- a/vllm/model_executor/layers/mamba/ops/mamba_ssm.py
++++ b/vllm/model_executor/layers/mamba/ops/mamba_ssm.py
+@@ -333,7 +333,15 @@
+     if HAS_STATE_BATCH_INDICES:
+         if IS_SPEC_DECODING:
+             num_accepted = tl.load(num_accepted_tokens_ptr + pid_b).to(tl.int64)
++            # Preserve the existing zero-count clamp while bounding the
++            # accepted-token-derived state lookup to this request's row.
++            # The bound is the ROW stride (elements per batch row), matching
++            # fused_recurrent.py's i_t < stride_indices_seq: for a contiguous
++            # [batch, T] tensor stride(0) == T. stride(1) would be 1 there,
++            # which rejects every accepted count > 1 (and a padded row keeps
++            # any overshoot inside this request's allocated slack).
+             init_token_idx = tl.maximum(num_accepted - 1, 0)
++            valid_initial_token = init_token_idx < stride_state_indices_batch
+         else:
+             init_token_idx = 0
+ 
+@@ -347,9 +355,17 @@
+                 dst_state_batch_idx * stride_state_batch + pid_h * stride_state_head
+             )
+ 
+-        state_batch_indices_ptr += (
+-            pid_b * stride_state_indices_batch + init_token_idx * stride_state_indices_T
+-        )
++        state_batch_indices_ptr += pid_b * stride_state_indices_batch
++        if IS_SPEC_DECODING and not valid_initial_token:
++            offs_m = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
++            zero = tl.zeros([BLOCK_SIZE_M], dtype=tl.float32)
++            out_ptr += bos * stride_out_batch + pid_h * stride_out_head
++            for _ in range(seq_len):
++                tl.store(out_ptr + offs_m * stride_out_dim, zero, mask=offs_m < dim)
++                out_ptr += stride_out_batch
++            return
++
++        state_batch_indices_ptr += init_token_idx * stride_state_indices_T
+         state_batch_idx = tl.load(state_batch_indices_ptr).to(tl.int64)
+         state_ptr += state_batch_idx * stride_state_batch + pid_h * stride_state_head
+     else:
+--- a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
++++ b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
+@@ -186,12 +186,20 @@
+         initial_token = tl.load(num_accepted_tokens + i_n).to(tl.int64) - 1
+     else:
+         initial_token = 0
+-    state_index = tl.load(state_indices + i_n * stride_indices_seq + initial_token).to(
+-        tl.int64
+-    )
++    initial_token_in_row = (initial_token >= 0) & (
++        initial_token < stride_indices_seq
++    )
++    state_index = tl.load(
++        state_indices + i_n * stride_indices_seq + initial_token,
++        mask=initial_token_in_row,
++        other=0,
++    ).to(tl.int64)
+     p_out = out + bos * stride_out_token + i_h * V + o_v
+     if state_index <= 0:
+-        tl.store(p_out, tl.zeros([BV], dtype=tl.float32), mask=m_v)
++        zero = tl.zeros([BV], dtype=tl.float32).to(p_out.dtype.element_ty)
++        for _ in range(0, sequence_length):
++            tl.store(p_out, zero, mask=m_v)
++            p_out += stride_out_token
+         return
+ 
+     p_state = (
+--- a/vllm/models/kimi_k3/nvidia/ops/third_party/kda/fused_recurrent.py
++++ b/vllm/models/kimi_k3/nvidia/ops/third_party/kda/fused_recurrent.py
+@@ -185,6 +185,8 @@
+     eos = tl.load(cu_seqlens + i_n + 1).to(tl.int64)
+     sequence_length = eos - bos
+     if sequence_length == 0:
++        if launch_pdl:
++            tl.extra.cuda.gdc_launch_dependents()
+         return
+ 
+     o_k = tl.arange(0, BK)
+@@ -197,12 +199,22 @@
+         initial_token = tl.load(num_accepted_tokens + i_n).to(tl.int64) - 1
+     else:
+         initial_token = 0
+-    state_index = tl.load(state_indices + i_n * stride_indices_seq + initial_token).to(
+-        tl.int64
+-    )
++    initial_token_in_row = (initial_token >= 0) & (
++        initial_token < stride_indices_seq
++    )
++    state_index = tl.load(
++        state_indices + i_n * stride_indices_seq + initial_token,
++        mask=initial_token_in_row,
++        other=0,
++    ).to(tl.int64)
+     p_out = out + bos * stride_out_token + i_h * V + o_v
+     if state_index <= 0:
+-        tl.store(p_out, tl.zeros([BV], dtype=tl.float32), mask=m_v)
++        zero = tl.zeros([BV], dtype=tl.float32).to(p_out.dtype.element_ty)
++        for _ in range(0, sequence_length):
++            tl.store(p_out, zero, mask=m_v)
++            p_out += stride_out_token
++        if launch_pdl:
++            tl.extra.cuda.gdc_launch_dependents()
+         return
+ 
+     p_state = (
+--- a/vllm/third_party/flash_linear_attention/ops/fused_recurrent.py
++++ b/vllm/third_party/flash_linear_attention/ops/fused_recurrent.py
+@@ -117,11 +117,29 @@
+             else:
+                 i_t = 0
+             # Load state index and check for invalid entries
+-            state_idx = tl.load(ssm_state_indices + i_n * stride_indices_seq + i_t).to(
+-                tl.int64
+-            )
+-            # Skip if state index is invalid (NULL_BLOCK_ID=0)
++            # ``i_t`` is ``num_accepted_tokens - 1`` and is otherwise
++            # unbounded, while ``ssm_state_indices`` has only
++            # ``stride_indices_seq`` columns per request. A zero accepted
++            # count gives ``i_t == -1`` (a read before this request's row,
++            # and before the tensor for ``i_n == 0``); a stale or too-large
++            # count reads past the row. The ``state_idx <= 0`` guard below
++            # only rejects non-positive values, so an out-of-range read that
++            # returns a garbage positive int32 flows into
++            # ``h0 + state_idx * stride_init_state_token`` and is
++            # dereferenced, faulting the SM. Mask the load to the row and let
++            # ``other=0`` fall into the existing invalid-state path.
++            idx_in_row = (i_t >= 0) & (i_t < stride_indices_seq)
++            state_idx = tl.load(
++                ssm_state_indices + i_n * stride_indices_seq + i_t,
++                mask=idx_in_row,
++                other=0,
++            ).to(tl.int64)
++            # Skip invalid state indices without exposing uninitialized output.
+             if state_idx <= 0:
++                zero = tl.zeros([BV], dtype=tl.float32).to(p_o.dtype.element_ty)
++                for _ in range(0, T):
++                    tl.store(p_o, zero, mask=mask_v)
++                    p_o += HV * V
+                 return
+             p_h0 = h0 + state_idx * stride_init_state_token
+         else:
+--- a/vllm/third_party/flash_linear_attention/ops/fused_sigmoid_gating.py
++++ b/vllm/third_party/flash_linear_attention/ops/fused_sigmoid_gating.py
+@@ -106,12 +106,29 @@
+                 i_t = tl.load(num_accepted_tokens + i_n).to(tl.int64) - 1
+             else:
+                 i_t = 0
+-            # Load state index and check for invalid entries
+-            state_idx = tl.load(ssm_state_indices + i_n * stride_indices_seq + i_t).to(
+-                tl.int64
+-            )
+-            # Skip if state index is invalid (NULL_BLOCK_ID=0)
++            # Load state index and check for invalid entries.
++            # ``i_t`` is ``num_accepted_tokens - 1`` and is otherwise unbounded
++            # against a ``stride_indices_seq``-column tensor: a zero accepted
++            # count gives ``i_t == -1`` (a read before this request's row, and
++            # before the tensor for ``i_n == 0``); a stale or too-large count
++            # reads past the row. The ``state_idx <= 0`` guard below only rejects
++            # non-positive values, so an out-of-range read returning a garbage
++            # positive int flows into ``h0 + state_idx * stride_init_state_token``
++            # and faults the SM. Mask the load to the row; ``other=0`` falls into
++            # the invalid-state path below, which also returns before the
++            # ``final_state_idx`` load later.
++            idx_in_row = (i_t >= 0) & (i_t < stride_indices_seq)
++            state_idx = tl.load(
++                ssm_state_indices + i_n * stride_indices_seq + i_t,
++                mask=idx_in_row,
++                other=0,
++            ).to(tl.int64)
++            # Skip invalid state indices without exposing uninitialized output.
+             if state_idx <= 0:
++                zero = tl.zeros([BV], dtype=tl.float32).to(p_o.dtype.element_ty)
++                for _ in range(0, T):
++                    tl.store(p_o, zero, mask=mask_v)
++                    p_o += HV * V
+                 return
+             p_h0 = h0 + state_idx * stride_init_state_token
+         else:
+--- a/vllm/v1/attention/backends/gdn_attn.py
++++ b/vllm/v1/attention/backends/gdn_attn.py
+@@ -22,6 +22,46 @@
+     split_decodes_and_prefills,
+ )
+ from vllm.v1.kv_cache_interface import MambaSpec
++
++
++def _build_mixed_token_indices_cpu(
++    spec_sequence_masks: torch.Tensor,
++    query_lens: torch.Tensor,
++    num_actual_tokens: int,
++    expected_non_spec_tokens: int,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Build a complete, in-range mixed GDN token partition on the CPU."""
++    if spec_sequence_masks.device.type != "cpu" or query_lens.device.type != "cpu":
++        raise ValueError("mixed GDN token partition inputs must be CPU tensors")
++    if spec_sequence_masks.ndim != 1 or query_lens.ndim != 1:
++        raise ValueError("mixed GDN token partition inputs must be one-dimensional")
++    if spec_sequence_masks.numel() != query_lens.numel():
++        raise ValueError("mixed GDN sequence mask and query lengths must have equal size")
++    if num_actual_tokens < 0 or expected_non_spec_tokens < 0:
++        raise ValueError("mixed GDN token counts must be non-negative")
++    if torch.any(query_lens < 0).item():
++        raise ValueError("mixed GDN query lengths must be non-negative")
++
++    token_count = int(query_lens.sum().item())
++    if token_count != num_actual_tokens:
++        raise ValueError(
++            "mixed GDN query lengths do not cover the actual token rows: "
++            f"query_tokens={token_count}, actual_tokens={num_actual_tokens}"
++        )
++
++    token_is_spec = torch.repeat_interleave(spec_sequence_masks, query_lens)
++    non_spec_count = int((~token_is_spec).sum().item())
++    if non_spec_count != expected_non_spec_tokens:
++        raise ValueError(
++            "mixed GDN request and token classifications disagree: "
++            f"partition_non_spec={non_spec_count}, "
++            f"expected_non_spec={expected_non_spec_tokens}"
++        )
++
++    ordered = torch.argsort(token_is_spec, stable=True)
++    non_spec = ordered[:non_spec_count]
++    spec = ordered[non_spec_count:]
++    return non_spec, spec
+ 
+ 
+ class GDNAttentionBackend(AttentionBackend):
+@@ -325,18 +365,26 @@
+                 non_spec_query_start_loc = None
+                 non_spec_query_start_loc_cpu = None
+             else:
+-                # Do not pass output_size here. FULL-graph token padding is a
+-                # global dispatch size, while DCP query_lens is rank-local; a
+-                # static padded output size can therefore exceed sum(query_lens)
+-                # and assert inside CUDA repeat_interleave on mixed MTP steps.
+-                spec_token_masks = torch.repeat_interleave(
+-                    spec_sequence_masks,
+-                    query_lens,
+-                )
+-                index = torch.argsort(spec_token_masks, stable=True)
++                # Build this partition from the authoritative CPU metadata.
++                # A GPU-side repeat/argsort can race asynchronous metadata reuse
++                # and feed index_select an index beyond the local QKV rows. The
++                # pure helper proves complete coverage and in-range indices before
++                # the one-way H2D copy.
+                 num_non_spec_tokens = num_prefill_tokens + num_decode_tokens
+-                non_spec_token_indx = index[:num_non_spec_tokens]
+-                spec_token_indx = index[num_non_spec_tokens:]
++                non_spec_token_indx_cpu, spec_token_indx_cpu = (
++                    _build_mixed_token_indices_cpu(
++                        spec_sequence_masks_cpu,
++                        query_lens_cpu,
++                        m.num_actual_tokens,
++                        num_non_spec_tokens,
++                    )
++                )
++                non_spec_token_indx = async_tensor_h2d(
++                    non_spec_token_indx_cpu, device=query_start_loc.device
++                )
++                spec_token_indx = async_tensor_h2d(
++                    spec_token_indx_cpu, device=query_start_loc.device
++                )
+ 
+                 spec_state_indices_tensor = block_table_tensor[
+                     spec_sequence_masks_cpu, : self.num_spec + 1
+--- a/vllm/v1/worker/mamba_utils.py
++++ b/vllm/v1/worker/mamba_utils.py
+@@ -174,7 +174,15 @@
+     # Widen block ids to int64 before they reach `block_id * state_block_stride`
+     # below: state_block_stride can exceed 2**31 bytes for large mamba caches,
+     # and Triton would otherwise do the multiply in int32 and wrap.
+-    dest_block_id = tl.load(block_table_base + dst_col).to(tl.int64)
++    # Accepted-token-derived columns must stay inside this request's row.
++    # Fail closed on an invalid column or NULL block instead of turning a stale
++    # count into a wild state address (upstream vLLM PR #50021).
++    dst_col_ok = (dst_col >= 0) & (dst_col < block_table_stride_req)
++    dest_block_id = tl.load(
++        block_table_base + dst_col, mask=dst_col_ok, other=-1
++    ).to(tl.int64)
++    if dest_block_id <= 0:
++        return
+     dst_addr = state_base_addr + dest_block_id * state_block_stride
+ 
+     is_conv_state = conv_width > 0
+@@ -185,7 +193,12 @@
+         if tile_idx > 0:
+             return
+         # DS conv layout: state_len is the slide axis; copy per dim row.
+-        src_block_id = tl.load(block_table_base + src_col).to(tl.int64)
++        src_col_ok = (src_col >= 0) & (src_col < block_table_stride_req)
++        src_block_id = tl.load(
++            block_table_base + src_col, mask=src_col_ok, other=-1
++        ).to(tl.int64)
++        if src_block_id <= 0:
++            return
+         dim_rows = tl.load(state_dim_row_count_ptr + state_idx)
+         row_stride = tl.load(state_dim_row_stride_ptr + state_idx)
+         per_row_bytes = (conv_width - token_bias).to(tl.int64) * state_elem_size
+@@ -211,7 +224,12 @@
+         #   state[bt[dst_col], :conv_width - token_bias]
+         # Small per-block bytes (~60-80 KiB) make tiling degenerate, so
+         # conv runs as a single-CTA memcpy (NUM_TILES=1).
+-        src_block_id = tl.load(block_table_base + src_col).to(tl.int64)
++        src_col_ok = (src_col >= 0) & (src_col < block_table_stride_req)
++        src_block_id = tl.load(
++            block_table_base + src_col, mask=src_col_ok, other=-1
++        ).to(tl.int64)
++        if src_block_id <= 0:
++            return
+         src_offset = token_bias.to(tl.int64) * state_inner_size * state_elem_size
+         src_addr = state_base_addr + src_block_id * state_block_stride + src_offset
+         copy_size = (
+@@ -230,7 +248,13 @@
+     # Temporal state: copy state[bt[src_col + token_bias]] -> state[bt[dst_col]]
+     # Body u64 range is partitioned across TEMPORAL_TILES CTAs to keep the
+     # SMs filled at small batch.
+-    actual_src_block_id = tl.load(block_table_base + src_col + token_bias).to(tl.int64)
++    tmp_col = src_col + token_bias
++    tmp_col_ok = (tmp_col >= 0) & (tmp_col < block_table_stride_req)
++    actual_src_block_id = tl.load(
++        block_table_base + tmp_col, mask=tmp_col_ok, other=-1
++    ).to(tl.int64)
++    if actual_src_block_id <= 0:
++        return
+     src_addr = state_base_addr + actual_src_block_id * state_block_stride
+     # Use natural block data size (inner_size * elem_size), NOT
+     # state_block_stride which is the page stride and can exceed the

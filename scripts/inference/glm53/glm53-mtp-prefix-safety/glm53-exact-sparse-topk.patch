@@ -1,0 +1,143 @@
+diff --git a/vllm/model_executor/layers/sparse_attn_indexer.py b/vllm/model_executor/layers/sparse_attn_indexer.py
+index 6420e43..7e5c3e7 100644
+--- a/vllm/model_executor/layers/sparse_attn_indexer.py
++++ b/vllm/model_executor/layers/sparse_attn_indexer.py
+@@ -75,8 +75,62 @@ def _dcp_query_split_context_eligible(context_tokens: int) -> bool:
+     return context_tokens > 0 and context_tokens >= min_context
+ 
+ 
+-def _use_persistent_topk_decode(topk_tokens: int) -> bool:
+-    return current_platform.is_cuda() and topk_tokens in (512, 1024, 2048)
++def _exact_sparse_attn_topk(
++    logits: torch.Tensor,
++    seq_lens: torch.Tensor,
++    topk_indices: torch.Tensor,
++    topk_tokens: int,
++) -> None:
++    """Select exact in-range sparse-attention candidates into caller-owned storage.
++
++    ``persistent_topk`` silently truncates crowded histogram bins (vLLM #51782)
++    and its atomic append order makes the wrong candidate set non-deterministic.
++    Masking by each row's authoritative sequence length also prevents stale logits
++    outside the live range from entering the exact ``torch.topk`` selection.
++    """
++    if logits.ndim != 2:
++        raise RuntimeError(f"sparse-attention logits must be rank 2, got {logits.ndim}")
++    row_lens = seq_lens.reshape(-1)
++    if row_lens.numel() != logits.shape[0]:
++        raise RuntimeError(
++            "sparse-attention sequence lengths must contain one entry per logits row, "
++            f"got {row_lens.numel()} lengths for {logits.shape[0]} rows"
++        )
++    if topk_indices.ndim != 2 or topk_indices.shape[0] != logits.shape[0]:
++        raise RuntimeError(
++            "sparse-attention top-k output must be rank 2 with one row per logits row"
++        )
++    if topk_tokens <= 0 or topk_tokens > topk_indices.shape[1]:
++        raise RuntimeError(
++            f"invalid sparse-attention top-k width {topk_tokens} for output shape "
++            f"{tuple(topk_indices.shape)}"
++        )
++
++    num_columns = logits.shape[1]
++    selected_width = min(topk_tokens, num_columns)
++    lengths = row_lens.to(device=logits.device, dtype=torch.int64).clamp(
++        min=0, max=num_columns
++    )
++    columns = torch.arange(num_columns, dtype=torch.int64, device=logits.device)
++    score_bits = logits.contiguous().view(torch.int32).to(torch.int64) & 0xFFFFFFFF
++    ordered_scores = torch.where(
++        score_bits & 0x80000000 != 0,
++        ~score_bits & 0xFFFFFFFF,
++        score_bits ^ 0x80000000,
++    )
++    score_keys = ordered_scores - 0x80000000
++    deterministic_keys = (score_keys << 32) | (0xFFFFFFFF - columns.unsqueeze(0))
++    deterministic_keys.masked_fill_(
++        columns.unsqueeze(0) >= lengths.unsqueeze(1), torch.iinfo(torch.int64).min
++    )
++    selected = torch.topk(
++        deterministic_keys, selected_width, dim=1, sorted=True
++    ).indices
++
++    ranks = torch.arange(selected_width, device=logits.device)
++    selected.masked_fill_(ranks.unsqueeze(0) >= lengths.unsqueeze(1), -1)
++    topk_indices.fill_(-1)
++    topk_indices[:, :selected_width].copy_(selected.to(topk_indices.dtype))
+ 
+ 
+ def _local_to_global_position(
+@@ -2397,20 +2451,7 @@ def sparse_attn_indexer(
+                 attn_metadata_narrowed.max_seq_len,
+             )
+         elif use_persistent_topk:
+-            workspace_manager = current_workspace_manager()
+-            (topk_workspace,) = workspace_manager.get_simultaneous(
+-                ((RADIX_TOPK_WORKSPACE_SIZE,), torch.uint8),
+-            )
+-            torch.ops._C.persistent_topk(
+-                logits,
+-                seq_lens,
+-                topk_indices,
+-                topk_workspace,
+-                topk_tokens,
+-                decode_metadata.max_seq_len
+-                if decode_metadata.max_seq_len is not None
+-                else logits.shape[1],
+-            )
++            _exact_sparse_attn_topk(logits, seq_lens, topk_indices, topk_tokens)
+         else:
+             ops.top_k_per_row_decode(
+                 logits,
+diff --git a/vllm/model_executor/layers/sparse_attn_indexer_kpool.py b/vllm/model_executor/layers/sparse_attn_indexer_kpool.py
+index 9a4955d..e613516 100644
+--- a/vllm/model_executor/layers/sparse_attn_indexer_kpool.py
++++ b/vllm/model_executor/layers/sparse_attn_indexer_kpool.py
+@@ -14,6 +14,7 @@ from vllm.forward_context import get_forward_context
+ from vllm.logger import init_logger
+ from vllm.model_executor.custom_op import CustomOp
+ from vllm.model_executor.layers.sparse_attn_indexer import (
++    _exact_sparse_attn_topk,
+     _merge_b12x_dcp_topk,
+     _run_b12x_paged_topk,
+ )
+@@ -1022,18 +1023,7 @@ def sparse_attn_indexer_kpool(
+                 device=logits.device,
+             )
+             if work_k in (512, 1024, 2048):
+-                workspace_manager = current_workspace_manager()
+-                (topk_workspace,) = workspace_manager.get_simultaneous(
+-                    ((RADIX_TOPK_WORKSPACE_SIZE,), torch.uint8),
+-                )
+-                torch.ops._C.persistent_topk(
+-                    logits,
+-                    pool_seq_lens,
+-                    pool_topk,
+-                    topk_workspace,
+-                    work_k,
+-                    max_pool_len,
+-                )
++                _exact_sparse_attn_topk(logits, pool_seq_lens, pool_topk, work_k)
+             else:
+                 torch.ops._C.top_k_per_row_decode(
+                     logits,
+@@ -1142,18 +1132,7 @@ def sparse_attn_indexer_kpool(
+             topk_dst = topk_indices_buffer[:num_padded_tokens, :topk_tokens]
+ 
+         if current_platform.is_cuda() and work_k in (512, 1024, 2048):
+-            workspace_manager = current_workspace_manager()
+-            (topk_workspace,) = workspace_manager.get_simultaneous(
+-                ((RADIX_TOPK_WORKSPACE_SIZE,), torch.uint8),
+-            )
+-            torch.ops._C.persistent_topk(
+-                logits,
+-                seq_lens,
+-                topk_dst,
+-                topk_workspace,
+-                work_k,
+-                attn_metadata_narrowed.max_seq_len,
+-            )
++            _exact_sparse_attn_topk(logits, seq_lens, topk_dst, work_k)
+         else:
+             if current_platform.is_xpu():
+                 xpu_ops.top_k_per_row_decode(  # type: ignore[attr-defined]

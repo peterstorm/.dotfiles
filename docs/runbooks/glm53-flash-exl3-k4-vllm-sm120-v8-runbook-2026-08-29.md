@@ -182,3 +182,71 @@ Pi selector, only while v8 is actually serving:
 ```text
 desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8:max
 ```
+
+## 2026-08-30 MTP + prefix-cache state-safety overlay
+
+A concurrent cached mixed batch (one MTP decode plus one newly admitted long prefill)
+reached an unbounded `num_accepted_tokens - 1` recurrent-state lookup and a racing
+GPU-built token partition. Both GPUs faulted (Xid 43 and Xid 31/MMU). The profile
+retains mandatory MTP3 and prefix caching; it does not hide the bug by disabling either.
+
+The immutable local image `sha256:ab8bf15ab9bd35c01dd1dac3d1a7474e3922f507bb3159695059ac9bbc1eed8d`
+derives from the exact 113-layer v84 base and adds two patch layers:
+
+- upstream vLLM PR [#50021](https://github.com/vllm-project/vllm/pull/50021) at
+  `9a198c0f8452d0eb251509f02753853903d9f17f`, bounding accepted-count-derived
+  KDA/GDN/Mamba/causal-conv state reads and failing closed on invalid state metadata;
+- a GLM V2 mixed-batch repair that constructs the spec/non-spec token partition from
+  authoritative CPU metadata, proves exact coverage of `num_actual_tokens`, and only
+  then performs the one-way H2D copy. This removes the asynchronous GPU
+  `repeat_interleave`/`argsort` path that fed `index_select` an out-of-range token.
+
+The vendored patch is `sha256:a8e288ec067fed7e2e38762ca71e6034982dc4d40dc02ceec5caa1dc319ace85`.
+MTP3 uses greedy draft selection so a temperature-zero target is not coupled to a probabilistic draft trajectory.
+The patched profile uses `--enforce-eager`: PR #50021 was validated in eager mode, and the MRV2 captured path produced cache-isolated temperature-zero drift during qualification.
+The qualified recovery profile uses DCP1 over TP2/EP2. DCP2 continued to produce long-prefill temperature-zero drift even in eager mode; DCP1 retains both GPUs and avoids the rank-local recurrent-state split. Eager DCP1 still measured enough KV capacity for one 359K request.
+The image build hash-gates every input and output source file, verifies the complete
+base rootfs prefix, and tests the mixed-token partition as a pure function. Runtime
+qualification must still prove cold, exact-warm, partial-warm, changed-image, MTP
+activity, concurrent mixed decode/prefill, restart, and soak behavior before promotion.
+
+The collective/launch order is pinned with NCCL Ring+Simple, one CUDA device connection, and deterministic cuBLAS workspace configuration.
+
+## 2026-08-30 exact sparse top-k overlay
+
+GLM's `index_topk=2048` decode path reached the same defective
+`torch.ops._C.persistent_topk` operator documented in vLLM
+[#51782](https://github.com/vllm-project/vllm/issues/51782). On SM120, vLLM
+explicitly excludes `cooperative_topk`, so the sparse indexer and both KPool
+fallbacks could silently drop candidates and vary their selected sets under
+identical temperature-zero requests. Cache isolation, eager execution, DCP1,
+and deterministic NCCL settings cannot correct a wrong candidate set.
+
+The immutable image replaces all three GLM persistent-top-k calls with one
+exact `torch.topk` seam. It masks columns outside each authoritative sequence
+length, fails closed on shape/width mismatches, emits `-1` for unavailable
+slots, and writes the caller-owned int32 output buffer. A unique int64 key pairs
+each float32 score's monotonic bit ordering with inverse column index, making
+equal-score selection deterministic without perturbing score ordering. The patch is
+`sha256:00254654846b80fc0ff44019ca0641586023b46993bac4af3e579cf8522a3041`.
+The image probe repeats the upstream 806,736-column crowded-bin regression ten
+times on a GPU and requires the exact indices `0..511`; source checks reject
+any remaining GLM `persistent_topk` call.
+
+### Qualification status after exact top-k
+
+The exact-top-k GPU regression passes, but end-to-end temperature-zero output
+equivalence remains **unqualified**. Cache-isolated long-prefill requests still
+produced multiple complete-message hashes after replacing every GLM vLLM
+`persistent_topk` call. Diagnostics also found:
+
+- no-MTP, exact-top-k runs retained occasional long-prefill drift;
+- changing the target MoE backend from B12X to Triton did not remove it;
+- changing only the MTP draft MoE backend to Triton retained occasional short
+  drift.
+
+Therefore #51782 was a real correctness defect and is now removed, but it was
+not the sole source of GLM output variance. Do not promote restart policy or
+claim cache output-equivalence until the remaining target/MTP numerical path is
+identified. The tracked profile remains MTP3 with the B12X target/default draft
+backend, prefix caching enabled, and `restart=no`.
