@@ -99,7 +99,7 @@ IMPLEMENTATION_STARTED=false
 for file in "${CHANGED[@]}"; do
   [[ -z "$file" ]] && continue
   case "$file" in
-    .claude/*|node_modules) ;;
+    .claude/*|.loom/verification-manifest.json|node_modules) ;;
     *)
       printf 'non-planning change: %s\n' "$file" >&2
       PLANNING_SCOPE_RESPECTED=false
