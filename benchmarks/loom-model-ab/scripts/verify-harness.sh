@@ -89,11 +89,20 @@ jq -e '
     "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
     "thinkingLevel": "max"
   } and
+  .targets.sol == {
+    "model": "openai-codex/gpt-5.6-sol",
+    "thinkingLevel": "high"
+  } and
   any(.rules[];
     .id == "glm-v10-dcp2-subagents-use-max" and
     .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
-    .use == {"kind": "named", "target": "glm-v10-dcp2"})
-' "$ROUTING" >/dev/null || fail "Pi routing lacks exact qwen/glm named targets"
+    .use == {"kind": "named", "target": "glm-v10-dcp2"}) and
+  any(.rules[];
+    .id == "sol-subagents-use-high" and
+    .when.parentClass == "cloud" and
+    .when.parentModel == "openai-codex/gpt-5.6-sol" and
+    .use == {"kind": "named", "target": "sol"})
+' "$ROUTING" >/dev/null || fail "Pi routing lacks exact qwen/glm/sol named targets"
 
 reference_frs="$(mktemp)"
 test_frs="$(mktemp)"
