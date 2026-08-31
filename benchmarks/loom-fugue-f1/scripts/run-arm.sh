@@ -81,7 +81,8 @@ jq -e \
     exit 1
   }
 
-PI_SETTINGS="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json"
+PI_AGENT_ROOT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+PI_SETTINGS="$PI_AGENT_ROOT/settings.json"
 if ! node - "$PI_SETTINGS" "$(realpath -e "$LOOM_RUNTIME")" <<'NODE'
 const fs = require("node:fs");
 const [file, runtime] = process.argv.slice(2);
@@ -166,8 +167,8 @@ PI_MODEL="$MODEL_ID" \
 PI_REASONING_LEVEL="$THINKING_LEVEL" \
   "$LOOM_RUNTIME/scripts/sync-pi-agents.sh" > "$RUN_DIR/agent-render.log"
 EXPECTED_AGENT_ROOT="$(printf '%s' "$LOOM_RUNTIME" | base64 -w0)"
-if ! grep -Fq "model: $MODEL" "$HOME/.pi/agent/agents/brainstorm-agent.md" ||
-   ! grep -Fq "loom-package-root: $EXPECTED_AGENT_ROOT" "$HOME/.pi/agent/agents/brainstorm-agent.md"; then
+if ! grep -Fq "model: $MODEL" "$PI_AGENT_ROOT/agents/brainstorm-agent.md" ||
+   ! grep -Fq "loom-package-root: $EXPECTED_AGENT_ROOT" "$PI_AGENT_ROOT/agents/brainstorm-agent.md"; then
   echo 'rendered phase-agent binding does not match the arm and pinned Loom runtime' >&2
   exit 1
 fi

@@ -27,7 +27,10 @@ source "$ROOT/benchmarks/loom-model-ab/scripts/arms.sh"
 PROTOCOL_SHA="$(fugue_protocol_sha "$BENCH")"
 [[ "$FUGUE_SUITE_ID" == 'fugue-f1-map-v1' && "$FUGUE_PROTOCOL_VERSION" == v1 ]] || fail 'suite identity drifted'
 [[ "$PROTOCOL_SHA" == 'd2629e9eb966e25364e24a34423e55247040344115874dc2f2de5fee415beed1' ]] || fail 'immutable protocol hash changed'
-[[ "$(bash "$RUN" --list | tail -n +2 | wc -l)" -eq 8 ]] || fail 'arm list is incomplete'
+ARM_LIST="$(bash "$RUN" --list | tail -n +2)"
+[[ "$(wc -l <<<"$ARM_LIST")" -eq 9 ]] || fail 'local arm list is incomplete'
+grep -q '^glm-v10-dcp2 ' <<<"$ARM_LIST" || fail 'v10 arm is absent'
+! grep -q '^sol ' <<<"$ARM_LIST" || fail 'cloud arm leaked into the local-only F1 harness'
 [[ "$(fugue_benchmark_arm_record glm-v8 | cut -f2)" == 'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8' ]] || fail 'v8 arm identity drifted'
 
 contains "$BENCH/frozen/brief.md" 'one statically declared worker computation'

@@ -16,7 +16,11 @@ FUGUE_PROTOCOL_FILES=(
 FUGUE_EXTRA_ARM_IDS=(glm-v8)
 
 fugue_benchmark_arm_ids() {
-  benchmark_arm_ids
+  local arm record
+  while IFS= read -r arm; do
+    record="$(benchmark_arm_record "$arm")"
+    [[ "${record%%$'\t'*}" == desktop-vllm/* ]] && printf '%s\n' "$arm"
+  done < <(benchmark_arm_ids)
   printf '%s\n' "${FUGUE_EXTRA_ARM_IDS[@]}"
 }
 
