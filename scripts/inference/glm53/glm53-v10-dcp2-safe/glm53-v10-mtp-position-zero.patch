@@ -1,0 +1,63 @@
+diff --git a/vllm/models/glm5next/nvidia/mtp.py b/vllm/models/glm5next/nvidia/mtp.py
+--- a/vllm/models/glm5next/nvidia/mtp.py
++++ b/vllm/models/glm5next/nvidia/mtp.py
+@@ -87,9 +87,8 @@
+         spec_step_index: int = 0,
+     ) -> torch.Tensor:
+         assert inputs_embeds is not None
+-        # Fused: zero pos-0 embeds + enorm(embeds) + hnorm(prev) + cat -> [N, 2H].
++        # Position zero contains a shifted live token during MTP first-pass.
+         eh_input = fused_eh_norm(
+-            positions,
+             inputs_embeds,
+             previous_hidden_states,
+             self.enorm.weight,
+diff --git a/vllm/models/glm5next/nvidia/ops/fused_eh_norm.py b/vllm/models/glm5next/nvidia/ops/fused_eh_norm.py
+--- a/vllm/models/glm5next/nvidia/ops/fused_eh_norm.py
++++ b/vllm/models/glm5next/nvidia/ops/fused_eh_norm.py
+@@ -16,7 +16,6 @@
+ 
+ @triton.jit
+ def _fused_eh_norm_kernel(
+-    pos_ptr,
+     embeds_ptr,
+     embeds_stride,
+     prev_ptr,
+@@ -29,16 +28,12 @@
+     H: tl.constexpr,
+     BLOCK: tl.constexpr,
+ ):
+-    """MTP input fusion: zero embeds at position 0, RMSNorm(embeds) with enorm
+-    and RMSNorm(prev_hidden) with hnorm, written side-by-side into ``out``
+-    ([N, 2H]) ready for the eh_proj GEMM. Replaces where + 2x RMSNorm + cat."""
++    """Normalize live MTP embeddings and previous hidden states into [N, 2H]."""
+     tok = tl.program_id(0)
+     off = tl.arange(0, BLOCK)
+     mask = off < H
+ 
+-    pos = tl.load(pos_ptr + tok)
+     e = tl.load(embeds_ptr + tok * embeds_stride + off, mask=mask, other=0.0)
+-    e = tl.where(pos == 0, 0.0, e.to(tl.float32))
+     ew = tl.load(enorm_w_ptr + off, mask=mask)
+     e_normed = _rms_norm(e, ew, eps, H)
+     tl.store(out_ptr + tok * out_stride + off, e_normed, mask=mask)
+@@ -50,18 +45,16 @@
+ 
+ 
+ def fused_eh_norm(
+-    positions: torch.Tensor,
+     inputs_embeds: torch.Tensor,
+     previous_hidden: torch.Tensor,
+     enorm_w: torch.Tensor,
+     hnorm_w: torch.Tensor,
+     eps: float,
+ ) -> torch.Tensor:
+-    """Returns cat([enorm(masked embeds), hnorm(prev_hidden)]) -> [N, 2H]."""
++    """Return ``cat([enorm(inputs_embeds), hnorm(previous_hidden)])``."""
+     n, h = inputs_embeds.shape
+     out = torch.empty(n, 2 * h, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+     _fused_eh_norm_kernel[(n,)](
+-        positions,
+         inputs_embeds,
+         inputs_embeds.stride(0),
+         previous_hidden,

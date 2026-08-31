@@ -69,9 +69,17 @@ jq -e '
     "thinkingLevel": "xhigh"
   } and
   .targets.glm == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k",
+    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
     "thinkingLevel": "max"
-  }
+  } and
+  .targets["glm-v10-dcp2"] == {
+    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
+    "thinkingLevel": "max"
+  } and
+  any(.rules[];
+    .id == "glm-v10-dcp2-subagents-use-max" and
+    .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
+    .use == {"kind": "named", "target": "glm-v10-dcp2"})
 ' "$ROUTING" >/dev/null || fail "Pi routing lacks exact qwen/glm named targets"
 
 reference_frs="$(mktemp)"

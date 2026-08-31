@@ -15,6 +15,10 @@
     "glm": {
       "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
       "thinkingLevel": "max"
+    },
+    "glm-v10-dcp2": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
+      "thinkingLevel": "max"
     }
   },
   "rules": [
@@ -27,6 +31,17 @@
       "use": {
         "kind": "named",
         "target": "glm"
+      }
+    },
+    {
+      "id": "glm-v10-dcp2-subagents-use-max",
+      "when": {
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10"
+      },
+      "use": {
+        "kind": "named",
+        "target": "glm-v10-dcp2"
       }
     },
     {

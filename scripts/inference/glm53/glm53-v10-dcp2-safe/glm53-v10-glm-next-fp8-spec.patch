@@ -1,0 +1,35 @@
+diff --git a/vllm/model_executor/layers/attention/mla_attention.py b/vllm/model_executor/layers/attention/mla_attention.py
+--- a/vllm/model_executor/layers/attention/mla_attention.py
++++ b/vllm/model_executor/layers/attention/mla_attention.py
+@@ -2174,6 +2174,13 @@
+         model_version = get_mla_kv_model_version(
+             self.kv_cache_dtype, hf_text_config
+         )
++        if (
++            model_version is None
++            and self.kv_cache_dtype == "fp8_ds_mla"
++            and int(getattr(hf_text_config, "qk_rope_head_dim", -1)) == 0
++            and os.environ.get("VLLM_B12X_GLM_NOPE_FP8", "0") == "1"
++        ):
++            model_version = "glm_next_fp8"
+         if model_version is None and glm_fp8_rope:
+             model_version = "glm_fp8_rope"
+         return MLAAttentionSpec(
+@@ -2179,2 +2186,7 @@
+         return MLAAttentionSpec(
++            page_size_padded=(
++                vllm_config.cache_config.block_size * 656
++                if model_version == "glm_next_fp8"
++                else None
++            ),
+             **common_kwargs,
+diff --git a/vllm/v1/kv_cache_interface.py b/vllm/v1/kv_cache_interface.py
+--- a/vllm/v1/kv_cache_interface.py
++++ b/vllm/v1/kv_cache_interface.py
+@@ -543,2 +543,6 @@
+                 return self.storage_block_size * 584
++            if self.model_version == "glm_next_fp8":
++                # Explicit B12X GLM_NEXT ABI: 512 E4M3 latent bytes plus four
++                # FP32 group-128 scales, with no RoPE suffix.
++                return self.storage_block_size * 528
+             # V3.2 main MLA: 656-byte custom layout (kv_lora_rank=512 +

@@ -1,0 +1,33 @@
+--- a/vllm/v1/kv_cache_interface.py
++++ b/vllm/v1/kv_cache_interface.py
+@@ -433,6 +433,11 @@
+             f"Configured decode-context-parallel size must be positive: "
+             f"{configured_dcp}"
+         )
++    # Attention KV is sequence-sharded under DCP. Recurrent state is not: each
++    # rank must retain the complete position-indexed Mamba table even though
++    # align mode recycles the resident state pages.
++    if isinstance(spec, MambaSpec):
++        return 1
+     replicated = bool(getattr(spec, "dcp_replicated", False))
+     override = getattr(spec, "dcp_kv_shard_count", None)
+     if replicated:
+--- a/vllm/v1/worker/gpu/block_table.py
++++ b/vllm/v1/worker/gpu/block_table.py
+@@ -125,8 +125,15 @@
+             bpk = self.blocks_per_kv_block[i]
+             if bpk > 1:
+                 block_ids = [b * bpk + k for b in block_ids for k in range(bpk)]
++            end = start + len(block_ids)
++            capacity = self.block_tables[i].gpu.shape[1]
++            if end > capacity:
++                raise RuntimeError(
++                    f"Block table write for request {req_index}, group {i} "
++                    f"exceeds row capacity ({end} > {capacity})"
++                )
+             self.block_tables[i].stage_write(req_index, start, block_ids)
+-            self.num_blocks.np[i, req_index] = start + len(block_ids)
++            self.num_blocks.np[i, req_index] = end
+ 
+     def apply_staged_writes(self) -> None:
+         if self.num_kv_cache_groups == 0:

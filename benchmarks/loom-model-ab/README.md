@@ -21,9 +21,10 @@ fan-out feature. Scores are never comparable between the two benchmark
 families.
 
 The benchmark supports DeepSeek V4 Flash, two immutable Qwen3.8-27B runtime
-profiles, the experimental Qwen3.8 Flash-Next FP8 runtime, and three immutable
-GLM-5.3 Flash v84 runtime profiles. Results are comparable only when both
-`protocol_version` and the complete protocol SHA match.
+profiles, the experimental Qwen3.8 Flash-Next FP8 runtime, three historical
+immutable GLM-5.3 Flash v84 profiles, and the qualified v10 TP2/EP2/DCP2
+profile. Results are comparable only when both `protocol_version` and the
+complete protocol SHA match.
 
 ## Protocol versions
 
@@ -69,6 +70,7 @@ This measures planning directly. No implementation is generated or inferred.
 | `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
 | `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
 | `glm-fp8` | `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v6` |
+| `glm-v10-dcp2` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max` | 359,000 | `glm53-flash-exl3-k4-vllm-sm120-v10` |
 
 List the machine-readable catalog with:
 
@@ -80,9 +82,10 @@ bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 `qwen-vllm-bf16kv` measures the single-GPU vLLM DFlash2/BF16-KV profile;
 `qwen` remains the historical TP2 SGLang/DSpark arm. `qwen-flash-next` measures
 the experimental TP2 FP8 profile with its 51.2B-element PLE table in host RAM.
-`glm-fp8` follows the active canonical GLM route. `glm-mtp` remains the
-multimodal v5 comparison arm, and `glm-dflash` is runtime-profile evidence—not
-an independent base-model observation.
+`glm-v10-dcp2` follows the qualified active GLM route. `glm-fp8` preserves the
+historical v6 comparison, `glm-mtp` remains the multimodal v5 comparison arm,
+and `glm-dflash` is runtime-profile evidence—not an independent base-model
+observation.
 
 ### Asymmetries that remain part of the experiment
 
@@ -132,7 +135,10 @@ firmware, Pi, protocol-hash, or Loom-baseline change inside one batch.
 Use only attended, versioned switch paths:
 
 ```bash
-# Active GLM text FP8 KV + MTP3 384K
+# Active GLM vision FP8 KV + MTP3 TP2/EP2/DCP2 359K
+bash scripts/inference/glm53/run-glm53-flash-exl3-k4-vllm-sm120-v10.sh --launch
+
+# Historical GLM text FP8 KV + MTP3 384K
 bash scripts/inference/glm53/switch-glm53-exl3-profile-v6.sh start
 
 # GLM multimodal MTP3 384K rollback
@@ -255,7 +261,7 @@ Before the first run:
 bash scripts/verify-harness.sh
 bash scripts/isolation.sh off
 bash scripts/isolation.sh status
-bash scripts/run-arm.sh --probe glm-fp8
+bash scripts/run-arm.sh --probe glm-v10-dcp2
 ```
 
 If the Loom baseline is stale, refresh and commit it before comparing arms:
@@ -267,7 +273,7 @@ bash scripts/baseline.sh
 Per run:
 
 ```bash
-bash scripts/run-arm.sh glm-fp8 1  # v2 by default
+bash scripts/run-arm.sh glm-v10-dcp2 1  # v2 by default
 ```
 
 `run.json` records `protocol_version` and the hash over every selected protocol

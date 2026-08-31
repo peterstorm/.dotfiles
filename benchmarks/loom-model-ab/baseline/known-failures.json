@@ -1,8 +1,6 @@
 {
-  "base_sha": "3815f65bfab4351f49f0e21e7b7415cdab1fda86",
+  "base_sha": "48483ba25ccacd87cb386df7d33f177573de99f1",
   "typecheck": "clean",
-  "total_tests": 5603,
-  "known_failures": [
-    "orchestration-contract volume graph keeps top-level source domains acyclic across runtime and type-only imports"
-  ]
+  "total_tests": 5651,
+  "known_failures": []
 }

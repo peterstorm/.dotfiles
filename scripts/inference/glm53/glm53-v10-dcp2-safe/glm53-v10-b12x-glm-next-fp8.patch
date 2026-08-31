@@ -1,0 +1,185 @@
+diff --git a/vllm/v1/attention/backends/mla/b12x_mla_sparse.py b/vllm/v1/attention/backends/mla/b12x_mla_sparse.py
+--- a/vllm/v1/attention/backends/mla/b12x_mla_sparse.py
++++ b/vllm/v1/attention/backends/mla/b12x_mla_sparse.py
+@@ -175,6 +175,8 @@
+ # decode specializations; upstream/default images must continue to fail closed.
+ _GLM_NOPE_NVFP4_OPT_IN_ENV = "VLLM_B12X_GLM_NOPE_NVFP4"
+ _GLM_NOPE_NVFP4_OPT_IN = os.environ.get(_GLM_NOPE_NVFP4_OPT_IN_ENV, "0") == "1"
++_GLM_NOPE_FP8_OPT_IN_ENV = "VLLM_B12X_GLM_NOPE_FP8"
++_GLM_NOPE_FP8_OPT_IN = os.environ.get(_GLM_NOPE_FP8_OPT_IN_ENV, "0") == "1"
+ 
+ 
+ def _require_callable_parameters(
+@@ -840,24 +842,29 @@
+             hf_text_config = vllm_config.model_config.hf_text_config
+             if not hasattr(hf_text_config, "index_topk"):
+                 return "B12X_MLA_SPARSE requires a model with index_topk config"
+-        # FAIL-CLOSED: q_head_dim 512 is ambiguous in b12x -- it is both the
+-        # NoPE contract (kv_lora_rank 512 + rope 0) and DSV4's (448 + 64). Only
+-        # the NVFP4 record width tells them apart, so refuse 512 for any other
+-        # cache dtype rather than let a NoPE model silently take DSV4 geometry.
++        # FAIL-CLOSED: q_head_dim 512 is ambiguous between GLM NoPE and DSV4.
++        # Admit it only through an image-specific cache ABI whose B12X reader
++        # and writer are pinned together.
+         if head_size == _NOPE_Q_HEAD_DIM:
+-            if kv_cache_dtype != "nvfp4_ds_mla":
+-                return (
+-                    "B12X_MLA_SPARSE supports head_size=512 "
+-                    "(qk_rope_head_dim=0) only with "
+-                    f"kv_cache_dtype='nvfp4_ds_mla'; got {kv_cache_dtype!r}"
+-                )
+-            if not _GLM_NOPE_NVFP4_OPT_IN:
+-                # Do not let an ordinary image select a locally patched device
+-                # contract merely because the host-side width is compatible.
++            if kv_cache_dtype == "fp8_ds_mla":
++                if not _GLM_NOPE_FP8_OPT_IN:
++                    return (
++                        "B12X_MLA_SPARSE NoPE FP8 requires the pinned GLM_NEXT "
++                        f"device ABI; set {_GLM_NOPE_FP8_OPT_IN_ENV}=1 only in "
++                        "that image."
++                    )
++            elif kv_cache_dtype == "nvfp4_ds_mla":
++                if not _GLM_NOPE_NVFP4_OPT_IN:
++                    return (
++                        "B12X_MLA_SPARSE NoPE NVFP4 requires the dedicated "
++                        "rope-less device build; set "
++                        f"{_GLM_NOPE_NVFP4_OPT_IN_ENV}=1 only in that image."
++                    )
++            else:
+                 return (
+-                    "B12X_MLA_SPARSE NoPE (head_size=512) NVFP4 requires the "
+-                    "dedicated rope-less b12x device build. Set "
+-                    f"{_GLM_NOPE_NVFP4_OPT_IN_ENV}=1 only in that image."
++                    "B12X_MLA_SPARSE supports head_size=512 only with an "
++                    "explicit GLM NoPE cache ABI; got "
++                    f"kv_cache_dtype={kv_cache_dtype!r}"
+                 )
+         return None
+ 
+@@ -870,10 +877,15 @@
+         cache_dtype_str: str = "auto",
+     ) -> tuple[int, ...]:
+         if cache_dtype_str == "fp8_ds_mla":
+-            # V32 fp8_ds_mla packed: 656 B/token (512 NoPE + 16 inline FP32
+-            # scales + 128 BF16 RoPE). Mirrors the FlashMLA / SPARSE_MLA_SM120
+-            # layout; b12x's GLM_NSA decode reads the same record.
+-            return (num_blocks, block_size, 656)
++            configured_nope = _current_model_uses_nope_mla()
++            is_nope = (
++                head_size == _NOPE_Q_HEAD_DIM
++                if configured_nope is None
++                else configured_nope
++            )
++            # Jovian's explicit GLM_NEXT record is 512 E4M3 latent bytes plus
++            # four FP32 group-128 scales, with no RoPE suffix.
++            return (num_blocks, block_size, 528 if is_nope else 656)
+         if cache_dtype_str == "nvfp4_ds_mla":
+             configured_nope = _current_model_uses_nope_mla()
+             is_nope = (
+@@ -1394,6 +1406,27 @@
+             self.kv_cache_dtype == "nvfp4_ds_mla"
+             and int(mla_args["qk_rope_head_dim"]) == 0
+         )
++        self._kv_nope_fp8 = bool(
++            self.kv_cache_dtype == "fp8_ds_mla"
++            and int(mla_args["qk_rope_head_dim"]) == 0
++        )
++        self._b12x_model_type: int | None = None
++        if self._kv_nope_fp8:
++            if not _GLM_NOPE_FP8_OPT_IN:
++                raise RuntimeError(
++                    f"GLM NoPE FP8 requires {_GLM_NOPE_FP8_OPT_IN_ENV}=1"
++                )
++            try:
++                from b12x.attention.sparse_mla import (
++                    ModelType,
++                    concat_and_cache_glm_next_mla,
++                )
++            except ImportError as exc:
++                raise RuntimeError(
++                    "GLM NoPE FP8 requires the pinned B12X GLM_NEXT API"
++                ) from exc
++            self._b12x_model_type = int(ModelType.GLM_NEXT)
++            self._concat_and_cache_glm_next_mla = concat_and_cache_glm_next_mla
+         if _KV_FP8_ROPE_REQUESTED and not _is_glm_moe_dsa_model():
+             logger.warning(
+                 "KV_FP8_ROPE=1 ignored: compact MLA records are restricted to "
+@@ -1541,6 +1574,8 @@
+                 )
+             else:
+                 self._kv_record_bytes = 368 if self._kv_fp8_rope else 432
++        elif self._kv_nope_fp8:
++            self._kv_record_bytes = 528
+         else:
+             self._kv_record_bytes = 656
+         logger.info(
+@@ -1659,6 +1694,7 @@
+                     max_batch=int(max_batch),
+                     max_chunks_per_row=self._num_splits_cap,
+                     page_size=self.block_size,
++                    model_type=self._b12x_model_type,
+                     head_major_output=head_major_output,
+                 )
+             )
+@@ -1891,6 +1927,19 @@
+         b12x package writer API, which does not replace or perturb the stock
+         writer used by KV_FP8_ROPE=0.
+         """
++        if kv_cache.numel() == 0:
++            return
++        if self._kv_nope_fp8:
++            if kv_cache_dtype != "fp8_ds_mla" or int(k_pe.shape[-1]) != 0:
++                raise RuntimeError(
++                    "GLM_NEXT FP8 writer requires fp8_ds_mla and zero-width RoPE"
++                )
++            self._concat_and_cache_glm_next_mla(
++                kv_c_normed,
++                kv_cache,
++                slot_mapping.flatten(),
++            )
++            return
+         if not (self._kv_fp8_rope or self._kv_nope_nvfp4):
+             return super().do_kv_cache_update(
+                 kv_c_normed,
+@@ -1900,8 +1949,6 @@
+                 kv_cache_dtype,
+                 k_scale,
+             )
+-        if kv_cache.numel() == 0:
+-            return
+         if kv_cache_dtype != "nvfp4_ds_mla":
+             raise RuntimeError(
+                 f"KV_FP8_ROPE writer reached a non-NVFP4 cache: {kv_cache_dtype!r}"
+@@ -2525,7 +2572,11 @@
+         slots = owner * int(padded_tokens) + rank_start + local_pos
+ 
+         k_scale = getattr(layer, "_k_scale", None)
+-        if self._kv_fp8_rope:
++        if self._kv_nope_fp8:
++            if int(k_pe_flat.shape[-1]) != 0:
++                raise RuntimeError("GLM_NEXT gathered-cache append requires NoPE")
++            self._concat_and_cache_glm_next_mla(kv_c, gathered_buffer, slots)
++        elif self._kv_fp8_rope:
+             if self._nvfp4_dynamic_scale:
+                 self._concat_and_cache_nvfp4_mla_fp8_rope(
+                     kv_c,
+@@ -2615,16 +2666,9 @@
+ 
+         rows_to_warm = (1, 2, 4, max(1, int(max_batched)))
+         seen_rows: set[int] = set()
+-        # GLM fp8_ds_mla cache records are 656 B/token; the real KV cache is
+-        # laid out (num_blocks, block_size, 656) (see the allocator at the
+-        # block-shape branch above), so a page's stride(0) = block_size*656.
+-        # The prewarm dummy must match that layout -- (1, block_size, 656) --
+-        # so _cache_block_stride_bytes sees stride >= page_size*656. The prior
+-        # (block_size, 1, 656) shape put block_size in dim 0, giving stride(0)
+-        # = 656 < page_size*656, which tripped the SM120 stride assertion
+-        # whenever this prewarm ran (i.e. spec + cudagraphs, the first config
+-        # to reach here; verifier-only and eager-snap both skipped it).
+-        # One page is enough: prewarm top-k indices all point at slot zero.
++        # Match the allocator's native paged record width (528 bytes for the
++        # explicit GLM_NEXT FP8 ABI, 656 for the legacy FP8+RoPE ABI). One page
++        # is enough because every prewarm top-k index points at slot zero.
+         kv_cache = torch.zeros(
+             (1, self.block_size, self._kv_record_bytes),
+             dtype=torch.uint8,

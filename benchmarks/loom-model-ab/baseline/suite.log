@@ -41,12 +41,12 @@ WARNING: Task T1 waives regression and new-test verification but description doe
 loom: cannot resolve transcript project directory /tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/deep/project: ENOENT: no such file or directory, lstat '/tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 loom: cannot resolve transcript project directory /tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/deep/project: ENOENT: no such file or directory, lstat '/tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 loom: cannot resolve transcript project directory /tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/deep/project: ENOENT: no such file or directory, lstat '/tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-loom: cannot scan transcript projects root /tmp/slug-config-ZG7BNC/does-not-exist/projects for prefix -tmp-slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-: ENOENT: no such file or directory, scandir '/tmp/slug-config-ZG7BNC/does-not-exist/projects'
+loom: cannot scan transcript projects root /tmp/slug-config-6pGFj1/does-not-exist/projects for prefix -tmp-slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-: ENOENT: no such file or directory, scandir '/tmp/slug-config-6pGFj1/does-not-exist/projects'
 loom: cannot resolve transcript project directory /tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/deep/project: ENOENT: no such file or directory, lstat '/tmp/slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-loom: cannot scan transcript projects root /tmp/slug-config-ZG7BNC/does-not-exist/projects for prefix -tmp-slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-: ENOENT: no such file or directory, scandir '/tmp/slug-config-ZG7BNC/does-not-exist/projects'
+loom: cannot scan transcript projects root /tmp/slug-config-6pGFj1/does-not-exist/projects for prefix -tmp-slug-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-: ENOENT: no such file or directory, scandir '/tmp/slug-config-6pGFj1/does-not-exist/projects'
 Updated checkboxes in issue #42
 Posted wave 1 summary to issue #42
-WARNING: Failed to post GH comment: offline; wrote fallback summary to /tmp/loom-wave-summary-port-QWcyQp/.claude/reviews/wave-1-review.md
+WARNING: Failed to post GH comment: offline; wrote fallback summary to /tmp/loom-wave-summary-port-etLy41/.claude/reviews/wave-1-review.md
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -67,10 +67,10 @@ All checks passed. Advancing...
 
 === All waves complete! ===
 Run `bun engine/src/cli.ts helper cleanup-state` to finalize.
-Committed receipt wave-completion:1381d26383925ddf528b9f9629215d79 at revision 1.
-Wave 1 was already completed by legacy-wave:9c2e30bfcafedff1f0c2548689208a4d; reusing receipt wave-completion:1381d26383925ddf528b9f9629215d79.
-Wave 1 was already completed by legacy-wave:9c2e30bfcafedff1f0c2548689208a4d; reusing receipt wave-completion:1381d26383925ddf528b9f9629215d79.
-Wave 1 was already completed by legacy-wave:9c2e30bfcafedff1f0c2548689208a4d; reusing receipt wave-completion:1381d26383925ddf528b9f9629215d79.
+Committed receipt wave-completion:ddbedb4845bb096755cb4c9a329e53d1 at revision 1.
+Wave 1 was already completed by legacy-wave:c1710bc03c470943d3871d3520275b8b; reusing receipt wave-completion:ddbedb4845bb096755cb4c9a329e53d1.
+Wave 1 was already completed by legacy-wave:c1710bc03c470943d3871d3520275b8b; reusing receipt wave-completion:ddbedb4845bb096755cb4c9a329e53d1.
+Wave 1 was already completed by legacy-wave:c1710bc03c470943d3871d3520275b8b; reusing receipt wave-completion:ddbedb4845bb096755cb4c9a329e53d1.
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -91,9 +91,9 @@ All checks passed. Advancing...
 
 === All waves complete! ===
 Run `bun engine/src/cli.ts helper cleanup-state` to finalize.
-Committed receipt wave-completion:8278b7903828f0a72e74eecd3593a42c at revision 1.
-Wave 1 was concurrently completed by legacy-wave:0f4bef705706642a542411f4f724181e; reusing receipt wave-completion:8278b7903828f0a72e74eecd3593a42c.
-Wave 1 was concurrently completed by legacy-wave:0f4bef705706642a542411f4f724181e; reusing receipt wave-completion:8278b7903828f0a72e74eecd3593a42c.
+Committed receipt wave-completion:8c025a04fd502215b1721fadd7778b49 at revision 1.
+Wave 1 was concurrently completed by legacy-wave:1715dc69b16da03c62a594e7444336a1; reusing receipt wave-completion:8c025a04fd502215b1721fadd7778b49.
+Wave 1 was concurrently completed by legacy-wave:1715dc69b16da03c62a594e7444336a1; reusing receipt wave-completion:8c025a04fd502215b1721fadd7778b49.
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -117,6 +117,7 @@ Run `bun engine/src/cli.ts helper cleanup-state` to finalize.
 Committed receipt wave-completion:6015b44a0232c3c032ed1092a53505d2 at revision 1.
 Wave 1 was concurrently completed by status-wave-run; reusing committed receipt wave-completion:6015b44a0232c3c032ed1092a53505d2.
 Wave 1 was concurrently completed by status-wave-run; reusing committed receipt wave-completion:6015b44a0232c3c032ed1092a53505d2.
+Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed, untrusted-regression-tests-failed, new-tests-not-observed.
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -128,28 +129,12 @@ No wave tasks are still executing
 4. Wave completion suite: legacy-unavailable (verification_manifest and active receipt absent).
 FAILED: Not all tasks have been reviewed.
   Unreviewed: T1
-Completing wave 1 gate...
-
-No wave tasks are still executing
-1. Implementation proof verified (1/1 tasks).
-2. Test evidence verified (1/1 tasks):
-     T1: vitest: Tests 5 passed
-3. New tests verified (1/1 tasks):
-     T1: 1 new test, 1 assertion
-4. Wave completion suite: legacy-unavailable (verification_manifest and active receipt absent).
-5. Reviews verified (1/1 tasks):
-     T1: passed
-6. Spec alignment verified (verdict: PASSED).
-7. No critical code review findings.
-8. Lifecycle artifacts: none bound to this wave.
-9. Review Packet workspace integrity: legacy packet authority unavailable.
-Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed, untrusted-regression-tests-failed, new-tests-not-observed.
 Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed, untrusted-regression-tests-failed, new-tests-not-observed, declared-artifact-not-changed.
-Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed.
-Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed, untrusted-regression-tests-failed.
 capture-orchestration-result: no reservation for missing-correlator
-capture-orchestration-result: rejected (run-authority): orchestration capture requires both runsRoot and runDirectory
-capture-orchestration-result: rejected (no-final-payload): result carried no final text payload
+loom: supplied agent transcript path /tmp/loom-capture-run-KSvipP/runs/run.acceptance-1/absent.jsonl is unavailable: ENOENT: no such file or directory, lstat '/tmp/loom-capture-run-KSvipP/runs/run.acceptance-1/absent.jsonl' — falling back to derived lookup
+capture-orchestration-result: retriable failure (run-authority): orchestration capture requires both runsRoot and runDirectory
+loom: supplied agent transcript path /tmp/loom-capture-run-P4Bj1h/runs/run.acceptance-1/absent.jsonl is unavailable: ENOENT: no such file or directory, lstat '/tmp/loom-capture-run-P4Bj1h/runs/run.acceptance-1/absent.jsonl' — falling back to derived lookup
+capture-orchestration-result: rejected (transcript-locator): no transcript can be located for session "s1" agent "agent-abc": none was supplied and the derived path does not exist
 Task T1 settlement: retry-required.
 Task T1 settlement: implemented.
 
@@ -157,36 +142,42 @@ Wave 1 implementation complete. Run: /wave-gate
 Task T1 settlement: implemented.
 
 Wave 1 implementation complete. Run: /wave-gate
-Executable-model bindings valid: 1 lifecycles, 0 pipeline, 0 invariants
-Task graph valid: 1 tasks
-Task graph populated: 1 tasks, waves: 1
-Task graph valid: 1 tasks
-Task graph populated: 1 tasks, waves: 1
-Task graph populated: 1 tasks, waves: 1
-Task graph populated: 1 tasks, waves: 1
+Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed.
 Task graph populated: 1 tasks, waves: 1
 Task graph populated: 1 tasks, waves: 1
 Task T1 settlement: implemented.
 
 Wave 1 implementation complete. Run: /wave-gate
 Task graph populated: 1 tasks, waves: 1
-findReport: --reporter=json requested but stdout carried no parseable summary
-findReport: stale report '/tmp/loom-report-32R08G/out.json' — artifact exceeds the freshness window
-findReport: --reporter=json requested but stdout carried no parseable summary
-findReport: stale report '/tmp/loom-report-eOcqmB/target/surefire-reports/TEST-a.xml' — artifact exceeds the freshness window
-findReport: stale report '/tmp/loom-report-order-d7JZlr/out.json' — artifact predates this tool call
-findReport: --reporter=json requested but stdout carried no parseable summary
-findReport: stale report '/tmp/loom-report-order-1Rm51S/target/surefire-reports/TEST-a.xml' — artifact predates this tool call
-findReport: stale report '/tmp/loom-report-order-NbH7ag/target/surefire-reports/TEST-old.xml' — artifact predates this tool call
-findReport: stale report '/tmp/loom-report-order-m9gzSq/out.json' — artifact predates this tool call
-findReport: --reporter=json requested but stdout carried no parseable summary
-Task graph populated: 1 tasks, waves: 1
-capture-orchestration-result: rejected (transcript-json): invalid final Claude transcript JSON at line 4: Unexpected end of JSON input
+Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed, untrusted-regression-tests-failed.
 Task graph populated: 1 tasks, waves: 1
 Task graph populated: 1 tasks, waves: 1
+findReport: --reporter=json requested but stdout carried no parseable summary
+findReport: stale report '/tmp/loom-report-abjPuH/out.json' — artifact exceeds the freshness window
+findReport: --reporter=json requested but stdout carried no parseable summary
+findReport: stale report '/tmp/loom-report-7eji6m/target/surefire-reports/TEST-a.xml' — artifact exceeds the freshness window
+findReport: stale report '/tmp/loom-report-order-CzJ0aW/out.json' — artifact predates this tool call
+findReport: --reporter=json requested but stdout carried no parseable summary
+findReport: stale report '/tmp/loom-report-order-Ltxpiz/target/surefire-reports/TEST-a.xml' — artifact predates this tool call
+findReport: stale report '/tmp/loom-report-order-yHf059/target/surefire-reports/TEST-old.xml' — artifact predates this tool call
+findReport: stale report '/tmp/loom-report-order-IC0rPf/out.json' — artifact predates this tool call
+findReport: --reporter=json requested but stdout carried no parseable summary
 Task graph populated: 1 tasks, waves: 1
-loom: cannot access /tmp/loom-test-LaL5G3/sealed/active_task_graph.json: EACCES: permission denied, access '/tmp/loom-test-LaL5G3/sealed/active_task_graph.json' — assuming present (fail closed)
-loom: cannot access /tmp/loom-test-LaL5G3/sealed/active_task_graph.json: EACCES: permission denied, access '/tmp/loom-test-LaL5G3/sealed/active_task_graph.json' — assuming present (fail closed)
+Task graph populated: 1 tasks, waves: 1
+Task graph populated: 1 tasks, waves: 1
+Task graph populated: 1 tasks, waves: 1
+Task graph populated: 2 tasks, waves: 1
+Executable-model bindings valid: 1 lifecycles, 0 pipeline, 0 invariants
+Task graph valid: 1 tasks
+Task graph populated: 2 tasks, waves: 1
+Task graph valid: 1 tasks
+loom: cannot access /tmp/loom-test-CLaaPW/sealed/active_task_graph.json: EACCES: permission denied, access '/tmp/loom-test-CLaaPW/sealed/active_task_graph.json' — assuming present (fail closed)
+loom: cannot access /tmp/loom-test-CLaaPW/sealed/active_task_graph.json: EACCES: permission denied, access '/tmp/loom-test-CLaaPW/sealed/active_task_graph.json' — assuming present (fail closed)
+Task graph populated: 2 tasks, waves: 1
+Task graph populated: 1 tasks, waves: 1
+Task graph populated: 2 tasks, waves: 1
+Task graph populated: 2 tasks, waves: 1
+Task graph populated: 1 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
@@ -198,15 +189,6 @@ Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-Task graph populated: 2 tasks, waves: 1
-capture-orchestration-result: rejected (transcript-json): invalid final Claude transcript JSON at line 2: Unexpected end of JSON input
 Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
 Task graph populated: 2 tasks, waves: 1
@@ -222,60 +204,62 @@ Task T1 settlement: implemented.
 Wave 1 implementation complete. Run: /wave-gate
 Task graph populated: 2 tasks, waves: 1
 update-task-status: T1 result ignored (duplicate); current authority preserved
-loom: supplied agent transcript path /tmp/loom-dispatch-zf33jG/missing-transcript.jsonl is unavailable: ENOENT: no such file or directory, lstat '/tmp/loom-dispatch-zf33jG/missing-transcript.jsonl' — falling back to derived lookup
-[loom] store-reviewer-findings: cannot read trusted code-reviewer prompt (ENOENT: no such file or directory, open '/tmp/loom-dispatch-zf33jG/missing-transcript.jsonl') — review evidence cannot be attributed
-capture-orchestration-result: rejected (no-final-payload): result carried no final text payload
+Task graph populated: 2 tasks, waves: 1
+Task graph populated: 2 tasks, waves: 1
+Task graph populated: 2 tasks, waves: 1
+WARNING: countMarkers failed for /tmp/loom-cm-XVtZAk/nope.md: ENOENT: no such file or directory, open '/tmp/loom-cm-XVtZAk/nope.md'
+plan-alignment completed but no plan-alignment.md found in /tmp/loom-rt-buaux1/.claude/specs
+plan-alignment completed but no plan-alignment.md found in /tmp/loom-rt-PQ5jho/nonexistent
+loom(pi): pathExistsFailClosed cannot access /tmp/loom-pi-project-rules-TYSpyP/.claude/linter/rules: ELOOP: too many symbolic links encountered, access '/tmp/loom-pi-project-rules-TYSpyP/.claude/linter/rules' — assuming active (fail closed)
+findReport: stale report '/tmp/loom-stale-artifact-cSInZR/results.json' — artifact predates this tool call
+loom: supplied agent transcript path /tmp/loom-dispatch-5v2b27/missing-transcript.jsonl is unavailable: ENOENT: no such file or directory, lstat '/tmp/loom-dispatch-5v2b27/missing-transcript.jsonl' — falling back to derived lookup
+[loom] store-reviewer-findings: cannot read trusted code-reviewer prompt (ENOENT: no such file or directory, open '/tmp/loom-dispatch-5v2b27/missing-transcript.jsonl') — review evidence cannot be attributed
+loom: supplied agent transcript path /tmp/loom-dispatch-NTh5n5/missing-transcript.jsonl is unavailable: ENOENT: no such file or directory, lstat '/tmp/loom-dispatch-NTh5n5/missing-transcript.jsonl' — falling back to derived lookup
+capture-orchestration-result: rejected (transcript-locator): no transcript can be located for session "dispatch-resilience-227428-1788178035692-capture-rejected" agent "agent-capture": none was supplied and the derived path does not exist
 dispatch: evidence snapshot failed for ../../invalid session: invalid session id
 dispatch: evidence snapshot failed for ../../invalid session: invalid session id
-findReport: stale report '/tmp/loom-stale-artifact-SFoe3r/results.json' — artifact predates this tool call
-loom(pi): pathExistsFailClosed cannot access /tmp/loom-pi-project-rules-pnB4rI/.claude/linter/rules: ELOOP: too many symbolic links encountered, access '/tmp/loom-pi-project-rules-pnB4rI/.claude/linter/rules' — assuming active (fail closed)
-WARNING: countMarkers failed for /tmp/loom-cm-iQsFIm/nope.md: ENOENT: no such file or directory, open '/tmp/loom-cm-iQsFIm/nope.md'
-plan-alignment completed but no plan-alignment.md found in /tmp/loom-rt-ledezp/.claude/specs
-plan-alignment completed but no plan-alignment.md found in /tmp/loom-rt-glnisc/nonexistent
-loom: cannot access /tmp/loom-failclosed-kIZm5I/loop: ELOOP: too many symbolic links encountered, access '/tmp/loom-failclosed-kIZm5I/loop' — assuming present (fail closed)
-mark-subagent-active: failed to persist task_graph pointer authority for roster-1555657-u6mlxf-review-pointer-eloop/reviewer-1 — cross-repo SubagentStop cleanup is unavailable: ELOOP: too many symbolic links encountered, open '/proc/self/fd/22/roster-1555657-u6mlxf-review-pointer-eloop.task_graph'
-markAgentActive: a-1 already on the roster for roster-1555657-u6mlxf-ok — duplicate SubagentStart ignored
-bindMachineAgent: a-1/code-implementer-agent already bound for roster-1555657-u6mlxf-ok — duplicate SubagentStart ignored
-mark-subagent-active: agent_id "evil:id" is reserved or path-unsafe (whitespace/colon/slash/'..', or the pi-grant- write-grant namespace) — no machine identity can be bound
-loom: cannot resolve transcript project directory /tmp/spec-check-derived-1787918545458/project: ENOENT: no such file or directory, lstat '/tmp/spec-check-derived-1787918545458/project'
-Spec-check: 0 critical, 0 high
+loom: cannot access /tmp/loom-failclosed-MISYza/loop: ELOOP: too many symbolic links encountered, access '/tmp/loom-failclosed-MISYza/loop' — assuming present (fail closed)
 loom(pi): capture-orchestration-result: captured request:reviewer:1 (197 bytes)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
-loom(pi): capture-orchestration-result: rejected (correlator): harness correlator authority is unreadable: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+loom(pi): capture-orchestration-result: retriable failure (correlator): harness correlator authority is unreadable: Expected property name or '}' in JSON at position 1 (line 1 column 2)
 loom(pi): standalone request-bound capture failed for code-reviewer: correlator: harness correlator authority is unreadable: Expected property name or '}' in JSON at position 1 (line 1 column 2); task state untouched
 loom(pi): capture-orchestration-result: no reservation for ["call-without-correlator",0,"code-reviewer"]
 loom(pi): standalone request-bound capture failed for code-reviewer: no reservation for ["call-without-correlator",0,"code-reviewer"]; task state untouched
 loom(pi): capture-orchestration-result: rejected (transcript-shape): messages must be an array
+mark-subagent-active: failed to persist task_graph pointer authority for roster-230621-ku13vl-review-pointer-eloop/reviewer-1 — cross-repo SubagentStop cleanup is unavailable: ELOOP: too many symbolic links encountered, open '/proc/self/fd/22/roster-230621-ku13vl-review-pointer-eloop.task_graph'
+markAgentActive: a-1 already on the roster for roster-230621-ku13vl-ok — duplicate SubagentStart ignored
+bindMachineAgent: a-1/code-implementer-agent already bound for roster-230621-ku13vl-ok — duplicate SubagentStart ignored
+mark-subagent-active: agent_id "evil:id" is reserved or path-unsafe (whitespace/colon/slash/'..', or the pi-grant- write-grant namespace) — no machine identity can be bound
 loom(pi): child write grant rejected — edits remain blocked: write grant agent does not match child agent identity
+loom: cannot resolve transcript project directory /tmp/spec-check-derived-1788178040036/project: ENOENT: no such file or directory, lstat '/tmp/spec-check-derived-1788178040036/project'
+Spec-check: 0 critical, 0 high
 Task T1 review: blocked (1 critical)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
 WARNING: review output has no matching active review run for this generation-aware task for T1 — evidence ignored
 WARNING: review finding location(s) outside Review Packet scope: README.md for T1 — marking evidence_capture_failed
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
 loom(pi): ad-hoc architecture-tech-lead completion — no task graph for session "019fca39-f989-7510-8e62-50dadbcad420", nothing to apply
-Spec trace graph upgraded atomically to v2
 loom(pi): no task graph for session "019fca39-f989-7510-8e62-50dadbcad421"; code-reviewer completion was NOT applied
 loom(pi): reserved subagent cleanup failed: release parent task-graph pointer lease for 019fca39-f989-7510-8e62-50dadbcad421: exact pointer ownership lost (ownership-lost)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
 WARNING: code-reviewer review result Task identity T2 does not match reserved Task T1 — findings NOT stored
 Task T1 review: blocked (1 critical)
 Spec trace graph upgraded atomically to v2
+loom(pi): capture-orchestration-result: captured request:0071b987e510358313b9a2018807295fb1144e299df1823492dd496525137ac7 (74 bytes)
+loom(pi): code-reviewer belongs to a standalone review run — task state untouched
+Spec trace graph upgraded atomically to v2
 Spec trace graph already uses the exact requested v2 ownership
 Spec trace graph upgraded atomically to v2
 Spec trace graph upgraded atomically to v2
-WARNING: code-implementer-agent transcript parse failed, inferred task T1 from executing_tasks
-Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed.
-ERROR in cleanupSubagentFlag: injected cleanup crash
-Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed.
-loom(pi): capture-orchestration-result: captured request:0071b987e510358313b9a2018807295fb1144e299df1823492dd496525137ac7 (74 bytes)
+loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
+loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
+loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
+loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
+Retired stale lock generation legacy-bb421fa35db885ce507b0ef5: /tmp/lock-test-1788178044542-eijetyu68ok/stale.lock
+Retired stale lock generation stale-generation: /tmp/lock-test-1788178044581-smif0qeuxf/orphaned-claim.lock
+loom(pi): capture-orchestration-result: captured request:a2a025b66915931d1492358312f67c432e0e0a65e78933a08e9bed09152f1988 (74 bytes)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
-loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
-loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
-loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
-loom: cannot resolve transcript project directory /nonexistent/project/dir: ENOENT: no such file or directory, lstat '/nonexistent'
-Retired stale lock generation legacy-bb421fa35db885ce507b0ef5: /tmp/lock-test-1787918552422-h4ij0geink9/stale.lock
-Retired stale lock generation stale-generation: /tmp/lock-test-1787918552498-atdu9idaf66/orphaned-claim.lock
-Retired stale lock generation stale-generation: /tmp/lock-test-1787918552620-3pq3lc09dc1/claimant-exits-during-wait.lock
+Retired stale lock generation stale-generation: /tmp/lock-test-1788178044675-wydwerk5azl/claimant-exits-during-wait.lock
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -290,7 +274,7 @@ No wave tasks are still executing
 6. Spec alignment verified (verdict: PASSED).
 7. No critical code review findings.
 FAILED: lifecycle machine files declared in the plan were not created by this wave:
-  LC-1: .tmp-loom-gate-handler-hPkx0s/src/order-machine.ts
+  LC-1: .tmp-loom-gate-handler-wffAtn/src/order-machine.ts
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -305,14 +289,14 @@ No wave tasks are still executing
 6. Spec alignment verified (verdict: PASSED).
 7. No critical code review findings.
 8. Lifecycle artifacts verified (1):
-     LC-1: .tmp-loom-gate-handler-8t2ZNb/order-machine.ts
+     LC-1: .tmp-loom-gate-handler-mMHd3l/order-machine.ts
 9. Review Packet workspace integrity: legacy packet authority unavailable.
 
 All checks passed. Advancing...
 
 === All waves complete! ===
 Run `bun engine/src/cli.ts helper cleanup-state` to finalize.
-Committed receipt wave-completion:297b3f95dbebc8aef832844bf5a74323 at revision 1.
+Committed receipt wave-completion:36722ec5c6649bb1b85d088cf1500669 at revision 1.
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -327,7 +311,7 @@ No wave tasks are still executing
 6. Spec alignment verified (verdict: PASSED).
 7. No critical code review findings.
 FAILED: lifecycle machine files declared in the plan were not created by this wave:
-  LC-1: .tmp-loom-gate-handler-Av631f/order-machine.ts
+  LC-1: .tmp-loom-gate-handler-6kJCEX/order-machine.ts
 Completing wave 1 gate...
 
 No wave tasks are still executing
@@ -342,48 +326,51 @@ No wave tasks are still executing
 6. Spec alignment verified (verdict: PASSED).
 7. No critical code review findings.
 FAILED: lifecycle machine files declared in the plan were not created by this wave:
-  LC-1: .tmp-loom-gate-handler-y2yelc/order-machine.ts
-loom(pi): capture-orchestration-result: captured request:a2a025b66915931d1492358312f67c432e0e0a65e78933a08e9bed09152f1988 (74 bytes)
-loom(pi): code-reviewer belongs to a standalone review run — task state untouched
-cleanup-stale-subagents: stat failed for /tracking/uncertain.active: EACCES stat
-cleanup-stale-subagents: stat failed for /tracking/unstatable.active: EACCES stat
-cleanup-stale-subagents: remove failed for /tracking/stale.active: EROFS remove
-cleanup-stale-subagents: read-directory failed for /unreadable: EACCES readdir
-cleanup-stale-subagents: stat failed for /tmp/claude-subagents/cleanup-diagnostic-1561379-1787918557388.active: ELOOP: too many symbolic links encountered, stat '/tmp/claude-subagents/cleanup-diagnostic-1561379-1787918557388.active'
+  LC-1: .tmp-loom-gate-handler-MjS0S4/order-machine.ts
+WARNING: code-implementer-agent transcript parse failed, inferred task T1 from executing_tasks
 loom(pi): capture-orchestration-result: captured request:reviewer:1 (217 bytes)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
-loom(pi): durable Pi orchestration reservation recovery failed: Pi tool call call-session-binding-current-after-stale could not be recovered unambiguously; inaccessible session bindings: run.pi-session-binding-stale-unrelated: run directory does not exist: /tmp/loom-pi-review-events-1nxfxF/orchestration-runs-pi-session-binding-stale-unrelated/run.pi-session-binding-stale-unrelated
+Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed.
+ERROR in cleanupSubagentFlag: injected cleanup crash
+loom(pi): durable Pi orchestration reservation recovery failed: Pi tool call call-session-binding-current-after-stale could not be recovered unambiguously; inaccessible session bindings: run.pi-session-binding-stale-unrelated: run directory does not exist: /tmp/loom-pi-review-events-1sG3wh/orchestration-runs-pi-session-binding-stale-unrelated/run.pi-session-binding-stale-unrelated
+Task T1 legacy completion quarantined pending fresh revalidation: task-not-completed.
 loom(pi): capture-orchestration-result: captured request:reviewer:1 (74 bytes)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
 loom(pi): capture-orchestration-result: captured request:reviewer:10 (74 bytes)
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
 loom(pi): request-bound result 1 for code-reviewer was missing or mismatched; run transcript was not captured
+loom(pi): capture-orchestration-result: rejected (agent-failed): code-reviewer exited without a successful result (exitCode=0, stopReason=error, errorMessage="Connection error.")
 loom(pi): standalone request-bound capture failed for code-reviewer: agent-failed: code-reviewer exited without a successful result (exitCode=0, stopReason=error, errorMessage="Connection error."); task state untouched
-loom(pi): standalone request-bound capture failed for code-reviewer: agent-failed: code-reviewer exited without a successful result (exitCode=0, stopReason=error, errorMessage="Connection error."); task state untouched
-loom(pi): capture rejection for code-reviewer[0] was terminalized but its audit event could not be persisted: EACCES: permission denied, open '/proc/self/fd/23/append.lock'
+loom(pi): capture-orchestration-result: rejected (rejection-audit-unsynchronized): capture refused (agent-failed: code-reviewer exited without a successful result (exitCode=0, stopReason=error, errorMessage="Connection error.")); it was terminalised but its audit event could not be persisted: EACCES: permission denied, open '/proc/self/fd/23/append.lock'
+loom(pi): standalone request-bound capture failed for code-reviewer: rejection-audit-unsynchronized: capture refused (agent-failed: code-reviewer exited without a successful result (exitCode=0, stopReason=error, errorMessage="Connection error.")); it was terminalised but its audit event could not be persisted: EACCES: permission denied, open '/proc/self/fd/23/append.lock'; task state untouched
 loom(pi): request-bound result 1 for code-reviewer was missing or mismatched; run transcript was not captured
-[loom machine] gate standing down for handlers-e2e-1561784-1787918558687-e2e-4: contended session
-record-evidence: standing down for handlers-e2e-1561784-1787918558687-e2e-4 — binding exists but attribution is unsound (contended or leaked); nothing recorded
+cleanup-stale-subagents: stat failed for /tracking/uncertain.active: EACCES stat
+cleanup-stale-subagents: stat failed for /tracking/unstatable.active: EACCES stat
+cleanup-stale-subagents: remove failed for /tracking/stale.active: EROFS remove
+cleanup-stale-subagents: read-directory failed for /unreadable: EACCES readdir
+cleanup-stale-subagents: stat failed for /tmp/claude-subagents/cleanup-diagnostic-235710-1788178047820.active: ELOOP: too many symbolic links encountered, stat '/tmp/claude-subagents/cleanup-diagnostic-235710-1788178047820.active'
+[loom machine] gate standing down for handlers-e2e-235766-1788178048058-e2e-4: contended session
+record-evidence: standing down for handlers-e2e-235766-1788178048058-e2e-4 — binding exists but attribution is unsound (contended or leaked); nothing recorded
+loom(pi): request-bound result 1 for code-reviewer was missing or mismatched; run transcript was not captured
 anyActiveSubagent: malformed task-graph pointer for session-a — assuming it serves this graph (fail closed)
 anyActiveSubagent: malformed task-graph pointer for session-a — assuming it serves this graph (fail closed)
 anyActiveSubagent: malformed task-graph pointer for session-a — assuming it serves this graph (fail closed)
-anyActiveSubagent: cannot read the task-graph pointer for unreadable (EACCES: permission denied, open '/tmp/loom-active-probe-OIqr0E/unreadable.task_graph') — assuming it serves this graph (fail closed)
-anyActiveSubagent: cannot read /tmp/loom-active-probe-cNJnUt (EACCES: permission denied, scandir '/tmp/loom-active-probe-cNJnUt') — assuming a subagent is active (fail closed)
-readBindings: skipped 1 malformed binding line(s) for gate-fail-closed-1562453-1787918560118-corrupt-binding
+anyActiveSubagent: cannot read the task-graph pointer for unreadable (EACCES: permission denied, open '/tmp/loom-active-probe-w4e9eL/unreadable.task_graph') — assuming it serves this graph (fail closed)
+anyActiveSubagent: cannot read /tmp/loom-active-probe-7HngIO (EACCES: permission denied, scandir '/tmp/loom-active-probe-7HngIO') — assuming a subagent is active (fail closed)
+readBindings: skipped 1 malformed binding line(s) for gate-fail-closed-236500-1788178049082-corrupt-binding
 [loom] resume-after-clear: unknown TaskStatus 'ghost'
-loom(pi): request-bound result 1 for code-reviewer was missing or mismatched; run transcript was not captured
 loom(pi): request-bound result 1 for code-reviewer was missing or mismatched; run transcript was not captured
 loom(pi): request-bound result authority rejected for code-reviewer: result marker request:reviewer:1 does not match correlated request request:reviewer:10; transcript was not captured
 loom(pi): request-bound result authority rejected for code-reviewer: result marker request:reviewer:10 does not match correlated request request:reviewer:1; transcript was not captured
-loom(pi): pathExistsFailClosed cannot access /tmp/loom-pi-review-events-1nxfxF/subagents/019fca39-f989-7510-8e62-50dadbcad40c.task_graph: ENOTDIR: not a directory, access '/tmp/loom-pi-review-events-1nxfxF/subagents/019fca39-f989-7510-8e62-50dadbcad40c.task_graph' — assuming active (fail closed)
+loom(pi): pathExistsFailClosed cannot access /tmp/loom-pi-review-events-1sG3wh/subagents/019fca39-f989-7510-8e62-50dadbcad40c.task_graph: ENOTDIR: not a directory, access '/tmp/loom-pi-review-events-1sG3wh/subagents/019fca39-f989-7510-8e62-50dadbcad40c.task_graph' — assuming active (fail closed)
 loom(pi): activated child write grant for T1/019fca39-f989-7510-8e62-50dadbcad421
 loom(pi): activated child write grant for T2/019fca39-f989-7510-8e62-50dadbcad422
-loom(pi): child write grant rejected — edits remain blocked: ENOENT: no such file or directory, rename '/tmp/loom-pi-review-events-1nxfxF/subagents/pi-write-grants/1db7345c70e6bed4ccc9303bb4a910083f4cbf39d4b87998a85db74c309e370f.json' -> '/tmp/loom-pi-review-events-1nxfxF/subagents/pi-write-grants/1db7345c70e6bed4ccc9303bb4a910083f4cbf39d4b87998a85db74c309e370f.json.1550880.1404b6788f9f41a8.claim'
+loom(pi): child write grant rejected — edits remain blocked: ENOENT: no such file or directory, rename '/tmp/loom-pi-review-events-1sG3wh/subagents/pi-write-grants/adfa90608cc1a2e6af4039a5b84580fff3b81a3693466af7ed039ed46c0fec6e.json' -> '/tmp/loom-pi-review-events-1sG3wh/subagents/pi-write-grants/adfa90608cc1a2e6af4039a5b84580fff3b81a3693466af7ed039ed46c0fec6e.json.225818.7cc7eb5d215cc205.claim'
 loom(pi): activated child write grant for phase:specify/019fca39-f989-7510-8e62-50dadbcad431
-loom(pi): reserved subagent cleanup failed: revoke write grant 1: EACCES: permission denied, unlink '/tmp/loom-pi-review-events-1nxfxF/subagents/pi-write-grants/a986bde342ed20f20d51c8ffe94faba36639470ca42b5104048278d2276cb613.json'
+loom(pi): reserved subagent cleanup failed: revoke write grant 1: EACCES: permission denied, unlink '/tmp/loom-pi-review-events-1sG3wh/subagents/pi-write-grants/051ed97e61c6a2ed596b7028d3de4946a8edf8f57001d36b4a569ca4ef3a0cdf.json'
 loom(pi): code-implementer-agent failed before evidence capture completed (exitCode=1, stopReason=n/a); exact result ignored (duplicate)
 loom(pi): activated child write grant for T1/019fca39-f989-7510-8e62-50dadbcad427
-loom(pi): child write grant rejected — edits remain blocked: ENOENT: no such file or directory, rename '/tmp/loom-pi-review-events-1nxfxF/subagents/pi-write-grants/53c34fb340f6e949e47fdad336001fa9dc77a32b7603a07db5ef8dee68cb34c7.json' -> '/tmp/loom-pi-review-events-1nxfxF/subagents/pi-write-grants/53c34fb340f6e949e47fdad336001fa9dc77a32b7603a07db5ef8dee68cb34c7.json.1550880.f031f66b871854c0.claim'
+loom(pi): child write grant rejected — edits remain blocked: ENOENT: no such file or directory, rename '/tmp/loom-pi-review-events-1sG3wh/subagents/pi-write-grants/a8c973a07563e4046187ac52a41762ad0bb3bfdded293ffbb14f65ce682d659c.json' -> '/tmp/loom-pi-review-events-1sG3wh/subagents/pi-write-grants/a8c973a07563e4046187ac52a41762ad0bb3bfdded293ffbb14f65ce682d659c.json.225818.370ea383973875cd.claim'
 loom(pi): code-reviewer belongs to a standalone review run — task state untouched
 loom(pi): ad-hoc review-verifier-agent completion — no task graph for session "019fca39-f989-7510-8e62-50dadbcad40f", nothing to apply
 loom(pi): ad-hoc review-verifier-agent completion — no task graph for session "019fca39-f989-7510-8e62-50dadbcad40f", nothing to apply
@@ -402,7 +389,7 @@ loom(pi): late result for T1 does not match its current attempt authority — re
 loom(pi): T1 result ignored (stale)
 loom: subagent flag cleanup failed for code-reviewer/019fca39-f989-7510-8e62-50dadbcad40a: injected roster cleanup failure
 Task T1 review: blocked (1 critical)
-loom(pi): subagent-stop processing failed for result 1 for agent code-implementer-agent (task T1): Corrupt state file (orphan execution reservation T1: executing_tasks must name an existing Task; run helper repair-task-graph to remove corrupt orphan reservations): /tmp/loom-pi-review-events-1nxfxF/active_task_graph.json — continuing with remaining results
+loom(pi): subagent-stop processing failed for result 1 for agent code-implementer-agent (task T1): Corrupt state file (orphan execution reservation T1: executing_tasks must name an existing Task; run helper repair-task-graph to remove corrupt orphan reservations): /tmp/loom-pi-review-events-1sG3wh/active_task_graph.json — continuing with remaining results
 loom(pi): T1 stopped; preserved completed/missing legacy state
 loom(pi): T1 produced no structured test evidence (no Bash call was classified as a test run) — transcript fallback used; the wave gate will reject it
 WARNING: code-reviewer failed before evidence capture completed (exitCode=1, stopReason=n/a) for T1 — marking evidence_capture_failed
@@ -427,14 +414,14 @@ loom(pi): T1 produced no structured test evidence (no Bash call was classified a
 loom(pi): T1 produced no structured test evidence (verdict=exit-not-attributable, classified=[bun test | grep -v fail]) — transcript fallback used; the wave gate will reject it
 loom(pi): T1 produced no structured test evidence (verdict=exit-not-attributable, classified=[cd engine && bun test | grep -v fail]) — transcript fallback used; the wave gate will reject it
 loom(pi): T1 result ignored (duplicate)
+Lint rules valid: 17 rules loaded (1 project rules from '/tmp/loom-rules-UlS0L7')
 loom(pi): code-implementer-agent failed before evidence capture completed (exitCode=1, stopReason=n/a); exact result ignored (duplicate)
 loom(pi): code-implementer-agent failed before evidence capture completed (exitCode=1, stopReason=n/a); exact result ignored (duplicate)
-Lint rules valid: 17 rules loaded (1 project rules from '/tmp/loom-rules-WbAmzJ')
 loom(pi): code-implementer-agent failed before evidence capture completed (exitCode=1, stopReason=n/a); exact result ignored (duplicate)
 loom(pi): T2 produced no structured test evidence (no Bash call was classified as a test run) — transcript fallback used; the wave gate will reject it
 loom(pi): T2 settlement: retry-required
-loom(pi): cannot finalize reserved implementation attempts for session 019fca39-f989-7510-8e62-50dadbcad431 — task graph pointer unreadable: resolveTaskGraph: session pointer /tmp/loom-pi-review-events-1nxfxF/subagents/019fca39-f989-7510-8e62-50dadbcad431.task_graph names missing graph '/tmp/loom-pi-review-events-1nxfxF/active_task_graph.json' — refusing local task-graph fallback
-loom(pi): subagent-stop processing failed for result 1 for agent code-implementer-agent (task T1): resolveTaskGraph: session pointer /tmp/loom-pi-review-events-1nxfxF/subagents/019fca39-f989-7510-8e62-50dadbcad431.task_graph names missing graph '/tmp/loom-pi-review-events-1nxfxF/active_task_graph.json' — refusing local task-graph fallback — continuing with remaining results
+loom(pi): cannot finalize reserved implementation attempts for session 019fca39-f989-7510-8e62-50dadbcad431 — task graph pointer unreadable: resolveTaskGraph: session pointer /tmp/loom-pi-review-events-1sG3wh/subagents/019fca39-f989-7510-8e62-50dadbcad431.task_graph names missing graph '/tmp/loom-pi-review-events-1sG3wh/active_task_graph.json' — refusing local task-graph fallback
+loom(pi): subagent-stop processing failed for result 1 for agent code-implementer-agent (task T1): resolveTaskGraph: session pointer /tmp/loom-pi-review-events-1sG3wh/subagents/019fca39-f989-7510-8e62-50dadbcad431.task_graph names missing graph '/tmp/loom-pi-review-events-1sG3wh/active_task_graph.json' — refusing local task-graph fallback — continuing with remaining results
 loom(pi): spec-check-invoker messages are malformed: messages[0] must be an object — marking spec-check evidence_capture_failed
 loom(pi): SPEC_CHECK_CRITICAL_COUNT (0) does not match CRITICAL: findings (1); counts must match the findings - re-run /wave-gate — marking spec-check evidence_capture_failed
 JSON report written to /home/peterstorm/.dotfiles/benchmarks/loom-model-ab/baseline/suite.json

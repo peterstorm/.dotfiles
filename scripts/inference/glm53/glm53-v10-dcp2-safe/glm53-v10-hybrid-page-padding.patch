@@ -1,0 +1,17 @@
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -1616,1 +1616,5 @@
+-    assert all(s.page_size_padded is None for s in mla_specs.values())
++    assert all(
++        s.page_size_padded is None
++        or s.page_size_padded >= s.real_page_size_bytes
++        for s in mla_specs.values()
++    )
+@@ -1732,5 +1736,2 @@
+-    if not all(
+-        type(s) is MLAAttentionSpec and s.page_size_padded is None
+-        for s in attn_uniform.kv_cache_specs.values()
+-    ):
++    if not all(type(s) is MLAAttentionSpec for s in attn_uniform.kv_cache_specs.values()):
+         return None

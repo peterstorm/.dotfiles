@@ -1,0 +1,172 @@
+--- a/vllm/v1/attention/backends/mla/b12x_mla_sparse.py
++++ b/vllm/v1/attention/backends/mla/b12x_mla_sparse.py
+@@ -196,6 +196,48 @@
+         )
+ 
+ 
++def _require_packed_paged_kv_cache(
++    kv_cache: torch.Tensor,
++    block_size: int,
++    record_bytes: int,
++    feature: str,
++) -> torch.Tensor:
++    """Return a B12X-safe packed-record view or fail before kernel launch."""
++    expected_tail = (int(block_size), int(record_bytes))
++    strides = tuple(kv_cache.stride()) if kv_cache.ndim == 3 else ()
++    minimum_page_stride = int(block_size) * int(record_bytes)
++    available_bytes = (
++        kv_cache.untyped_storage().nbytes() - int(kv_cache.storage_offset())
++        if kv_cache.dtype == torch.uint8
++        else 0
++    )
++    required_bytes = (
++        (int(kv_cache.shape[0]) - 1) * strides[0] + minimum_page_stride
++        if kv_cache.ndim == 3 and int(kv_cache.shape[0]) > 0
++        else 0
++    )
++    if (
++        kv_cache.dtype != torch.uint8
++        or kv_cache.ndim != 3
++        or int(kv_cache.shape[0]) <= 0
++        or tuple(kv_cache.shape[1:]) != expected_tail
++        or strides[2] != 1
++        or strides[1] != int(record_bytes)
++        or strides[0] < minimum_page_stride
++        or strides[0] % 16 != 0
++        or kv_cache.data_ptr() % 16 != 0
++        or required_bytes > available_bytes
++    ):
++        raise ValueError(
++            f"{feature} requires packed {record_bytes}-byte records in "
++            f"({block_size},{record_bytes}) pages with a 16-byte-aligned "
++            f"page stride >= {minimum_page_stride}; got "
++            f"shape={tuple(kv_cache.shape)}, stride={strides}, "
++            f"dtype={kv_cache.dtype}, available_bytes={available_bytes}"
++        )
++    return kv_cache
++
++
+ def _cdiv(x: int, y: int) -> int:
+     return (int(x) + int(y) - 1) // int(y)
+ 
+@@ -1419,6 +1461,7 @@
+             try:
+                 from b12x.attention.sparse_mla import (
+                     ModelType,
++                    compile_glm_next_mla_cache_writer,
+                     concat_and_cache_glm_next_mla,
+                 )
+             except ImportError as exc:
+@@ -1426,6 +1469,9 @@
+                     "GLM NoPE FP8 requires the pinned B12X GLM_NEXT API"
+                 ) from exc
+             self._b12x_model_type = int(ModelType.GLM_NEXT)
++            self._compile_glm_next_mla_cache_writer = (
++                compile_glm_next_mla_cache_writer
++            )
+             self._concat_and_cache_glm_next_mla = concat_and_cache_glm_next_mla
+         if _KV_FP8_ROPE_REQUESTED and not _is_glm_moe_dsa_model():
+             logger.warning(
+@@ -2411,15 +2457,12 @@
+             attn_metadata, attn_metadata.num_actual_tokens
+         ):
+             raise RuntimeError("CKV gather called for an ineligible attention batch")
+-        if (
+-            kv_cache.dtype != torch.uint8
+-            or kv_cache.ndim != 3
+-            or tuple(kv_cache.shape[1:]) != (self.block_size, self._kv_record_bytes)
+-            or not kv_cache.is_contiguous()
+-        ):
+-            raise ValueError(
+-                "CKV gather requires contiguous native paged KV cache pages"
+-            )
++        kv_cache = _require_packed_paged_kv_cache(
++            kv_cache,
++            self.block_size,
++            self._kv_record_bytes,
++            "CKV gather",
++        )
+ 
+         assert attn_metadata.dcp_local_cu_seq_lens is not None
+         padded_tokens = attn_metadata.dcp_padded_total_tokens
+@@ -2666,13 +2709,38 @@
+ 
+         rows_to_warm = (1, 2, 4, max(1, int(max_batched)))
+         seen_rows: set[int] = set()
+-        # Match the allocator's native paged record width (528 bytes for the
+-        # explicit GLM_NEXT FP8 ABI, 656 for the legacy FP8+RoPE ABI). One page
+-        # is enough because every prewarm top-k index points at slot zero.
+-        kv_cache = torch.zeros(
+-            (1, self.block_size, self._kv_record_bytes),
+-            dtype=torch.uint8,
+-            device=self.device,
++        # Match the allocator's native view. GLM_NEXT keeps packed 528-byte
++        # records but widens only the physical page stride to the hybrid
++        # manager's 656-byte/token page size.
++        if self._kv_nope_fp8:
++            page_storage = torch.zeros(
++                (self.block_size * 656,), dtype=torch.uint8, device=self.device
++            )
++            kv_cache = torch.as_strided(
++                page_storage,
++                (1, self.block_size, self._kv_record_bytes),
++                (self.block_size * 656, self._kv_record_bytes, 1),
++            )
++            writer_source = torch.zeros(
++                (1, self.kv_lora_rank), dtype=torch.bfloat16, device=self.device
++            )
++            for slot_dtype in (torch.int32, torch.int64):
++                self._compile_glm_next_mla_cache_writer(
++                    writer_source,
++                    kv_cache,
++                    torch.zeros((1,), dtype=slot_dtype, device=self.device),
++                )
++        else:
++            kv_cache = torch.zeros(
++                (1, self.block_size, self._kv_record_bytes),
++                dtype=torch.uint8,
++                device=self.device,
++            )
++        kv_cache = _require_packed_paged_kv_cache(
++            kv_cache,
++            self.block_size,
++            self._kv_record_bytes,
++            "B12X prewarm",
+         )
+         for rows in rows_to_warm:
+             rows = int(rows)
+@@ -2892,13 +2960,9 @@
+             )
+             nsa_cache_seqlens = per_token_cache
+ 
+-        # KV cache -> paged rank-3 uint8. B12X unified SM120 kernels consume
+-        # flat slot ids in selected_indices, but compute raw byte offsets as:
+-        #   block = slot // page_size, local = slot % page_size
+-        # so the cache tensor itself must expose a per-block stride of
+-        # block_size * record_bytes. The older split path used a token-flat
+-        # (num_slots, 1, bytes) view; that makes stride(0) one record and breaks
+-        # the unified block-stride contract.
++        # KV cache -> paged rank-3 uint8. B12X computes each address from the
++        # physical page stride plus a packed record offset. The page stride may
++        # exceed block_size * record_bytes for hybrid Mamba/MLA allocation.
+         kv_u8 = kv_c_and_k_pe_cache.view(torch.uint8)
+         if kv_u8.ndim == 3 and kv_u8.shape[1] == self.block_size:
+             kv_cache = kv_u8
+@@ -2915,11 +2979,12 @@
+                 f"(blocks,{self.block_size},bytes) or (slots,1,bytes), got "
+                 f"{tuple(kv_u8.shape)}"
+             )
+-        if not kv_cache.is_contiguous():
+-            raise ValueError(
+-                "B12X_MLA_SPARSE requires a contiguous native paged KV cache; "
+-                f"got stride={tuple(kv_cache.stride())}"
+-            )
++        kv_cache = _require_packed_paged_kv_cache(
++            kv_cache,
++            self.block_size,
++            self._kv_record_bytes,
++            "B12X_MLA_SPARSE",
++        )
+         if use_ckv_gather:
+             layer_idx = self._resolve_layer_index(layer)
+             prefetch_registry = attn_metadata.ckv_prefetch_registry

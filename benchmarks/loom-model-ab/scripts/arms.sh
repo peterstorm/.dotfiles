@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8)
+BENCHMARK_ARM_IDS=(ds4 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8 glm-v10-dcp2)
 BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
 BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
 BENCHMARK_V1_PROTOCOL_FILES=(
@@ -146,6 +146,15 @@ benchmark_arm_record() {
         'glm53-flash-exl3-k4-vllm-sm120-v6' \
         'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v6.sh start' \
         'GLM-5.3 Flash EXL3 K4 v84 Text FP8 KV + MTP3 384K'
+      ;;
+    glm-v10-dcp2)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max' \
+        'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10' \
+        '359000' \
+        'glm53-flash-exl3-k4-vllm-sm120-v10' \
+        'bash ~/.dotfiles/scripts/inference/glm53/run-glm53-flash-exl3-k4-vllm-sm120-v10.sh --launch' \
+        'GLM-5.3 Flash EXL3 K4 Vision FP8 KV + MTP3 TP2/EP2/DCP2 v10'
       ;;
     *)
       printf 'unknown arm: %s (expected one of: %s)\n' \
