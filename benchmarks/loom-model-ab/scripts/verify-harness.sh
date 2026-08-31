@@ -42,24 +42,37 @@ jq -e '.typecheck == "clean" and (.total_tests | type == "number" and . > 0) and
 while IFS= read -r arm; do
   IFS=$'\t' read -r model served context profile _ label \
     <<<"$(benchmark_arm_record "$arm")"
-  selector="${model#desktop-vllm/}"
+  provider="${model%%/*}"
+  selector="${model#*/}"
   model_id="${selector%%:*}"
   thinking_level="${selector##*:}"
   [[ "$served" == "$model_id" ]] \
     || fail "$arm serves $served but its Pi selector targets $model_id"
   [[ "$context" =~ ^[1-9][0-9]*$ ]] || fail "$arm has an invalid context window: $context"
-  jq -e \
-    --arg id "$model_id" \
-    --arg level "$thinking_level" \
-    --argjson context "$context" '
-      any(.providers["desktop-vllm"].models[];
-        .id == $id and
-        .contextWindow == $context and
-        .thinkingLevelMap[$level] != null)
-    ' "$PI_MODELS" >/dev/null \
-    || fail "$arm ($label) disagrees with pi/models.json or pins an unsupported thinking level"
-  grep -Fqx "  $profile" "$PROFILE_CATALOG" \
-    || fail "$arm profile is absent from the inference profile catalog: $profile"
+  if [[ "$provider" == desktop-vllm ]]; then
+    jq -e \
+      --arg id "$model_id" \
+      --arg level "$thinking_level" \
+      --argjson context "$context" '
+        any(.providers["desktop-vllm"].models[];
+          .id == $id and
+          .contextWindow == $context and
+          .thinkingLevelMap[$level] != null)
+      ' "$PI_MODELS" >/dev/null \
+      || fail "$arm ($label) disagrees with pi/models.json or pins an unsupported thinking level"
+    grep -Fqx "  $profile" "$PROFILE_CATALOG" \
+      || fail "$arm profile is absent from the inference profile catalog: $profile"
+  else
+    [[ "$profile" == "cloud:$provider" ]] \
+      || fail "$arm cloud profile '$profile' disagrees with selector provider '$provider'"
+    expected_context="$((context / 1000))K"
+    pi --list-models "$model_id" 2>/dev/null | awk \
+      -v provider="$provider" -v model="$model_id" -v context="$expected_context" \
+      '$1 == provider && $2 == model && $3 == context { found = 1 } END { exit !found }' \
+      || fail "$arm ($label) is absent from Pi's provider catalog at context $expected_context"
+    [[ "$thinking_level" =~ ^(off|minimal|low|medium|high|xhigh|max)$ ]] \
+      || fail "$arm pins an unsupported thinking level: $thinking_level"
+  fi
 done < <(benchmark_arm_ids)
 
 ROUTING="$ROOT/pi/model-routing.json"

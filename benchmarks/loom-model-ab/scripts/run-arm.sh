@@ -83,48 +83,65 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$ARM-$REP"
 RUN_DIR="$BENCH_DIR/runs/$RUN_ID"
 WORKTREE="$LOOM/../loom-bench-$RUN_ID"
 
-# --- the backend must actually be serving the arm's model -------------------
+# --- the selected provider must expose the arm's exact model ----------------
 #
-# Health alone has lied during a cutover before, so this asks for an
-# authenticated model list and checks the served name. Starting a run against
-# the other arm's container is the one mistake that silently invalidates
-# everything downstream.
-
-# Same resolution chain as pi/models.json, including the ssh fallback — on a
-# machine that is not the desktop, the key exists only on the desktop.
-resolve_key() {
-  local candidate
-  for candidate in ~/.config/ds4-flash/api-key ~/.config/qwen38/api-key \
-                   ~/.config/glm53/api-key ~/.config/muse-glimmer/api-key \
-                   ~/.config/sops-nix/secrets/vllm-api-key; do
-    [[ -r "$candidate" ]] && { cat "$candidate"; return 0; }
-  done
-  ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" '
-    for candidate in ~/.config/ds4-flash/api-key ~/.config/qwen38/api-key \
-      ~/.config/glm53/api-key ~/.config/muse-glimmer/api-key; do
-      [ -r "$candidate" ] && { cat "$candidate"; exit 0; }
-    done
+# Local arms attest the authenticated model endpoint and container. Cloud arms
+# attest Pi's provider catalog and authentication without exposing credentials.
+if [[ "$PROFILE_CONTAINER" == cloud:* ]]; then
+  CLOUD_PROVIDER="${PROFILE_CONTAINER#cloud:}"
+  MODEL_ROW="$(pi --list-models "$EXPECTED" 2>/dev/null | awk \
+    -v provider="$CLOUD_PROVIDER" -v model="$EXPECTED" \
+    '$1 == provider && $2 == model { print $1 "\t" $2 "\t" $3; exit }')"
+  IFS=$'\t' read -r CATALOG_PROVIDER CATALOG_MODEL CATALOG_CONTEXT <<<"$MODEL_ROW"
+  EXPECTED_CONTEXT="$((CONTEXT_WINDOW / 1000))K"
+  if [[ "$CATALOG_PROVIDER" != "$CLOUD_PROVIDER" ||
+        "$CATALOG_MODEL" != "$EXPECTED" ||
+        "$CATALOG_CONTEXT" != "$EXPECTED_CONTEXT" ]]; then
+    echo "Pi catalog mismatch: arm '$ARM' needs $CLOUD_PROVIDER/$EXPECTED at $EXPECTED_CONTEXT context." >&2
     exit 1
-  ' 2>/dev/null
-}
+  fi
+  if ! pi auth print-bearer-token --provider "$CLOUD_PROVIDER" --model "$EXPECTED" >/dev/null 2>&1; then
+    echo "Cloud authentication unavailable for $CLOUD_PROVIDER/$EXPECTED." >&2
+    echo "Attended authentication hint: $START_HINT" >&2
+    exit 1
+  fi
+  SERVED="$EXPECTED"
+else
+  # Same resolution chain as pi/models.json, including the ssh fallback — on a
+  # machine that is not the desktop, the key exists only on the desktop.
+  resolve_key() {
+    local candidate
+    for candidate in ~/.config/ds4-flash/api-key ~/.config/qwen38/api-key \
+                     ~/.config/glm53/api-key ~/.config/muse-glimmer/api-key \
+                     ~/.config/sops-nix/secrets/vllm-api-key; do
+      [[ -r "$candidate" ]] && { cat "$candidate"; return 0; }
+    done
+    ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" '
+      for candidate in ~/.config/ds4-flash/api-key ~/.config/qwen38/api-key \
+        ~/.config/glm53/api-key ~/.config/muse-glimmer/api-key; do
+        [ -r "$candidate" ] && { cat "$candidate"; exit 0; }
+      done
+      exit 1
+    ' 2>/dev/null
+  }
 
-API_KEY="$(resolve_key)"
-[[ -n "$API_KEY" ]] || { echo "could not resolve an inference api-key locally or from the desktop" >&2; exit 1; }
-ESCAPED_API_KEY="${API_KEY//\\/\\\\}"
-ESCAPED_API_KEY="${ESCAPED_API_KEY//\"/\\\"}"
+  API_KEY="$(resolve_key)"
+  [[ -n "$API_KEY" ]] || { echo "could not resolve an inference api-key locally or from the desktop" >&2; exit 1; }
+  ESCAPED_API_KEY="${API_KEY//\\/\\\\}"
+  ESCAPED_API_KEY="${ESCAPED_API_KEY//\"/\\\"}"
 
-# Read the credential through curl's stdin config so it never appears in argv.
-MODELS_JSON="$({
-  printf 'header = "Authorization: Bearer %s"\n' "$ESCAPED_API_KEY"
-} | curl --config - -fsS -m 15 \
-  "${INFERENCE_URL:-http://192.168.0.80:8000}/v1/models" 2>/dev/null)" || MODELS_JSON=''
-SERVED="$(jq -er '
-  .data | select(type == "array" and length == 1) | .[0].id | select(type == "string")
-' <<<"$MODELS_JSON" 2>/dev/null)" || SERVED=''
-unset API_KEY ESCAPED_API_KEY MODELS_JSON
+  # Read the credential through curl's stdin config so it never appears in argv.
+  MODELS_JSON="$({
+    printf 'header = "Authorization: Bearer %s"\n' "$ESCAPED_API_KEY"
+  } | curl --config - -fsS -m 15 \
+    "${INFERENCE_URL:-http://192.168.0.80:8000}/v1/models" 2>/dev/null)" || MODELS_JSON=''
+  SERVED="$(jq -er '
+    .data | select(type == "array" and length == 1) | .[0].id | select(type == "string")
+  ' <<<"$MODELS_JSON" 2>/dev/null)" || SERVED=''
+  unset API_KEY ESCAPED_API_KEY MODELS_JSON
 
-if [[ "$SERVED" != "$EXPECTED" ]]; then
-  cat >&2 <<EOF
+  if [[ "$SERVED" != "$EXPECTED" ]]; then
+    cat >&2 <<EOF
 Backend mismatch: :8000 is serving '${SERVED:-<nothing or multiple models>}', arm '$ARM' needs '$EXPECTED'.
 
 Attended startup hint for $PROFILE_LABEL:
@@ -132,19 +149,20 @@ Attended startup hint for $PROFILE_LABEL:
 
 Wait for an authenticated /v1/models before retrying — a cold start takes minutes.
 EOF
-  exit 1
-fi
+    exit 1
+  fi
 
-PROFILE_RUNNING="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
-  "docker inspect --format='{{.State.Running}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
-if [[ "$PROFILE_RUNNING" != true ]]; then
-  cat >&2 <<EOF
+  PROFILE_RUNNING="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
+    "docker inspect --format='{{.State.Running}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
+  if [[ "$PROFILE_RUNNING" != true ]]; then
+    cat >&2 <<EOF
 Runtime profile mismatch: arm '$ARM' requires running container '$PROFILE_CONTAINER'.
 
 Attended startup hint for $PROFILE_LABEL:
   $START_HINT
 EOF
-  exit 1
+    exit 1
+  fi
 fi
 
 if [[ "$PROBE_ONLY" == true ]]; then
