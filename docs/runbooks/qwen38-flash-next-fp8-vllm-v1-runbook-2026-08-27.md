@@ -49,22 +49,31 @@ other memory-heavy jobs concurrently.
 
 ## vLLM support and provenance caveat
 
-Flash-Next model support and PLE RAM offload are not in a released vLLM version at preparation
-time:
+Flash-Next model support was not in a released vLLM version when this image was prepared.
+Upstream status changed after qualification:
 
-- vLLM PR #53896 (`Qwen4Exp` model support) is open;
-- vLLM PR #53899 (PLE CPU offload) is open;
-- the PR reports FP8/BF16 RAM-offload validation on GB200 with TP2/TP4 and DP4+EP4;
+- vLLM PR #53896 (`Qwen4Exp` model support) merged as
+  `e126687a9a828d513c01a07cd69f025f27d63280` on 2026-08-31;
+- vLLM PR #53899 (PLE CPU offload) remains open and needs rebase;
+- draft PR #54371 is a separate UVA PLE-offload direction;
+- the PLE work reports FP8/BF16 RAM-offload validation on GB200 with TP2/TP4 and DP4+EP4;
 - issue #53960 reports a PLE-offload warmup deadlock on TP1/GB10. This profile is fixed to TP2,
   but the failure reinforces the need for local warmup and soak evidence.
 
-The supplied image is published under the official `vllm/vllm-openai` namespace and contains
-the required special build, but its OCI labels say build commit `unknown`, pipeline `local`, and
-image tag `local/vllm-openai:dev`. The installed wheel reports
-`0.1.dev20073+g8e685d198`, but that abbreviated commit was not resolvable in either the public
-vLLM repository or the contributor fork. Its exact image digest and runtime capabilities are
-provable; its source commit is not. Treat it as experimental until a reconstructible official
-build or merged release exists. The stock image also contains a correctness defect on capability-family 12.x: `qsa_select_paged_tokens` excludes that family from `cooperative_topk` and routes through the racy `persistent_topk` kernel. The derived image applies the published `torch.topk(sorted=False)` plus canonical ordering repair and fixes `VLLM_QSA_EXACT_TOPK=3`; see [the DocAI investigation](https://docai.hu/en/blog/qwen38-flash-next-nondeterministic-vllm-kernel) and vLLM issue #51782. A GPU-assisted `vllm serve --help=all` probe succeeded on the
+The merge does not retroactively establish the source of this supplied image. It is published
+under the official `vllm/vllm-openai` namespace and contains the required special build, but its
+OCI labels say build commit `unknown`, pipeline `local`, and image tag
+`local/vllm-openai:dev`. The installed wheel reports `0.1.dev20073+g8e685d198`, but that
+abbreviated commit is not resolvable in the public vLLM repository or contributor forks. Its exact
+image digest and runtime capabilities are provable; its source commit is not. Treat it as
+experimental until a complete Qwen-plus-PLE build is reconstructed from pinned public source.
+The stock image also contains a correctness defect on capability-family 12.x:
+`qsa_select_paged_tokens` excludes that family from `cooperative_topk` and routes through the
+racy `persistent_topk` kernel. Large prefill chunks route there regardless of architecture. The
+derived image applies the published `torch.topk(sorted=False)` plus canonical ordering repair and
+fixes `VLLM_QSA_EXACT_TOPK=3`; see [the DocAI investigation](https://docai.hu/en/blog/qwen38-flash-next-nondeterministic-vllm-kernel), vLLM issues #51782 and #54521, and
+[`qwen38-flash-next-topk-upstream-research-2026-08-31.md`](qwen38-flash-next-topk-upstream-research-2026-08-31.md).
+A GPU-assisted `vllm serve --help=all` probe succeeded on the
 desktop's driver and confirmed the prefix-cache, MTP, multimodal-limit, reasoning, and tool
 arguments. That parses the CLI only; it does not load weights or execute model kernels.
 

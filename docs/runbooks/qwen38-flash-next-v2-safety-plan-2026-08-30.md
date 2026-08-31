@@ -8,6 +8,18 @@
 
 Build one immutable Qwen-specific serving image that retains the proven QSA exact-top-k repair and ports the applicable accepted-token/recurrent-state safety fixes discovered during GLM-5.3 qualification. Do not copy GLM-specific adapters into Qwen blindly: every source path, input hash, runtime call path, and output hash must be established against Qwen's exact base image.
 
+## 2026-08-31 top-k research update
+
+The observed local QSA nondeterminism is already repaired by the v1 mode-3 `torch.topk` overlay,
+but upstream vLLM still routes merged Qwen support through affected `persistent_topk` paths.
+Issue #51782 and PR #52149 remain open; Qwen support PR #53896 has merged, while the PLE-offload
+PRs required by this workstation are not ready. A strict dry run proved that the GLM v9 exact
+persistent-top-k patch applies without fuzz to the exact Qwen merge commit's two kernel headers.
+The source algorithm and verifier matrix are reusable; the GLM extension binary is not.
+
+See [`qwen38-flash-next-topk-upstream-research-2026-08-31.md`](qwen38-flash-next-topk-upstream-research-2026-08-31.md)
+for upstream evidence, portability results, and the recommended Qwen-owned rebuild.
+
 ## Current immutable baseline
 
 | Item | Identity / setting |
