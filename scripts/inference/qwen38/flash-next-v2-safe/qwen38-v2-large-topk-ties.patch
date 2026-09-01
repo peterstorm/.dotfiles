@@ -1,0 +1,154 @@
+diff --git a/csrc/libtorch_stable/persistent_topk.cuh b/csrc/libtorch_stable/persistent_topk.cuh
+index dabf0df..53c806c 100644
+--- a/csrc/libtorch_stable/persistent_topk.cuh
++++ b/csrc/libtorch_stable/persistent_topk.cuh
+@@ -826,32 +826,41 @@ __device__ void radix_topk(const float* __restrict__ row_input,
+     __syncthreads();
+   }  // end 4 radix rounds
+ 
+-  // -- Count local > pivot elements --
++  // -- Count local > and == pivot elements --
+   const uint32_t ordered_pivot = shared_scalars[0];
+ 
+-  if (tx == 0) suffix_sum[0] = 0;
++  if (tx == 0) {
++    suffix_sum[0] = 0;
++    suffix_sum[1] = 0;
++  }
+   __syncthreads();
+ 
+   uint32_t my_gt_count = 0;
++  uint32_t my_eq_count = 0;
+   for (uint32_t i = tx; i < actual_chunk_size; i += kThreadsPerBlock) {
+-    if (shared_ordered[i] > ordered_pivot) my_gt_count++;
++    const uint32_t ordered = shared_ordered[i];
++    my_gt_count += ordered > ordered_pivot;
++    my_eq_count += ordered == ordered_pivot;
+   }
+   for (int offset = 16; offset > 0; offset /= 2) {
+     my_gt_count += __shfl_down_sync(0xffffffff, my_gt_count, offset);
++    my_eq_count += __shfl_down_sync(0xffffffff, my_eq_count, offset);
+   }
+-  if (tx % 32 == 0 && my_gt_count > 0) {
+-    atomicAdd(&suffix_sum[0], my_gt_count);
++  if (tx % 32 == 0) {
++    if (my_gt_count > 0) atomicAdd(&suffix_sum[0], my_gt_count);
++    if (my_eq_count > 0) atomicAdd(&suffix_sum[1], my_eq_count);
+   }
+   __syncthreads();
+   const uint32_t local_gt_count = suffix_sum[0];
++  const uint32_t local_eq_count = suffix_sum[1];
+ 
+-  // -- Stage 3: Collect top-k indices --
++  // -- Stage 3a: Collect every element strictly above the pivot --
+   if (tx == 0) {
+     local_histogram[0] = 0;
+-    if (local_gt_count > 0) {
+-      local_histogram[1] =
+-          atomicAdd(&state->output_counter, static_cast<int>(local_gt_count));
+-    }
++    local_histogram[1] = local_gt_count > 0
++                             ? atomicAdd(&state->output_counter,
++                                         static_cast<int>(local_gt_count))
++                             : 0;
+   }
+   __syncthreads();
+ 
+@@ -871,14 +880,77 @@ __device__ void radix_topk(const float* __restrict__ row_input,
+   barrier_phase++;
+   __syncthreads();
+ 
+-  for (uint32_t i = tx; i < actual_chunk_size; i += kThreadsPerBlock) {
+-    if (shared_ordered[i] == ordered_pivot) {
+-      int pos = atomicAdd(&state->output_counter, 1);
+-      if (pos < TopK) {
+-        row_output[pos] = static_cast<int32_t>(my_chunk_start + i);
++  // -- Stage 3b: Select exact-score boundary ties by global token index --
++  // Each CTA owns one contiguous token range. Publish equal counts, then use
++  // the counts of lower CTA ids as a stable global prefix. A block scan gives
++  // equal elements within this chunk deterministic index order. This removes
++  // the cross-CTA atomic race that otherwise chooses an arbitrary subset when
++  // more boundary-equal elements exist than the remaining top-k capacity.
++  uint32_t* equal_counts = state->histogram[(radix_iter * 4 + 2) % 3];
++  if (tx == 0) equal_counts[cta_in_group] = local_eq_count;
++  if (tx == 0) red_release(&state->arrival_counter, 1);
++  wait_ge(&state->arrival_counter,
++          (barrier_phase + 1) * static_cast<int>(ctas_per_group), tx);
++  barrier_phase++;
++
++  if (tx == 0) {
++    uint32_t equal_before = 0;
++    for (uint32_t cta = 0; cta < cta_in_group; ++cta) {
++      equal_before += equal_counts[cta];
++    }
++    shared_scalars[4] = equal_before;
++    suffix_sum[0] = 0;
++  }
++  __syncthreads();
++
++  const uint32_t global_gt_count =
++      static_cast<uint32_t>(state->output_counter);
++  const uint32_t equal_before = shared_scalars[4];
++  const uint32_t lane = tx % 32;
++  const uint32_t warp = tx / 32;
++
++  for (uint32_t base = 0; base < actual_chunk_size;
++       base += kThreadsPerBlock) {
++    const uint32_t i = base + tx;
++    const bool matches =
++        i < actual_chunk_size && shared_ordered[i] == ordered_pivot;
++    const uint32_t match_mask = __ballot_sync(0xffffffff, matches);
++    if (lane == 0) local_histogram[warp] = __popc(match_mask);
++    __syncthreads();
++
++    if (tx < 32) {
++      uint32_t warp_prefix = 0;
++      for (uint32_t prior = 0; prior < tx; ++prior) {
++        warp_prefix += local_histogram[prior];
++      }
++      local_histogram[32 + tx] = warp_prefix;
++      if (tx == 31) {
++        shared_scalars[3] = warp_prefix + local_histogram[31];
+       }
+     }
++    __syncthreads();
++
++    const uint32_t lower_lane_mask =
++        lane == 0 ? 0u : ((1u << lane) - 1u);
++    const uint32_t rank = local_histogram[32 + warp] +
++                          __popc(match_mask & lower_lane_mask);
++    const uint32_t local_base = suffix_sum[0];
++    const uint32_t output_pos =
++        global_gt_count + equal_before + local_base + rank;
++    if (matches && output_pos < TopK) {
++      row_output[output_pos] = static_cast<int32_t>(my_chunk_start + i);
++    }
++    __syncthreads();
++    if (tx == 0) suffix_sum[0] = local_base + shared_scalars[3];
++    __syncthreads();
+   }
++
++  // Keep the count buffer live until every CTA has consumed its prefix before
++  // the next persistent row reuses the triple-buffered histogram storage.
++  if (tx == 0) red_release(&state->arrival_counter, 1);
++  wait_ge(&state->arrival_counter,
++          (barrier_phase + 1) * static_cast<int>(ctas_per_group), tx);
++  barrier_phase++;
+ }
+ 
+ // ============================================================================
+diff --git a/csrc/libtorch_stable/topk.cu b/csrc/libtorch_stable/topk.cu
+index 07b7521..0699e2d 100644
+--- a/csrc/libtorch_stable/topk.cu
++++ b/csrc/libtorch_stable/topk.cu
+@@ -78,6 +78,10 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
+     uint32_t ctas_per_group =
+         (static_cast<uint32_t>(stride) + max_chunk_elements - 1) /
+         max_chunk_elements;
++    STD_TORCH_CHECK(
++        ctas_per_group <= P::RADIX,
++        "persistent_topk requires at most ", P::RADIX,
++        " CTAs per cooperative row, got ", ctas_per_group);
+     uint32_t chunk_size =
+         (static_cast<uint32_t>(stride) + ctas_per_group - 1) / ctas_per_group;
+     chunk_size = ((chunk_size + vec_size - 1) / vec_size) * vec_size;

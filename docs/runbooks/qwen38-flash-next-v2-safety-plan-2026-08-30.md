@@ -1,6 +1,6 @@
 # Qwen3.8 Flash-Next v2 state-safety plan
 
-**Status:** planned; not implemented or qualified  
+**Status:** implemented; runtime/state-safety qualified; semantic quality failed; not promoted
 **Target:** Qwen3.8 Flash-Next FP8, TP2, MTP3, vision, 262,144-token context  
 **Safety posture:** prefix caching remains disabled until complete output-equivalence qualification passes
 
@@ -66,20 +66,41 @@ If Qwen does not execute that path, do not add a dormant patch.
 
 GLM's three `sparse_attn_indexer*.py` call sites are not Qwen's QSA interface. Qwen needs a QSA-specific exact selector, not the GLM KPool patch.
 
+## Implemented source overlay
+
+The v2 profile reconstructs vLLM from public commit
+`e126687a9a828d513c01a07cd69f025f27d63280` and produces deterministic overlay
+commit `c0ac28980016af357df50359d301648352eebbf2`. It does not copy the GLM extension
+binary or depend on any GLM-owned path.
+
+The ordered patchset is:
+
+1. adapted UVA PLE support from `vllm#54371@905219234b0698b1f1ec2ed756de7051b080fb1c`;
+2. Qwen-owned copy of the exact persistent-top-k repair from
+   `vllm#52149@b8f88c1a29f54dcc42f1b163db523bf362e845e3`;
+3. adapted accepted-token and recurrent-state bounds from
+   `vllm#50021@9a198c0f8452d0eb251509f02753853903d9f17f` plus CPU-proven mixed-token partitioning;
+4. explicit ascending compressed-block canonicalization before QSA expansion;
+5. Qwen PLE short-convolution checks that fail closed on invalid accepted counts
+   and invalid decode, prefill, or speculative state rows;
+6. a Qwen-specific large-row repair that replaces the multi-CTA atomic boundary-tie
+   race with deterministic CTA-prefix and in-chunk token-index ordering.
+
 ## Image construction
 
-Build directly from the exact 32-layer Qwen base rather than chaining mutable local images. The Dockerfile must:
+Build with the exact upstream Dockerfile from the reconstructed source tree. The build script:
 
-1. hash-check every unmodified source input;
-2. hash-check each vendored patch;
-3. apply with `patch --batch --fuzz=0`;
-4. hash-check every patched output;
-5. compile all changed Python modules;
-6. retain the complete base rootfs layer prefix;
-7. label the upstream PR/issue identities and patch digests;
-8. produce one digest-pinned derived image and private identity receipt.
+1. fetches and verifies the exact public source commit;
+2. pins the PyTorch builder and CUDA runtime base images by digest;
+3. hash-checks each vendored patch;
+4. dry-runs and applies every patch with `--batch --fuzz=0`;
+5. hash-checks the patched runtime sources;
+6. creates and verifies the deterministic source-overlay commit;
+7. compiles the complete vLLM wheel for SM120 from the patched source;
+8. labels every upstream lineage and safety invariant;
+9. emits a digest-pinned final image and private identity receipt.
 
-The launcher, pull/proof script, contract, and runbook must update all image pins atomically. Startup remains transactional: `restart=no` until authenticated readiness and all required receipts pass.
+The launcher, pull/proof script, contract, and runbook update all image pins atomically. Startup remains transactional: `restart=no` until authenticated readiness and all required receipts pass.
 
 ## Verification strategy
 

@@ -1,0 +1,41 @@
+ARG SOURCE_IMAGE=peterstorm/vllm:qwen38-flash-next-v2-source-e126687
+FROM ${SOURCE_IMAGE} AS topk-builder
+
+USER root
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends git cuda-nvrtc-dev-13-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m pip install --no-cache-dir 'cmake==4.4.0'
+
+COPY . /opt/qwen38-v2-source
+WORKDIR /opt/qwen38-v2-source
+ENV TORCH_CUDA_ARCH_LIST=12.0 \
+    VLLM_TARGET_DEVICE=cuda \
+    NVCC_THREADS=2
+RUN set -eux; \
+    python_path="$(python3 -c 'import sys; print(":".join(sys.path))')"; \
+    cmake -S . -B /tmp/vllm-cmake -G Ninja \
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DVLLM_TARGET_DEVICE=cuda \
+      -DVLLM_PYTHON_EXECUTABLE=/usr/bin/python3 \
+      -DVLLM_PYTHON_PATH="$python_path" \
+      -DFETCHCONTENT_BASE_DIR=/tmp/vllm-fetchcontent \
+      -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+      -DNVCC_THREADS=2; \
+    cmake --build /tmp/vllm-cmake --target _C_stable_libtorch -j 8; \
+    cmake --install /tmp/vllm-cmake --prefix /tmp/vllm-install \
+      --component _C_stable_libtorch; \
+    built_so="$(find /tmp/vllm-install -type f \
+      -name '_C_stable_libtorch*.so' -print -quit)"; \
+    test -n "$built_so"; \
+    install -Dm0755 "$built_so" \
+      /tmp/repaired/vllm/_C_stable_libtorch.abi3.so
+
+FROM ${SOURCE_IMAGE}
+ARG REPAIRED_SOURCE_OVERLAY_COMMIT=c0ac28980016af357df50359d301648352eebbf2
+COPY --from=topk-builder \
+  /tmp/repaired/vllm/_C_stable_libtorch.abi3.so \
+  /usr/local/lib/python3.12/dist-packages/vllm/_C_stable_libtorch.abi3.so
+ENV VLLM_BUILD_COMMIT=${REPAIRED_SOURCE_OVERLAY_COMMIT}
+LABEL ai.peterstorm.inference.repaired-source-overlay-commit="${REPAIRED_SOURCE_OVERLAY_COMMIT}" \
+      ai.peterstorm.inference.large-topk-ties="deterministic-global-token-index"

@@ -1,0 +1,39 @@
+diff --git a/tests/models/qwen4_exp/test_qsa_reference.py b/tests/models/qwen4_exp/test_qsa_reference.py
+index 276eb31..4a73c60 100644
+--- a/tests/models/qwen4_exp/test_qsa_reference.py
++++ b/tests/models/qwen4_exp/test_qsa_reference.py
+@@ -187,6 +187,7 @@ def _qsa_select_paged_tokens_reference(
+         visible_blocks,
+         token_topk // compress_ratio,
+     )
++    blocks = torch.sort(blocks, dim=1).values
+     return _expand_qsa_indices_reference(
+         blocks,
+         query_positions,
+@@ -801,7 +802,7 @@ def test_qsa_selection_chunks_workspace_and_matches_test_reference(
+         compress_ratio,
+     )
+ 
+-    torch.testing.assert_close(actual.sort().values, expected.sort().values)
++    torch.testing.assert_close(actual, expected)
+     assert scored_row_counts == [32, 32, 1]
+ 
+ 
+diff --git a/vllm/models/qwen4_exp/nvidia/ops/qsa.py b/vllm/models/qwen4_exp/nvidia/ops/qsa.py
+index d6aa06f..27b83b1 100644
+--- a/vllm/models/qwen4_exp/nvidia/ops/qsa.py
++++ b/vllm/models/qwen4_exp/nvidia/ops/qsa.py
+@@ -797,8 +797,12 @@ def qsa_select_paged_tokens(
+             else torch.ops._C.persistent_topk
+         )
+         topk_op(logits, visible_blocks, blocks, topk_workspace, block_topk, columns)
++        # Sparse attention reductions are order-sensitive. Canonicalize the
++        # selected set so identical top-k membership produces identical QSA
++        # token order across launches and CUDA Graph replay.
++        canonical_blocks = torch.sort(blocks, dim=1).values
+         expand_qsa_block_indices_cuda(
+-            blocks,
++            canonical_blocks,
+             query_positions[row_slice],
+             sequence_lengths,
+             token_to_req[row_slice],

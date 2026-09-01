@@ -1,0 +1,186 @@
+diff --git a/tests/models/qwen4_exp/test_ple.py b/tests/models/qwen4_exp/test_ple.py
+index 071c94a..dfb2e3a 100644
+--- a/tests/models/qwen4_exp/test_ple.py
++++ b/tests/models/qwen4_exp/test_ple.py
+@@ -528,6 +528,115 @@ def test_ple_ngram_ids_custom_op_uses_current_request_layout(monkeypatch) -> Non
+     assert torch.equal(output, torch.full_like(output, 2))
+ 
+ 
++@pytest.mark.parametrize("state_index", [-1, 2])
++def test_dilated_ple_decode_rejects_out_of_range_state_index(
++    state_index: int,
++) -> None:
++    module = Qwen4ExpPLELayer.__new__(Qwen4ExpPLELayer)
++    nn.Module.__init__(module)
++    module.conv_state_len = 6
++    module.short_conv_dilation = 2
++
++    conv_state = torch.zeros(2, 1, 6)
++    state_before = conv_state.clone()
++    output = module._short_conv_dilated_decode_batched(
++        torch.tensor([[10.0]]),
++        conv_state,
++        torch.tensor([[0.25, -0.5, 0.75, 1.0]]),
++        torch.tensor([state_index]),
++        None,
++    )
++
++    torch.testing.assert_close(output, torch.zeros_like(output))
++    torch.testing.assert_close(conv_state, state_before)
++
++
++@pytest.mark.parametrize("state_index", [-1, 2])
++def test_dilated_ple_prefill_rejects_out_of_range_state_index(
++    state_index: int,
++) -> None:
++    module = Qwen4ExpPLELayer.__new__(Qwen4ExpPLELayer)
++    nn.Module.__init__(module)
++    module.conv_state_len = 6
++    module.short_conv_dilation = 2
++
++    conv_state = torch.zeros(2, 1, 6)
++    state_before = conv_state.clone()
++    metadata = SimpleNamespace(
++        non_spec_query_start_loc=torch.tensor([0, 2]),
++        has_initial_states_p=torch.tensor([True]),
++        max_prefill_query_len=2,
++    )
++    output = module._short_conv_dilated_prefill_batched(
++        torch.tensor([[10.0], [20.0]]),
++        metadata,
++        conv_state,
++        torch.tensor([[0.25, -0.5, 0.75, 1.0]]),
++        torch.tensor([state_index]),
++        num_prefills=1,
++        num_decode_tokens=0,
++        num_prefill_tokens=2,
++    )
++
++    torch.testing.assert_close(output, torch.zeros_like(output))
++    torch.testing.assert_close(conv_state, state_before)
++
++
++@pytest.mark.parametrize("accepted_count", [0, 5])
++def test_dilated_ple_spec_state_rejects_invalid_accepted_count(
++    accepted_count: int,
++) -> None:
++    module = Qwen4ExpPLELayer.__new__(Qwen4ExpPLELayer)
++    nn.Module.__init__(module)
++    module.conv_state_len = 6
++    module.short_conv_dilation = 2
++
++    conv_weights = torch.tensor([[0.25, -0.5, 0.75, 1.0]])
++    conv_state = torch.zeros(2, 1, 9)
++    conv_state[1] = torch.arange(1, 10, dtype=torch.float32).reshape(1, 9)
++    state_before = conv_state.clone()
++
++    output = module._short_conv_dilated_spec_batched(
++        torch.tensor([[10.0], [20.0], [30.0], [40.0]]),
++        conv_state,
++        conv_weights,
++        torch.tensor([1]),
++        torch.tensor([0, 4]),
++        torch.tensor([accepted_count]),
++        spec_query_len=4,
++    )
++
++    torch.testing.assert_close(output, torch.zeros_like(output))
++    torch.testing.assert_close(conv_state, state_before)
++
++
++@pytest.mark.parametrize("state_index", [-1, 2])
++def test_dilated_ple_spec_state_rejects_out_of_range_state_index(
++    state_index: int,
++) -> None:
++    module = Qwen4ExpPLELayer.__new__(Qwen4ExpPLELayer)
++    nn.Module.__init__(module)
++    module.conv_state_len = 6
++    module.short_conv_dilation = 2
++
++    conv_weights = torch.tensor([[0.25, -0.5, 0.75, 1.0]])
++    conv_state = torch.zeros(2, 1, 9)
++    state_before = conv_state.clone()
++
++    output = module._short_conv_dilated_spec_batched(
++        torch.tensor([[10.0], [20.0], [30.0], [40.0]]),
++        conv_state,
++        conv_weights,
++        torch.tensor([state_index]),
++        torch.tensor([0, 4]),
++        torch.tensor([1]),
++        spec_query_len=4,
++    )
++
++    torch.testing.assert_close(output, torch.zeros_like(output))
++    torch.testing.assert_close(conv_state, state_before)
++
++
+ def test_dilated_ple_spec_state_rolls_back_before_next_forward() -> None:
+     module = Qwen4ExpPLELayer.__new__(Qwen4ExpPLELayer)
+     nn.Module.__init__(module)
+diff --git a/vllm/models/qwen4_exp/nvidia/ple_layer.py b/vllm/models/qwen4_exp/nvidia/ple_layer.py
+index b5d3dfb..d9def0c 100644
+--- a/vllm/models/qwen4_exp/nvidia/ple_layer.py
++++ b/vllm/models/qwen4_exp/nvidia/ple_layer.py
+@@ -1204,9 +1204,11 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
+         state_indices = state_indices_tensor_d.to(
+             device=conv_state.device, dtype=torch.int64
+         )
+-        # FULL cudagraph padded decode rows use NULL_BLOCK_ID. Remap them to
+-        # slot 0 for a safe gather, then zero output and skip write-back.
+-        valid_state = state_indices != NULL_BLOCK_ID
++        # FULL cudagraph padding and corrupt state rows fail closed through the
++        # reserved null slot: no out-of-range value reaches index_select.
++        valid_state = (state_indices > NULL_BLOCK_ID) & (
++            state_indices < conv_state.shape[0]
++        )
+         state_indices = torch.where(
+             valid_state, state_indices, torch.zeros_like(state_indices)
+         )
+@@ -1323,7 +1325,9 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
+         state_indices = state_indices_tensor_p[:num_prefills].to(
+             device=conv_state.device, dtype=torch.int64
+         )
+-        valid_state = state_indices != NULL_BLOCK_ID
++        valid_state = (state_indices > NULL_BLOCK_ID) & (
++            state_indices < conv_state.shape[0]
++        )
+         state_indices = torch.where(
+             valid_state, state_indices, torch.zeros_like(state_indices)
+         )
+@@ -1429,7 +1433,15 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
+         state_indices = spec_state_indices_tensor.to(
+             device=conv_state.device, dtype=torch.int64
+         )
+-        valid_state = state_indices != NULL_BLOCK_ID
++        accepted_counts = num_accepted_tokens.to(
++            device=conv_state.device, dtype=torch.int64
++        )
++        valid_accepted = (accepted_counts >= 1) & (accepted_counts <= max_len)
++        valid_state = (
++            (state_indices > NULL_BLOCK_ID)
++            & (state_indices < conv_state.shape[0])
++            & valid_accepted
++        )
+         state_indices = torch.where(
+             valid_state, state_indices, torch.zeros_like(state_indices)
+         )
+@@ -1441,6 +1453,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
+         req_indices = torch.searchsorted(q_starts[1:], positions, right=True)
+         valid_tokens = (positions < total_real_tokens) & (req_indices < num_reqs)
+         clamped_req_indices = req_indices.clamp_max(max(num_reqs - 1, 0))
++        valid_tokens &= valid_state[clamped_req_indices].to(device=x_spec.device)
+         col_indices = (positions - q_starts[clamped_req_indices]).clamp_(0, max_len - 1)
+         pack_req_indices = torch.where(
+             valid_tokens,
+@@ -1458,9 +1471,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
+ 
+         if self.conv_state_len > 0:
+             cached_state = conv_state.index_select(0, state_indices)
+-            rollback_offsets = num_accepted_tokens.to(
+-                device=conv_state.device, dtype=torch.int64
+-            ).sub(1)
++            rollback_offsets = accepted_counts.sub(1)
+             rollback_offsets = torch.where(
+                 valid_state,
+                 rollback_offsets.clamp_(0, max_len - 1),

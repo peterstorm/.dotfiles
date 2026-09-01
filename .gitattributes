@@ -2,5 +2,6 @@
 
 # Preserve the byte-exact externally verified QSA patch artifact.
 scripts/inference/qwen38/flash-next-topk3/qsa-exact-topk.patch whitespace=-blank-at-eol
+scripts/inference/qwen38/flash-next-v2-safe/*.patch whitespace=-blank-at-eol
 scripts/inference/glm53/glm53-v9-fast-safe/*.patch whitespace=-blank-at-eol
 scripts/inference/glm53/glm53-v10-dcp2-safe/*.patch whitespace=-blank-at-eol
