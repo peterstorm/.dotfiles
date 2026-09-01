@@ -1,6 +1,6 @@
 ---
 name: blender-previz
-description: "Builds and reviews minimal Blender mechanics previsualization for AI-film shots, then hands an approved playblast to local MiniMax H3 Reference-to-Video or uses sparse guide frames when that carrier is preferable. Use for Blender, 3D blockouts, previsualization, animatics, difficult lenses or framing, camera paths, character spacing, moving architecture, contact geometry, mechanisms, Blender MCP interaction, viewport review, contact sheets, playblasts, or converting a Blender scene into an H3 REF2VA video carrier or two/four-guide inputs. Not for face design, acting, dialogue performance, detailed final rendering, or ordinary shots that a keyframe and prompt already solve."
+description: "Builds and reviews minimal Blender mechanics previsualization — blocking videos — for AI-film shots. Use for Blender, 3D blockouts, previsualization, animatics, difficult lenses or framing, camera paths, character spacing, moving architecture, contact geometry, mechanisms, Blender MCP interaction, viewport review, contact sheets, or playblasts. Delivers an approved playblast, a carrier contract naming what the video proves, and optional state stills at declared frames; how a video model consumes them is the consuming skill's business. Not for face design, acting, dialogue performance, detailed final rendering, or ordinary shots that a keyframe and prompt already solve."
 license: MIT
 compatibility: "Pi project skill, available only from ~/dev/creative. Live authoring requires its pinned pi-mcp-adapter and .mcp.json plus blender-mcp-session running in Blender 5.2 on desktop. The wrapper supplies a private virtual GUI when the workstation is headless."
 ---
@@ -9,16 +9,18 @@ compatibility: "Pi project skill, available only from ~/dev/creative. Live autho
 
 Blender is a spatial instrument, not the final image maker. Use it only when a shot is difficult because of **projection, framing, spacing, support/contact, a mechanism, a transition, or a camera path**. For faces, acting, dialogue, wardrobe nuance, or a simple camera move, stay in the accepted Krea/MiniMax pipeline.
 
+The deliverable is a **blocking video**: an approved playblast whose only job is to prove camera, space, timing, and mechanism, packaged with a carrier contract and any requested state stills. What consumes that package — and how — belongs to the consuming skill (`h3-prompt-distillation` for local H3 production), not to this one.
+
 Read [the canonical workflow](references/workflow.md) before creating or changing a scene.
 
 ## Authority boundary
 
-- **Blender owns:** lens hypothesis, camera and object transforms, scale, screen direction, spacing, supports, contact planes, occlusion, mechanism states, and candidate timeline anchors.
+- **Blender owns:** lens hypothesis, camera and object transforms, scale, screen direction, spacing, supports, contact planes, occlusion, mechanism states, and candidate timeline anchors — as evidence *implementing* the locked `blocking-continuity` and `action-physics-production` contracts. Those contracts remain the specification authority; the `.blend` proves them in 3D, it does not compete with them.
 - **Blender is never acting authority.** Proxy motion may show only the spatial event necessary to explain a mechanism. It does not author face, gaze, gesture, emotion, performance, wardrobe detail, or final world texture.
 - **MCP is the live authoring surface.** It inspects the open scene, executes small reviewed Blender-Python changes, and returns viewport screenshots.
 - **The CLI is the render surface.** Save source and `.blend`, then render deterministic stills/playblasts outside the conversational socket.
-- **MiniMax is final-motion authority, subject to review.** Local REF2VA can encode the full Blender playblast as `<Video 1>` through `MiniMaxH3ReferenceToVideo`; treat camera, timing, poses, support, and mechanism as declared carrier roles, not guaranteed pixel-space transfer. Two/four still guides remain an alternate anchor strategy.
-- Every retained Blender or H3 result is Development evidence. A completed H3 capture remains `captured-awaiting-user-review`, `authority: none`, and `semanticAcceptance: false` until explicit user selection.
+- **The deliverable boundary is the handoff package.** This skill ends at the approved playblast, carrier contract, and requested state stills. It does not choose generation models, reference stacks, or prompts.
+- Every retained artifact is Development evidence, never Production authority.
 
 ## Hard rules
 
@@ -33,7 +35,8 @@ Read [the canonical workflow](references/workflow.md) before creating or changin
 9. Keep the add-on socket on desktop loopback. Pi reaches the MCP stdio process through SSH; never open TCP 9876 in the firewall.
 10. Telemetry and external asset integrations stay disabled. Do not install downloaded add-ons or run code copied from unreviewed scenes.
 11. Plan and give corrective feedback before fan-out. The parent owns sequence-level `PROGRESS.json` and `LEARNINGS.md`; independent-shot workers read both, self-check their output, and never edit shared files.
-12. Generation success, a pretty render, or a close camera match never establishes Mechanics-Proof or Production authority.
+12. Render targets come from the shot unit. Frame rate, aspect ratio, exact frame count, and required state-still frames are inputs from the consuming skill — do not invent them here.
+13. A pretty render, a clean playblast, or a close camera match never establishes Mechanics-Proof or Production authority.
 
 ## Start a live session
 
@@ -71,10 +74,7 @@ Use `blender_execute_blender_code` only after reviewing the exact code. Its appr
 5. **Static review:** render setup, load, event/contact, and consequence stills as a contact sheet before animation.
 6. **Animation review:** animate only required camera/object transforms; add small deterministic camera imperfection after the clean path works.
 7. **Playblast review:** inspect full-frame continuity and a sampled contact sheet. Revise one cause at a time.
-8. **Prepare the carrier:** render the approved 24 fps Blender playblast to exactly 124 or 362 frames and upload it as `<Video 1>`. Use the six profiles under `minimax-h3-blender-ref2va-development`: BF16 quality, task-matched Turbo 4-step, or dedicated PDD 8-step. Compare acceleration with identical carrier, appearance references, prompt, dimensions, and paired seed; never stack Turbo and PDD.
-9. **Choose alternatives deliberately:** use the 124-frame profiles for precise mechanics and controlled comparisons; use 362 frames only when the long camera/edit timeline is load-bearing. Use two still guides for endpoint-dominant shots or four for setup/load/event/consequence when sparse states matter more than the complete path. Resolve raw proxy stills through Krea if they cause style bleed.
-10. **H3 prompt:** declare the shot purpose and attention target; state what `<Video 1>`, each picture, or each guide owns and must not own; then separately state explicit acting/action, causal dependencies, timing, sound/music cues, and positive/negative locks.
-11. **Capture and QA:** use the generic ComfyUI capture path, compare sampled frames against the Blender contract, and await explicit user review.
+8. **Handoff package:** render the approved playblast at the requested frame rate, aspect ratio, and exact frame count; export requested state stills at their declared frames; write the carrier contract naming exactly what the video proves (camera path, spacing, contact order, mechanism timing, screen direction) and what it must never carry forward (identity, anatomy, wardrobe, materials, color, lighting, acting, world design); checksum everything and hand the package to the consuming skill.
 
 ## Completion report
 
@@ -86,7 +86,5 @@ Report:
 - lens/sensor hypothesis and camera path summary;
 - proxy IDs, scale, support/contact, and mechanism states;
 - static and animation self-check results plus learnings promoted for later shots;
-- selected H3 carrier: REF2VA source-video checksum and role, or sparse guide frames and whether raw or Krea-resolved;
-- H3 workflow/profile and prompt-package path;
-- geometry, interpolation, identity, and style-bleed findings;
+- handoff package path: playblast checksum, carrier contract, and state-still manifest;
 - Development status and unresolved authority limits.

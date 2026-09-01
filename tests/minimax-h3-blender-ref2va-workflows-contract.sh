@@ -8,6 +8,7 @@ BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-blender-ref2va-workflows.sh"
 RUNBOOK="$ROOT/docs/runbooks/minimax-h3-blender-ref2va.md"
 SKILL="$ROOT/pi/project-skills/creative/blender-previz/SKILL.md"
 WORKFLOW="$ROOT/pi/project-skills/creative/blender-previz/references/workflow.md"
+DISTILLER_MODEL="$ROOT/pi/project-skills/creative/h3-prompt-distillation/references/h3-response-model.md"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -19,7 +20,7 @@ contains() {
   grep -Fq -- "$needle" "$file" || fail "$file does not contain: $needle"
 }
 
-for file in "$MODULE" "$BUILDER" "$RUNBOOK" "$SKILL" "$WORKFLOW"; do
+for file in "$MODULE" "$BUILDER" "$RUNBOOK" "$SKILL" "$WORKFLOW" "$DISTILLER_MODEL"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 [[ -x "$BUILDER" ]] || fail "builder is not executable"
@@ -76,7 +77,9 @@ contains "$RUNBOOK" 'PDD 8-Step'
 contains "$RUNBOOK" 'never stack Turbo and PDD'
 contains "$RUNBOOK" 'audio output is deliberately unconnected'
 contains "$RUNBOOK" 'not deterministic pixel-space transfer'
-contains "$SKILL" 'minimax-h3-blender-ref2va-development'
-contains "$WORKFLOW" '15-second Turbo and PDD profiles are duration-qualification candidates'
+contains "$DISTILLER_MODEL" 'minimax-h3-blender-ref2va-development'
+contains "$DISTILLER_MODEL" 'duration-qualification candidates'
+contains "$DISTILLER_MODEL" 'stack Turbo and PDD'
+contains "$WORKFLOW" 'CARRIER-CONTRACT.md'
 
 printf 'PASS: Blender REF2VA workflows preserve task family, video-carrier authority, BF16/Turbo/PDD recipes, durations, and Development status\n'

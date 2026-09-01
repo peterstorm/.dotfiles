@@ -88,7 +88,8 @@ The repository owns twelve MIT-licensed companion skills:
 - `action-physics-production` — support, force, contact order, momentum,
   conditioning strategy, proof coverage, and sampled-frame action QA;
 - `blender-previz` — MCP-assisted minimal camera, spacing, contact, and mechanism
-  previsualization with contact-sheet gates and sparse MiniMax H3 guide handoff;
+  previsualization with contact-sheet gates and a model-agnostic blocking-video
+  carrier handoff;
 - `blocking-continuity` — normalized staging, screen direction, map qualification,
   and fail-closed spatial QA;
 - `ensemble-action-production` — local-only Krea 2, MiniMax Music 3, and MiniMax H3

@@ -33,7 +33,7 @@ Load [the H3 response model](references/h3-response-model.md) whenever this skil
 
 1. **Read the contracts, not the skills' prose.** Gather each owning skill's *handoff block* (performance task, human-motion block, blocking contract, physical-state chain, prop states, light contract, look token, reference-pack manifest). Do not re-derive or reinterpret them.
 2. **One scored variable per generation.** Name what this clip must prove before drafting. Everything else is supporting or QA-only.
-3. **Prose is the weakest identity carrier.** Identity, wardrobe, and world travel by reference image; composition and endpoints travel by keyframe; the prompt carries **action, camera, sound, and timing**. Never spend prompt budget re-describing what a reference already locks — name the reference and move on.
+3. **Prose is the weakest identity carrier.** Identity, wardrobe, and world travel by reference image; composition and endpoints travel by keyframe; continuous motion — camera path, spacing, contact order, timing — travels by an approved blocking-video carrier when one exists; the prompt carries **action, camera, sound, and timing**. Never spend prompt budget re-describing what a reference already locks — name the reference and move on.
 4. **Every reference has exactly one job**, stated in the manifest and respected in the prompt. More references are not better; conflicting references average.
 5. **Positive language only.** H3 has no negative-prompt field. Translate every forbidden-failure into either a positive statement ("both feet stay planted through the swing") or a QA row. Never paste a forbidden-failure battery into the prompt.
 6. **Observable or absent.** Every clause must name something visible or audible at a moment in time. Convert intent and emotion to camera-detectable behavior; delete mood adjectives, plot summary, and unbacked style words.
@@ -59,6 +59,7 @@ List the owning skills actually relevant to this shot and collect their locked h
 | wardrobe-asset-production | wardrobe package | |
 | location-world-production | light contract + look token + ambient contract | |
 | cinema-director | coverage/camera assignment | |
+| blender-previz | blocking-video carrier contract + playblast/state stills | |
 
 An unlocked contract blocks compilation — distilling an unfinished specification produces a confident prompt for the wrong shot. Skip rows that genuinely do not apply; do not invent contracts for them.
 
@@ -81,12 +82,21 @@ Most continuity constraints are `qa-only`: the model cannot be talked into conti
 
 Assign each row a carrier:
 
+- `video carrier` — an approved blocking playblast from `blender-previz`, loaded as `<Video 1>` in REF2VA: camera path, cuts, spacing, poses, contact order, and mechanism timing. The strongest motion channel when one exists.
 - `reference` — identity, wardrobe, world, style, motion, voice timbre. Update the reference manifest; the prompt names the label and its role once.
 - `keyframe` — exact composition, opening/closing states, blocking marks. FL2VA endpoints beat prose endpoints; a keyframe that embodies the blocking beats a described mark.
 - `prompt` — action order, camera behavior, dialogue, synchronized sound, timing, and the minimum anchor phrases that bind references to moments.
 - `qa` — everything verified from pixels after generation.
 
 Allocation heuristic: **if a stronger channel can carry it, the prompt must not.** The prompt gets what only prose can do — the causal, temporal, audible spine of the shot.
+
+### Video carrier rules
+
+- This skill declares the render targets `blender-previz` must hit — frame rate, aspect, exact frame count, and state-still frames — from the consuming graph; the current local profiles are documented in `docs/runbooks/minimax-h3-blender-ref2va.md`.
+- Encode the carrier contract's owned/not-owned split through the official grammar: what `<Video 1>` provides in `subject_definitions`, its preservation level in `retention_analysis`, and its role positively in the description. Not-owned properties (identity, proxy appearance, gray materials, lighting) are covered by the appearance references and the style-bleed QA row — never by negative prompt clauses.
+- The carrier is generative guidance, not deterministic pixel transfer: every claimed camera, cut, path, contact, and state property still needs sampled-frame QA.
+- Raw proxy state stills are Development A/B material only; prefer Krea-resolved stills that keep the Blender projection and spacing while carrying accepted appearance.
+- The carrier plus appearance pictures form one reference stack — the paired-seed reference-count test applies to it like any other.
 
 ## Stage 3 — maximal draft
 

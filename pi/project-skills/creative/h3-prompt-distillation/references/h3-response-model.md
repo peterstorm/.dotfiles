@@ -99,11 +99,14 @@ exact. The official adapter owns this syntax; never freelance it.
 
 Prose is the weakest carrier. Ranked by constraint strength:
 
-1. **Keyframes** — exact composition, opening/closing states (FL2VA endpoints).
-2. **References** — identity, wardrobe, world, style, motion, voice timbre.
-3. **Prompt** — action order, camera, dialogue, synchronized sound, timing;
+1. **Video carrier** — an approved blocking playblast as `<Video 1>`: continuous
+   camera path, cuts, spacing, poses, contact order, mechanism timing. Strongest
+   channel for motion; still generative guidance, never pixel transfer.
+2. **Keyframes** — exact composition, opening/closing states (FL2VA endpoints).
+3. **References** — identity, wardrobe, world, style, motion, voice timbre.
+4. **Prompt** — action order, camera, dialogue, synchronized sound, timing;
    plus the anchor phrases binding references to moments.
-4. **QA** — everything verified from pixels afterward.
+5. **QA** — everything verified from pixels afterward.
 
 A constraint stated in prose that a stronger channel could carry is budget spent
 buying weaker enforcement.
@@ -127,4 +130,9 @@ buying weaker enforcement.
 - Wushu Action V7 runs stack the research adapter at strength 0.5 after the
   official Ref2VA Turbo LoRA and prepend `wushu_action,` to the prompt —
   Development-only, no authority.
+- Blender blocking carriers use the `minimax-h3-blender-ref2va-development`
+  profiles (124-frame default; 362-frame duration-qualification candidates —
+  note 362 frames is nominally 15.08 s against the documented ≤15 s reference
+  limit, so confirm the frame-vs-seconds boundary before qualifying). Never
+  stack Turbo and PDD adapters; see `docs/runbooks/minimax-h3-blender-ref2va.md`.
 - Keep text, titles, and logos out of diffusion outputs; add them in post.

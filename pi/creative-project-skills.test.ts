@@ -143,8 +143,9 @@ describe("creative project skill scope", () => {
 				"MCP is the live authoring surface",
 				"contact sheet before animation",
 				"never acting authority",
-				"MiniMaxH3ReferenceToVideo",
-				"captured-awaiting-user-review",
+				"eligibility gate",
+				"carrier contract",
+				"Render targets come from the shot unit",
 			],
 			"blocking-continuity": [
 				"normalized image coordinates",
@@ -165,6 +166,7 @@ describe("creative project skill scope", () => {
 				"Positive language only",
 				"The adapter formats; it does not author",
 				"fidelity diff",
+				"video carrier",
 			],
 			"human-motion-realism-production": [
 				"Gaze acquisition",
