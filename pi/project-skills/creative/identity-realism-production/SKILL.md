@@ -1,6 +1,6 @@
 ---
 name: identity-realism-production
-description: "Creates and qualifies mandatory production-realism face assets for locked fictional characters. Use when an accepted Krea face needs a conservative FLUX.2 Klein 9B BF16 realism pass, when preparing the highest-fidelity identity references for MiniMax H3, when comparing base and finished faces, or when guarding against identity drift during finishing. Preserves immutable A/B evidence, inherits baked identity modifiers without reapplying them, and blocks production video until the finished face passes visual identity QA."
+description: "Creates and qualifies mandatory production-realism face assets for locked fictional characters. Use when an accepted Krea face needs a conservative FLUX.2 Klein 9B BF16 realism pass, when preparing the highest-fidelity identity references for MiniMax H3, when comparing base and finished faces, when a scene needs a non-neutral expression variant of a locked identity, when a keyframe must contain two or more locked identities without bleed, or when guarding against identity drift during finishing. Preserves immutable A/B evidence, inherits baked identity modifiers without reapplying them, qualifies expression variants and multi-identity group keyframes, and blocks production video until the finished face passes visual identity QA."
 license: MIT
 compatibility: "Pi project skill for local Krea 2, FLUX.2 Klein 9B BF16, and MiniMax H3 reference production. FLUX.2 Klein 9B outputs remain subject to its non-commercial license."
 ---
@@ -24,6 +24,9 @@ It does not redesign faces. It creates a higher-fidelity photographic derivative
 - **Production reference pack** — the accepted realism face plus compatible wardrobe/body and world references supplied to H3 production.
 - **Preview reference** — a technically valid pre-production face that may be used for cheap iteration but is barred from final H3 production.
 - **Identity drift** — any change to facial geometry, eye shape or spacing, jaw, nose, lips, skin register, hair identity, expression baseline, or apparent personhood.
+- **Expression variant** — an accepted child of Realism B that changes only expression, gaze, or head attitude for one named scene need.
+- **Identity bleed** — one principal's facial identity, features, or wardrobe contaminating another principal in a multi-identity generation.
+- **Reference-count test** — a paired-seed comparison establishing that each identity reference in a multi-reference generation earns its place.
 
 ## Hard rules
 
@@ -37,6 +40,8 @@ It does not redesign faces. It creates a higher-fidelity photographic derivative
 8. **Fail closed on drift.** If B is less faithful than A, retry with a new numbered version or reject it. Do not fall back silently and do not call extra sharpness realism.
 9. **Reference-pack consistency.** H3 receives the accepted B face authority through a compatible face plate or strict one-visible-face character sheet. Wardrobe and body references cannot introduce a competing face.
 10. **License travels with the asset.** Every B manifest records the FLUX.2 Klein 9B non-commercial restriction.
+11. **Expression variants are children of B.** A scene needing a non-neutral face derives an expression variant from accepted Realism B through Stage 6. Rule 3's expression freeze applies to the realism pass itself, not to a qualified variant. A variant never replaces B as the identity authority.
+12. **Group keyframes qualify separately.** A keyframe containing two or more locked identities enters production lineage only after the Stage 7 multi-identity qualification. Single-face acceptance does not imply group acceptance.
 
 ## Stage 0 — source gate
 
@@ -117,6 +122,28 @@ Before final H3 generation:
 - FL2VA and REF2VA remain separate serialized graphs;
 - preview footage is clearly barred from final delivery if it used Identity A only.
 
+## Stage 6 — expression-range variants
+
+Use this stage when `performance-direction` requires a pre-turn emotional state, or a scene keyframe needs any non-neutral expression, gaze, or head attitude from a locked identity.
+
+- Derive every variant directly from accepted Realism B. B is the sole visual parent; no second face, style reference, or identity LoRA.
+- One variant per named expression need. "A range of emotions" is not a request; "guarded fear while listening" is.
+- The variant may change only expression, gaze direction, and head attitude. Framing, crop, hair identity, lighting register, and background remain B's.
+- Inspect each variant against B using the Stage 3 table with one substitution: the expression row instead verifies that the **requested** expression is achieved and readable. Every other identity row must still pass — a frightened face that belongs to a different person is `REJECT`.
+- Promotion requires explicit user acceptance. The manifest records role `expression-variant`, its parent B path and hash, and the named expression need.
+- Variants serve scene keyframes. They never become the H3 face authority; production reference packs continue to resolve to B. An unaccepted variant is barred from lineage exactly like a rejected finish.
+
+## Stage 7 — multi-identity keyframe qualification
+
+Required before any keyframe containing two or more locked identities becomes a production lineage parent or H3 reference.
+
+- Run a paired-seed reference-count test: generate with N identity references and with N−1 at the same seed and prompt. Keep the extra reference only if it demonstrably improves its principal without degrading the others. Never assume more references improve separation.
+- Crop every visible face and compare each against its own accepted authority (Realism B or accepted expression variant) using the Stage 3 identity rows.
+- Reject on any identity bleed: face averaging between principals, feature migration, identity swap, wardrobe or hair migrating from one principal to another, a duplicated principal, or an extra person.
+- Record acceptance per principal, not per image. One drifted face rejects the keyframe even when the others are perfect.
+- Geometry, marks, and screen sides remain `blocking-continuity`'s contract; this stage judges identity only.
+- An accepted group keyframe is a qualified lineage parent for group H3 shots. Keep most H3 coverage at one to three readable faces; a full-group wide starts from an accepted group keyframe or does not run.
+
 ## Versioning
 
 Create a new numbered realism version when changing the source A, Klein model or encoder revision, prompt, seed, sampling graph, resolution, crop, or finishing policy. Retries remain preserved with reasons. Never rewrite `realism-01` into a corrected `realism-01`.
@@ -140,4 +167,6 @@ Only `PASS` may enter final H3 production.
 - [ ] Realism improvement visible rather than assumed
 - [ ] User explicitly accepted B
 - [ ] Klein non-commercial license attached
+- [ ] Expression variants derive from B, pass identity QA, and never replace the face authority
+- [ ] Multi-identity keyframes passed the reference-count test and per-principal bleed QA
 - [ ] Final H3 reference pack resolves to accepted B or production remains blocked

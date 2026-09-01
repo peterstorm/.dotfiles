@@ -128,6 +128,20 @@ For high-risk mechanics prefer, in order:
 4. authored first/last keyframes when endpoints matter more than intermediate contact;
 5. text only for simple low-contact movement.
 
+### Multi-keyframe Motion Context — Development only
+
+The installed Motion Context/MultiRef workflows add a third exact-frame anchor: **setup → event → consequence**. Use them when the mid-action state — the contact, block, or grapple itself — is a contract, not just the endpoints, and splitting into two FL2VA clips would break the exchange. Each keyframe owns one visible state; the prompt describes the single causal path between them.
+
+Constraints:
+
+- an anchor constrains its frame but proves nothing about interpolation, contact topology, or force transfer between anchors — dense sampled-frame QA still decides;
+- keyframe positions stay within the target frame count and strictly increasing;
+- for AV Extension continuation, prefer the 39-frame context, keep every source or extension clip at 15 seconds or less, and run one extension at a time — review the seam before adding the next;
+- treat every seam as a QA surface: identity, topology, lighting, motion direction, and audio continuity across the join;
+- long chains accumulate identity, lighting, and motion error; for exact editorial cuts, generate independent source shots and edit externally.
+
+All Motion Context/MultiRef workflows and outputs remain **Development-only under the AFTERSIGNAL boundary**. They scout, previsualize, and qualify; they do not enter Production delivery. A clean seam or cinematic impression never proves hidden mechanics.
+
 ## Stage 3 — proof and creative-montage coverage
 
 ### Mechanics-proof mode
@@ -255,6 +269,7 @@ Create a new numbered workflow/output version for changed conditioning, keyframe
 - [ ] End state and persistent consequences explicit
 - [ ] FL2VA/REF2VA decision matches the uncertainty
 - [ ] Motion authority rights and exact role recorded
+- [ ] Motion Context / AV Extension use labeled Development-only; every seam passed continuity QA
 - [ ] Proof shot protects mechanics; style shot remains separate
 - [ ] Official H3 adapter changed format only, not action
 - [ ] Production faces resolve to accepted Klein realism authorities

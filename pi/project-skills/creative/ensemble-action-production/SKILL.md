@@ -1,6 +1,6 @@
 ---
 name: ensemble-action-production
-description: "Orchestrates an original local-only ensemble music/action production from story causality through cast, music, world, vehicles, shots, generation, and evidence-backed acceptance. Use for bands, teams, squads, mech pilots, action trailers, music videos, or episodic proof-of-concepts where every member needs distinct dramatic and capability coverage. Coordinates story-bible-builder, character-builder, identity-realism-production, action-physics-production, performance-direction, human-motion-realism-production, blocking-continuity, prop-continuity, cinema-director, Krea 2, MiniMax Music 3, and MiniMax H3 without cloud generation."
+description: "Orchestrates an original local-only ensemble music/action production from story causality through cast, music, world, vehicles, shots, generation, and evidence-backed acceptance. Use for bands, teams, squads, mech pilots, action trailers, music videos, or episodic proof-of-concepts where every member needs distinct dramatic and capability coverage. Coordinates story-bible-builder, character-builder, identity-realism-production, action-physics-production, performance-direction, human-motion-realism-production, blocking-continuity, prop-continuity, location-world-production, cinema-director, Krea 2, MiniMax Music 3, and MiniMax H3 without cloud generation."
 license: MIT
 compatibility: "Pi project skill for the local creative stack: Krea 2 images, MiniMax Music 3 songs, and MiniMax H3 FL2VA/REF2VA video on serialized GPU1 workflows."
 ---
@@ -133,10 +133,10 @@ No video generation begins before acceptance of:
 - cockpit and exterior correspondence;
 - weapons, controls, and scale evidence;
 - alien species sheets and scale comparisons;
-- clean location plates;
+- accepted location canon, clean plates, per-scene light contracts, and the production look bible;
 - original logo/text assets rendered deterministically, not by video diffusion.
 
-Use `identity-realism-production` for mandatory production face finishing and H3 identity handoff. Krea-only faces may drive previews but are barred from final H3 production. Use `prop-continuity` for mechs, weapons, controls, hatches, and mating interfaces. Use `blocking-continuity` for formations, cockpit geography, and fight axes.
+Use `identity-realism-production` for mandatory production face finishing, expression variants, multi-identity group keyframe qualification, and H3 identity handoff. Krea-only faces may drive previews but are barred from final H3 production. Use `prop-continuity` for mechs, vehicles, weapons, controls, hatches, and mating interfaces — the mech/vehicle bible follows its prop-canon and scale discipline. Use `blocking-continuity` for formations, cockpit geography, and fight axes. Use `location-world-production` for location canon, plates, light contracts, the look bible, and ambient-motion contracts. Alien species sheets follow the `wardrobe-asset-production` package discipline — turnaround plates, scale evidence, and close-up sheets — with the accepted species anatomy as the identity authority.
 
 ## Stage 5 — shot units
 
@@ -202,6 +202,7 @@ Every accepted shot requires:
 - dense eye/blink/breath/support/gesture verdict from `human-motion-realism-production` when people are visible;
 - spatial verdict from `blocking-continuity`;
 - prop/mech verdict from `prop-continuity`;
+- location, light, look, and ambient verdict from `location-world-production`;
 - music synchronization evidence for performance shots;
 - final `PASS`, `REJECT`, or `UNVERIFIABLE`.
 
@@ -212,7 +213,9 @@ All critical invariants must pass. Technical success does not waive semantic fai
 - Cut on the detected music grid, not requested BPM.
 - Generate member cockpit portraits separately and composite multi-panel layouts deterministically.
 - Preserve the Music 3 master; do not concatenate conflicting H3 music beds.
+- Before mixing any H3-native audio, verify dialogue intelligibility, sound-cause alignment, and room-tone continuity across cuts; a clip whose soundtrack contradicts its picture fails audio QA even when the picture passed.
 - Use H3 foley selectively under the song only after checking rights, continuity, and levels.
+- Upscale only through the qualified local finishing profiles. Every upscale is a **finishing derivative**: preserve the native H3 master, compare at 100% and in motion at dense intervals for identity, invented texture, palette, and flicker, and remux checksum-authoritative dialogue after visual finishing. An unqualified upscaler output is a Development derivative, not a deliverable.
 - Keep text, titles, subtitles, and logos out of diffusion outputs; add them in post.
 - Verify final duration, streams, frame count, audio level, complete decode, and SHA-256.
 

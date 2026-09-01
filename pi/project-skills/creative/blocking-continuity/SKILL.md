@@ -31,7 +31,7 @@ A diagram is planning evidence by default. Do not feed it directly into a genera
 
 ## Hard rules
 
-1. **Geometry only.** Maps do not define face, wardrobe, materials, lighting, location texture, or grade.
+1. **Geometry only.** Maps do not define face, wardrobe, materials, lighting, location texture, or grade. Place, light, and look resolve through `location-world-production`; every anchor referenced here must exist in its accepted location canon.
 2. **One principal ID per entity.** Use stable IDs such as `A`, `B`, `C`; never rename within a sequence.
 3. **IDs live in metadata, not rendered pixels.** Do not draw letters, labels, or typography on a conditioning map.
 4. **Coordinates are explicit.** Prose such as “near her” is insufficient when position matters.
