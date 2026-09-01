@@ -156,6 +156,8 @@ Each H3 shot unit must state:
 
 Do not ask one generation to perform exterior combat, transform into a cockpit, deliver dialogue, fire a weapon, and react. Split those into causal shots.
 
+Compile every shot unit's locked contracts through `h3-prompt-distillation` — constraint ledger, channel allocation, maximal draft, distillation to H3's response budget — before the official `h3-prompt-writing` formatting pass. Do not paste raw skill contracts into an H3 prompt.
+
 Any fight, fall, throw, impact, vehicle maneuver, collision, recoil, jump, landing, destruction event, or contact-rich prop action must pass through `action-physics-production` before the official H3 formatting pass.
 
 ### Action grammar

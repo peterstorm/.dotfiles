@@ -46,7 +46,8 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    appears on the next activation — no rebuild. Stale links to removed skills
    are pruned.
 6. **Creative project skills**: links four reviewed archive skills, MiniMax's
-   revision-pinned music-caption skill, and four MIT-licensed authored production
+   revision-pinned official music-caption and H3 prompt-writing skills, and
+   eleven MIT-licensed authored production
    skills into `~/dev/creative/.pi/skills/` through Home Manager. They are not
    present in `~/.pi/agent/skills`, package settings, or any ancestor directory,
    so Pi discovers them only when its working directory is exactly
@@ -83,7 +84,7 @@ Nix also fetches MiniMax's official `music-caption-rewriter` and
 and source hashes in the provenance file, including their relative assets under
 the applicable upstream community licenses.
 
-The repository owns nine MIT-licensed companion skills:
+The repository owns eleven MIT-licensed companion skills:
 
 - `action-physics-production` — support, force, contact order, momentum,
   conditioning strategy, proof coverage, and sampled-frame action QA;
@@ -91,10 +92,14 @@ The repository owns nine MIT-licensed companion skills:
   and fail-closed spatial QA;
 - `ensemble-action-production` — local-only Krea 2, MiniMax Music 3, and MiniMax H3
   production orchestration;
+- `h3-prompt-distillation` — constraint ledger, channel allocation, and distillation
+  of multi-skill shot contracts to H3's response budget before official formatting;
 - `human-motion-realism-production` — evidence-informed gaze, blink, breathing,
   support, gesture, fidget, response-latency, and dense sampled-frame QA;
 - `identity-realism-production` — mandatory Krea/Klein face A/B qualification and
   accepted high-fidelity identity handoff to production H3;
+- `location-world-production` — location canon, personless plates, light contracts,
+  look bible, ambient motion, and set-state continuity;
 - `performance-direction` — playable actor and listener work with sampled-frame QA;
 - `prop-continuity` — prop scale, mating geometry, action coverage, and semantic QA;
 - `synthetic-voice-production` — immutable original VoiceAnchors, dialogue cloning,
@@ -115,7 +120,7 @@ pi
 Pi requires an explicit project-trust decision before loading `.pi/skills`.
 Approve the prompt after verifying the path is exactly `~/dev/creative`; use
 `/trust` if that decision should persist, then restart Pi as instructed. Starting
-Pi elsewhere does not discover these fifteen skills. Pi intentionally applies
+Pi elsewhere does not discover these seventeen skills. Pi intentionally applies
 ancestor traversal to `.agents/skills`, not `.pi/skills`; this setup uses the
 Pi-only `.pi` location, so start the session from the creative project root.
 

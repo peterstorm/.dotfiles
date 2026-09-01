@@ -196,6 +196,8 @@ Pass the following locked inputs to `h3-prompt-writing`:
 
 The adapter must preserve the official field names, section order, labels, and timing notation. Reject the translation if it adds an action, changes causal order, drops an endpoint, or assigns one reference two conflicting roles.
 
+When this shot also carries performance, motion, blocking, prop, or location contracts, run `h3-prompt-distillation` first so the combined constraints are ledgered, channel-allocated, and reduced to H3's response budget before the adapter formats them.
+
 ## Stage 5 — forbidden failures
 
 Every action unit carries only the failures relevant to it, selected from:
