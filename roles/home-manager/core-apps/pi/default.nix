@@ -33,6 +33,7 @@ let
     "h3-prompt-distillation"
     "human-motion-realism-production"
     "identity-realism-production"
+    "krea2-cinematic-still-production"
     "location-world-production"
     "performance-direction"
     "prop-continuity"

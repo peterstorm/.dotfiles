@@ -27,6 +27,7 @@ const creativeSkillNames = Object.freeze([
 	"h3-prompt-writing",
 	"human-motion-realism-production",
 	"identity-realism-production",
+	"krea2-cinematic-still-production",
 	"location-world-production",
 	"music-caption-rewriter",
 	"performance-direction",
@@ -179,6 +180,14 @@ describe("creative project skill scope", () => {
 				"Identity A",
 				"Realism B",
 				"No modifier reapplication",
+			],
+			"krea2-cinematic-still-production": [
+				"Asset-mode algebra",
+				"Exact camera contract",
+				"Photographic reality stack",
+				"A clear wrong face is a recast actor",
+				"Character-bearing establishing keyframe",
+				"Full-frame and crop QA",
 			],
 			"location-world-production": [
 				"One geography",

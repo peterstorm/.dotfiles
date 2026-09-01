@@ -47,7 +47,7 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    are pruned.
 6. **Creative project resources**: links four reviewed archive skills, MiniMax's
    revision-pinned official music-caption and H3 prompt-writing skills, and
-   twelve MIT-licensed authored production skills into `~/dev/creative/.pi/skills/`
+   thirteen MIT-licensed authored production skills into `~/dev/creative/.pi/skills/`
    through Home Manager. The same project receives a revision-pinned MCP adapter
    setting and an allowlisted Blender MCP config. None are global resources, so
    Pi discovers them only when its working directory is exactly `~/dev/creative`.
@@ -83,7 +83,7 @@ Nix also fetches MiniMax's official `music-caption-rewriter` and
 and source hashes in the provenance file, including their relative assets under
 the applicable upstream community licenses.
 
-The repository owns twelve MIT-licensed companion skills:
+The repository owns thirteen MIT-licensed companion skills:
 
 - `action-physics-production` — support, force, contact order, momentum,
   conditioning strategy, proof coverage, and sampled-frame action QA;
@@ -100,6 +100,8 @@ The repository owns twelve MIT-licensed companion skills:
   support, gesture, fidget, response-latency, and dense sampled-frame QA;
 - `identity-realism-production` — mandatory Krea/Klein face A/B qualification and
   accepted high-fidelity identity handoff to production H3;
+- `krea2-cinematic-still-production` — explicit asset modes, reference-role routing,
+  physical camera contracts, photographic material direction, and fail-closed Krea still QA;
 - `location-world-production` — location canon, personless plates, light contracts,
   look bible, ambient motion, and set-state continuity;
 - `performance-direction` — playable actor and listener work with sampled-frame QA;
