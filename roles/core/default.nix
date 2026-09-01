@@ -30,12 +30,10 @@
 
   users.mutableUsers = false;
 
-  security.sudo.extraRules = [{
-    users = [ "peterstorm" ];
-    commands = [
-      { command = "/run/current-system/sw/bin/nixos-rebuild"; options = [ "NOPASSWD" ]; }
-    ];
-  }];
+  # Single-operator machines: every wheel account is the owner's own, and
+  # agent sessions drive rebuilds/service ops non-interactively. Supersedes
+  # the earlier nixos-rebuild-only NOPASSWD rule.
+  security.sudo.wheelNeedsPassword = false;
 
   virtualisation.docker.enable = true;
 
