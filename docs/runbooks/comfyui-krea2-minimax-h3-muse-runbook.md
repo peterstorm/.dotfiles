@@ -932,7 +932,7 @@ local Qwen3.8 remains the supported local prompt-author path.
 Nix pins `ModelTC/Minimax-H3-Turbo` at
 `a7e148b8dc7db8ad976966060dcc022adf11fc8d` (Apache-2.0), adapts its native
 ComfyUI graphs to the workstation's unpruned BF16 task-family checkpoints and
-BF16 Qwen3-VL encoder, and installs four Development graphs under **User
+BF16 Qwen3-VL encoder, and installs six Development graphs under **User
 workflows → `minimax-h3-turbo-lora-qualification`**:
 
 1. `00 ... Prompt Only Mechanics Test` — FL2VA-family T2VA with both frame
@@ -945,6 +945,38 @@ workflows → `minimax-h3-turbo-lora-qualification`**:
 4. `03 ... REF2VA Turbo 4-Step ...` — the qualified appearance-reference
    control at strength 1.0, four Euler/simple steps, shifts 12/3, 960×544,
    and reference resize `match`.
+5. `04 ... FL2VA PDD Acc 8-Step ...` — prompt-only qualification using the
+   official Alibaba PAI FL2VA acceleration file, dedicated PDD loader, Euler,
+   CFG 1, trained sigma boundaries, shifts 12/3, and 960×544.
+6. `05 ... REF2VA PDD Acc 8-Step ...` — the matching Ref2VA PDD profile with
+   one appearance reference and otherwise identical sampling constraints.
+
+#### PDD Acceleration 8-Step
+
+PDD checkpoints are **not ordinary LoRAs**. Each file combines a rank-64 trunk
+adapter with a parallel-decoding final-layer head bank and a trained 32-interval
+sigma grid. Loading one through `LoraLoaderModelOnly` silently drops the head
+bank and does not reproduce PDD. Nix therefore pins the Apache-2.0 dedicated
+`ComfyUI-MiniMax-H3-PDD-Acc` loader at
+`311a65dd53832d8a5f8177a9d5fb923c09e35a90`, runs its torch regression suite,
+and keeps the files in `/models/comfyui/pdd_acc`.
+
+Install both official task-family files after the existing H3 legal gates:
+
+```bash
+MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
+  bash scripts/comfyui/download-minimax-h3-pdd-models.sh
+```
+
+The downloader pins `alibaba-pai/MiniMax-H3-Acc-LoRAs` revision
+`335001fb9e5455d68a0caa18ec2e319072150328`. FL2VA and Ref2VA are each
+1,372,450,680 bytes and checksum-distinct. Pairing is enforced by both workflow
+contract and the loader's trunk fingerprint guard.
+
+The required recipe is exact: `MiniMaxH3PDDAccApply`, NFE 8, LoRA/head strengths
+1.0/1.0, `on_off_grid=error`, Euler, CFG 1, shifts 12/3, and the Apply node's
+`SIGMAS` output wired directly into `SamplerCustomAdvanced`. Do not add a
+`BasicScheduler`, Turbo adapter, second distill, EasyCache, or block cache.
 
 Start with workflow `00` and anonymous subjects. One prompt should contain one
 continuous 3–5 second shot, one causal physical beat, a static medium-close
@@ -953,7 +985,7 @@ settle. Use four fixed seeds before changing wording. Do not introduce AEGIS,
 identity references, camera motion, or cuts until generic mechanics pass.
 
 The zero-reference graph is not zero-reference Ref2VA and is not a dedicated
-T2VA checkpoint. The four graphs are qualification tools, not Production
+T2VA checkpoint. The six graphs are qualification tools, not Production
 profiles. Preserve compiled requests and histories externally; their Nix
 installation never promotes an output.
 
@@ -961,12 +993,12 @@ installation never promotes an output.
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **129 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **138 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
-  maximum-quality H3 production graphs, two H3 Director Development graphs, four
-  H3 Turbo-LoRA qualification graphs, one full-quality Music 3 graph, seven
-  still/video upscaler qualification graphs, four tested H3-output finishing
+  maximum-quality H3 production graphs, two H3 Director Development graphs, six
+  H3 acceleration qualification graphs, seven H3 motion-context/keyframe graphs,
+  one full-quality Music 3 graph, seven still/video upscaler qualification graphs, four tested H3-output finishing
   graphs, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 54 curated
   graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains

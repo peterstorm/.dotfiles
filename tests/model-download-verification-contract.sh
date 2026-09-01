@@ -7,6 +7,7 @@ KREA_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-models.sh"
 KLEIN_DOWNLOAD="$ROOT/scripts/comfyui/download-krea2-flux-klein-models.sh"
 MUSE_DOWNLOAD="$ROOT/scripts/inference/muse/download-muse-glimmer-30b.sh"
 H3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
+PDD_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-pdd-models.sh"
 MUSIC3_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-music3-models.sh"
 PROFILE_CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 
@@ -270,6 +271,20 @@ H3_EVENTS="$sandbox/h3-events" PATH="$sandbox/bin:$PATH" \
   bash "$H3_DOWNLOAD" >/dev/null 2>&1 || h3_status=$?
 [ "$h3_status" -eq 2 ] || fail "MiniMax missing-authorization gate returned $h3_status"
 [ ! -s "$sandbox/h3-events" ] || fail "MiniMax called hf before authorization attestation"
+
+pdd_status=0
+H3_EVENTS="$sandbox/h3-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/pdd" bash "$PDD_DOWNLOAD" \
+  >/dev/null 2>&1 || pdd_status=$?
+[ "$pdd_status" -eq 2 ] || fail "MiniMax PDD missing-license gate returned $pdd_status"
+[ ! -s "$sandbox/h3-events" ] || fail "MiniMax PDD called hf before license acceptance"
+
+pdd_status=0
+H3_EVENTS="$sandbox/h3-events" PATH="$sandbox/bin:$PATH" \
+  COMFYUI_MODELS_ROOT="$sandbox/pdd" MINIMAX_H3_ACCEPT_LICENSE=yes \
+  bash "$PDD_DOWNLOAD" >/dev/null 2>&1 || pdd_status=$?
+[ "$pdd_status" -eq 2 ] || fail "MiniMax PDD missing-authorization gate returned $pdd_status"
+[ ! -s "$sandbox/h3-events" ] || fail "MiniMax PDD called hf before authorization attestation"
 
 # Music 3's community-license gate must also reject before the hf boundary.
 cat >"$sandbox/bin/hf" <<'EOF'

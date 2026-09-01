@@ -207,6 +207,7 @@ let
     "clip_vision"
     "vae"
     "loras"
+    "pdd_acc"
     "controlnet"
     "upscale_models"
     "SEEDVR2"
@@ -379,6 +380,19 @@ let
     hash = "sha256-tu5Q7keXuZTUN8y4qSeGJqInDNm8WWwB3UQmmGWc4ek=";
   };
 
+  # PixelEasel publishes these examples without an explicit redistribution
+  # license. Fixed-output fetches keep them private to the local Development
+  # build and make source drift fail closed.
+  minimaxH3TwoGuideWorkflowSource = pkgs.fetchurl {
+    url = "https://drive.usercontent.google.com/download?id=1YVjFwB3twS2MviP-DWSmW84gnRHzzEW-&export=download&confirm=t";
+    hash = "sha256-FnuBHZDoMZfaPlg+iNc9zHI/ijdfT3aSwehRodRIojU=";
+  };
+
+  minimaxH3FourGuideWorkflowSource = pkgs.fetchurl {
+    url = "https://drive.usercontent.google.com/download?id=1iSS4Dsb_tfkSAlUinHXH_w5QV1-xU3Wf&export=download&confirm=t";
+    hash = "sha256-nn6Jcn7aHNgQQm1WoXr0f+PEmZrHhV2YrUopKTkNXTA=";
+  };
+
   h3MotionContextNode =
     pkgs.runCommand "comfyui-h3-motion-context-multiref-87de57b-tested"
       {
@@ -444,6 +458,26 @@ let
     hash = "sha256-LG7fqEcWcuacQYK6DMyS7uCTnz0Wa66oO6SPRIqIENo=";
   };
 
+  minimaxH3PddSource = pkgs.fetchFromGitHub {
+    owner = "Jalen-Brunson";
+    repo = "ComfyUI-MiniMax-H3-PDD-Acc";
+    rev = "311a65dd53832d8a5f8177a9d5fb923c09e35a90";
+    hash = "sha256-jqjqdww2pUYPOr+5ox0GtculgpL1OjKGlgALb4eN1vk=";
+  };
+
+  minimaxH3PddNode =
+    pkgs.runCommand "comfyui-minimax-h3-pdd-acc-311a65d-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${minimaxH3PddSource}/. "$out"
+        chmod -R u+w "$out"
+        cd "$out"
+        ${comfyPythonEnv}/bin/python tests/test_pdd_acc.py
+        chmod -R a-w "$out"
+      '';
+
   minimaxH3DirectorNode =
     pkgs.runCommand "comfyui-minimax-h3-director-hardened"
       {
@@ -470,6 +504,7 @@ let
     ln -s ${videoHelperSuiteNode} "$out/ComfyUI-VideoHelperSuite"
     ln -s ${mmh3ToolsNode} "$out/ComfyUI-MMH3Tools"
     ln -s ${h3MotionContextNode} "$out/ComfyUI-H3-Motion-Context-MultiRef"
+    ln -s ${minimaxH3PddNode} "$out/ComfyUI-MiniMax-H3-PDD-Acc"
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
@@ -1906,6 +1941,7 @@ let
             ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_i2v_lightx2v_turbo.json \
           --ref2v-source \
             ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+          --pdd-source ${minimaxH3PddNode}/example_workflows/pdd_acc_t2v_basic.json \
           --output-dir "$out/workflows"
       '';
 
@@ -1922,6 +1958,8 @@ let
         ${pkgs.bash}/bin/bash \
           ${../../scripts/comfyui/build-minimax-h3-motion-context-workflows.sh} \
           --source-dir ${h3MotionContextNode} \
+          --two-guide-source ${minimaxH3TwoGuideWorkflowSource} \
+          --four-guide-source ${minimaxH3FourGuideWorkflowSource} \
           --output-dir "$out/workflows"
       '';
 

@@ -2,12 +2,13 @@
 set -euo pipefail
 
 usage() {
-  printf 'Usage: %s --i2v-source FILE --ref2v-source FILE --output-dir DIR\n' "$0" >&2
+  printf 'Usage: %s --i2v-source FILE --ref2v-source FILE --pdd-source FILE --output-dir DIR\n' "$0" >&2
   exit 64
 }
 
 i2v_source=
 ref2v_source=
+pdd_source=
 output_dir=
 while (($#)); do
   case "$1" in
@@ -21,6 +22,11 @@ while (($#)); do
       ref2v_source=$2
       shift 2
       ;;
+    --pdd-source)
+      [[ $# -ge 2 ]] || usage
+      pdd_source=$2
+      shift 2
+      ;;
     --output-dir)
       [[ $# -ge 2 ]] || usage
       output_dir=$2
@@ -30,13 +36,20 @@ while (($#)); do
   esac
 done
 
-[[ -f "$i2v_source" && -f "$ref2v_source" && -n "$output_dir" ]] || usage
+[[ -f "$i2v_source" && -f "$ref2v_source" && -f "$pdd_source" && -n "$output_dir" ]] || usage
+expected_pdd_source_sha=9ef2d4914e3256fb3d025be80b00f28047ea48d41c2d61b10558354b5c23ac69
+[[ $(sha256sum "$pdd_source" | cut -d' ' -f1) == "$expected_pdd_source_sha" ]] || {
+  echo "unexpected PDD workflow source checksum" >&2
+  exit 1
+}
 mkdir -p "$output_dir"
 
 t2v8="$output_dir/00 MiniMax H3 BF16 FL2VA Turbo 8-Step - Prompt Only Mechanics Test.json"
 fl4="$output_dir/01 MiniMax H3 BF16 FL2VA Turbo 4-Step 768p - First Last Test.json"
 fl8="$output_dir/02 MiniMax H3 BF16 FL2VA Turbo 8-Step - First Last Test.json"
 ref4="$output_dir/03 MiniMax H3 BF16 REF2VA Turbo 4-Step - Reference Test.json"
+pdd_fl8="$output_dir/04 MiniMax H3 BF16 FL2VA PDD Acc 8-Step - Prompt Test.json"
+pdd_ref8="$output_dir/05 MiniMax H3 BF16 REF2VA PDD Acc 8-Step - Reference Test.json"
 
 fl_prompt='How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the final frame.\n\nintegrated_multimodal_description: [Shot 1] Paste one prompt-only qualification shot here. Begin exactly from Picture 1 and end exactly on Picture 2. Describe one subject pair, one causal physical beat, one camera move, and one contact or near-contact event in chronological order. Use concrete verbs and visible reactions. Do not request internal cuts.\n\noverall_soundscape: Describe only synchronized ambience, movement, and impact sounds.\n\nnon_diegetic_music: N/A'
 fl4_note='## AFTERSIGNAL — FL2VA Turbo 4-step 768p Development test\n\nTask-matched BF16 FL2VA base plus `minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors` at strength 1.0. Exact source profile: Euler/simple, 4 steps, video/audio shifts 6/3, native 1344×768. Supply independent first and last frames. This profile is unqualified: preserve request, history, seed, inputs, output, and runtime before judging it. Do not use it as Production authority.'
@@ -177,6 +190,147 @@ jq \
     | walk(if type == "object" then del(.models) else . end)
   ' "$ref2v_source" >"$ref4"
 
+pdd_fl_prompt='summary:
+[reference generation] One continuous prompt-only mechanics qualification shot with one anonymous subject pair, one causal physical beat, and no internal cuts.
+
+detailed_description:
+[Shot 1] Describe opening geometry, planted support, action initiation, exact path, one contact or near-contact event, receiver reaction, and short settle in chronological order. Use a static medium-close camera. Do not add identity references, a second exchange, or a scene transition.
+
+overall_soundscape:
+Describe only synchronized ambience, movement, contact, and recovery sounds.
+
+non_diegetic_music:
+N/A'
+pdd_ref_prompt='subject_definitions:
+<Subject 1> is the appearance reference in <Picture 1>. Preserve only its supplied visible identity, proportions, and materials.
+
+summary:
+[reference generation] One continuous reference-driven mechanics qualification shot with one causal physical beat and no internal cuts.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): fully_preserved - preserve the supplied visible appearance throughout.
+
+detailed_description:
+[Shot 1] Describe opening geometry, planted support, action initiation, exact path, one contact or near-contact event, receiver reaction, and short settle in chronological order. Use one restrained camera move. Do not add a second exchange or scene transition.
+
+overall_soundscape:
+Describe only synchronized ambience, movement, contact, and recovery sounds.
+
+non_diegetic_music:
+N/A'
+pdd_note='PDD distills do not stack with Turbo or other acceleration LoRAs. This is not an ordinary LoRA graph: MiniMaxH3PDDAccApply loads the rank-64 trunk adapter, parallel-decoding head bank, and trained sigma boundaries together. Use Euler, CFG 1, shifts 12/3, NFE 8, LoRA/head strengths 1.0, and on_off_grid=error. Keep task families exact. Private local Development qualification only; preserve graph, request, history, inputs, seed, runtime, and output before judging quality.'
+
+build_pdd() {
+  local destination=$1 family=$2 pdd_file=$3 prompt=$4 prefix=$5 with_reference=$6
+  jq \
+    --arg family "$family" \
+    --arg pdd_file "$pdd_file" \
+    --arg prompt "$prompt" \
+    --arg prefix "$prefix" \
+    --arg note "$pdd_note" \
+    --argjson with_reference "$with_reference" '
+      .last_node_id = (if $with_reference then 100 else .last_node_id end)
+      | .last_link_id = (if $with_reference then 100 else .last_link_id end)
+      | (.nodes[] | select(.id == 1)) |= (
+          .title = "ON-DEMAND — unpruned BF16 \($family)"
+          | .widgets_values = ["minimax_h3_\($family)_bf16.safetensors", "default"]
+          | del(.properties.models)
+        )
+      | (.nodes[] | select(.id == 2)) |= (
+          .title = "ON-DEMAND — BF16 Qwen3-VL-32B"
+          | .widgets_values = ["qwen3vl_32b_minimax_h3_bf16.safetensors", "minimax", "default"]
+          | del(.properties.models)
+        )
+      | (.nodes[] | select(.id == 5)) |= (
+          .title = "PDD training grid — shifts 12/3 exactly"
+          | .widgets_values = [12, 3]
+        )
+      | (.nodes[] | select(.id == 6)) |= (
+          .title = "Dedicated PDD loader — trunk + head bank + trained sigmas"
+          | .widgets_values = [$pdd_file, "8", 1.0, 1.0, "error"]
+        )
+      | (.nodes[] | select(.id == 7)) |= (
+          .title = (if $with_reference then "PDD Ref2VA — Picture 1 appearance reference" else "PDD FL2VA-family — prompt-only mechanics" end)
+          | .widgets_values = [$prompt, 960, 544, 124, "match"]
+        )
+      | (.nodes[] | select(.id == 9)) |= (
+          .title = "PDD requires Euler"
+          | .widgets_values = ["euler"]
+        )
+      | (.nodes[] | select(.id == 10)) |= (
+          .title = "Fixed paired-comparison seed"
+          | .widgets_values = [872605, "fixed"]
+        )
+      | (.nodes[] | select(.id == 15) | .widgets_values[0]) = $prefix
+      | (.nodes[] | select(.id == 17)) |= (
+          .title = "AFTERSIGNAL PDD qualification contract"
+          | .widgets_values = [$note]
+        )
+      | (.nodes[] | select(.id == 18)) |= (
+          .title = "Required PDD recipe — never wire BasicScheduler sigmas"
+          | .widgets_values = ["MiniMaxH3PDDAccApply sigmas → SamplerCustomAdvanced. Euler only; CFG 1; shifts 12/3; NFE 8; strengths 1/1; off-grid error. No Turbo, cache, or second distill adapter."]
+        )
+      | if $with_reference then
+          (.nodes[] | select(.id == 7) | .inputs[] | select(.name == "ref_images.ref_image_0") | .link) = 100
+          | .nodes += [{
+              "id": 100,
+              "type": "LoadImage",
+              "pos": [-520, 120],
+              "size": [320, 314],
+              "flags": {},
+              "order": 4,
+              "mode": 0,
+              "inputs": [
+                {"name":"image","type":"COMBO","widget":{"name":"image"},"link":null},
+                {"name":"upload","type":"IMAGEUPLOAD","widget":{"name":"upload"},"link":null}
+              ],
+              "outputs": [
+                {"name":"IMAGE","type":"IMAGE","links":[100]},
+                {"name":"MASK","type":"MASK","links":null}
+              ],
+              "properties": {"cnr_id":"comfy-core","ver":"0.33.3","Node name for S&R":"LoadImage"},
+              "title": "Picture 1 — appearance reference",
+              "widgets_values": ["pdd-qualification/subject_1.png", "image"],
+              "widgets_values_named": {"image":"pdd-qualification/subject_1.png","upload":"image"}
+            }]
+          | .links += [[100, 100, 0, 7, 3, "IMAGE"]]
+        else . end
+      | walk(if type == "object" then del(.models) else . end)
+    ' "$pdd_source" >"$destination"
+}
+
+build_pdd "$pdd_fl8" fl2va MiniMax-H3-FL2VA-Acc-8Step.safetensors \
+  "$pdd_fl_prompt" video/AFTERSIGNAL_H3_FL2VA_PDD8_Prompt_Development false
+build_pdd "$pdd_ref8" ref2va MiniMax-H3-Ref2VA-Acc-8Step.safetensors \
+  "$pdd_ref_prompt" video/AFTERSIGNAL_H3_REF2VA_PDD8_Reference_Development true
+
+jq -s -e '
+  length == 2
+  and all(.[]; . as $workflow
+    | ([.nodes[].id] | length == (unique | length))
+    and all(.links[]; . as $edge
+      | any($workflow.nodes[]; .id == $edge[1])
+      and any($workflow.nodes[]; .id == $edge[3]))
+    and ([.nodes[] | select(.type == "MiniMaxH3PDDAccApply") | .widgets_values[1:5]]
+      == [["8", 1, 1, "error"]])
+    and ([.nodes[] | select(.type == "MiniMaxH3SigmaShift") | .widgets_values] == [[12, 3]])
+    and ([.nodes[] | select(.type == "KSamplerSelect") | .widgets_values] == [["euler"]])
+    and ([.nodes[] | select(.type == "BasicScheduler" or .type == "LoraLoaderModelOnly")] | length) == 0
+    and ([.nodes[] | select(.type == "MiniMaxH3ReferenceToVideo") | .widgets_values[1:5]]
+      == [[960, 544, 124, "match"]]))
+  and ([.[0].nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+    == ["minimax_h3_fl2va_bf16.safetensors"])
+  and ([.[0].nodes[] | select(.type == "MiniMaxH3PDDAccApply") | .widgets_values[0]]
+    == ["MiniMax-H3-FL2VA-Acc-8Step.safetensors"])
+  and ([.[0].nodes[] | select(.type == "LoadImage")] | length) == 0
+  and ([.[1].nodes[] | select(.type == "UNETLoader") | .widgets_values[0]]
+    == ["minimax_h3_ref2va_bf16.safetensors"])
+  and ([.[1].nodes[] | select(.type == "MiniMaxH3PDDAccApply") | .widgets_values[0]]
+    == ["MiniMax-H3-Ref2VA-Acc-8Step.safetensors"])
+  and ([.[1].nodes[] | select(.type == "LoadImage") | .widgets_values[0]]
+    == ["pdd-qualification/subject_1.png"])
+' "$pdd_fl8" "$pdd_ref8" >/dev/null
+
 jq -s -e '
   length == 4
   and all(.[]; . as $workflow
@@ -216,4 +370,4 @@ if grep -RqiE 'pruned_int8|nvfp4|resolve/main|tree/main|ComfyUI-Manager|api[_-]?
   echo "Turbo qualification workflows retain a lower-quality selector, mutable model URL, Manager, or credential field" >&2
   exit 1
 fi
-[[ $(find "$output_dir" -type f -name '*.json' | wc -l) -eq 4 ]]
+[[ $(find "$output_dir" -type f -name '*.json' | wc -l) -eq 6 ]]
