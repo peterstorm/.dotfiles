@@ -21,7 +21,7 @@ fan-out feature. Scores are never comparable between the two benchmark
 families.
 
 The benchmark supports DeepSeek V4 Flash text and Vision r21, two immutable
-Qwen3.8-27B runtime profiles, the experimental Qwen3.8 Flash-Next FP8 runtime,
+Qwen3.8-27B runtime profiles, both immutable Qwen3.8 Flash-Next FP8 runtimes,
 three historical immutable GLM-5.3 Flash v84 profiles, and the qualified v10 TP2/EP2/DCP2
 profile. Results are comparable only when both `protocol_version` and the
 complete protocol SHA match.
@@ -68,6 +68,7 @@ This measures planning directly. No implementation is generated or inferred.
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
 | `qwen-vllm-bf16kv` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dflash2-vllm-v3` |
 | `qwen-flash-next` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v1` |
+| `qwen-flash-next-v2` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v2` |
 | `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
 | `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
 | `glm-fp8` | `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v6` |
@@ -83,8 +84,10 @@ bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 `ds4-vision-r21` measures the qualified TP2 B12X/DGLIN Vision profile with
 fixed DSpark K6. `qwen-vllm-bf16kv` measures the single-GPU vLLM
 DFlash2/BF16-KV profile;
-`qwen` remains the historical TP2 SGLang/DSpark arm. `qwen-flash-next` measures
-the experimental TP2 FP8 profile with its 51.2B-element PLE table in host RAM.
+`qwen` remains the historical TP2 SGLang/DSpark arm. `qwen-flash-next` preserves
+the original experimental TP2 FP8 profile; `qwen-flash-next-v2` measures the
+source-reconstructible safety revision with UVA PLE, exact QSA selection,
+recurrent-state safeguards, and MTP3.
 `glm-v10-dcp2` follows the qualified active GLM route. `glm-fp8` preserves the
 historical v6 comparison, `glm-mtp` remains the multimodal v5 comparison arm,
 and `glm-dflash` is runtime-profile evidence—not an independent base-model
@@ -156,8 +159,11 @@ bash scripts/inference/qwen38/switch-qwen38-backend-v4.sh sglang
 # Qwen TP1 vLLM/DFlash2 with BF16 KV on physical GPU0
 bash scripts/inference/qwen38/switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv
 
-# Qwen Flash-Next FP8 TP2 with mandatory PLE host-RAM offload
+# Historical Qwen Flash-Next FP8 TP2 profile
 bash scripts/inference/qwen38/switch-qwen38-flash-next-profile-v1.sh start
+
+# Qwen Flash-Next v2 FP8 TP2 with UVA PLE, exact QSA, and state safety
+bash scripts/inference/qwen38/switch-qwen38-flash-next-profile-v2.sh start
 
 # DS4 text rollback
 bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh

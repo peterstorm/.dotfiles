@@ -16,6 +16,10 @@
       "model": "desktop-vllm/qwen3.8-27b",
       "thinkingLevel": "xhigh"
     },
+    "qwen-flash-next-v2": {
+      "model": "desktop-vllm/qwen3.8-flash-next-fp8",
+      "thinkingLevel": "xhigh"
+    },
     "glm": {
       "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
       "thinkingLevel": "max"
@@ -39,6 +43,17 @@
       "use": {
         "kind": "named",
         "target": "ds4-vision-r21"
+      }
+    },
+    {
+      "id": "qwen-flash-next-v2-subagents-use-xhigh",
+      "when": {
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/qwen3.8-flash-next-fp8"
+      },
+      "use": {
+        "kind": "named",
+        "target": "qwen-flash-next-v2"
       }
     },
     {

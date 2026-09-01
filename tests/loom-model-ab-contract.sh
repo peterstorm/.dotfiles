@@ -47,7 +47,7 @@ V2_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v2)"
 status=0
 benchmark_protocol_sha "$BENCH" future >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "protocol hasher accepted an unknown version"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -78,6 +78,8 @@ contains "$ARMS" 'switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv'
 contains "$ARMS" 'desktop-vllm/qwen3.8-flash-next-fp8:xhigh'
 contains "$ARMS" 'qwen38-flash-next-fp8-vllm-v1'
 contains "$ARMS" 'switch-qwen38-flash-next-profile-v1.sh start'
+contains "$ARMS" 'qwen38-flash-next-fp8-vllm-v2'
+contains "$ARMS" 'switch-qwen38-flash-next-profile-v2.sh start'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max'
@@ -147,6 +149,14 @@ jq -e '
     "model": "desktop-vllm/deepseek-v4-flash-vision",
     "thinkingLevel": "max"
   } and
+  .targets["qwen-flash-next-v2"] == {
+    "model": "desktop-vllm/qwen3.8-flash-next-fp8",
+    "thinkingLevel": "xhigh"
+  } and
+  any(.rules[];
+    .id == "qwen-flash-next-v2-subagents-use-xhigh" and
+    .when.parentModel == "desktop-vllm/qwen3.8-flash-next-fp8" and
+    .use == {"kind": "named", "target": "qwen-flash-next-v2"}) and
   any(.rules[];
     .id == "ds4-vision-r21-subagents-use-max" and
     .when.parentModel == "desktop-vllm/deepseek-v4-flash-vision" and

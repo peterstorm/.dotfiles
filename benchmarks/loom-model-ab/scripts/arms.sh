@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol)
+BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol)
 BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
 BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
 BENCHMARK_V1_PROTOCOL_FILES=(
@@ -128,6 +128,15 @@ benchmark_arm_record() {
         'qwen38-flash-next-fp8-vllm-v1' \
         'bash ~/.dotfiles/scripts/inference/qwen38/switch-qwen38-flash-next-profile-v1.sh start' \
         'Qwen3.8 Flash-Next FP8 vLLM TP2 + PLE RAM offload'
+      ;;
+    qwen-flash-next-v2)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/qwen3.8-flash-next-fp8:xhigh' \
+        'qwen3.8-flash-next-fp8' \
+        '262144' \
+        'qwen38-flash-next-fp8-vllm-v2' \
+        'bash ~/.dotfiles/scripts/inference/qwen38/switch-qwen38-flash-next-profile-v2.sh start' \
+        'Qwen3.8 Flash-Next v2 FP8 vLLM TP2 + UVA PLE + exact QSA + recurrent-state safety'
       ;;
     glm-dflash)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \

@@ -85,6 +85,10 @@ jq -e '
     "model": "desktop-vllm/qwen3.8-27b",
     "thinkingLevel": "xhigh"
   } and
+  .targets["qwen-flash-next-v2"] == {
+    "model": "desktop-vllm/qwen3.8-flash-next-fp8",
+    "thinkingLevel": "xhigh"
+  } and
   .targets.glm == {
     "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
     "thinkingLevel": "max"
@@ -102,6 +106,11 @@ jq -e '
     .when.parentClass == "local" and
     .when.parentModel == "desktop-vllm/deepseek-v4-flash-vision" and
     .use == {"kind": "named", "target": "ds4-vision-r21"}) and
+  any(.rules[];
+    .id == "qwen-flash-next-v2-subagents-use-xhigh" and
+    .when.parentClass == "local" and
+    .when.parentModel == "desktop-vllm/qwen3.8-flash-next-fp8" and
+    .use == {"kind": "named", "target": "qwen-flash-next-v2"}) and
   any(.rules[];
     .id == "glm-v10-dcp2-subagents-use-max" and
     .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
