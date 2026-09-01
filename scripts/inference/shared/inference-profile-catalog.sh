@@ -5,6 +5,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   ds4-0731-r31
   ds4-0731-r33
   ds4-infernal-invocation-cu133-r18
+  ds4-flash-vision-infernal-invocation-cu133-r21-v1
   qwen38-27b-bf16
   qwen38-27b-bf16-dspark-vllm-v2
   qwen38-27b-bf16-dspark-sglang-v2

@@ -15,7 +15,9 @@ qwen38/    Qwen3.8 profiles: 27B BF16 downloaders and launchers, DSpark,
            Flash-Next FP8 TP2 profile offloads its 51.2B N-gram embedding to
            host RAM and uses a hash-gated exact-top-k3 overlay because the stock
            family-12 QSA kernel is non-deterministic. Existing 27B launchers remain validated rollback pins.
-deepseek/  DeepSeek-V4-Flash-0731 (Infernal Invocation r18) downloader + launcher.
+deepseek/  DeepSeek-V4-Flash-0731 r18 rollback plus the source-guarded
+           DeepSeek-V4-Flash-Vision-Exp r21 overlay, downloader, launcher,
+           transactional switcher, and target/fixed-K6 qualification probes.
 glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            digest-pinned custom vLLM SM120 images, a multimodal 262K NVFP4 TP2
            profile, a conservative 128K/C1 EXL3 rollback, an upstream-aligned
@@ -52,4 +54,5 @@ Conventions:
 - GLM-5.3 is experimental until its dated runbooks' SM120, capacity,
   correctness, tool-use, context, and soak gates pass. The EXL3 image has an
   additional publicly unreconstructible overlay-provenance limitation. Qwen
-  and DS4 remain unchanged rollback profiles.
+  remains unchanged; DS4 r18 remains the text-only rollback for the qualified
+  r21 Vision candidate.
