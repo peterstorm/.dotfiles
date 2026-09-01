@@ -1307,6 +1307,39 @@ maximum-quality baseline does not apply a Turbo LoRA and retains the original
 - `video_minimax_h3_i2v`;
 - `video_minimax_h3_r2v`.
 
+### Wushu Action V7 — private local qualification only
+
+The public Wushu Action V7 repository declares its license only as `other` and
+contains no explicit Production or commercial-use grant. Its 924-clip training
+set is described but not sourced. The adapter therefore remains a private local
+Development experiment, never a Production dependency or authority. The H3
+base-model license and separate territorial authorization still apply.
+
+Install only the Ref2VA NO-ADALN variant, which is the upstream file intended
+for BF16/non-ConvRot Ref2VA models:
+
+```bash
+MINIMAX_H3_ACCEPT_LICENSE=yes \
+MINIMAX_H3_AUTHORIZED=yes \
+MINIMAX_H3_WUSHU_V7_RESEARCH_ONLY=yes \
+  bash scripts/comfyui/download-minimax-h3-wushu-v7-lora.sh
+```
+
+The downloader pins repository revision `9abd1a8ae5edf0c8a1aea541bfd58b778273ca6a`,
+310,167,928 bytes, and SHA-256
+`f070becda73c65a19a8204384db51bb8204d2303055852172c25aa699589326e`.
+The qualification runner stacks it after the official task-matched Ref2VA Turbo
+adapter at strength **0.5**, before `MiniMaxH3SigmaShift`. This isolates one new
+variable against the existing four-step control. The profile remains 960×544,
+Euler/simple, four steps, CFG 1, and shifts 12/3.
+
+Do not import either upstream workflow: they select lower-precision models and
+unqualified custom nodes, mix additional adapters, and use contradictory
+strength/sampler recipes. Use the existing core-node runner profile
+`wushu-v7-turbo-native`, include `wushu_action,` at the start of the authored
+prompt, and retain every output as `captured-awaiting-user-review`,
+`authority: none`, and `semanticAcceptance: false`.
+
 The practical single-GPU Comfy profile uses pruned INT8 ConvRot diffusion,
 NVFP4-AWQ Qwen3-VL-32B, FP16 video VAE, and FP32 audio VAE. It occupies roughly
 42.5 GB of weight files before optional LoRAs and leaves useful activation
