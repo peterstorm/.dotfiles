@@ -27,6 +27,7 @@ let
   ];
   authoredCreativeProjectSkillNames = [
     "action-physics-production"
+    "blender-previz"
     "blocking-continuity"
     "ensemble-action-production"
     "h3-prompt-distillation"
@@ -120,7 +121,10 @@ in
 {
   home.packages = [ pkgs.pi-coding-agent ];
 
-  home.file = creativeProjectSkillLinks;
+  home.file = creativeProjectSkillLinks // {
+    "dev/creative/.pi/settings.json".source = piDir + "/project-config/creative/settings.json";
+    "dev/creative/.mcp.json".source = piDir + "/project-config/creative/mcp.json";
+  };
 
   # extensions/ and prompts/ are hand-written source, so they stay whole-directory
   # symlinks: adding, editing or removing a file needs no rebuild. models.json and

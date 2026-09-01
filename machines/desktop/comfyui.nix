@@ -1945,6 +1945,26 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3BlenderRef2vaWorkflows =
+    pkgs.runCommand "minimax-h3-blender-ref2va-local-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-blender-ref2va-workflows.sh} \
+          --base-source \
+            ${qualifiedWorkflowTemplatesJson}/templates/video_minimax_h3_r2v.json \
+          --turbo-source \
+            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+          --pdd-source ${minimaxH3PddNode}/example_workflows/pdd_acc_t2v_basic.json \
+          --output-dir "$out/workflows"
+      '';
+
   minimaxH3MotionContextWorkflows =
     pkgs.runCommand "minimax-h3-motion-context-local-development-workflows"
       {
@@ -2394,6 +2414,7 @@ let
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
+    h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     elite_dir="$user_workflows/creative-suite"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
@@ -2409,21 +2430,24 @@ let
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
+    h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     elite_staging="$user_workflows/.creative-suite.new"
     input_dir=/var/lib/comfyui/input
+    blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_motion_context_staging" "$elite_staging"
+      "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_motion_context_staging" "$elite_staging" "$input_dir"
+      "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging" \
+      "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
     done
@@ -2469,6 +2493,9 @@ let
     for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3BlenderRef2vaWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_blender_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3MotionContextWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_motion_context_staging/$(basename "$source")"
     done
@@ -2483,7 +2510,8 @@ let
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
-      "$director_dir" "$h3_turbo_dir" "$h3_motion_context_dir" "$elite_dir"
+      "$director_dir" "$h3_turbo_dir" "$h3_blender_dir" \
+      "$h3_motion_context_dir" "$elite_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2497,6 +2525,7 @@ let
     mv "$h3_safe_upscaler_staging" "$h3_safe_upscaler_dir"
     mv "$director_staging" "$director_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
+    mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$elite_staging" "$elite_dir"
   '';

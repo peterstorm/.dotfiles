@@ -45,13 +45,12 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    Drop a new skill directory (with a `SKILL.md`) into `pi/skills/` and it
    appears on the next activation — no rebuild. Stale links to removed skills
    are pruned.
-6. **Creative project skills**: links four reviewed archive skills, MiniMax's
+6. **Creative project resources**: links four reviewed archive skills, MiniMax's
    revision-pinned official music-caption and H3 prompt-writing skills, and
-   eleven MIT-licensed authored production
-   skills into `~/dev/creative/.pi/skills/` through Home Manager. They are not
-   present in `~/.pi/agent/skills`, package settings, or any ancestor directory,
-   so Pi discovers them only when its working directory is exactly
-   `~/dev/creative`.
+   twelve MIT-licensed authored production skills into `~/dev/creative/.pi/skills/`
+   through Home Manager. The same project receives a revision-pinned MCP adapter
+   setting and an allowlisted Blender MCP config. None are global resources, so
+   Pi discovers them only when its working directory is exactly `~/dev/creative`.
 7. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
 
 ### Global skills (`pi/skills`)
@@ -84,10 +83,12 @@ Nix also fetches MiniMax's official `music-caption-rewriter` and
 and source hashes in the provenance file, including their relative assets under
 the applicable upstream community licenses.
 
-The repository owns eleven MIT-licensed companion skills:
+The repository owns twelve MIT-licensed companion skills:
 
 - `action-physics-production` — support, force, contact order, momentum,
   conditioning strategy, proof coverage, and sampled-frame action QA;
+- `blender-previz` — MCP-assisted minimal camera, spacing, contact, and mechanism
+  previsualization with contact-sheet gates and sparse MiniMax H3 guide handoff;
 - `blocking-continuity` — normalized staging, screen direction, map qualification,
   and fail-closed spatial QA;
 - `ensemble-action-production` — local-only Krea 2, MiniMax Music 3, and MiniMax H3
@@ -117,12 +118,17 @@ cd ~/dev/creative
 pi
 ```
 
-Pi requires an explicit project-trust decision before loading `.pi/skills`.
-Approve the prompt after verifying the path is exactly `~/dev/creative`; use
-`/trust` if that decision should persist, then restart Pi as instructed. Starting
-Pi elsewhere does not discover these seventeen skills. Pi intentionally applies
-ancestor traversal to `.agents/skills`, not `.pi/skills`; this setup uses the
-Pi-only `.pi` location, so start the session from the creative project root.
+Pi requires an explicit project-trust decision before loading `.pi/skills`, the
+project package, or `.mcp.json`. Approve the prompt after verifying the path is
+exactly `~/dev/creative`; use `/trust` if that decision should persist, then
+restart Pi as instructed. The project-local package is
+`nicobailon/pi-mcp-adapter@ff234b862359e722bf4dc1c99cde62278d4b8eb3`; its
+Blender server launches lazily through `ssh desktop` and exposes only scene/object
+inspection, viewport screenshots, and approval-gated code execution. Starting
+Pi elsewhere does not discover these eighteen skills or load the Blender MCP
+adapter/config. Pi intentionally applies ancestor traversal to `.agents/skills`,
+not `.pi/skills`; this setup uses the Pi-only `.pi` location, so start the session
+from the creative project root.
 
 ### Why Directory Symlinks?
 

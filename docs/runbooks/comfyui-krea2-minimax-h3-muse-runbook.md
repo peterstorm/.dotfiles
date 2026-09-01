@@ -989,16 +989,31 @@ T2VA checkpoint. The six graphs are qualification tools, not Production
 profiles. Preserve compiled requests and histories externally; their Nix
 installation never promotes an output.
 
+### Blender REF2VA video-carrier suite
+
+Nix installs six Development graphs under **User workflows →
+`minimax-h3-blender-ref2va-development`**. Each graph connects a 24 fps Blender
+viewport render directly to core `MiniMaxH3ReferenceToVideo` as `<Video 1>`,
+plus three separately owned appearance pictures. The paired 124-frame and
+362-frame families contain an unpruned BF16 20-step baseline, a task-matched
+Ref2VA Turbo four-step candidate, and a dedicated Ref2VA PDD eight-step
+candidate. Source audio is disconnected by default so an empty Blender track
+does not suppress prompt-authored sound. Never stack Turbo and PDD; the
+15-second accelerated graphs remain duration-qualification candidates. See
+`minimax-h3-blender-ref2va.md` for carrier export, authority, prompt, and QA
+contracts.
+
 ### Curated creative suite
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **138 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **144 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
   maximum-quality H3 production graphs, two H3 Director Development graphs, six
-  H3 acceleration qualification graphs, seven H3 motion-context/keyframe graphs,
-  one full-quality Music 3 graph, seven still/video upscaler qualification graphs, four tested H3-output finishing
+  H3 acceleration qualification graphs, six Blender REF2VA video-carrier graphs,
+  seven H3 motion-context/keyframe graphs, one full-quality Music 3 graph, seven
+  still/video upscaler qualification graphs, four tested H3-output finishing
   graphs, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 54 curated
   graphs installed into the workflow browser.
 - **506 official templates:** the complete pinned Comfy Template Library remains

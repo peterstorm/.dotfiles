@@ -36,6 +36,7 @@ if [ "${1:-}" = "--tests" ]; then
     rmdir "$links/@earendil-works" 2>/dev/null || true
   }
   trap cleanup EXIT
+  bash "$here/../tests/blender-mcp-contract.sh"
   bun test \
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \

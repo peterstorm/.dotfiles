@@ -1,0 +1,39 @@
+{
+  "settings": {
+    "scriptMode": false,
+    "directTools": false,
+    "hostConfigDiscovery": "off",
+    "toolResultRendering": "compact",
+    "approveTools": []
+  },
+  "mcpServers": {
+    "blender": {
+      "command": "ssh",
+      "args": [
+        "-o",
+        "BatchMode=yes",
+        "desktop",
+        "env",
+        "DISABLE_TELEMETRY=true",
+        "blender-mcp"
+      ],
+      "env": {
+        "DISABLE_TELEMETRY": "true"
+      },
+      "includeTools": [
+        "get_scene_info",
+        "get_object_info",
+        "get_viewport_screenshot",
+        "execute_blender_code"
+      ],
+      "approveTools": [
+        "execute_blender_code"
+      ],
+      "directTools": true,
+      "idleTimeout": 0,
+      "requestTimeoutMs": 120000,
+      "debug": false,
+      "trace": false
+    }
+  }
+}

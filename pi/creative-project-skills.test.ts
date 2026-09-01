@@ -18,6 +18,7 @@ import {
 const creativeSkillNames = Object.freeze([
 	"action-physics-production",
 	"banana-pro-director-30",
+	"blender-previz",
 	"blocking-continuity",
 	"character-builder",
 	"cinema-director",
@@ -137,6 +138,13 @@ describe("creative project skill scope", () => {
 				"off-label Turbo-LoRA extrapolation",
 				"CINEMATIC_PASS",
 				"sampled-frame atomic QA",
+			],
+			"blender-previz": [
+				"MCP is the live authoring surface",
+				"contact sheet before animation",
+				"never acting authority",
+				"MiniMaxH3ReferenceToVideo",
+				"captured-awaiting-user-review",
 			],
 			"blocking-continuity": [
 				"normalized image coordinates",

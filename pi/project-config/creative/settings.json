@@ -1,0 +1,10 @@
+{
+  "packages": [
+    {
+      "source": "git:github.com/nicobailon/pi-mcp-adapter@ff234b862359e722bf4dc1c99cde62278d4b8eb3",
+      "skills": [],
+      "prompts": [],
+      "themes": []
+    }
+  ]
+}

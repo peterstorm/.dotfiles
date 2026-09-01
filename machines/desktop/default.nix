@@ -102,6 +102,7 @@ in
     inputs.disko.nixosModules.disko
     ./disks.nix
     ./comfyui.nix
+    ./blender-previz.nix
   ];
 
   # MT7927 WiFi + Bluetooth. Deliberately not importing
