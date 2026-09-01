@@ -77,6 +77,10 @@ done < <(benchmark_arm_ids)
 
 ROUTING="$ROOT/pi/model-routing.json"
 jq -e '
+  .targets["ds4-vision-r21"] == {
+    "model": "desktop-vllm/deepseek-v4-flash-vision",
+    "thinkingLevel": "max"
+  } and
   .targets.qwen == {
     "model": "desktop-vllm/qwen3.8-27b",
     "thinkingLevel": "xhigh"
@@ -94,6 +98,11 @@ jq -e '
     "thinkingLevel": "high"
   } and
   any(.rules[];
+    .id == "ds4-vision-r21-subagents-use-max" and
+    .when.parentClass == "local" and
+    .when.parentModel == "desktop-vllm/deepseek-v4-flash-vision" and
+    .use == {"kind": "named", "target": "ds4-vision-r21"}) and
+  any(.rules[];
     .id == "glm-v10-dcp2-subagents-use-max" and
     .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
     .use == {"kind": "named", "target": "glm-v10-dcp2"}) and
@@ -102,7 +111,7 @@ jq -e '
     .when.parentClass == "cloud" and
     .when.parentModel == "openai-codex/gpt-5.6-sol" and
     .use == {"kind": "named", "target": "sol"})
-' "$ROUTING" >/dev/null || fail "Pi routing lacks exact qwen/glm/sol named targets"
+' "$ROUTING" >/dev/null || fail "Pi routing lacks exact ds4/qwen/glm/sol named targets"
 
 reference_frs="$(mktemp)"
 test_frs="$(mktemp)"

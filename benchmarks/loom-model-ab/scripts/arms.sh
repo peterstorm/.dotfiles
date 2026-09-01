@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol)
+BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol)
 BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
 BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
 BENCHMARK_V1_PROTOCOL_FILES=(
@@ -92,6 +92,15 @@ benchmark_arm_record() {
         'ds4-infernal-invocation-cu133-r18' \
         'bash ~/.dotfiles/scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh' \
         'DeepSeek V4 Flash r18'
+      ;;
+    ds4-vision-r21)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/deepseek-v4-flash-vision:max' \
+        'deepseek-v4-flash-vision' \
+        '312000' \
+        'ds4-flash-vision-infernal-invocation-cu133-r21-v1' \
+        'bash ~/.dotfiles/scripts/inference/deepseek/switch-ds4-flash-vision-r21-v1.sh start' \
+        'DeepSeek V4 Flash Vision r21 + DSpark K6'
       ;;
     qwen)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \

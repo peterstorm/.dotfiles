@@ -8,6 +8,10 @@
     ]
   },
   "targets": {
+    "ds4-vision-r21": {
+      "model": "desktop-vllm/deepseek-v4-flash-vision",
+      "thinkingLevel": "max"
+    },
     "qwen": {
       "model": "desktop-vllm/qwen3.8-27b",
       "thinkingLevel": "xhigh"
@@ -26,6 +30,17 @@
     }
   },
   "rules": [
+    {
+      "id": "ds4-vision-r21-subagents-use-max",
+      "when": {
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/deepseek-v4-flash-vision"
+      },
+      "use": {
+        "kind": "named",
+        "target": "ds4-vision-r21"
+      }
+    },
     {
       "id": "glm-v8-subagents-use-max",
       "when": {

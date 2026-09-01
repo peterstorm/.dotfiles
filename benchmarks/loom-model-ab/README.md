@@ -20,9 +20,9 @@ primary novel-feature planning benchmark now lives at
 fan-out feature. Scores are never comparable between the two benchmark
 families.
 
-The benchmark supports DeepSeek V4 Flash, two immutable Qwen3.8-27B runtime
-profiles, the experimental Qwen3.8 Flash-Next FP8 runtime, three historical
-immutable GLM-5.3 Flash v84 profiles, and the qualified v10 TP2/EP2/DCP2
+The benchmark supports DeepSeek V4 Flash text and Vision r21, two immutable
+Qwen3.8-27B runtime profiles, the experimental Qwen3.8 Flash-Next FP8 runtime,
+three historical immutable GLM-5.3 Flash v84 profiles, and the qualified v10 TP2/EP2/DCP2
 profile. Results are comparable only when both `protocol_version` and the
 complete protocol SHA match.
 
@@ -64,6 +64,7 @@ This measures planning directly. No implementation is generated or inferred.
 | Arm | Pi launch selector | Context | Immutable runtime profile |
 |---|---|---:|---|
 | `ds4` | `desktop-vllm/deepseek-v4-flash:max` | 1,048,576 | `ds4-infernal-invocation-cu133-r18` |
+| `ds4-vision-r21` | `desktop-vllm/deepseek-v4-flash-vision:max` | 312,000 | `ds4-flash-vision-infernal-invocation-cu133-r21-v1` |
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
 | `qwen-vllm-bf16kv` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dflash2-vllm-v3` |
 | `qwen-flash-next` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v1` |
@@ -79,7 +80,9 @@ bash scripts/run-arm.sh --list                 # default v2
 bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 ```
 
-`qwen-vllm-bf16kv` measures the single-GPU vLLM DFlash2/BF16-KV profile;
+`ds4-vision-r21` measures the qualified TP2 B12X/DGLIN Vision profile with
+fixed DSpark K6. `qwen-vllm-bf16kv` measures the single-GPU vLLM
+DFlash2/BF16-KV profile;
 `qwen` remains the historical TP2 SGLang/DSpark arm. `qwen-flash-next` measures
 the experimental TP2 FP8 profile with its 51.2B-element PLE table in host RAM.
 `glm-v10-dcp2` follows the qualified active GLM route. `glm-fp8` preserves the
@@ -156,8 +159,11 @@ bash scripts/inference/qwen38/switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16k
 # Qwen Flash-Next FP8 TP2 with mandatory PLE host-RAM offload
 bash scripts/inference/qwen38/switch-qwen38-flash-next-profile-v1.sh start
 
-# DS4
+# DS4 text rollback
 bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
+
+# DS4 Vision r21
+bash scripts/inference/deepseek/switch-ds4-flash-vision-r21-v1.sh start
 ```
 
 Then authenticate and attest the served model:

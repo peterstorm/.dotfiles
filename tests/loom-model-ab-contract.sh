@@ -47,7 +47,7 @@ V2_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v2)"
 status=0
 benchmark_protocol_sha "$BENCH" future >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "protocol hasher accepted an unknown version"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -70,6 +70,9 @@ status=0
 bash "$RUN" --protocol future --list >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "unknown protocol did not fail with usage status 2"
 
+contains "$ARMS" 'desktop-vllm/deepseek-v4-flash-vision:max'
+contains "$ARMS" 'ds4-flash-vision-infernal-invocation-cu133-r21-v1'
+contains "$ARMS" 'switch-ds4-flash-vision-r21-v1.sh start'
 contains "$ARMS" 'qwen38-27b-bf16-dflash2-vllm-v3'
 contains "$ARMS" 'switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv'
 contains "$ARMS" 'desktop-vllm/qwen3.8-flash-next-fp8:xhigh'
@@ -91,7 +94,7 @@ contains "$RUN" 'docker inspect --format='
 contains "$RUN" 'Runtime profile mismatch:'
 contains "$RUN" 'verify-run-models.sh'
 contains "$VERIFY" '.thinkingLevelMap[$level] != null'
-contains "$VERIFY" 'Pi routing lacks exact qwen/glm named targets'
+contains "$VERIFY" 'Pi routing lacks exact ds4/qwen/glm/sol named targets'
 contains "$GRADE" 'child_models_attested'
 contains "$GRADE" '.current_phase == "execute"'
 contains "$GRADE" '.tasks | type == "array" and length > 0 and all(.status == "pending")'
@@ -140,17 +143,21 @@ if grep -Eq -- 'curl .*Authorization: Bearer' "$RUN"; then
 fi
 
 jq -e '
-  .targets.qwen == {
-    "model": "desktop-vllm/qwen3.8-27b",
-    "thinkingLevel": "xhigh"
-  } and
-  .targets.glm == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k",
+  .targets["ds4-vision-r21"] == {
+    "model": "desktop-vllm/deepseek-v4-flash-vision",
     "thinkingLevel": "max"
-  }
-' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing lacks exact qwen/glm targets"
+  } and
+  any(.rules[];
+    .id == "ds4-vision-r21-subagents-use-max" and
+    .when.parentModel == "desktop-vllm/deepseek-v4-flash-vision" and
+    .use == {"kind": "named", "target": "ds4-vision-r21"})
+' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing lacks the exact DS4 Vision target"
 
 jq -e '
+  any(.providers["desktop-vllm"].models[];
+    .id == "deepseek-v4-flash-vision" and
+    .contextWindow == 312000 and
+    .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
     .id == "glm-5.3-flash-exl3-k4-vision" and
     .contextWindow == 98304 and
