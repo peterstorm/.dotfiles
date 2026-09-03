@@ -439,6 +439,8 @@ let
 
         package_root = pathlib.Path(sys.argv[1])
         sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "h3_fun_control_contract",
             package_root / "__init__.py",
