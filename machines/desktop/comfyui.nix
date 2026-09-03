@@ -438,6 +438,7 @@ let
         import torch
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
         spec = importlib.util.spec_from_file_location(
             "h3_fun_control_contract",
             package_root / "__init__.py",
