@@ -255,6 +255,15 @@ let
     ];
     text = builtins.readFile ../../scripts/comfyui/download-image-upscaler-models.sh;
   };
+  downloadMinimaxH3FunControlnet = pkgs.writeShellApplication {
+    name = "download-minimax-h3-fun-controlnet";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-fun-controlnet.sh;
+  };
 
   krea2EditNode = pkgs.fetchFromGitHub {
     owner = "lbouaraba";
@@ -406,6 +415,53 @@ let
         chmod -R a-w "$out"
       '';
 
+  h3FunControlSource = pkgs.fetchFromGitHub {
+    owner = "wyzborrero";
+    repo = "ComfyUI-H3-FunControl";
+    rev = "22a7ec38c4d16a76a8dea53b6e0faa0356f4f220";
+    hash = "sha256-UIKCkqMIbWeacsycqh1ZJ0R7szuioOwyigjOKMKamYs=";
+  };
+
+  h3FunControlNode =
+    pkgs.runCommand "comfyui-h3-fun-control-22a7ec3-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${h3FunControlSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+        import torch
+
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "h3_fun_control_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load H3 Fun ControlNet")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        control = sys.modules[f"{spec.name}.control"]
+        rows = control.pack_control_latent(torch.zeros((1, 24, 2, 4, 4)))
+        assert tuple(rows.shape) == (8, 196)
+        assert torch.count_nonzero(rows) == 0
+        try:
+            control.patchify(torch.zeros((2, 24, 2, 4, 4)))
+        except ValueError as error:
+            assert "single-batch" in str(error)
+        else:
+            raise AssertionError("batch > 1 must fail closed")
+        PY
+        chmod -R a-w "$out"
+      '';
+
   # Upstream does not declare a code license. This immutable pin is authorized
   # only for private local Development evaluation; it is not a Production or
   # redistribution grant.
@@ -504,6 +560,7 @@ let
     ln -s ${videoHelperSuiteNode} "$out/ComfyUI-VideoHelperSuite"
     ln -s ${mmh3ToolsNode} "$out/ComfyUI-MMH3Tools"
     ln -s ${h3MotionContextNode} "$out/ComfyUI-H3-Motion-Context-MultiRef"
+    ln -s ${h3FunControlNode} "$out/ComfyUI-H3-FunControl"
     ln -s ${minimaxH3PddNode} "$out/ComfyUI-MiniMax-H3-PDD-Acc"
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
@@ -2544,6 +2601,7 @@ in
     creativeModelPhase
     h3ModelPhase
     downloadImageUpscalerModels
+    downloadMinimaxH3FunControlnet
     modelTools
     pkgs.ffmpeg-full
   ];
