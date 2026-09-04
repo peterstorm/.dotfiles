@@ -10,6 +10,11 @@
 # Every artifact is pinned by size and SHA-256 in the checked-in manifest, and
 # the manifest itself is pinned by its own digest, so a tampered manifest fails
 # before any network access.
+#
+# Xet is disabled deliberately. hf-xet 1.6.0 stalls on this workstation exactly as
+# it does for Muse: the shard .incomplete files sit at zero bytes indefinitely with
+# no transfer. Standard Hub HTTPS is slower but resumable and observable. See the
+# same note in scripts/inference/muse/download-muse-glimmer-30b.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -133,7 +138,7 @@ docker run -d --name "$NAME" --network host \
   -v /tmp/qwen38-27b-blackfrost-abliterated-bf16-download.py:/download.py:ro \
   "${TOKEN_MOUNT[@]}" \
   "$PYTHON_IMAGE" \
-  bash -ceu "pip install --no-cache-dir 'huggingface_hub[hf_xet]==0.34.4'; export HF_XET_HIGH_PERFORMANCE=1; python /download.py '$REPO' '$REV' '$DEST' /checkpoint.manifest"
+  bash -ceu "pip install --no-cache-dir 'huggingface_hub==0.34.4'; export HF_HUB_DISABLE_XET=1; python /download.py '$REPO' '$REV' '$DEST' /checkpoint.manifest"
 
 printf "Downloading in container '%s'. Follow with: docker logs -f %s\n" "$NAME" "$NAME"
 printf "Completion marker: %s/.download-complete\n" "$DEST"
