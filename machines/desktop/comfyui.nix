@@ -231,6 +231,7 @@ let
     "clip_vision"
     "vae"
     "loras"
+    "vdn"
     "pdd_acc"
     "controlnet"
     "upscale_models"
@@ -287,6 +288,16 @@ let
       modelTools
     ];
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-fun-controlnet.sh;
+  };
+
+  downloadMinimaxH3VdnStage = pkgs.writeShellApplication {
+    name = "download-minimax-h3-vdn-stage";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-vdn-stage.sh;
   };
 
   krea2EditNode = pkgs.fetchFromGitHub {
@@ -618,6 +629,67 @@ let
           ${minimaxH3DirectorSource} "$out"
       '';
 
+  # VDN-H3 (Video Delta Net) hybrid attention for MiniMax-H3 — the video's
+  # "faster base model" node port. v1.3.1 is the hotfix release its example
+  # workflows target. Apache-2.0, no new Python dependencies; the contract runs
+  # the port's numerical-verification and attention-dispatch test suites.
+  vdnH3Source = pkgs.fetchFromGitHub {
+    owner = "Saganaki22";
+    repo = "ComfyUI-VDN-H3";
+    rev = "183f33d8a7b3c6322d83be95ae369251a63b3198";
+    hash = "sha256-D7hR0XpYOIXV27g43Q0sH+X9SP8QGe47mDhW2DBpLJQ=";
+  };
+
+  vdnH3Node =
+    pkgs.runCommand "comfyui-vdn-h3-183f33d-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${vdnH3Source}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        cd "$out"
+        ${comfyPythonEnv}/bin/python tests/test_vdn_math.py
+        ${comfyPythonEnv}/bin/python tests/test_window_dispatch.py
+        chmod -R a-w "$out"
+      '';
+
+  # NVIDIA Sol-Attn sparse attention (Apache-2.0, vendored NVIDIA kernel): the
+  # comparison-branch nodes (SolAttnMiniMax, MiniMaxChunkFeedForward) the VDN
+  # example wires. torch + Triton only; GPU regression tests skip without CUDA.
+  solAttnSource = pkgs.fetchFromGitHub {
+    owner = "Saganaki22";
+    repo = "ComfyUI-sol-attn";
+    rev = "930a4d6e432ff8b8ed5e30ff2f72519b92d69bdf";
+    hash = "sha256-bdAEEzx6Ab2EHcrjsnhrwPOwlQHFfntMExj14mqumfA=";
+  };
+
+  solAttnNode =
+    pkgs.runCommand "comfyui-sol-attn-930a4d6-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${solAttnSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        cd "$out"
+        # The architecture-dispatch class is the CPU-safe contract: the fusion
+        # and inline-Q GPU tests need a CUDA device the build sandbox denies.
+        ${comfyPythonEnv}/bin/python tests/test_optimizations.py ArchitectureDispatchTests
+        chmod -R a-w "$out"
+      '';
+
+  # The VDN example's comparison topology switches branches through this pack's
+  # wildcard Switch node; main HEAD is the exact revision the example pins.
+  rebalancePackNode = pkgs.fetchFromGitHub {
+    owner = "nova452";
+    repo = "Rebalance-Pack";
+    rev = "4553b145043b3ed6818651e5e39a01614fc11fb6";
+    hash = "sha256-VgrNS/EfmJ94MFQCHDtke7JUr2jCtUgbHPYccKCh2mI=";
+  };
+
   declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
     mkdir -p "$out"
     ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
@@ -638,6 +710,9 @@ let
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
     ln -s ${superNodesSource} "$out/ComfyUI-SuperNodes"
     ln -s ${nvidiaRtxNodesSource} "$out/Nvidia_RTX_Nodes_ComfyUI"
+    ln -s ${vdnH3Node} "$out/ComfyUI-VDN-H3"
+    ln -s ${solAttnNode} "$out/ComfyUI-sol-attn"
+    ln -s ${rebalancePackNode} "$out/Rebalance-Pack"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -2113,6 +2188,25 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3VdnWorkflows =
+    pkgs.runCommand "minimax-h3-vdn-h3-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-vdn-workflows.sh} \
+          --vdn-t2v-source \
+            ${vdnH3Source}/example_workflows/vdn_h3_t2v_8step.json \
+          --ref2v-source \
+            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+          --output-dir "$out/workflows"
+      '';
+
   imageUpscalerWorkflows =
     pkgs.runCommand "image-upscaler-qualification-v1-workflows"
       {
@@ -2546,6 +2640,7 @@ let
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
+    h3_vdn_dir="$user_workflows/minimax-h3-vdn-h3"
     elite_dir="$user_workflows/creative-suite"
     balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
@@ -2563,6 +2658,7 @@ let
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
+    h3_vdn_staging="$user_workflows/.minimax-h3-vdn-h3.new"
     elite_staging="$user_workflows/.creative-suite.new"
     balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
     input_dir=/var/lib/comfyui/input
@@ -2572,14 +2668,14 @@ let
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging" \
+      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$elite_staging" \
       "$balanced_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging" \
+      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$elite_staging" \
       "$balanced_staging" \
       "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
@@ -2633,6 +2729,9 @@ let
     for source in ${minimaxH3MotionContextWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_motion_context_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3VdnWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_vdn_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -2648,7 +2747,7 @@ let
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
       "$director_dir" "$h3_turbo_dir" "$h3_blender_dir" \
-      "$h3_motion_context_dir" "$elite_dir" "$balanced_dir"
+      "$h3_motion_context_dir" "$h3_vdn_dir" "$elite_dir" "$balanced_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2664,6 +2763,7 @@ let
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
+    mv "$h3_vdn_staging" "$h3_vdn_dir"
     mv "$elite_staging" "$elite_dir"
     mv "$balanced_staging" "$balanced_dir"
   '';
@@ -2683,6 +2783,7 @@ in
     h3ModelPhase
     downloadImageUpscalerModels
     downloadMinimaxH3FunControlnet
+    downloadMinimaxH3VdnStage
     modelTools
     pkgs.ffmpeg-full
   ];
