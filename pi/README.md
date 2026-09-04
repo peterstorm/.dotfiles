@@ -161,8 +161,8 @@ with nine selectable models:
 
 DeepSeek, GLM, and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when
 GPU capacity permits. The two Muse entries are alternative servers on that one port — the
-SGLang profile serves `muse-glimmer-30b` at Muse's native 128K, the pinned vLLM profile
-serves `muse-glimmer-30b-blackfrost-bf16` at its own 32K `--max-model-len`. Select the
+SGLang profile serves `muse-glimmer-30b`, the pinned vLLM profile serves
+`muse-glimmer-30b-blackfrost-bf16`, both at the checkpoint's native 128K. Select the
 entry matching whichever launcher is running.
 
 Every launcher synchronizes the DeepSeek, Qwen, GLM, and Muse key

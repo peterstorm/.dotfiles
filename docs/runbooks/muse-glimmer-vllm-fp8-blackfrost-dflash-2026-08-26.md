@@ -22,6 +22,11 @@ All checkpoints must pass their exact size/SHA-256 manifests and matching `.down
   loopback-only bind silently broke both that scrape and Pi's `desktop-muse` provider.
 - API credentials are read from the private Muse key file and installed through a mode-0600 env file; they never enter Docker argv.
 - Host power policy permits at most 450 W, matching `machines/desktop/default.nix`.
+- `MAX_MODEL_LEN` defaults to the checkpoint-native 131072 and is refused above it. The KV
+  pool is sized by `--gpu-memory-utilization`, not by the window, so raising the window
+  costs no VRAM: the same 19.71 GiB pool holds 610,685 tokens either way, which is 4.66x
+  concurrency at 131072 against `--max-num-seqs 2`. An earlier 32768 default left roughly
+  sixteen seats' worth of KV allocated and unreachable.
 
 ## FP8 download
 

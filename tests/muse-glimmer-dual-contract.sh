@@ -236,14 +236,14 @@ jq -e '
   ))
 ' "$PI_MODELS" >/dev/null || fail "Pi's desktop-muse catalog does not expose the Muse native-template contract"
 
-# The Blackfrost vLLM profile is a second served model behind the same provider.
-# Its context window is the launcher's own --max-model-len, not Muse's native 128K.
+# The Blackfrost vLLM profile is a second served model behind the same provider,
+# serving the checkpoint's full native 128K window.
 jq -e '
   .providers."desktop-muse".models | any(
     .id == "muse-glimmer-30b-blackfrost-bf16" and
     .reasoning == true and
     .defaultThinkingLevel == "xhigh" and
-    .contextWindow == 32768 and
+    .contextWindow == 131072 and
     .compat.thinkingFormat == "chat-template" and
     .compat.requiresReasoningContentOnAssistantMessages == true and
     .compat.chatTemplateKwargs.reasoning_strength == {"$var": "thinking.effort"}

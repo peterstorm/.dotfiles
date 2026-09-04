@@ -404,8 +404,8 @@
             "max": null
           },
           "input": ["text"],
-          "contextWindow": 32768,
-          "maxTokens": 16384,
+          "contextWindow": 131072,
+          "maxTokens": 32768,
           "cost": {
             "input": 0,
             "output": 0,

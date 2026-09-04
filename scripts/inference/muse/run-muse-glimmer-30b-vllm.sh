@@ -18,7 +18,7 @@ TARGET_VARIANT="${MUSE_VLLM_TARGET:-fp8}"
 SPECULATION="${MUSE_VLLM_SPECULATION:-target-only}"
 GPU_DEVICE="${GPU_DEVICE:-0}"
 PORT="${PORT:-8001}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-2}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 MAX_GPU_POWER_LIMIT="${MAX_GPU_POWER_LIMIT:-450}"
@@ -90,6 +90,10 @@ for numeric in MAX_MODEL_LEN MAX_NUM_SEQS MAX_NUM_BATCHED_TOKENS MAX_GPU_POWER_L
     exit 2
   fi
 done
+if ((MAX_MODEL_LEN > 131072)); then
+  echo "error: MAX_MODEL_LEN exceeds the checkpoint-native 131072-token contract" >&2
+  exit 2
+fi
 if ! [[ "$GPU_MEMORY_UTILIZATION" =~ ^0\.[0-9]+$ ]] \
   || ! awk -v value="$GPU_MEMORY_UTILIZATION" 'BEGIN { exit !(value >= 0.40 && value <= 0.85) }'; then
   echo "error: GPU_MEMORY_UTILIZATION must be between 0.40 and 0.85" >&2

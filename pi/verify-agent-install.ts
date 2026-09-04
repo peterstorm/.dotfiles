@@ -261,7 +261,7 @@ const museContractViolations = (
 
 for (const violation of [
   ...museContractViolations(muse, "muse-glimmer-30b", 131_072),
-  ...museContractViolations(museBlackfrost, "muse-glimmer-30b-blackfrost-bf16", 32_768),
+  ...museContractViolations(museBlackfrost, "muse-glimmer-30b-blackfrost-bf16", 131_072),
 ]) {
   fail(violation);
 }
