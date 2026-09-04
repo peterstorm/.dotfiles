@@ -103,6 +103,29 @@ let
               hash = "sha256-N4tJZxtYERSi0l1Ako8SoVCHL+rfEWaaY/Vz6Bx4AZo=";
             };
           };
+      # NVIDIA VFX SDK Python bindings (LicenseRef-NvidiaProprietary). Upstream
+      # ships only a wheel-stub sdist whose build backend pulls the real binary
+      # from pypi.nvidia.com, which cannot run hermetically, so the pinned
+      # manylinux wheel is installed directly. The bundled cuDNN/NPP/TensorRT/
+      # NGX libraries resolve inside the wheel; libcuda comes from the host
+      # driver at runtime. This pin is authorized only for private local
+      # Development evaluation under the bundled NVIDIA license terms, not a
+      # Production or redistribution grant.
+      nvidia-vfx = prev.buildPythonPackage {
+        pname = "nvidia-vfx";
+        version = "0.1.0.1";
+        format = "wheel";
+        src = nvidiaVfxWheel;
+        nativeBuildInputs = [ pkgs.autoPatchelfHook ];
+        buildInputs = [
+          pkgs.stdenv.cc.libc
+          pkgs.gcc.cc.lib
+        ];
+        preFixup = ''
+          addAutoPatchelfSearchPath $out/${final.python.sitePackages}/nvvfx/libs
+        '';
+        autoPatchelfIgnoreMissingDeps = [ "libcuda.so.1" ];
+      };
     };
   };
 
@@ -129,6 +152,7 @@ let
       matplotlib
       mss
       numpy
+      nvidia-vfx
       omegaconf
       opencv4
       peft
@@ -515,6 +539,37 @@ let
     chmod -R a-w "$out"
   '';
 
+  # SuperCC AI publishes ComfyUI-SuperNodes ("Mostly custom nodes I need for my
+  # YouTube workflows"); the Balanced T2V workflow requires its sampler,
+  # scheduling, and tool nodes (DualSampler*, SigmaAncestry, SigmasRescale,
+  # SuperSelectLoraName, SetReserveVRAM, ImageSizeCalculator). See
+  # docs/runbooks/minimax-h3-balanced-supercc-workflows.md for the adaptation.
+  superNodesSource = pkgs.fetchFromGitHub {
+    owner = "sonnybox";
+    repo = "ComfyUI-SuperNodes";
+    rev = "6a271834567f26576c046259493f0934c6c57d84";
+    hash = "sha256-cBI28zo7MxtbRk8PcATbJN/1N87PJ9wC3dL2V1qmqv4=";
+  };
+
+  # Official NVIDIA RTX nodes pack. The RTXVideoSuperResolution node is
+  # load-bearing in the Balanced workflow's base-to-turbo handoff and final
+  # output upscale; its resolutions are calculator-driven, so the node
+  # supplies the VSR detail pass only.
+  nvidiaRtxNodesSource = pkgs.fetchFromGitHub {
+    owner = "Comfy-Org";
+    repo = "Nvidia_RTX_Nodes_ComfyUI";
+    rev = "892515e3eb9a4920a131a502a047e47adca9eb0d";
+    hash = "sha256-cuoFJAy2IQYomJlcclbM7WAdjk1AckQ4TRn3mCivyKc=";
+  };
+
+  # NVIDIA VFX SDK proprietary binary wheel, pinned from pypi.nvidia.com (the
+  # upstream wheel-stub sdist backend cannot run hermetically). Bundled
+  # license terms apply; see the nvidia-vfx package override above.
+  nvidiaVfxWheel = pkgs.fetchurl {
+    url = "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl";
+    hash = "sha256-e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905";
+  };
+
   minimaxH3DirectorSource = pkgs.fetchFromGitHub {
     owner = "AIMixer";
     repo = "ComfyUI_MiniMaxH3_Director";
@@ -581,6 +636,8 @@ let
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
+    ln -s ${superNodesSource} "$out/ComfyUI-SuperNodes"
+    ln -s ${nvidiaRtxNodesSource} "$out/Nvidia_RTX_Nodes_ComfyUI"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -2490,6 +2547,7 @@ let
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     elite_dir="$user_workflows/creative-suite"
+    balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
@@ -2506,6 +2564,7 @@ let
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     elite_staging="$user_workflows/.creative-suite.new"
+    balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
     input_dir=/var/lib/comfyui/input
     blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
@@ -2513,13 +2572,15 @@ let
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging"
+      "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging" \
+      "$balanced_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$elite_staging" \
+      "$balanced_staging" \
       "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
@@ -2579,12 +2640,15 @@ let
         install -m 0600 "$source" "$destination/$(basename "$source")"
       done
     done
+    install -m 0600 \
+      ${../../comfyui/workflows/minimax-h3-balanced-supercc-v1.0-t2v.json} \
+      "$balanced_staging/MiniMax H3 BF16 Balanced SuperCC v1.0 - Text To Video.json"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
       "$director_dir" "$h3_turbo_dir" "$h3_blender_dir" \
-      "$h3_motion_context_dir" "$elite_dir"
+      "$h3_motion_context_dir" "$elite_dir" "$balanced_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2601,6 +2665,7 @@ let
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$elite_staging" "$elite_dir"
+    mv "$balanced_staging" "$balanced_dir"
   '';
 
   extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {
