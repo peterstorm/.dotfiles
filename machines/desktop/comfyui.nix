@@ -300,6 +300,16 @@ let
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-vdn-stage.sh;
   };
 
+  downloadMinimaxH3RealismPeopleLora = pkgs.writeShellApplication {
+    name = "download-minimax-h3-realism-people-lora";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-realism-people-lora.sh;
+  };
+
   krea2EditNode = pkgs.fetchFromGitHub {
     owner = "lbouaraba";
     repo = "comfyui-krea2edit";
@@ -2223,6 +2233,25 @@ let
           --output-dir "$out/workflows"
       '';
 
+  # The fal realism-people adapter on BOTH branches of each VDN-H3 graph; the
+  # built base workflows are the checksum-gated sources.
+  minimaxH3VdnRealismWorkflows =
+    pkgs.runCommand "minimax-h3-vdn-realism-people-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-vdn-realism-workflows.sh} \
+          --t2v-source "${minimaxH3VdnWorkflows}/workflows/VDN-H3-VS-fastvideoH3_t2v.json" \
+          --r2v-source "${minimaxH3VdnWorkflows}/workflows/Minimax-H3VDN-R2V.json" \
+          --output-dir "$out/workflows"
+      '';
+
   imageUpscalerWorkflows =
     pkgs.runCommand "image-upscaler-qualification-v1-workflows"
       {
@@ -2657,6 +2686,7 @@ let
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     h3_vdn_dir="$user_workflows/minimax-h3-vdn-h3"
+    h3_vdn_realism_dir="$user_workflows/minimax-h3-vdn-h3-realism-people"
     elite_dir="$user_workflows/creative-suite"
     balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
@@ -2675,6 +2705,7 @@ let
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     h3_vdn_staging="$user_workflows/.minimax-h3-vdn-h3.new"
+    h3_vdn_realism_staging="$user_workflows/.minimax-h3-vdn-h3-realism-people.new"
     elite_staging="$user_workflows/.creative-suite.new"
     balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
     input_dir=/var/lib/comfyui/input
@@ -2684,14 +2715,14 @@ let
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$elite_staging" \
+      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$elite_staging" \
+      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" \
       "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
@@ -2748,6 +2779,9 @@ let
     for source in ${minimaxH3VdnWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_vdn_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3VdnRealismWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_vdn_realism_staging/$(basename "$source")"
+    done
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -2763,7 +2797,7 @@ let
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
       "$director_dir" "$h3_turbo_dir" "$h3_blender_dir" \
-      "$h3_motion_context_dir" "$h3_vdn_dir" "$elite_dir" "$balanced_dir"
+      "$h3_motion_context_dir" "$h3_vdn_dir" "$h3_vdn_realism_dir" "$elite_dir" "$balanced_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2780,6 +2814,7 @@ let
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$h3_vdn_staging" "$h3_vdn_dir"
+    mv "$h3_vdn_realism_staging" "$h3_vdn_realism_dir"
     mv "$elite_staging" "$elite_dir"
     mv "$balanced_staging" "$balanced_dir"
   '';
@@ -2800,6 +2835,7 @@ in
     downloadImageUpscalerModels
     downloadMinimaxH3FunControlnet
     downloadMinimaxH3VdnStage
+    downloadMinimaxH3RealismPeopleLora
     modelTools
     pkgs.ffmpeg-full
   ];

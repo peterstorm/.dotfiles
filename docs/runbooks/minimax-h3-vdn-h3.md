@@ -30,8 +30,10 @@ retraining, no extra Python packages. The 8-step distilled model supports
 | Comparison nodes | Saganaki22/ComfyUI-sol-attn @ `930a4d6e432ff8b8ed5e30ff2f72519b92d69bdf` (v0.6.2) |
 | Switch node | nova452/Rebalance-Pack @ `4553b145043b3ed6818651e5e39a01614fc11fb6` (main HEAD — the exact revision the example pins) |
 | VDN weights | OpenVDN/vdn-minimax-h3 @ `18be6bcc4ee72585eee322ba28b5ccac2cf85ef0` — `stage-dmd-step-250/` (bf16 release) |
+| Realism LoRA | fal/MiniMax-H3-Realism-People-LoRA @ `039cc8579d7aa357a882d7f4111b25da4f72dccc` — `h3-realism-people-t2v-i2v-r2v.safetensors` (rank 32, 1500 steps, ungated) |
 | Workflows | `VDN-H3-VS-fastvideoH3_t2v.json`, `Minimax-H3VDN-R2V.json` (built by `scripts/comfyui/build-minimax-h3-vdn-workflows.sh`) |
-| Deployed as | `minimax-h3-vdn-h3/` under `/var/lib/comfyui/user/default/workflows` |
+| Realism workflows | `VDN-H3-VS-fastvideoH3_t2v + Realism People LoRA.json`, `Minimax-H3VDN-R2V + Realism People LoRA.json` (built by `scripts/comfyui/build-minimax-h3-vdn-realism-workflows.sh`) |
+| Deployed as | `minimax-h3-vdn-h3/` and `minimax-h3-vdn-h3-realism-people/` under `/var/lib/comfyui/user/default/workflows` |
 | Author's Patreon JSONs | Account-gated; both graphs are adapted from the pinned upstream example + ModelTC REF2VA Turbo source instead |
 
 ## Install
@@ -50,6 +52,17 @@ retraining, no extra Python packages. The 8-step distilled model supports
    SHA-256 verified against the pinned manifest before it reaches the model root.
    The bf16 release is pinned deliberately — not the optional int8 ConvRot
    quantization (bf16 where possible).
+3. Download the fal Realism People LoRA (license-gated, ungated on HuggingFace):
+
+   ```bash
+   MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
+     download-minimax-h3-realism-people-lora
+   ```
+
+   The adapter lands as `/models/comfyui/loras/h3-realism-people-t2v-i2v-r2v.safetensors`
+   (131,229,656 bytes), SHA-256 verified against the pinned manifest. It follows
+   the MiniMax-H3 Community License of the base model and loads as-is — the keys
+   are the standard H3 fused-QKV layout, no conversion step.
 
 ## Workflows
 
@@ -83,6 +96,32 @@ recipe:
 
 Drop `subject_1.png`, `subject_2.png`, `environment.png` into the three loaders
 before queueing. Outputs: `video/VDN-H3_R2V_VDN` and `video/VDN-H3_R2V_Turbo4_Control`.
+
+### Realism People LoRA variants
+
+`VDN-H3-VS-fastvideoH3_t2v + Realism People LoRA.json` and
+`Minimax-H3VDN-R2V + Realism People LoRA.json` copy the two graphs above and wire
+the fal realism adapter into **both branches of each graph**, so the comparison
+stays apples-to-apples — the variable remains the attention route, not the LoRA.
+Built by `scripts/comfyui/build-minimax-h3-vdn-realism-workflows.sh` from the
+checksum-gated built base workflows; every other widget (samplers, schedulers,
+VDN stage, sigma shifts) is unchanged.
+
+- The adapter only touches the shared attention projections
+  (`diffusion_model.blocks.N.attn.qkv_proj`, fused QKV), so it composes with the
+  VDN runtime patch and with the Turbo LoRA. In the T2V graph the turbo branch
+  chains UNET → realism LoRA → Turbo LoRA → comfy kitchen → Sol; the VDN branch
+  chains UNET → realism LoRA → ApplyVDNH3.
+- **Start every prompt with the trigger word `r34l1sm`**, then describe the
+  scene (the graphs already prepend it; keep it when editing prompts). Scale 1.0
+  is the intended strength; 0.6–0.8 for a lighter touch.
+- Outputs are prefixed `_realism` (`video/VDN-H3_VS_fastvideoH3_t2v_realism`,
+  `video/VDN-H3_R2V_VDN_realism`, `video/VDN-H3_R2V_Turbo4_Control_realism`) so
+  realism and non-realism renders never overwrite each other.
+- Sigma schedulers in the R2V graph keep the raw UNET on purpose: sigmas do not
+  depend on LoRA weights.
+- One adapter covers t2v, i2v and r2v — trained on a larger people-focused
+  dataset as the successor of fal's MiniMax-H3-Realism-LoRA.
 
 ## Model substitutions (bf16 where possible)
 

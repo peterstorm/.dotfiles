@@ -107,5 +107,42 @@ grep -Fq 'lora_mode' "$RUNBOOK" || fail 'runbook omits the merge requirement'
 grep -Fq 'Do not stack' "$RUNBOOK" || fail 'runbook omits the SOL stacking warning'
 grep -Fq '8 steps' "$RUNBOOK" || fail 'runbook omits the 8-step recipe'
 
+# Realism People LoRA: the fal rank-32 adapter pinned byte-exact, both license
+# gates in force, the realism builder's sources checksum-gated, and the module
+# wiring intact.
+REALISM_BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-vdn-realism-workflows.sh"
+REALISM_DOWNLOADER="$ROOT/scripts/comfyui/download-minimax-h3-realism-people-lora.sh"
+grep -Fq 'REPO="fal/MiniMax-H3-Realism-People-LoRA"' "$REALISM_DOWNLOADER" || fail 'realism LoRA repository is not pinned'
+grep -Fq 'REV="039cc8579d7aa357a882d7f4111b25da4f72dccc"' "$REALISM_DOWNLOADER" || fail 'realism LoRA revision is not pinned'
+grep -Fq 'acc529601d2da117fb81179e76c56e488a3beab1171659d305f04fa3655b787e 131229656 h3-realism-people-t2v-i2v-r2v.safetensors' "$REALISM_DOWNLOADER" || fail 'realism LoRA artifact is not exact'
+grep -Fq 'MINIMAX_H3_ACCEPT_LICENSE' "$REALISM_DOWNLOADER" || fail 'realism downloader lacks the base-license gate'
+grep -Fq 'MINIMAX_H3_AUTHORIZED' "$REALISM_DOWNLOADER" || fail 'realism downloader lacks the authorization gate'
+if ! MINIMAX_H3_ACCEPT_LICENSE=no COMFYUI_MODELS_ROOT=/tmp/vdn-gate-check \
+  "$REALISM_DOWNLOADER" >/dev/null 2>&1; then
+  :
+else
+  fail 'realism downloader runs without the license gate'
+fi
+if ! MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=no COMFYUI_MODELS_ROOT=/tmp/vdn-gate-check \
+  "$REALISM_DOWNLOADER" >/dev/null 2>&1; then
+  :
+else
+  fail 'realism downloader runs without the territorial authorization gate'
+fi
+grep -Fq 'expected_t2v_source_sha=4d99fe6283616f7f49ae610f54fa987a6dfea206c48fd86f961870d8d48d24c9' "$REALISM_BUILDER" || fail 'realism builder T2V source is not checksum-gated'
+grep -Fq 'expected_r2v_source_sha=90c3d8086533160e8653a7c8b42515382f87c23fafce08cb563fd1cebd897a0f' "$REALISM_BUILDER" || fail 'realism builder R2V source is not checksum-gated'
+grep -Fq 'h3-realism-people-t2v-i2v-r2v.safetensors' "$REALISM_BUILDER" || fail 'realism builder does not wire the realism adapter'
+grep -Fq 'h3-realism-people-t2v-i2v-r2v.safetensors' "$RUNBOOK" || fail 'runbook omits the realism adapter file'
+contains '${../../scripts/comfyui/build-minimax-h3-vdn-realism-workflows.sh}'
+contains '"${minimaxH3VdnWorkflows}/workflows/VDN-H3-VS-fastvideoH3_t2v.json"'
+contains '"${minimaxH3VdnWorkflows}/workflows/Minimax-H3VDN-R2V.json"'
+contains 'h3_vdn_realism_dir="$user_workflows/minimax-h3-vdn-h3-realism-people"'
+contains 'downloadMinimaxH3RealismPeopleLora'
+contains 'download-minimax-h3-realism-people-lora'
+for file in "$REALISM_BUILDER" "$REALISM_DOWNLOADER"; do
+  [[ -x "$file" ]] || fail "missing executable: $file"
+  bash -n "$file"
+done
+
 nix-instantiate --parse "$MODULE" >/dev/null
 printf 'PASS: VDN-H3 pins the node port, Sol comparison nodes, bf16 stage, both license gates, and the Switch comparison topology\n'
