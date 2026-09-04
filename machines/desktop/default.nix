@@ -110,6 +110,19 @@ in
   # upstream extra/ layout, which depmod ranks below the in-tree mt76 modules.
   # See the mt7927* definitions at the top of this file.
   hardware.firmware = [ mt7927Firmware ];
+
+  # system-apply.sh evaluates the flake as root, and libgit2 refuses to open a
+  # repository owned by a different user (error code 7) unless it is explicitly
+  # trusted. The repo is peterstorm-owned by design, so this system-level git
+  # config is what lets `sudo nixos-rebuild switch --flake .#` re-evaluate a
+  # freshly pulled commit. System-level, not the home-manager user config,
+  # because root performs the evaluation.
+  programs.git = {
+    enable = true;
+    config = {
+      safe.directory = [ "/home/peterstorm/.dotfiles" ];
+    };
+  };
   boot.extraModulePackages = [
     mt7927Wifi
     mt7927Bluetooth
