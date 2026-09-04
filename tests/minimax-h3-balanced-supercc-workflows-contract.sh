@@ -39,7 +39,7 @@ contains 'hash = "sha256-cuoFJAy2IQYomJlcclbM7WAdjk1AckQ4TRn3mCivyKc=";'
 # --- nvidia-vfx proprietary wheel pin (wheel-stub cannot run hermetically) ---
 contains 'nvidiaVfxWheel = pkgs.fetchurl {'
 contains 'url = "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl";'
-contains 'hash = "sha256-e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905";'
+contains 'hash = "sha256-5R2eb6poRm5FuDvnkoMhr0sMVhx8VTaoyyt+arol+QU=";'
 contains 'nvidia-vfx = prev.buildPythonPackage {'
 contains 'format = "wheel";'
 contains 'nativeBuildInputs = [ pkgs.autoPatchelfHook ];'
