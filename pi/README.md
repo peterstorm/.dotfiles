@@ -147,7 +147,7 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with nine selectable models:
+with ten selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision` (DFlash benchmark arm)
@@ -155,6 +155,7 @@ with nine selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7`
 - `desktop-vllm/qwen3.8-27b`
+- `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
 - `desktop-muse/muse-glimmer-30b`
 - `desktop-muse/muse-glimmer-30b-blackfrost-bf16`
