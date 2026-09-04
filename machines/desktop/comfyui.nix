@@ -650,8 +650,24 @@ let
         chmod -R u+w "$out"
         export PYTHONPATH=${comfyui}/share/comfyui
         cd "$out"
-        ${comfyPythonEnv}/bin/python tests/test_vdn_math.py
-        ${comfyPythonEnv}/bin/python tests/test_window_dispatch.py
+        # The math test's _sdpa dispatches through comfy.ops, whose
+        # model_management resolves the device at import time. Parsing --cpu
+        # before the import keeps the sandbox (no NVIDIA driver) on the CPU
+        # state; the same chain runs GPU-side in production.
+        cat > run_vdn_test.py <<'RUNNER'
+        import os
+        import runpy
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        runpy.run_path(os.environ["VDN_TEST_PATH"], run_name="__main__")
+        RUNNER
+        VDN_TEST_PATH="$out/tests/test_vdn_math.py" \
+          ${comfyPythonEnv}/bin/python run_vdn_test.py
+        VDN_TEST_PATH="$out/tests/test_window_dispatch.py" \
+          ${comfyPythonEnv}/bin/python run_vdn_test.py
         chmod -R a-w "$out"
       '';
 
