@@ -100,6 +100,12 @@ jq --arg note "$t2v_note" '
     )
   | (.nodes[] | select(.id == 16) | .widgets_values[0]) = "video/VDN-H3_VS_fastvideoH3_t2v"
   | (.nodes[] | select(.id == 25) | .properties.ver) = "183f33d8a7b3c6322d83be95ae369251a63b3198"
+  | (.nodes[] | select(.id == 20)) |= (
+      .type = "MiniMaxH3ScheduledSolAttentionPatch"
+      | .properties = {"Node name for S&R": "MiniMaxH3ScheduledSolAttentionPatch"}
+      | .widgets_values = [true, 1.2, 0.8, "linear", 12288, false, 0.2, "diag", false, false, "exact_kv_and_rows", ""]
+      | .outputs = [(.outputs[0]), {"name": "tau_graph", "type": "IMAGE", "links": null}]
+    )
   | .last_node_id = ([.last_node_id, 100] | max)
   | .nodes += [{
       "id": 100,
@@ -142,7 +148,9 @@ jq -e '
   and ([.nodes[] | select(.type == "Switch")] | length) == 1
   and ([.nodes[] | select(.type == "BasicScheduler") | .widgets_values] == [["beta", 8, 1]])
   and ([.nodes[] | select(.type == "KSamplerSelect") | .widgets_values] == [["er_sde"]])
-  and ([.nodes[] | select(.type == "SolAttnMiniMax")] | length) == 1
+  and ([.nodes[] | select(.type == "MiniMaxH3ScheduledSolAttentionPatch")] | length) == 1
+  and ([.nodes[] | select(.type == "MiniMaxH3ScheduledSolAttentionPatch") | .widgets_values]
+    == [[true, 1.2, 0.8, "linear", 12288, false, 0.2, "diag", false, false, "exact_kv_and_rows", ""]])
   and ([.nodes[] | select(.type == "MiniMaxChunkFeedForward")] | length) == 1
   and ([.nodes[] | select(.type == "MarkdownNote")] | length) == 1
   and all(.links[]; . as $edge
@@ -291,6 +299,10 @@ jq --slurpfile vdn_source "$vdn_t2v_source" --arg note "$r2v_note" '
         | .pos = [-1500, 180]
         | .order = 30
         | .title = "Control branch — Scheduled Sol Attention"
+        | .type = "MiniMaxH3ScheduledSolAttentionPatch"
+        | .properties = {"Node name for S&R": "MiniMaxH3ScheduledSolAttentionPatch"}
+        | .widgets_values = [true, 1.2, 0.8, "linear", 12288, false, 0.2, "diag", false, false, "exact_kv_and_rows", ""]
+        | .outputs = [(.outputs[0]), {"name": "tau_graph", "type": "IMAGE", "links": null}]
         | .inputs[0].link = 317
         | .outputs[0].links = [318])
     ]
@@ -351,7 +363,9 @@ jq -e '
   and ([.nodes[] | select(.type == "LoraLoaderModelOnly") | .widgets_values]
     == [["minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors", 1]])
   and ([.nodes[] | select(.type == "MiniMaxH3SigmaShift") | .widgets_values] == [[12, 3]])
-  and ([.nodes[] | select(.type == "SolAttnMiniMax")] | length) == 1
+  and ([.nodes[] | select(.type == "MiniMaxH3ScheduledSolAttentionPatch")] | length) == 1
+  and ([.nodes[] | select(.type == "MiniMaxH3ScheduledSolAttentionPatch") | .widgets_values]
+    == [[true, 1.2, 0.8, "linear", 12288, false, 0.2, "diag", false, false, "exact_kv_and_rows", ""]])
   and ([.nodes[] | select(.type == "ModelAttentionBackend") | .widgets_values]
     == [["comfy kitchen attention"]])
   and ([.nodes[] | select(.type == "SaveVideo")] | length) == 2

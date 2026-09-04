@@ -95,6 +95,7 @@ before queueing. Outputs: `video/VDN-H3_R2V_VDN` and `video/VDN-H3_R2V_Turbo4_Co
 | Audio VAE (VAELoader) | `minimax_h3_audio_vae_fp32.safetensors` | unchanged | fp32 is the only audio VAE variant |
 | Turbo LoRA (T2V FALSE branch) | upstream's resized 4-step rank-64 LoRA at 0.65 | `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` at 1.0 | On-recipe: the shared 8-step sampler pairs with the 8-step LoRA at its released strength |
 | VDN stage | `stage-dmd-step-250` (bf16) | unchanged | bf16 where possible; the int8 ConvRot variant trades fidelity for speed |
+| Scheduled Sol Attention | upstream example's `SolAttnMiniMax` (pre-rename schema) | `MiniMaxH3ScheduledSolAttentionPatch` (v0.6.2) | The class was renamed and its inputs redesigned between the example's export and v0.6.2; the example's intent is kept — tau_start 1.2, dense_percent 0.2 (the Sol-Attn paper's recipe), min_tokens 12288, sink exact_kv_and_rows — with released defaults elsewhere (tau_end 0.8, linear curve, diag threshold, no int8) |
 
 ## Tips and tricks (from the source video, kept binding)
 
