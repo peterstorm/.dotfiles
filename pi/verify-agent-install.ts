@@ -175,8 +175,14 @@ const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
 const desktopProvider = modelsConfig.providers?.["desktop-vllm"];
 const deepSeek = desktopProvider?.models?.find((model) => model.id === "deepseek-v4-flash");
 const qwen = desktopProvider?.models?.find((model) => model.id === "qwen3.8-27b");
+type CatalogModel = NonNullable<
+  NonNullable<NonNullable<typeof modelsConfig.providers>[string]>["models"]
+>[number];
 const museProvider = modelsConfig.providers?.["desktop-muse"];
 const muse = museProvider?.models?.find((model) => model.id === "muse-glimmer-30b");
+const museBlackfrost = museProvider?.models?.find(
+  (model) => model.id === "muse-glimmer-30b-blackfrost-bf16",
+);
 if (desktopProvider?.baseUrl !== "http://192.168.0.80:8000/v1") {
   fail("desktop-vllm does not target the workstation's OpenAI-compatible endpoint");
 }
@@ -215,28 +221,49 @@ if (
 if (museProvider?.baseUrl !== "http://192.168.0.80:8001/v1") {
   fail("desktop-muse does not target the workstation's concurrent Muse endpoint");
 }
-if (!muse) fail("desktop-muse is missing muse-glimmer-30b");
-if (muse.defaultThinkingLevel !== "xhigh") fail("muse-glimmer-30b does not default to xhigh reasoning");
-if (muse.contextWindow !== 131_072) fail("muse-glimmer-30b does not declare its native 128K context");
-for (const level of ["low", "medium", "high", "xhigh"] as const) {
-  if (muse.thinkingLevelMap?.[level] !== level) {
-    fail(`muse-glimmer-30b does not expose the ${level} reasoning contract`);
-  }
-}
-for (const level of ["off", "minimal", "max"] as const) {
-  if (muse.thinkingLevelMap?.[level] !== null) {
-    fail(`muse-glimmer-30b does not hide unsupported ${level} reasoning`);
-  }
-}
-if (
-  muse.compat?.supportsDeveloperRole !== false ||
-  muse.compat?.supportsReasoningEffort !== false ||
-  muse.compat?.supportsStrictMode !== false ||
-  muse.compat?.thinkingFormat !== "chat-template" ||
-  JSON.stringify(muse.compat.chatTemplateKwargs?.reasoning_strength) !==
-    JSON.stringify({ $var: "thinking.effort" })
-) {
-  fail("muse-glimmer-30b does not map Pi reasoning into Muse's chat-template contract");
+// Both Muse entries serve the same chat template through the same provider, so
+// they share one reasoning contract and differ only in served id and the
+// `--max-model-len` their launcher pins. Computing violations purely keeps the
+// contract in one place; the shell below decides what to do with them.
+const museContractViolations = (
+  model: CatalogModel | undefined,
+  id: string,
+  contextWindow: number,
+): readonly string[] =>
+  !model
+    ? [`desktop-muse is missing ${id}`]
+    : [
+        ...(model.defaultThinkingLevel !== "xhigh"
+          ? [`${id} does not default to xhigh reasoning`]
+          : []),
+        ...(model.contextWindow !== contextWindow
+          ? [`${id} does not declare its ${contextWindow}-token served context`]
+          : []),
+        ...(["low", "medium", "high", "xhigh"] as const).flatMap((level) =>
+          model.thinkingLevelMap?.[level] !== level
+            ? [`${id} does not expose the ${level} reasoning contract`]
+            : [],
+        ),
+        ...(["off", "minimal", "max"] as const).flatMap((level) =>
+          model.thinkingLevelMap?.[level] !== null
+            ? [`${id} does not hide unsupported ${level} reasoning`]
+            : [],
+        ),
+        ...(model.compat?.supportsDeveloperRole !== false ||
+        model.compat?.supportsReasoningEffort !== false ||
+        model.compat?.supportsStrictMode !== false ||
+        model.compat?.thinkingFormat !== "chat-template" ||
+        JSON.stringify(model.compat.chatTemplateKwargs?.reasoning_strength) !==
+          JSON.stringify({ $var: "thinking.effort" })
+          ? [`${id} does not map Pi reasoning into Muse's chat-template contract`]
+          : []),
+      ];
+
+for (const violation of [
+  ...museContractViolations(muse, "muse-glimmer-30b", 131_072),
+  ...museContractViolations(museBlackfrost, "muse-glimmer-30b-blackfrost-bf16", 32_768),
+]) {
+  fail(violation);
 }
 
 const runtimeAgentDir = mkdtempSync(join(tmpdir(), "pi-routing-verify-"));

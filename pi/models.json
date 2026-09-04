@@ -388,6 +388,41 @@
               "reasoning_strength": { "$var": "thinking.effort" }
             }
           }
+        },
+        {
+          "id": "muse-glimmer-30b-blackfrost-bf16",
+          "name": "Muse Glimmer 30B Blackfrost BF16 + DFlash (local RTX workstation)",
+          "reasoning": true,
+          "defaultThinkingLevel": "xhigh",
+          "thinkingLevelMap": {
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "xhigh": "xhigh",
+            "max": null
+          },
+          "input": ["text"],
+          "contextWindow": 32768,
+          "maxTokens": 16384,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": false,
+            "supportsStrictMode": false,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "reasoning_strength": { "$var": "thinking.effort" }
+            }
+          }
         }
       ]
     }

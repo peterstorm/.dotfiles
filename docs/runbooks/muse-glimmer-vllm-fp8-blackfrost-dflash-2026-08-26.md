@@ -16,7 +16,10 @@ All checkpoints must pass their exact size/SHA-256 manifests and matching `.down
 - Muse owns physical GPU0 through Docker `device=0`.
 - The container receives only one visible device, remapped internally to `CUDA_VISIBLE_DEVICES=0`.
 - ComfyUI must prove `CUDA_VISIBLE_DEVICES=1` while active.
-- API binds only to `127.0.0.1:8001`.
+- API binds `0.0.0.0:8001`, reachable on the LAN at `192.168.0.80:8001` and gated by the bearer key.
+  This matches every other profile in `scripts/inference/`, the `8001` opening in
+  `machines/desktop/default.nix`, and the Prometheus scrape of `192.168.0.80:8001`. An earlier
+  loopback-only bind silently broke both that scrape and Pi's `desktop-muse` provider.
 - API credentials are read from the private Muse key file and installed through a mode-0600 env file; they never enter Docker argv.
 - Host power policy permits at most 450 W, matching `machines/desktop/default.nix`.
 

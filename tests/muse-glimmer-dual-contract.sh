@@ -236,6 +236,21 @@ jq -e '
   ))
 ' "$PI_MODELS" >/dev/null || fail "Pi's desktop-muse catalog does not expose the Muse native-template contract"
 
+# The Blackfrost vLLM profile is a second served model behind the same provider.
+# Its context window is the launcher's own --max-model-len, not Muse's native 128K.
+jq -e '
+  .providers."desktop-muse".models | any(
+    .id == "muse-glimmer-30b-blackfrost-bf16" and
+    .reasoning == true and
+    .defaultThinkingLevel == "xhigh" and
+    .contextWindow == 32768 and
+    .compat.thinkingFormat == "chat-template" and
+    .compat.requiresReasoningContentOnAssistantMessages == true and
+    .compat.chatTemplateKwargs.reasoning_strength == {"$var": "thinking.effort"}
+  )
+' "$PI_MODELS" >/dev/null ||
+  fail "Pi's desktop-muse catalog does not expose the Blackfrost BF16 served model"
+
 contains "$DOC" 'Muse Glimmer BF16 + DFlash beside Qwen'
 contains "$DOC" "$IMAGE"
 contains "$DOC" "$DIGEST"

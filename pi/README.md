@@ -147,7 +147,7 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with eight selectable models:
+with nine selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision` (DFlash benchmark arm)
@@ -157,9 +157,15 @@ with eight selectable models:
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
 - `desktop-muse/muse-glimmer-30b`
+- `desktop-muse/muse-glimmer-30b-blackfrost-bf16`
 
 DeepSeek, GLM, and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when
-GPU capacity permits. Every launcher synchronizes the DeepSeek, Qwen, GLM, and Muse key
+GPU capacity permits. The two Muse entries are alternative servers on that one port — the
+SGLang profile serves `muse-glimmer-30b` at Muse's native 128K, the pinned vLLM profile
+serves `muse-glimmer-30b-blackfrost-bf16` at its own 32K `--max-model-len`. Select the
+entry matching whichever launcher is running.
+
+Every launcher synchronizes the DeepSeek, Qwen, GLM, and Muse key
 files to one endpoint credential, so switching models, runtimes, or ports does
 not change Pi authentication. Launching through `sudo` still resolves `SUDO_USER` and
 writes the invoking desktop user's files—never a private `/root` credential. The key is

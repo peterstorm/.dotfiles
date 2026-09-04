@@ -224,7 +224,7 @@ docker_args=(
   --default-chat-template-kwargs '{"reasoning_strength":"high"}'
   --override-generation-config '{"temperature":1.0,"top_p":0.95,"top_k":64}'
   "${speculation_args[@]}"
-  --host 127.0.0.1
+  --host 0.0.0.0
   --port "$PORT"
 )
 "${docker_args[@]}" >/dev/null
