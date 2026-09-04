@@ -336,7 +336,7 @@ When deploying on a node that previously ran flannel/kube-proxy (or any prior CN
 
 ## Local inference monitoring (desktop)
 
-The `monitoring/` app scrapes both inference endpoints: Qwen/DeepSeek on `desktop:8000/metrics` and concurrent Muse Glimmer on `desktop:8001/metrics` (see `monitoring/values.yaml` → `prometheusSpec.additionalScrapeConfigs`). `monitoring/templates/inference-recording-rules.yaml` normalizes engine-specific names into a stable `inference:*` contract. The dashboard `monitoring/dashboard-vllm.json` consumes that contract and is auto-provisioned into Grafana via the sidecar ConfigMap (`monitoring/templates/dashboard-vllm.yaml`, label `grafana_dashboard=1`). Raw vLLM fallbacks preserve pre-normalization history.
+The `monitoring/` app scrapes both inference endpoints: the active `desktop-vllm` model on `desktop:8000/metrics` and a reserved second concurrent endpoint on `desktop:8001/metrics` (see `monitoring/values.yaml` → `prometheusSpec.additionalScrapeConfigs`). `monitoring/templates/inference-recording-rules.yaml` normalizes engine-specific names into a stable `inference:*` contract. The dashboard `monitoring/dashboard-vllm.json` consumes that contract and is auto-provisioned into Grafana via the sidecar ConfigMap (`monitoring/templates/dashboard-vllm.yaml`, label `grafana_dashboard=1`). Raw vLLM fallbacks preserve pre-normalization history.
 
 - Verify scraping: Grafana → Explore → `up{job="vllm-desktop"}` should contain healthy `desktop:8000` and `desktop:8001` series while the dual profile is running
 - Engine counters reset on container restart or runtime switch; Prometheus `rate()`/`increase()` handle process resets while the durable ledger below preserves lifetime totals
@@ -360,7 +360,7 @@ Prometheus history dies on cluster wipes, so `desktop` keeps its own append-only
 
 ### Adding another model or runtime
 
-The Grafana contract keys off `model_name` after normalizing runtime-specific metrics. A new model in the **same engine schema** needs nothing. A new engine on the existing exclusive port needs one mapping in `inference-recording-rules.yaml` and `COUNTER_SCHEMAS` in `vllm-stats-record.py`. A **separate concurrent endpoint on a new port** additionally needs the same integration completed for Muse on port 8001:
+The Grafana contract keys off `model_name` after normalizing runtime-specific metrics. A new model in the **same engine schema** needs nothing. A new engine on the existing exclusive port needs one mapping in `inference-recording-rules.yaml` and `COUNTER_SCHEMAS` in `vllm-stats-record.py`. A **separate concurrent endpoint on a new port** additionally needs the same integration already wired for port 8001:
 
 1. A launch script (mirror `scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh`, different `PORT` + `SERVED_MODEL_NAME`)
 2. Firewall: add the port to `networking.firewall.allowedTCPPorts` in `machines/desktop/default.nix`

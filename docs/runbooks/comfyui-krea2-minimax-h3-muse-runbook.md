@@ -1,4 +1,4 @@
-# ComfyUI creative stack — Krea 2 + MiniMax H3 + MiniMax Music 3 + Muse Glimmer
+# ComfyUI creative stack — Krea 2 + MiniMax H3 + MiniMax Music 3 + Blackfrost Qwen
 
 Research snapshot: **2026-08-24**. Target: `desktop`, headless NixOS, Ryzen 9
 9950X, 91 GiB RAM, 2× RTX PRO 6000 Blackwell 96 GiB over PCIe PHB.
@@ -7,7 +7,7 @@ Research snapshot: **2026-08-24**. Target: `desktop`, headless NixOS, Ryzen 9
 
 Use one Nix-managed ComfyUI service and keep the workflow native-first:
 
-- **Muse Glimmer 30B BF16 + DFlash** on physical GPU0 writes and compiles
+- **Blackfrost abliterated Qwen3.8-27B BF16** on physical GPU0 writes and compiles
   creative briefs into model-ready prompts.
 - **ComfyUI 0.33.3** on physical GPU1 runs local Krea 2, MiniMax H3, and
   MiniMax Music 3 workflows. The UI listens only on `127.0.0.1:8188` and is
@@ -33,7 +33,7 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
   and Music 3 on GPU1.** It refuses `/free` while a graph is active or pending.
 
 This deliberately does **not** install ComfyUI-Manager or permit mutable node
-installs. Core supplies the standard generation nodes. The in-repo Muse adapter
+installs. Core supplies the standard generation nodes. The in-repo Blackfrost Qwen adapter
 and all required packs are immutable source pins: Krea 2 Identity Edit,
 Krea2T Enhancer, Pixaroma, Detail Daemon, and KJNodes. The latter two provide
 only the video workflow's active detail and color-match operations. Pixaroma is a broad
@@ -47,7 +47,7 @@ ComfyUI remains loopback-only and systemd-confined.
 | ComfyUI runtime | `machines/desktop/comfyui.nix` | Nix flake pin |
 | CUDA PyTorch | Nixpkgs `torch-bin`, `triton-bin`, `torchvision-bin`, `torchaudio-bin` | Nix flake pin; no source build |
 | Core nodes and template library | ComfyUI/Nix package | Nix flake pin |
-| Muse prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
+| Blackfrost Qwen prompt node | `comfyui/custom_nodes/muse_glimmer_prompt/` | immutable Nix-store path |
 | Episode 24/29/30 node packs | GitHub commits in `machines/desktop/comfyui.nix` | immutable source hashes |
 | Episode 24 Krea workflows | Pixaroma ZIP plus one deterministic Krea→Klein composition, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 12/12 BF16/model/node/link gate |
 | Krea 2 + FLUX.2 Klein 9B workflow | The AI Blueprint/Google Drive, installed under `/var/lib/comfyui/` | exact SHA-256; BF16/model/node/link/credential gate |
@@ -60,10 +60,10 @@ ComfyUI remains loopback-only and systemd-confined.
 | FLUX.2 Klein 9B BF16, encoder, VAE, and two Krea LoRAs | `/models/comfyui/` | HF revisions/Civitai model versions + exact size + SHA-256 manifest |
 | Gokay Krea 2 Realism LoRA | `/models/comfyui/loras/krea2_realism_lora.safetensors` | HF revision `32f0436...` + exact 469,288,512-byte size + SHA-256 |
 | MiniMax Music 3 FP16 DiT, BF16 encoder, and DAV | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest; explicit community-license gate |
-| Muse target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
+| Blackfrost Qwen target + DFlash draft files | `/models/` | HF revision + exact size + SHA-256 manifest for every runtime-required artifact |
 | User workflows, input, output, database | `/var/lib/comfyui/` | mutable state, mode 0700/0750 |
 | Comfy account/partner credits | Comfy account | external prepaid service |
-| Muse bearer key | `~/.config/muse-glimmer/api-key` | private file, never a node widget |
+| Blackfrost Qwen bearer key | `~/.config/qwen38/api-key` | private file, never a node widget |
 
 The current flake resolves ComfyUI 0.33.3 at commit
 `4da9e2dbead52fc1e68beae33fe3d7ad63b63241`, frontend 1.49.6, workflow
@@ -175,7 +175,7 @@ The switch installs:
 - `comfyui.service`, installed but intentionally not boot-started while the
   normal Qwen TP2 profile owns both GPUs;
 - `/models/comfyui/{diffusion_models,text_encoders,vae,loras,...}`;
-- the immutable Muse, Krea edit, Krea enhancer, Pixaroma, Detail Daemon, and
+- the immutable Blackfrost Qwen, Krea edit, Krea enhancer, Pixaroma, Detail Daemon, and
   KJNodes packages via an extra-path YAML in the Nix store;
 - eleven BF16-adapted Episode 24 Krea workflows—eight standard and three
   abliterated-encoder variants—under
@@ -225,7 +225,7 @@ Do not start it directly while Qwen owns both cards. Section 3 performs the
 transactional profile switch. After activation, acceptance requires:
 
 - the listener is exactly `127.0.0.1:8188`, not `0.0.0.0`;
-- logs list Muse, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
+- logs list Blackfrost Qwen, `Krea2EditModelPatch`, Krea2T Enhancer, and Pixaroma without
   import or database errors;
 - `/var/lib/comfyui/user/comfyui.db` exists with no group/world access;
 - exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
@@ -264,7 +264,7 @@ Comfy to the provider and are subject to both services' policies.
 ## 3. Activate the creative GPU profile
 
 The transactional activator stops known Qwen/DeepSeek containers, keeps them
-available for rollback, starts Nix-managed ComfyUI, and starts Muse on GPU0:
+available for rollback, starts Nix-managed ComfyUI, and starts Blackfrost Qwen on GPU0:
 
 ```bash
 cd ~/.dotfiles
@@ -275,27 +275,27 @@ Expected topology:
 
 | Physical card | Process | Purpose |
 |---|---|---|
-| GPU0 | `muse-glimmer-30b-bf16-dflash` | prompt/script author, `:8001` |
+| GPU0 | `qwen38-27b-blackfrost-abliterated-bf16-vllm` | prompt/script author, `:8000` |
 | GPU1 | `comfyui.service` | Krea 2/local media generation |
 
 The activator records which known inference containers were running and
 whether ComfyUI was active, checks that the target GPUs were released, and
 restores the complete prior profile if activation fails. It preserves an
-already healthy Muse container rather than replacing it.
+already healthy Blackfrost Qwen container rather than replacing it.
 
 Check:
 
 ```bash
 curl -fsS http://127.0.0.1:8188/system_stats | jq .
 bash scripts/inference/qwen38/switch-qwen38-backend-v2.sh status
-key="$(< ~/.config/muse-glimmer/api-key)"
-curl -fsS -H "Authorization: Bearer $key" http://127.0.0.1:8001/v1/models | jq .
+key="$(< ~/.config/qwen38/api-key)"
+curl -fsS -H "Authorization: Bearer $key" http://127.0.0.1:8000/v1/models | jq .
 nvidia-smi --query-compute-apps=gpu_uuid,pid,used_memory --format=csv
 ```
 
 ComfyUI itself uses little VRAM while idle, but Qwen must not remain on GPU1
 when a local diffusion workflow loads. Partner-only H3 workflows do not need
-local GPU inference, but preserving the same topology keeps Muse prompting
+local GPU inference, but preserving the same topology keeps Blackfrost Qwen prompting
 available.
 
 ## 4. Install the local Krea 2 production profile
@@ -456,7 +456,7 @@ Nix rewrites both exposed widgets and internal loader metadata. The redundant
 official INT8 T2I graph is not installed in the curated user-workflow inventory.
 
 Krea's local prompting rules are simple: natural language, faithful detail,
-long prompts when useful, and exact visible text in double quotes. The Muse
+long prompts when useful, and exact visible text in double quotes. The Blackfrost Qwen
 node embeds Krea's official expansion contract.
 
 ### Krea maximum-quality tier
@@ -486,7 +486,7 @@ Not every operation has a legitimate RAW counterpart. The official
 with the Turbo adapter, so the BF16 Turbo style-reference workflow remains the
 highest compatible local profile. Episode 24 also retains its pinned
 Turbo-specific enhancer topology. Existing H3 production workflows already use
-unpruned BF16 models at 50 steps, Muse already uses full BF16, and FLUX.2 Klein
+unpruned BF16 models at 50 steps, Blackfrost Qwen already uses full BF16, and FLUX.2 Klein
 already uses its full BF16 9B checkpoint.
 
 Treat RAW and Turbo as an A/B, not a numeric leaderboard. Krea officially
@@ -499,7 +499,7 @@ composition, and detail better.
 
 Open **User workflows → `contest-production-bf16`**. This is the guided local
 production surface for prompts authored in Pi with the character-builder,
-banana-pro-director, cinema-director, story-bible, and Muse context. Those
+banana-pro-director, cinema-director, story-bible, and Blackfrost Qwen context. Those
 external Markdown skills remain operator-loaded reference material; they are
 not copied into the Nix closure, executed by ComfyUI, or trusted as code.
 
@@ -511,7 +511,7 @@ cloud-product names to models actually installed here:
 - Seedance video stages become maximum-quality MiniMax H3 T2V, FL2VA, or REF2VA
   shots. H3 has different reference and motion behavior; prompts still require
   operator review.
-- A story bible feeds Muse and the pasted prompt. It has no separate graph because
+- A story bible feeds Blackfrost Qwen and the pasted prompt. It has no separate graph because
   canon is text context, not a diffusion operation.
 - Voice descriptions and sound beds can guide H3 native audio. Exact voice cloning
   is not provided by this pack. Use the separately pinned Episode 29 speech/singing
@@ -543,7 +543,7 @@ The 21 workflows are ordered as a production path:
 
 Image prompt handoff is deliberate. Workflows `01`, `02`, `11`, `12`, and `13`
 disable the official subgraph's prompt expansion and style LoRA, increase the
-exposed prompt budget, and pass the pasted Muse text directly. Identity and
+exposed prompt budget, and pass the pasted Blackfrost Qwen text directly. Identity and
 sheet graphs expose one plainly titled prompt widget and retain the same approved
 reference in semantic Qwen grounding and clean VAE appearance-token channels;
 the independent target latent remains the only sampler initialization. Long
@@ -607,7 +607,7 @@ The two LoRA graphs originally use `Power Lora Loader (rgthree)`. The adapter
 replaces that node with ComfyUI core's `LoraLoaderModelOnly`, reconnects the
 encoder directly, and selects the already pinned flat-path Krea style LoRAs.
 This preserves model conditioning while avoiding another broad custom-node
-package. Prompt-enhancer graphs retain core `TextGenerate`; Muse remains the
+package. Prompt-enhancer graphs retain core `TextGenerate`; Blackfrost Qwen remains the
 preferred external prompt author when GPU memory or prompt quality matters.
 
 The three source files use an unpinned FP8 encoder and advertise an alternate
@@ -826,7 +826,7 @@ The two H3 workflows use Pixaroma's local Qwen3-VL-8B prompt generator. The
 transcript reports that its 4B experiment missed instructions, while 8B was more
 reliable; it switches among text, first-frame, and first+last-frame formulas and
 scales action count to duration. Enable its `release_model` setting before a
-larger downstream workflow. Muse Glimmer 30B remains the preferred prompt author
+larger downstream workflow. Blackfrost abliterated Qwen3.8-27B remains the preferred prompt author
 for quality and reference mode, while these two workflows preserve the video's
 self-contained ComfyUI option.
 
@@ -859,7 +859,7 @@ than Krea 2 for those jobs.
 
 Episode 29's useful additions over the official local templates are explicit
 first+last and last-only graphs, ready-made two/three-reference graphs, and
-Pixaroma's H3 audio-latent synchronization for speech and singing. Muse replaces
+Pixaroma's H3 audio-latent synchronization for speech and singing. Blackfrost Qwen replaces
 the video's hosted custom ChatGPT prompt step. Do not rely on the video's
 speculation that personal use bypasses excluded territories; this deployment's
 separate H3 authorization remains mandatory.
@@ -1165,58 +1165,47 @@ Medium is positioned for expressive illustration; Large for expressive
 photorealism. Partner references are uploaded to Comfy API storage. This is
 not the private local path.
 
-## 6. Use Muse Glimmer as the prompt author
+## 6. Use Blackfrost Qwen as the prompt author
 
-### Standard and refusal-suppressed BF16 variants
+### Refusal-suppressed BF16 prompt author
 
-The default remains the qualified upstream `meta-models/Muse-Glimmer-30B`.
-The stack also supports the requested
-[`mlasli/Muse-Glimmer-30B-Abliterated-BF16`](https://huggingface.co/mlasli/Muse-Glimmer-30B-Abliterated-BF16)
-at immutable revision `daf5fab76a0351a583714a92d88ebdb6eb48af35`.
-Despite the request describing it as a quant, that repository is **full BF16**:
-its two model shards total 59,553,433,736 bytes. Every runtime-required target
-and DFlash draft artifact is checked by exact size and SHA-256 after download
-and again before launch. Because the derivative omits SGLang's required
-`processor_config.json`, the downloader adds only that architecture-identical
-1,084-byte file from upstream Muse revision
-`a4e59da52a7bc87ae7251dd5545c0dd437c44b68`, pinned by SHA-256
-`97e2a486...0712dae77`; it does not borrow or alter model weights. Its model
-card reports weight-level refusal suppression at alpha 0.15 but no formal
-capability benchmark. Direct workstation testing confirmed that it still
-refuses consensual adult-only prompt-authoring requests.
+The prompt author is
+[`Blackfrost-AI/Qwen3.8-27B-ABLITERATED-BF16`](https://huggingface.co/Blackfrost-AI/Qwen3.8-27B-ABLITERATED-BF16),
+pinned at revision `9d85770e5eb602322b4bceef55beda357e0bd0ca`. It is a
+weight-level derivative of `Qwen/Qwen3.8-27B` with a reduced refusal surface —
+**not** the upstream safety-stock checkpoint, and it must not be represented as
+one. Blackfrost reports 11 residual refusals across 450 cases (2.4%).
 
-The stronger candidate is
-[`Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16`](https://huggingface.co/Blackfrost-AI/Muse-Glimmer-30B-Abliterated-BF16),
-pinned at revision `1b489c23b583d609b6c17b00e1a877d1faac1ee2`. Its two
-BF16 shards total 59,553,435,272 bytes; all nine runtime-required artifacts are
-size- and SHA-256-pinned. The repository supplies its own processor metadata
-and documents the same SGLang BF16+DFlash topology used here. Its publisher
-reports 0/300 true refusals, but the workstation must reproduce the relevant
-adult-only compliance probe and prompt-quality baseline before promotion.
+All 31 artifacts total 55,586,061,398 bytes and are pinned by exact size and
+SHA-256 in a checked-in manifest that is itself digest-pinned, so a tampered
+manifest fails before any network access. The checkpoint is structurally
+identical to the stock `/models/Qwen3.8-27B` — same
+`Qwen3_5ForConditionalGeneration` architecture, same `qwen3_5_text` 262144-token
+contract, same 64 layers — so it serves through the qualified TP1 vLLM profile
+unchanged. The downloader refuses any structural divergence, including an
+unexpected quantization config.
 
-Download and activate either derivative explicitly:
+Download and activate:
 
 ```bash
-MUSE_VARIANT=blackfrost bash scripts/inference/muse/download-muse-glimmer-30b.sh
-# The command returns only after checksum verification and DOWNLOAD_COMPLETE.
-MUSE_VARIANT=blackfrost bash scripts/comfyui/activate-creative-stack.sh
+bash scripts/inference/qwen38/download-qwen38-27b-blackfrost-abliterated-bf16.sh
+docker logs -f qwen38-27b-blackfrost-abliterated-bf16-model-dl
+bash scripts/comfyui/activate-creative-stack.sh
 ```
 
-For an explicitly asynchronous transfer, add `MUSE_DOWNLOAD_DETACH=yes`; that
-mode reports `DOWNLOAD_STARTED`, never completion. Follow the reported
-Nix-managed host-worker log under
-`~/.local/state/creative-model-downloads/` until it reports
-`DOWNLOAD_COMPLETE`. No mutable Python image or runtime `pip install` is used.
+Xet is deliberately disabled in that downloader. `hf-xet` 1.6.0 stalls on this
+workstation for this repository — every shard `.incomplete` file sits at zero
+bytes with no transfer. Standard Hub HTTPS is slower but resumable and
+observable.
 
-All variants use distinct model directories, caches, download locks/logs, and
-runtime container names. They share the official BF16 DFlash assistant. DFlash
-sampling remains output-exact because the target verifies candidates, but the
-modified target may accept fewer draft tokens; benchmark acceptance and speed
-before declaring the variant qualified. The repository's Q8/Q6/Q4 GGUF releases
-are actual quantizations, but they are not installed because this SGLang DFlash
-profile does not provide a qualified Muse GGUF path.
+Decoding defaults to target-only. DFlash2 speculation pairs the official draft
+with the abliterated target and stays opt-in behind
+`QWEN_BLACKFROST_SPECULATION=dflash2` until target-only output has been compared
+here. The repository's GGUF and NVFP4 releases are not installed: GGUF is a
+llama.cpp path this stack does not serve, and NVFP4 measures roughly 10% higher
+perplexity with no coding, tool-use, or long-context validation.
 
-Add **creative → Muse Glimmer → Muse Glimmer Creative Prompt**.
+Add **creative → Blackfrost Qwen → Blackfrost Qwen Creative Prompt**.
 
 Inputs:
 
@@ -1224,7 +1213,9 @@ Inputs:
 - `brief`: the human creative brief;
 - `duration_seconds`: 4–15 for H3 planning;
 - `aspect_ratio`;
-- `reasoning_strength`: default `xhigh`;
+- `reasoning_strength`: `low` or `xhigh`, default `xhigh` — Qwen3.8 implements
+  exactly these two efforts, so the levels it would silently fall back on are
+  not offered;
 - `max_tokens`: default 4096;
 - `reference_manifest`: required for H3 reference mode.
 
@@ -1236,38 +1227,38 @@ Outputs:
 The node:
 
 - defaults to the Nix-configured loopback endpoint
-  `http://127.0.0.1:8001/v1/chat/completions`; an operator can deliberately
+  `http://127.0.0.1:8000/v1/chat/completions`; an operator can deliberately
   override the base with `MUSE_GLIMMER_BASE_URL`;
-- reads the bearer key from the mode-0600 Muse key file on each request;
+- reads the bearer key from the mode-0600 Blackfrost Qwen key file on each request;
 - never stores the key in workflow JSON or a UI widget;
-- uses Muse's model-card sampling defaults (`temperature=1`, `top_p=.95`,
-  `top_k=64`) and maps reasoning through
-  `chat_template_kwargs.reasoning_strength`;
-- fails closed if the key is missing, permissive, empty, or Muse is down.
+- uses Qwen's sampling defaults (`temperature=1`, `top_p=.95`, `top_k=20`) and
+  maps reasoning through `chat_template_kwargs.reasoning_effort` alongside
+  `enable_thinking` and `preserve_thinking`;
+- fails closed if the key is missing, permissive, empty, or Blackfrost Qwen is down.
 
 ### Krea recipe
 
 ```text
-Muse Glimmer Creative Prompt [task=Krea 2 image]
+Blackfrost Qwen Creative Prompt [task=Krea 2 image]
   prompt → Krea-2 local subgraph “Text String (User Prompt)”
           → sampler → VAE Decode → SaveImage
 ```
 
 If the template prompt is a widget, right-click it and choose **Convert widget
-to input**, then connect Muse's `prompt` output.
+to input**, then connect Blackfrost Qwen's `prompt` output.
 
 ### H3 API recipe
 
 ```text
 creative brief
-  → Muse Glimmer Creative Prompt [MiniMax H3 base/reference]
+  → Blackfrost Qwen Creative Prompt [MiniMax H3 base/reference]
   → optional MinimaxHailuo03ContextIRNode
   → H3 Text / First-Last-Frame / Reference node
   → optional MinimaxHailuo03RegenerateNode (2K)
   → SaveVideo
 ```
 
-Muse supplies story, shot, and sound judgment. Context IR is the provider's
+Blackfrost Qwen supplies story, shot, and sound judgment. Context IR is the provider's
 multimodal rewrite and is useful when the same references can be supplied in
 the same order. Do not assume they are equivalent; save both prompts in the
 workflow record.
@@ -1294,7 +1285,7 @@ They are the current built-in H3 partner nodes, not old Hailuo 02 nodes.
 - up to 3 audio clips, each 2–15 seconds, no more than 15 seconds total;
 - audio references require at least one image or video anchor;
 - images at least 256×256 and aspect ratio 0.4–2.5;
-- use the same media in the same order for Muse manifest, Context IR,
+- use the same media in the same order for Blackfrost Qwen manifest, Context IR,
   generation, and 2K regeneration.
 
 Assign every reference one job:
@@ -1307,15 +1298,15 @@ Audio 1: voice timbre and cadence only.
 ```
 
 For local H3 syntax after licensing, labels become `<Picture 1>`, `<Video 1>`,
-and `<Audio 1>`. The Muse node's manifest is passed through verbatim, so use
+and `<Audio 1>`. The Blackfrost Qwen node's manifest is passed through verbatim, so use
 labels appropriate to the target node.
 
 ### Best hosted production chain
 
 1. Generate Krea 2 concept frames locally.
 2. Choose and manually review the exact references.
-3. Ask Muse for four micro-film concepts; select one yourself.
-4. Ask Muse to compile the selected concept as H3 reference mode.
+3. Ask Blackfrost Qwen for four micro-film concepts; select one yourself.
+4. Ask Blackfrost Qwen to compile the selected concept as H3 reference mode.
 5. Run Context IR with the same media order.
 6. Generate a 5-second preview.
 7. Check identity, motion, dialogue timing, audio sync, and disclosure needs.
@@ -1577,7 +1568,7 @@ until both FL2VA and REF2VA complete while measured VRAM and RAM stay healthy.
 #### Exact operator workflow for the first BF16 qualification
 
 1. Activate the creative profile normally. This stops the normal TP2 Qwen
-   backend, leaves Muse on physical GPU0, and gives physical GPU1 to ComfyUI:
+   backend, leaves Blackfrost Qwen on physical GPU0, and gives physical GPU1 to ComfyUI:
 
    ```bash
    cd ~/.dotfiles
@@ -1661,7 +1652,7 @@ until both FL2VA and REF2VA complete while measured VRAM and RAM stay healthy.
    ```
 
    Restarting ComfyUI releases all process-owned GPU1 VRAM and host RAM. It does
-   not stop Muse on GPU0. Wait for `http://127.0.0.1:8188/system_stats` before
+   not stop Blackfrost Qwen on GPU0. Wait for `http://127.0.0.1:8188/system_stats` before
    queueing `MiniMax H3 BF16 — R2V`.
 
 9. Qualify R2V conservatively: one image, `ref_image_size=match`, 124 frames,
@@ -1708,16 +1699,16 @@ checksum-verified profile before these selectors can be used:
 
 That practical profile is not the requested maximum-fidelity baseline, but it is
 preferable to an unstable BF16 run. A future full-BF16 TP2 profile could provide
-more aggregate VRAM, but it would own both GPUs: Muse and ComfyUI GPU generation
+more aggregate VRAM, but it would own both GPUs: Blackfrost Qwen and ComfyUI GPU generation
 would have to stop. It is not part of the current single-GPU ComfyUI profile.
 
 | Concurrent work | Current status |
 |---|---|
-| Muse on GPU0 + Krea on GPU1 | Supported |
-| Muse on GPU0 + one full BF16 H3 family on GPU1 | Candidate topology; must pass the qualification above |
+| Blackfrost Qwen on GPU0 + Krea on GPU1 | Supported |
+| Blackfrost Qwen on GPU0 + one full BF16 H3 family on GPU1 | Candidate topology; must pass the qualification above |
 | Krea + H3 generating on GPU1 | Unsupported; serialize and clear between them |
 | FL2VA + REF2VA in one active graph | Unsupported and unnecessary |
-| Full BF16 H3 TP2 over both GPUs | Separate future profile; Muse and ComfyUI generation must stop |
+| Full BF16 H3 TP2 over both GPUs | Separate future profile; Blackfrost Qwen and ComfyUI generation must stop |
 
 ## 9. Generate original music locally with MiniMax Music 3
 
@@ -1842,15 +1833,15 @@ The starting surface is:
 | Style-preserving single character view | `Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16` | User workflows → `krea2-character-sheet-bf16` | One canonical subject; 1:1 source/output; identity-first `ref_boost=1`; both realism LoRAs bypassed; FLUX outputs muted |
 | Native three-panel character sheet | `Krea 2 Three-Panel Character Sheet BF16` | User workflows → `krea2-character-sheet-bf16` | Approved reference feeds semantic and VAE appearance-token paths; independent 1536×768 target latent; one Krea pass and save |
 | Undistilled maximum-quality Krea suite | `01`–`04 Krea 2 RAW BF16...` | User workflows → `krea2-max-quality-bf16` | RAW T2I 52/3.5; RAW Identity 20/3; RAW three-panel; RAW→full-BF16 Klein; no Turbo enhancer or active unqualified realism LoRA |
-| Guided skill-to-graph production path | `01`–`21` ordered character, still, finish, and H3 workflows | User workflows → `contest-production-bf16` | Paste approved Muse prompts directly; obey each graph's titled reference roles; Turbo previews and RAW/H3 production remain separate |
+| Guided skill-to-graph production path | `01`–`21` ordered character, still, finish, and H3 workflows | User workflows → `contest-production-bf16` | Paste approved Blackfrost Qwen prompts directly; obey each graph's titled reference roles; Turbo previews and RAW/H3 production remain separate |
 | Approved first/last frame → maximum-quality video | `01 MiniMax H3 BF16 FL2VA - First Frame Production` | User workflows → `minimax-h3-production-bf16` | Prepare `fl2va`; unpruned BF16 FL2VA/Qwen; 50 steps; no Krea or Turbo |
 | Character references → maximum-quality video | `02 MiniMax H3 BF16 REF2VA - Character References Production` | User workflows → `minimax-h3-production-bf16` | Prepare `ref2va`; unpruned BF16 REF2VA/Qwen; start with two images and `match` |
 | Style-led character image | `image_krea2_turbo_bf16_image_style_reference` | User workflows → `creative-suite/image` | Krea BF16 DiT/encoder and style-reference LoRA |
 | Identity-preserving views and expressions | `Krea 2 + Edit Lora` or `Krea 2 + Edit Lora - Custom Ratio` | User workflows → `pixaroma-ep30` | Krea Identity Edit weights and pinned edit nodes |
 | Character in a designed location | `Krea 2 + Edit Lora - Character and Background` | User workflows → `pixaroma-ep30` | Character and background reference images |
 | Wardrobe variants | `Krea 2 + One Image Outfit Lora` or `Krea 2 + Outfit Transfer 2` | User workflows → `pixaroma-ep30` | Outfit-transfer weights and clean clothing references |
-| Story, screenplay, and scene cards | Muse Glimmer in Pi | Select `desktop-muse/muse-glimmer-30b` | Muse target and DFlash draft markers; Muse endpoint healthy |
-| Per-scene H3 prompt compilation | `Muse Glimmer Creative Prompt` | Add node → creative → Muse Glimmer | Muse endpoint healthy; accepted scene card already written |
+| Story, screenplay, and scene cards | Blackfrost Qwen in Pi | Select `desktop-vllm/qwen3.8-27b-blackfrost-abliterated` | Blackfrost Qwen target and DFlash draft markers; Blackfrost Qwen endpoint healthy |
+| Per-scene H3 prompt compilation | `Blackfrost Qwen Creative Prompt` | Add node → creative → Blackfrost Qwen | Blackfrost Qwen endpoint healthy; accepted scene card already written |
 | Text-only local H3 scene | `Minimax H3 - Text to video` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker; BF16 FL2VA graph is already adapted |
 | First-frame local H3 scene | `Minimax H3 - Image to video FF (First Frame)` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker and accepted Krea keyframe |
 | First+last or last-only local H3 scene | `Minimax H3 - Image to video FFLF` or `Minimax H3 - Image to video LF (Last Frame)` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker and matching-ratio keyframes |
@@ -1896,16 +1887,13 @@ test -f /models/comfyui/.krea2-flux2-klein9b-bf16-v1.complete
 test -f /models/comfyui/.krea2-realism-lora-32f0436-v1.complete
 test -f /models/comfyui/.minimax-h3-bf16-complete
 
-MUSE_VARIANT="${MUSE_VARIANT:-standard}"
-source scripts/inference/muse/muse-glimmer-variant.sh
-muse_resolve_variant "$MUSE_VARIANT"
-test -f "$MUSE_TARGET_HOST/.download-complete"
-test -f "$MUSE_DRAFT_HOST/.download-complete"
+grep -Fxq 'Blackfrost-AI/Qwen3.8-27B-ABLITERATED-BF16@9d85770e5eb602322b4bceef55beda357e0bd0ca' \
+  /models/Qwen3.8-27B-Blackfrost-Abliterated-BF16/.download-complete
 ```
 
 The downloaders default directly to `/models` and `/models/comfyui`. During the
 unprivileged initial transfer documented for this workstation, they were
-explicitly redirected with `MUSE_MODELS_ROOT` and `COMFYUI_MODELS_ROOT` into
+explicitly redirected with `COMFYUI_MODELS_ROOT` into
 `~/.local/state/creative-model-staging/`. Markers there mean only that the
 redirected staging profile is complete; they do **not** satisfy these default
 runtime checks until the artifacts are promoted into `/models`. Likewise, a present H3 workflow is not a claim that the
@@ -1938,7 +1926,7 @@ stable point at which to reject drift before it contaminates every later scene.
 ### Step 1 — create a small project bible
 
 If the external story-bible-builder skill is loaded in Pi, use it to interview and
-assemble this canon before asking Muse for image or video prompts. Treat the
+assemble this canon before asking Blackfrost Qwen for image or video prompts. Treat the
 result as human-reviewed project input, not executable code. The story bible
 supplies who, voice, movement, stillness, world rules, and era; the image and
 cinema skills supply how each asset is framed and generated.
@@ -2029,7 +2017,7 @@ constraints to detect drift.
 #### 2.2 Generate and approve one canonical anchor
 
 Open contest workflow `01 Character Face Lock - Turbo BF16 Preview`, paste the
-approved Muse/character-builder face-lock prompt, and iterate before attempting
+approved Blackfrost Qwen/character-builder face-lock prompt, and iterate before attempting
 outfits or action poses. The graph is fixed at 768×1024 with prompt expansion and
 style LoRA disabled. Promote an approved specification through `02 Character
 Face Lock - RAW BF16 Production` for the undistilled comparison. Keep the plain
@@ -2068,7 +2056,7 @@ is not a useful reference.
 
 Build and approve the full outfit first with contest workflow `05` or `06`, then
 open `09 Character Headless Three-Panel Sheet - RAW BF16 Production`. Paste the
-single Muse sheet prompt with identity and wardrobe described once and the three
+single Blackfrost Qwen sheet prompt with identity and wardrobe described once and the three
 panel roles explicit. Queue the graph once; one native RAW Krea pass generates
 and saves the complete horizontal sheet. Reject it if the center panel
 exposes the face instead of a strict rear view, if the right panel is wider than
@@ -2092,20 +2080,20 @@ Create a contact sheet for yourself if useful, but pass the original individual
 images to H3. Mark only approved images as canonical; move rejected experiments
 out of the reference directory.
 
-### Step 3 — write the story and scene cards with Muse
+### Step 3 — write the story and scene cards with Blackfrost Qwen
 
-Use Muse in two distinct roles:
+Use Blackfrost Qwen in two distinct roles:
 
 1. **Free-form writer/director in Pi:** select
-   `desktop-muse/muse-glimmer-30b` to develop the story, screenplay, and scene
+   `desktop-vllm/qwen3.8-27b-blackfrost-abliterated` to develop the story, screenplay, and scene
    breakdown interactively.
 2. **Approved prompt compiler in Pi:** activate the relevant image or cinema
-   skill plus the story bible, ask Muse for the final standalone prompt, review
+   skill plus the story bible, ask Blackfrost Qwen for the final standalone prompt, review
    it, then paste it into the plainly titled widget in the contest workflow.
 
-The `Muse Glimmer Creative Prompt` ComfyUI node remains an optional task-shaped
+The `Blackfrost Qwen Creative Prompt` ComfyUI node remains an optional task-shaped
 alternative, but the contest graphs intentionally do not chain another enhancer
-over already approved Muse text. Start the Pi conversation by pasting the
+over already approved Blackfrost Qwen text. Start the Pi conversation by pasting the
 approved project and character bibles, then use a request like:
 
 ```text
@@ -2140,7 +2128,7 @@ cards. Do not write final H3 prompts until I approve the cards.
 ```
 
 Review the screenplay yourself. Check motivation, pacing, continuity, feasible
-shot count, and whether every dialogue line can fit its clip. Ask Muse to revise
+shot count, and whether every dialogue line can fit its clip. Ask Blackfrost Qwen to revise
 specific cards rather than regenerating the entire story after every note.
 
 Save each accepted card in `scenes/<id>-<slug>/scene.md`. A useful card looks
@@ -2209,7 +2197,7 @@ For each accepted scene card:
 1. Open only contest workflow `18`, `19`, `20`, or `21`.
 2. Confirm no unrelated output branch is active and the queue is empty.
 3. Load the approved first/last frame or references in the exact titled order.
-4. Paste the complete approved Muse/Cinema Director prompt into the titled H3
+4. Paste the complete approved Blackfrost Qwen/Cinema Director prompt into the titled H3
    prompt widget. Do not run another enhancer over it.
 5. Confirm the workflow family matches the prompt: FL2VA for `18`–`20`, REF2VA
    for `21`.
@@ -2221,7 +2209,7 @@ For each accepted scene card:
    <Picture 3>: clocktower doorway architecture and lighting only.
    ```
 
-7. Paste the scene card as the brief. Inspect Muse's returned prompt; it must not
+7. Paste the scene card as the brief. Inspect Blackfrost Qwen's returned prompt; it must not
    contradict the scene card or renumber references.
 8. Queue one 768p, approximately five-second, batch-1 generation.
 9. Monitor RAM/VRAM as described in Section 8.
@@ -2303,7 +2291,7 @@ three clips:
    the door opens and warm machinery is revealed.
 
 Accept each scene before creating the next continuity handoff. This small test
-exercises Krea identity editing, Muse scene compilation, both H3 families,
+exercises Krea identity editing, Blackfrost Qwen scene compilation, both H3 families,
 `/free` family transitions, native audio, and final assembly without hiding
 problems inside a long generation.
 
@@ -2319,7 +2307,7 @@ problems inside a long generation.
 | ComfyUI-Detail-Daemon | **Installed**, MIT, pinned commit; exact sampler seam used by the Krea/FLUX workflow |
 | KJNodes | **Installed**, GPL-3.0, pinned commit; exact `ColorMatch` seam used by the Krea/FLUX workflow |
 | rgthree-comfy | Not installed; Episode 24's two Power LoRA nodes are deterministically converted to core `LoraLoaderModelOnly` nodes |
-| IF AI Tools | Archived and dependency-heavy; the in-repo Muse node is narrower and uses the existing endpoint |
+| IF AI Tools | Archived and dependency-heavy; the in-repo Blackfrost Qwen node is narrower and uses the existing endpoint |
 | New H3 “director/turbo/cache” nodes | Too new and overlapping with native H3; no baseline evidence yet |
 
 After a clean native baseline, Sage Attention is the first optional performance
@@ -2332,8 +2320,8 @@ benchmark it separately; do not silently fold it into the reference profile.
 ## 12. Security and privacy
 
 - Port 8188 is loopback-only. Use SSH forwarding; never add a firewall rule.
-- Muse's key stays in a mode-0600 file and is read at execution time.
-- Local Muse, Krea, H3, and Music 3 prompts/references stay on the workstation.
+- Blackfrost Qwen's key stays in a mode-0600 file and is read at execution time.
+- Local Blackfrost Qwen, Krea, H3, and Music 3 prompts/references stay on the workstation.
 - The ensemble project forbids partner nodes and other hosted media generation.
 - Partner nodes upload prompts and media to Comfy/provider infrastructure.
   Treat faces, voices, customer assets, unreleased products, and location data
@@ -2353,13 +2341,13 @@ Do not call the stack qualified until:
 - [ ] Nix evaluation and build pass from the pinned flake.
 - [ ] `comfyui.service` stays inactive after reboot, then explicit creative-profile
       activation starts it on loopback only.
-- [ ] Comfy logs load Muse plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
+- [ ] Comfy logs load Blackfrost Qwen plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
 - [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 54 curated workflows, one full-quality Music 3 workflow, and 16 unique sample inputs are present.
 - [ ] ComfyUI is exactly 0.33.3 with frontend 1.49.6, workflow templates 0.11.44, and comfy-kitchen 0.2.31.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.
-- [ ] Muse and Comfy are isolated to physical GPU0/GPU1 respectively.
+- [ ] Blackfrost Qwen and Comfy are isolated to physical GPU0/GPU1 respectively.
 - [ ] `creative-model-phase` accepts only `krea`, `h3-fl2va`, `h3-ref2va`, and `music3`, and refuses every prepare/release while the queue is active or pending.
 - [ ] The Music 3 completion marker verifies the FP16 DiT, unpruned BF16 encoder, and full DAV against all three exact checksums.
 - [ ] A fixed 30-second Music 3 qualification renders at 30 steps/CFG 1.7 with untiled decode; complete decode, duration, stereo stream, peak GPU1 VRAM, host RAM, and SHA-256 are recorded.
@@ -2389,12 +2377,12 @@ Do not call the stack qualified until:
 - [ ] Both Episode 30 local H3 prompt workflows produce their expected schema.
 - [ ] Episode 29 FFLF, last-only, two/three-reference, speech-sync, and singing-sync graphs expose only the expected BF16 family and 50-step sampler.
 - [ ] H3 BF16 FL2VA T2V and one-keyframe I2V each complete at 768p/124 frames
-      with Muse active on GPU0; record both GPU1 VRAM and host RAM peaks.
+      with Blackfrost Qwen active on GPU0; record both GPU1 VRAM and host RAM peaks.
 - [ ] After the FL2VA job finishes, the idle-queue `/free` operation or a
       ComfyUI restart clears its model/cache state.
 - [ ] H3 BF16 REF2VA then completes with one matched-size image at 768p/124
       frames, without either DiT co-residing, host swapping, or a GPU OOM.
-- [ ] Standard Muse→Krea BF16 1K and 2K images complete.
+- [ ] Standard Blackfrost Qwen→Krea BF16 1K and 2K images complete.
 - [ ] The Gokay realism workflow completes with only
       `krea2_realism_lora.safetensors` active at 1.0; compare the native output
       against plain Turbo, FameGrid, and UltraReal with one fixed prompt/seed,
@@ -2402,7 +2390,7 @@ Do not call the stack qualified until:
 - [ ] The Krea→FLUX Klein workflow completes with only FameGrid active, saves a
       four-megapixel result, and records peak GPU1 VRAM/host RAM; repeat with
       only UltraReal active and retain the stronger result.
-- [ ] Abliterated Muse starts from its pinned marker, completes the same fixed
+- [ ] Abliterated Blackfrost Qwen starts from its pinned marker, completes the same fixed
       prompt corpus, and records quality, refusal behavior, throughput, and
       effective DFlash acceptance versus standard.
 - [ ] A local Krea style-reference generation completes with the BF16 DiT,
@@ -2427,7 +2415,7 @@ nix build .#nixosConfigurations.desktop.config.system.build.toplevel --dry-run
 
 journalctl -k -b | grep -Ei 'NVRM|Xid|fallen off|AER'
 journalctl -u comfyui -b --no-pager
-docker inspect muse-glimmer-30b-bf16-dflash \
+docker inspect qwen38-27b-blackfrost-abliterated-bf16-vllm \
   --format 'status={{.State.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}'
 ```
 
@@ -2438,7 +2426,7 @@ Stop only the creative components:
 ```bash
 sudo systemctl stop comfyui
 
-docker stop -t 30 muse-glimmer-30b-bf16-dflash
+docker stop -t 30 qwen38-27b-blackfrost-abliterated-bf16-vllm
 ```
 
 Restore the desired inference backend explicitly, for example:
@@ -2470,7 +2458,7 @@ Sources accessed 2026-08-21–22:
 - [Pixaroma workflow index](https://workflows.pixaroma.com/)
 - [Huihui Qwen3-VL-4B Abliterated](https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-4B-Instruct-abliterated)
 - [ComfyUI BF16 packaging](https://huggingface.co/ahmed22xa/Huihui-Qwen3-VL-4B-Instruct-abliterated-comfy)
-- [Muse Glimmer 30B Abliterated BF16](https://huggingface.co/mlasli/Muse-Glimmer-30B-Abliterated-BF16)
+- [Blackfrost abliterated Qwen3.8-27B Abliterated BF16](https://huggingface.co/mlasli/Blackfrost Qwen-Glimmer-30B-Abliterated-BF16)
 - [Krea 2 Identity Edit nodes](https://github.com/lbouaraba/comfyui-krea2edit)
 - [Krea 2 Identity Edit weights](https://huggingface.co/conradlocke/krea2-identity-edit)
 - [Krea2T Enhancer](https://github.com/capitan01R/ComfyUI-Krea2T-Enhancer)

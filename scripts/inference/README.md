@@ -30,8 +30,6 @@ glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            long-prefill fairness cap. v6 measured 403,989 tokens on its cold JIT-cache
            boot and 737,953 after cache warmup, reproducing the roughly 700K claim;
            v7's cache correctness and latency remain unqualified.
-muse/      Muse Glimmer 30B (BF16 + DFlash) downloader + launcher.
-profiles/  Cross-model profiles (the concurrent Qwen + Muse dual switcher).
 shared/    Components more than one profile uses: the credential helper every
            launcher sources, the secret-safe SGLang entrypoint, GPU telemetry
            recording, throughput probing, and the durable vLLM/SGLang stats

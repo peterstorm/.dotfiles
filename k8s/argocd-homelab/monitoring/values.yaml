@@ -44,7 +44,8 @@ kube-prometheus-stack:
                 storage: 10Gi
       replicas: 1
       # The local inference engines run outside the cluster. Port 8000 serves
-      # Qwen or DeepSeek; port 8001 concurrently serves Muse Glimmer. Recording
+      # whichever desktop-vllm model is active; 8001 stays wired for a future
+      # second concurrent endpoint and reports down until one exists. Recording
       # rules normalize vLLM and SGLang names into the inference:* contract.
       additionalScrapeConfigs:
         - job_name: vllm-desktop

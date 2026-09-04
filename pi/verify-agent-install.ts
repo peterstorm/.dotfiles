@@ -80,9 +80,11 @@ if (resolve(dirname(routingLink), readlinkSync(routingLink)) !== expectedRouting
 const loadedRouting = loadModelRoutingPolicy(agentDir);
 if (!loadedRouting.ok) fail(`invalid model routing policy: ${loadedRouting.error.message}`);
 const deepSeekModel = parseModelReference("desktop-vllm/deepseek-v4-flash");
-const museModel = parseModelReference("desktop-muse/muse-glimmer-30b");
+const blackfrostModel = parseModelReference("desktop-vllm/qwen3.8-27b-blackfrost-abliterated");
 const cloudModel = parseModelReference("openai-codex/gpt-5.6-sol");
-if (!deepSeekModel.ok || !museModel.ok || !cloudModel.ok) fail("verification model references are invalid");
+if (!deepSeekModel.ok || !blackfrostModel.ok || !cloudModel.ok) {
+  fail("verification model references are invalid");
+}
 const deepSeekBinding = {
   model: deepSeekModel.value,
   thinkingLevel: "max" as const,
@@ -110,10 +112,10 @@ if (
 ) {
   fail("local parent does not override a subagent's declared cloud binding");
 }
-const museRoute = resolveModelRoute(
+const blackfrostRoute = resolveModelRoute(
   loadedRouting.value.policy,
   {
-    parent: { model: museModel.value, thinkingLevel: "xhigh" },
+    parent: { model: blackfrostModel.value, thinkingLevel: "xhigh" },
     declared: { model: cloudModel.value, thinkingLevel: "high" },
     workload: "subagent",
     profile: "general-review",
@@ -122,13 +124,13 @@ const museRoute = resolveModelRoute(
   loadedRouting.value.digest,
 );
 if (
-  !museRoute.ok ||
-  museRoute.value.kind !== "override" ||
-  museRoute.value.effective?.model.provider !== "desktop-muse" ||
-  museRoute.value.effective?.model.id !== "muse-glimmer-30b" ||
-  museRoute.value.effective?.thinkingLevel !== "xhigh"
+  !blackfrostRoute.ok ||
+  blackfrostRoute.value.kind !== "override" ||
+  blackfrostRoute.value.effective?.model.provider !== "desktop-vllm" ||
+  blackfrostRoute.value.effective?.model.id !== "qwen3.8-27b-blackfrost-abliterated" ||
+  blackfrostRoute.value.effective?.thinkingLevel !== "xhigh"
 ) {
-  fail("Muse is not classified as a local parent for nested workloads");
+  fail("Blackfrost Qwen is not classified as a local parent for nested workloads");
 }
 const cloudRoute = resolveModelRoute(
   loadedRouting.value.policy,
@@ -175,13 +177,8 @@ const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
 const desktopProvider = modelsConfig.providers?.["desktop-vllm"];
 const deepSeek = desktopProvider?.models?.find((model) => model.id === "deepseek-v4-flash");
 const qwen = desktopProvider?.models?.find((model) => model.id === "qwen3.8-27b");
-type CatalogModel = NonNullable<
-  NonNullable<NonNullable<typeof modelsConfig.providers>[string]>["models"]
->[number];
-const museProvider = modelsConfig.providers?.["desktop-muse"];
-const muse = museProvider?.models?.find((model) => model.id === "muse-glimmer-30b");
-const museBlackfrost = museProvider?.models?.find(
-  (model) => model.id === "muse-glimmer-30b-blackfrost-bf16",
+const blackfrost = desktopProvider?.models?.find(
+  (model) => model.id === "qwen3.8-27b-blackfrost-abliterated",
 );
 if (desktopProvider?.baseUrl !== "http://192.168.0.80:8000/v1") {
   fail("desktop-vllm does not target the workstation's OpenAI-compatible endpoint");
@@ -218,52 +215,37 @@ if (
 ) {
   fail("qwen3.8-27b does not map Pi reasoning levels into Qwen chat-template kwargs");
 }
-if (museProvider?.baseUrl !== "http://192.168.0.80:8001/v1") {
-  fail("desktop-muse does not target the workstation's concurrent Muse endpoint");
+// The Blackfrost checkpoint is a weight-level derivative of Qwen3.8-27B, so it
+// serves the same chat template and must expose the same reasoning contract as
+// the stock entry — only the served id differs.
+if (!blackfrost) fail("desktop-vllm is missing qwen3.8-27b-blackfrost-abliterated");
+if (blackfrost.defaultThinkingLevel !== "xhigh") {
+  fail("qwen3.8-27b-blackfrost-abliterated does not declare xhigh as its model default");
 }
-// Both Muse entries serve the same chat template through the same provider, so
-// they share one reasoning contract and differ only in served id and the
-// `--max-model-len` their launcher pins. Computing violations purely keeps the
-// contract in one place; the shell below decides what to do with them.
-const museContractViolations = (
-  model: CatalogModel | undefined,
-  id: string,
-  contextWindow: number,
-): readonly string[] =>
-  !model
-    ? [`desktop-muse is missing ${id}`]
-    : [
-        ...(model.defaultThinkingLevel !== "xhigh"
-          ? [`${id} does not default to xhigh reasoning`]
-          : []),
-        ...(model.contextWindow !== contextWindow
-          ? [`${id} does not declare its ${contextWindow}-token served context`]
-          : []),
-        ...(["low", "medium", "high", "xhigh"] as const).flatMap((level) =>
-          model.thinkingLevelMap?.[level] !== level
-            ? [`${id} does not expose the ${level} reasoning contract`]
-            : [],
-        ),
-        ...(["off", "minimal", "max"] as const).flatMap((level) =>
-          model.thinkingLevelMap?.[level] !== null
-            ? [`${id} does not hide unsupported ${level} reasoning`]
-            : [],
-        ),
-        ...(model.compat?.supportsDeveloperRole !== false ||
-        model.compat?.supportsReasoningEffort !== false ||
-        model.compat?.supportsStrictMode !== false ||
-        model.compat?.thinkingFormat !== "chat-template" ||
-        JSON.stringify(model.compat.chatTemplateKwargs?.reasoning_strength) !==
-          JSON.stringify({ $var: "thinking.effort" })
-          ? [`${id} does not map Pi reasoning into Muse's chat-template contract`]
-          : []),
-      ];
-
-for (const violation of [
-  ...museContractViolations(muse, "muse-glimmer-30b", 131_072),
-  ...museContractViolations(museBlackfrost, "muse-glimmer-30b-blackfrost-bf16", 131_072),
-]) {
-  fail(violation);
+if (blackfrost.contextWindow !== 262_144) {
+  fail("qwen3.8-27b-blackfrost-abliterated does not declare its native 262K context");
+}
+for (const level of ["low", "xhigh"] as const) {
+  if (blackfrost.thinkingLevelMap?.[level] !== level) {
+    fail(`qwen3.8-27b-blackfrost-abliterated does not expose the ${level} reasoning contract`);
+  }
+}
+for (const level of ["off", "minimal", "medium", "high", "max"] as const) {
+  if (blackfrost.thinkingLevelMap?.[level] !== null) {
+    fail(`qwen3.8-27b-blackfrost-abliterated does not hide unsupported ${level} reasoning`);
+  }
+}
+const blackfrostTemplate = blackfrost.compat?.chatTemplateKwargs;
+if (
+  blackfrost.compat?.supportsDeveloperRole !== false ||
+  blackfrost.compat?.thinkingFormat !== "chat-template" ||
+  JSON.stringify(blackfrostTemplate?.enable_thinking) !==
+    JSON.stringify({ $var: "thinking.enabled" }) ||
+  blackfrostTemplate?.preserve_thinking !== true ||
+  JSON.stringify(blackfrostTemplate?.reasoning_effort) !==
+    JSON.stringify({ $var: "thinking.effort", omitWhenOff: true })
+) {
+  fail("qwen3.8-27b-blackfrost-abliterated does not map Pi reasoning into Qwen chat-template kwargs");
 }
 
 const runtimeAgentDir = mkdtempSync(join(tmpdir(), "pi-routing-verify-"));

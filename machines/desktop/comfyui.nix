@@ -465,6 +465,18 @@ let
         chmod -R a-w "$out"
       '';
 
+  aftersignalH3SourceEditNode =
+    pkgs.runCommand "comfyui-aftersignal-h3-source-edit-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${../../comfyui/custom_nodes/aftersignal_h3_source_edit}/. "$out"
+        chmod -R u+w "$out"
+        ${comfyPythonEnv}/bin/python "$out/test_nodes.py"
+        chmod -R a-w "$out"
+      '';
+
   # Upstream does not declare a code license. This immutable pin is authorized
   # only for private local Development evaluation; it is not a Production or
   # redistribution grant.
@@ -564,6 +576,7 @@ let
     ln -s ${mmh3ToolsNode} "$out/ComfyUI-MMH3Tools"
     ln -s ${h3MotionContextNode} "$out/ComfyUI-H3-Motion-Context-MultiRef"
     ln -s ${h3FunControlNode} "$out/ComfyUI-H3-FunControl"
+    ln -s ${aftersignalH3SourceEditNode} "$out/aftersignal_h3_source_edit"
     ln -s ${minimaxH3PddNode} "$out/ComfyUI-MiniMax-H3-PDD-Acc"
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
@@ -2638,13 +2651,13 @@ in
       XDG_CACHE_HOME = "/var/cache/comfyui";
       HF_HOME = "/var/cache/comfyui/huggingface";
       CUDA_DEVICE_ORDER = "PCI_BUS_ID";
-      # Keep physical GPU0 available for Muse Glimmer. CUDA_VISIBLE_DEVICES=1
+      # Keep physical GPU0 available for the prompt-author LLM. CUDA_VISIBLE_DEVICES=1
       # makes physical GPU1 ComfyUI's only visible device, renumbered to cuda:0.
       CUDA_VISIBLE_DEVICES = "1";
       LD_LIBRARY_PATH = "/run/opengl-driver/lib";
       PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True";
-      MUSE_GLIMMER_BASE_URL = "http://127.0.0.1:8001/v1";
-      MUSE_GLIMMER_API_KEY_FILE = "/home/peterstorm/.config/muse-glimmer/api-key";
+      MUSE_GLIMMER_BASE_URL = "http://127.0.0.1:8000/v1";
+      MUSE_GLIMMER_API_KEY_FILE = "/home/peterstorm/.config/qwen38/api-key";
       MINIMAX_H3_DIRECTOR_LLM_API_KEY_FILE = "/home/peterstorm/.config/qwen38/api-key";
     };
 

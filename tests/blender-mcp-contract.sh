@@ -9,6 +9,9 @@ PROJECT_SETTINGS="$ROOT/pi/project-config/creative/settings.json"
 MCP_CONFIG="$ROOT/pi/project-config/creative/mcp.json"
 SKILL="$ROOT/pi/project-skills/creative/blender-previz/SKILL.md"
 WORKFLOW="$ROOT/pi/project-skills/creative/blender-previz/references/workflow.md"
+TRAJECTORIES="$ROOT/pi/project-skills/creative/blender-previz/scripts/camera_trajectories.py"
+TRAJECTORY_TEST="$ROOT/pi/project-skills/creative/blender-previz/scripts/test_camera_trajectories.py"
+SCOPE_EXTENSION="$ROOT/pi/extensions/creative-project-scope/index.ts"
 HOME_MODULE="$ROOT/roles/home-manager/core-apps/pi/default.nix"
 
 fail() {
@@ -21,7 +24,7 @@ contains() {
   grep -Fq -- "$text" "$file" || fail "$file does not contain: $text"
 }
 
-for file in "$MODULE" "$DESKTOP" "$GLOBAL_SETTINGS" "$PROJECT_SETTINGS" "$MCP_CONFIG" "$SKILL" "$WORKFLOW" "$HOME_MODULE"; do
+for file in "$MODULE" "$DESKTOP" "$GLOBAL_SETTINGS" "$PROJECT_SETTINGS" "$MCP_CONFIG" "$SKILL" "$WORKFLOW" "$TRAJECTORIES" "$TRAJECTORY_TEST" "$SCOPE_EXTENSION" "$HOME_MODULE"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 
@@ -49,6 +52,10 @@ jq -e '
 contains "$HOME_MODULE" '"blender-previz"'
 contains "$HOME_MODULE" '"dev/creative/.pi/settings.json"'
 contains "$HOME_MODULE" '"dev/creative/.mcp.json"'
+contains "$SCOPE_EXTENSION" 'resolveCreativeScope'
+contains "$SCOPE_EXTENSION" 'ctx.isProjectTrusted()'
+contains "$SCOPE_EXTENSION" 'configPath: join(result.scope.root, ".mcp.json")'
+contains "$SCOPE_EXTENSION" 'return { skillPaths: [...creativeSkillPaths(result.scope)] }'
 
 contains "$MODULE" 'version = "1.9.0";'
 contains "$MODULE" 'f0759291b5748c35fcdabd68f89b684cfaae6c61dd475f87d591dddcef63f9fa'
@@ -76,6 +83,16 @@ contains "$WORKFLOW" 'reference → mechanism reconstruction → original remix'
 contains "$WORKFLOW" 'CARRIER-CONTRACT.md'
 contains "$WORKFLOW" 'setup → load → event/contact → consequence'
 contains "$WORKFLOW" 'Pi runs on `homelab`; Blender runs on `desktop`'
+contains "$WORKFLOW" 'scripts/camera_trajectories.py'
+contains "$TRAJECTORIES" 'class OrbitPassSpec:'
+contains "$TRAJECTORIES" 'class OverheadOrbitSpec:'
+contains "$TRAJECTORIES" 'true horizontal orbit, then a separate vertical surface dive'
+contains "$TRAJECTORIES" 'weighted ground-level orbit up, over, inverted, and down through the surface'
+contains "$TRAJECTORIES" 'class RoboticArmSpec:'
+contains "$TRAJECTORY_TEST" 'test_orbit_phase_is_a_true_horizontal_circle'
+contains "$TRAJECTORY_TEST" 'test_exit_is_vertical_and_never_reverses_around_target'
+contains "$TRAJECTORY_TEST" 'test_camera_rig_becomes_upside_down_after_crossing_the_apex'
+contains "$TRAJECTORY_TEST" 'test_terminal_motion_accelerates_into_the_surface'
 [[ ! -e "$ROOT/pi/skills/blender-previz" ]] || fail "Blender previz must not be a global Pi skill"
 
 printf 'PASS: Blender MCP is pinned, loopback-scoped, telemetry-off, Pi-discoverable, and bounded at the blocking-video handoff\n'

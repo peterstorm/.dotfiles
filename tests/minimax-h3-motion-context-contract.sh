@@ -6,6 +6,8 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-motion-context-workflows.sh"
 RUNBOOK="$ROOT/docs/runbooks/minimax-h3-motion-context.md"
+SOURCE_EDIT_NODE="$ROOT/comfyui/custom_nodes/aftersignal_h3_source_edit/nodes.py"
+SOURCE_EDIT_TEST="$ROOT/comfyui/custom_nodes/aftersignal_h3_source_edit/test_nodes.py"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -17,7 +19,7 @@ contains() {
   grep -Fq -- "$needle" "$file" || fail "$file does not contain: $needle"
 }
 
-for file in "$MODULE" "$BUILDER" "$RUNBOOK"; do
+for file in "$MODULE" "$BUILDER" "$RUNBOOK" "$SOURCE_EDIT_NODE" "$SOURCE_EDIT_TEST"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
 [[ -x "$BUILDER" ]] || fail "$BUILDER is not executable"
@@ -33,6 +35,8 @@ contains "$MODULE" 'id=1iSS4Dsb_tfkSAlUinHXH_w5QV1-xU3Wf'
 contains "$MODULE" 'hash = "sha256-nn6Jcn7aHNgQQm1WoXr0f+PEmZrHhV2YrUopKTkNXTA=";'
 contains "$MODULE" '${comfyPythonEnv}/bin/python tests/run_tests.py'
 contains "$MODULE" 'ln -s ${h3MotionContextNode} "$out/ComfyUI-H3-Motion-Context-MultiRef"'
+contains "$MODULE" 'ln -s ${aftersignalH3SourceEditNode} "$out/aftersignal_h3_source_edit"'
+contains "$MODULE" '${comfyPythonEnv}/bin/python "$out/test_nodes.py"'
 contains "$MODULE" '${../../scripts/comfyui/build-minimax-h3-motion-context-workflows.sh}'
 contains "$MODULE" '--two-guide-source ${minimaxH3TwoGuideWorkflowSource}'
 contains "$MODULE" '--four-guide-source ${minimaxH3FourGuideWorkflowSource}'
@@ -81,5 +85,8 @@ contains "$RUNBOOK" 'Two Guides — Maximum Quality BF16'
 contains "$RUNBOOK" 'Four Guides — BF16 FL2VA Turbo 4-Step'
 contains "$RUNBOOK" 'guide and as a visual reference'
 contains "$RUNBOOK" 'strong steer, not a compositing guarantee'
+contains "$SOURCE_EDIT_NODE" 'AFTERSIGNALH3SourceVideoLatent'
+contains "$SOURCE_EDIT_NODE" 'output.pop("noise_mask", None)'
+contains "$SOURCE_EDIT_TEST" 'test_source_replaces_video_stream_without_changing_audio'
 
 printf 'PASS: H3 Motion Context is pinned, source-tested, BF16-adapted, Turbo-family matched, and Development-only\n'

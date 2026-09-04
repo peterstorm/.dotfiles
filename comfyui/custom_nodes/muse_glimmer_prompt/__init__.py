@@ -16,7 +16,9 @@ TASK_KREA2 = "Krea 2 image"
 TASK_H3_BASE = "MiniMax H3 base"
 TASK_H3_REFERENCE = "MiniMax H3 reference"
 TASKS = (TASK_KREA2, TASK_H3_BASE, TASK_H3_REFERENCE)
-REASONING_STRENGTHS = ("low", "medium", "high", "xhigh")
+# Qwen3.8 exposes exactly two qualified reasoning efforts. Offering the levels it
+# does not implement would silently fall back rather than fail, so they are not listed.
+REASONING_STRENGTHS = ("low", "xhigh")
 
 KREA2_INSTRUCTION = """You are an expert prompt engineer for Krea 2. Expand the brief into one faithful, cohesive natural-language image prompt. Internally choose the most suitable medium, composition, framing, grounded detail, lighting, and palette. Preserve every requested subject, action, color, spatial relationship, and medium. Do not invent unsupported objects or characters. Put any requested visible text in double quotes. If the brief is already detailed, polish rather than replace it. Return only one prompt paragraph: no planning, headings, bullets, JSON, markdown, or commentary."""
 
@@ -138,13 +140,17 @@ def build_request_body(
     if not 256 <= max_tokens <= 8192:
         raise ValueError("max_tokens must be between 256 and 8192")
     return {
-        "model": "muse-glimmer-30b",
+        "model": "qwen3.8-27b-blackfrost-abliterated",
         "messages": list(messages),
         "temperature": 1.0,
         "top_p": 0.95,
-        "top_k": 64,
+        "top_k": 20,
         "max_tokens": max_tokens,
-        "chat_template_kwargs": {"reasoning_strength": reasoning_strength},
+        "chat_template_kwargs": {
+            "enable_thinking": True,
+            "preserve_thinking": True,
+            "reasoning_effort": reasoning_strength,
+        },
     }
 
 
@@ -262,7 +268,7 @@ class MuseGlimmerPrompt:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("prompt", "reasoning")
     FUNCTION = "generate"
-    CATEGORY = "creative/Muse Glimmer"
+    CATEGORY = "creative/Blackfrost Qwen"
 
     def generate(
         self,
@@ -282,15 +288,18 @@ class MuseGlimmerPrompt:
         key_path = Path(
             os.environ.get(
                 "MUSE_GLIMMER_API_KEY_FILE",
-                "/home/peterstorm/.config/muse-glimmer/api-key",
+                "/home/peterstorm/.config/qwen38/api-key",
             )
         )
         endpoint = os.environ.get(
-            "MUSE_GLIMMER_BASE_URL", "http://127.0.0.1:8001/v1"
+            "MUSE_GLIMMER_BASE_URL", "http://127.0.0.1:8000/v1"
         )
         api_key = read_private_key(key_path)
         return request_prompt(endpoint, api_key, body, timeout_seconds=600)
 
 
 NODE_CLASS_MAPPINGS = {"MuseGlimmerPrompt": MuseGlimmerPrompt}
-NODE_DISPLAY_NAME_MAPPINGS = {"MuseGlimmerPrompt": "Muse Glimmer Creative Prompt"}
+# The class key stays MuseGlimmerPrompt: saved workflows reference it by that
+# key, and renaming it would make them load with a missing node. Only the
+# human-facing label follows the model.
+NODE_DISPLAY_NAME_MAPPINGS = {"MuseGlimmerPrompt": "Blackfrost Qwen Creative Prompt"}

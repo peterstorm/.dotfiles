@@ -113,18 +113,32 @@ class MusePromptContractTest(unittest.TestCase):
         self.assertIn("<Picture 1>: identity", user["content"])
         self.assertIn("duration_seconds: 8", user["content"])
 
-    def test_request_body_maps_muse_reasoning_without_credentials(self) -> None:
+    def test_request_body_maps_qwen_reasoning_without_credentials(self) -> None:
         request = module.parse_prompt_request(
             module.TASK_KREA2, "A paper sculpture.", "", 5, "1:1"
         )
         messages = module.compile_messages(request)
         body = module.build_request_body(messages, "xhigh", 4096)
-        self.assertEqual(body["model"], "muse-glimmer-30b")
+        self.assertEqual(body["model"], "qwen3.8-27b-blackfrost-abliterated")
         self.assertEqual(
-            body["chat_template_kwargs"], {"reasoning_strength": "xhigh"}
+            body["chat_template_kwargs"],
+            {
+                "enable_thinking": True,
+                "preserve_thinking": True,
+                "reasoning_effort": "xhigh",
+            },
         )
-        self.assertEqual(body["top_k"], 64)
+        self.assertEqual(body["top_k"], 20)
         self.assertNotIn("api_key", body)
+
+    def test_request_body_rejects_efforts_qwen_does_not_implement(self) -> None:
+        request = module.parse_prompt_request(
+            module.TASK_KREA2, "A paper sculpture.", "", 5, "1:1"
+        )
+        messages = module.compile_messages(request)
+        for effort in ("medium", "high"):
+            with self.assertRaises(ValueError):
+                module.build_request_body(messages, effort, 4096)
 
     def test_private_key_rejects_group_or_world_access(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -160,7 +174,7 @@ class MusePromptContractTest(unittest.TestCase):
             prompt, reasoning = module.request_prompt(
                 endpoint,
                 "private-test-key",
-                {"model": "muse-glimmer-30b", "messages": []},
+                {"model": "qwen3.8-27b-blackfrost-abliterated", "messages": []},
                 5,
             )
         self.assertEqual(prompt, "server prompt")
@@ -170,7 +184,8 @@ class MusePromptContractTest(unittest.TestCase):
             MuseTestHandler.observed_authorization, "Bearer private-test-key"
         )
         self.assertEqual(
-            MuseTestHandler.observed_body["model"], "muse-glimmer-30b"
+            MuseTestHandler.observed_body["model"],
+            "qwen3.8-27b-blackfrost-abliterated",
         )
 
     def test_http_error_preserves_status_and_redacts_credentials(self) -> None:
@@ -185,7 +200,7 @@ class MusePromptContractTest(unittest.TestCase):
             module.request_prompt(
                 endpoint,
                 "private-test-key",
-                {"model": "muse-glimmer-30b", "messages": []},
+                {"model": "qwen3.8-27b-blackfrost-abliterated", "messages": []},
                 5,
             )
         error = str(raised.exception)
@@ -208,7 +223,7 @@ class MusePromptContractTest(unittest.TestCase):
                 module.request_prompt(
                     endpoint,
                     "private-test-key",
-                    {"model": "muse-glimmer-30b", "messages": []},
+                    {"model": "qwen3.8-27b-blackfrost-abliterated", "messages": []},
                     5,
                 )
 

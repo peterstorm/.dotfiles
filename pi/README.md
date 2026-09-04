@@ -146,27 +146,26 @@ into it.
 
 ## Local AI Workstation
 
-`models.json` registers two OpenAI-compatible providers on the `desktop` workstation
-with ten selectable models:
+`models.json` registers one OpenAI-compatible provider on the `desktop` workstation
+with twelve selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
+- `desktop-vllm/deepseek-v4-flash-vision`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision` (DFlash benchmark arm)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k` (v5 rollback)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v9`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10`
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
-- `desktop-muse/muse-glimmer-30b`
-- `desktop-muse/muse-glimmer-30b-blackfrost-bf16`
 
-DeepSeek, GLM, and Qwen alternate on port 8000. Muse runs concurrently on port 8001 when
-GPU capacity permits. The two Muse entries are alternative servers on that one port — the
-SGLang profile serves `muse-glimmer-30b`, the pinned vLLM profile serves
-`muse-glimmer-30b-blackfrost-bf16`, both at the checkpoint's native 128K. Select the
-entry matching whichever launcher is running.
+Every model alternates on port 8000; exactly one serves at a time. Select the entry
+matching whichever launcher is running.
 
-Every launcher synchronizes the DeepSeek, Qwen, GLM, and Muse key
+Every launcher synchronizes the DeepSeek, Qwen, and GLM key
 files to one endpoint credential, so switching models, runtimes, or ports does
 not change Pi authentication. Launching through `sudo` still resolves `SUDO_USER` and
 writes the invoking desktop user's files—never a private `/root` credential. The key is
@@ -282,22 +281,22 @@ pi --list-models qwen3.8-flash-next-fp8
 pi --model desktop-vllm/qwen3.8-flash-next-fp8:xhigh
 ```
 
-### Muse Glimmer 30B
+### Qwen3.8 27B Blackfrost Abliterated
 
-Muse Glimmer runs the BF16 language model and official BF16 DFlash draft at its native
-131,072-token context. The initial profile is text-only. Pi maps `low`, `medium`, `high`,
-and `xhigh` into the checkpoint's `chat_template_kwargs.reasoning_strength` value and
-hides unsupported off, minimal, and max levels. SGLang's native `muse` parsers expose the
-model's ATEM reasoning and tool protocol as OpenAI-compatible fields.
+A weight-level derivative of `Qwen/Qwen3.8-27B` with a reduced refusal surface — not the
+upstream safety-stock checkpoint. It is structurally identical to `qwen3.8-27b`, so it
+serves through the same pinned TP1 vLLM profile at the native 262,144-token context, with
+the same reasoning contract: Pi maps `low` and `xhigh` into
+`chat_template_kwargs.reasoning_effort` and hides the levels Qwen3.8 does not implement.
 
 ```bash
-pi --list-models muse-glimmer-30b
-pi --model desktop-muse/muse-glimmer-30b:xhigh
+pi --list-models qwen3.8-27b-blackfrost-abliterated
+pi --model desktop-vllm/qwen3.8-27b-blackfrost-abliterated:xhigh
 ```
 
-The separate provider is required because Muse listens on port 8001 while Qwen remains on
-port 8000. Both `desktop-vllm/*` and `desktop-muse/*` are explicitly classified as local by
-`model-routing.json`, so nested Pi workloads inherit either local parent exactly.
+It shares port 8000 with the other `desktop-vllm` models, so exactly one of them serves at
+a time. Note that its chat template embeds a Blackfrost operational system prompt, which is
+a real behavioural difference from the stock `qwen3.8-27b` entry.
 
 ## Child Model Routing
 
@@ -305,7 +304,7 @@ port 8000. Both `desktop-vllm/*` and `desktop-muse/*` are explicitly classified 
 nested Pi workloads. Provider names, endpoint URLs, and model prices are never used to
 guess whether a model is local.
 
-The policy classifies `desktop-vllm/*` and `desktop-muse/*` as local and applies this invariant:
+The policy classifies `desktop-vllm/*` as local and applies this invariant:
 
 | Active parent | Subagent launch binding |
 |---|---|

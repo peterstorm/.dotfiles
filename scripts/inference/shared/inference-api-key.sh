@@ -30,7 +30,6 @@ inference_resolve_operator() {
   INFERENCE_DS4_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/ds4-flash/api-key"
   INFERENCE_QWEN_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/qwen38/api-key"
   INFERENCE_GLM_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/glm53/api-key"
-  INFERENCE_MUSE_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/muse-glimmer/api-key"
   INFERENCE_SOPS_KEYFILE="$INFERENCE_OPERATOR_HOME/.config/sops-nix/secrets/vllm-api-key"
 }
 
@@ -106,7 +105,7 @@ inference_validate_api_key() {
 }
 
 # Resolves one endpoint credential and synchronizes all model-specific key paths.
-# Priority is explicit value -> DeepSeek key -> Qwen key -> GLM key -> Muse key ->
+# Priority is explicit value -> DeepSeek key -> Qwen key -> GLM key ->
 # sops fallback -> generated key. Pi uses the same order, so every launcher and client converges.
 inference_prepare_api_key() {
   local explicit_key="${1:-}"
@@ -119,7 +118,6 @@ inference_prepare_api_key() {
   inference_install_private_dir "$(dirname "$INFERENCE_DS4_KEYFILE")"
   inference_install_private_dir "$(dirname "$INFERENCE_QWEN_KEYFILE")"
   inference_install_private_dir "$(dirname "$INFERENCE_GLM_KEYFILE")"
-  inference_install_private_dir "$(dirname "$INFERENCE_MUSE_KEYFILE")"
 
   if [ -n "$explicit_key" ]; then
     selected_key="$explicit_key"
@@ -129,8 +127,6 @@ inference_prepare_api_key() {
     selected_key="$(<"$INFERENCE_QWEN_KEYFILE")"
   elif [ -r "$INFERENCE_GLM_KEYFILE" ]; then
     selected_key="$(<"$INFERENCE_GLM_KEYFILE")"
-  elif [ -r "$INFERENCE_MUSE_KEYFILE" ]; then
-    selected_key="$(<"$INFERENCE_MUSE_KEYFILE")"
   elif [ -r "$INFERENCE_SOPS_KEYFILE" ]; then
     selected_key="$(<"$INFERENCE_SOPS_KEYFILE")"
   else
@@ -148,9 +144,6 @@ EOF
   inference_write_private_file "$INFERENCE_GLM_KEYFILE" <<EOF
 $selected_key
 EOF
-  inference_write_private_file "$INFERENCE_MUSE_KEYFILE" <<EOF
-$selected_key
-EOF
   INFERENCE_API_KEY="$selected_key"
 }
 
@@ -163,8 +156,6 @@ inference_resolve_client_keyfile() {
     INFERENCE_CLIENT_KEYFILE="$INFERENCE_QWEN_KEYFILE"
   elif [ -r "$INFERENCE_GLM_KEYFILE" ]; then
     INFERENCE_CLIENT_KEYFILE="$INFERENCE_GLM_KEYFILE"
-  elif [ -r "$INFERENCE_MUSE_KEYFILE" ]; then
-    INFERENCE_CLIENT_KEYFILE="$INFERENCE_MUSE_KEYFILE"
   elif [ -r "$INFERENCE_SOPS_KEYFILE" ]; then
     INFERENCE_CLIENT_KEYFILE="$INFERENCE_SOPS_KEYFILE"
   else
