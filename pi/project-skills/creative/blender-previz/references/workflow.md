@@ -13,9 +13,13 @@ Pi skill + project files (homelab)
   → Blender 5.2 add-on in the GUI event loop
 ```
 
-The socket accepts arbitrary Blender Python. It must remain loopback-only. The MCP adapter, config, and this skill are discovered only when Pi starts from exactly `~/dev/creative`. The server is pinned, telemetry-disabled, and restricted by that project's `.mcp.json` to scene inspection, object inspection, viewport screenshots, and approved code execution. `blender-mcp-session` supplies a private `Xvfb -nolisten tcp` GUI event loop when the workstation is otherwise headless.
+The socket accepts arbitrary Blender Python. It must remain loopback-only. The global `creative-project-scope` extension activates only when Pi's canonical cwd is `~/dev/creative` or a descendant, rejects symlink escapes, contributes the root creative skill directory, and loads the pinned adapter with `~/dev/creative/.mcp.json`. Siblings and unrelated paths receive neither resource. The server is telemetry-disabled and restricted to scene/object inspection, viewport screenshots, and approved code execution. `blender-mcp-session` supplies a private `Xvfb -nolisten tcp` GUI event loop when the workstation is otherwise headless.
 
 MCP is intentionally not the renderer. Save deterministic Python and `.blend` sources, then use Blender CLI/render commands so renders are repeatable without conversational state.
+
+### Safe mode is available and deliberately off
+
+The pinned server (1.9.1) ships an opt-in AST allowlist for `execute_blender_code`, enabled with `BLENDER_MCP_SAFE_MODE=1` in the `.mcp.json` ssh env. It is off by default because the injection surface it targets — asset names and descriptions returned by Poly Haven, Sketchfab, Hyper3D, Hunyuan3D and Poly Pizza — is already removed twice over here: those integrations are disabled in the add-on and their tools are absent from the allowlist, and the one remaining dangerous tool is approval-gated. Its policy would also reject two things this workflow uses: importing `scripts/camera_trajectories.py` inside Blender, and defining classes in scene scripts. Turn it on for any session that pulls third-party catalogue text into context, and precompute trajectory samples on the Pi side when you do.
 
 ## What the reference-video workflow gets right
 
@@ -106,6 +110,17 @@ A reference contact sheet is analysis evidence, not final-film authority. Record
 7. move the mechanism into that geography, identities, and story purpose.
 
 Do not copy protected character or production design. Mechanism understanding is the point.
+
+## Reusable trajectory core
+
+Use `scripts/camera_trajectories.py` instead of writing shot-specific camera interpolation. Its immutable specifications and pure samplers separate:
+
+- true horizontal orbit passes when the reference calls for azimuthal movement;
+- weighted vertical-plane overhead orbits with continuous roll, upside-down far side, and accelerating terminal descent;
+- pure fixed-heading floor rises;
+- robotic-arm arcs, arrivals, and dead-static holds.
+
+The module has no `bpy` or `mathutils` dependency. Scene scripts are imperative shells: translate tuple samples to scene origins, aim the Blender camera, and insert keys. Vendor a checksum-identical snapshot beside retained `.blend` evidence when the package must reproduce without the workstation skill tree.
 
 ## Scene construction contract
 

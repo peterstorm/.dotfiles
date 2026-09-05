@@ -8,6 +8,7 @@ This directory contains the pi coding agent configuration managed by home-manage
 pi/
 ├── agents/           # Generic agents this repo owns (→ linked per file)
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
+│   ├── creative-project-scope/ # Trusted ~/dev/creative subtree resources
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   └── global-instructions.ts  # Standalone extension
@@ -49,8 +50,10 @@ The nix home-manager module at `roles/home-manager/core-apps/pi/default.nix`:
    revision-pinned official music-caption and H3 prompt-writing skills, and
    thirteen MIT-licensed authored production skills into `~/dev/creative/.pi/skills/`
    through Home Manager. The same project receives a revision-pinned MCP adapter
-   setting and an allowlisted Blender MCP config. None are global resources, so
-   Pi discovers them only when its working directory is exactly `~/dev/creative`.
+   setting and an allowlisted Blender MCP config. The global
+   `creative-project-scope` extension exposes those resources only when the
+   canonical cwd is `~/dev/creative` or a descendant; siblings and symlink escapes
+   remain excluded.
 7. **Settings**: Copies `settings.json` on activation (preserves `lastChangelogVersion`).
 
 ### Global skills (`pi/skills`)
@@ -114,24 +117,24 @@ The repository owns thirteen MIT-licensed companion skills:
 These authored skills adapt model-agnostic production lessons without modifying or
 republishing the unlicensed archive or uploaded reference text.
 
-Start Pi in the project to expose them:
+Start Pi at the root or in any project below it:
 
 ```bash
-cd ~/dev/creative
+cd ~/dev/creative/productions/<project>
 pi
 ```
 
-Pi requires an explicit project-trust decision before loading `.pi/skills`, the
-project package, or `.mcp.json`. Approve the prompt after verifying the path is
-exactly `~/dev/creative`; use `/trust` if that decision should persist, then
-restart Pi as instructed. The project-local package is
+Pi requires an applicable project-trust decision before the scoped extension
+contributes skills or initializes MCP. Approve the creative root/parent trust only
+after verifying the canonical path; use `/trust` if it should persist, then restart
+Pi as instructed. The project-local package is
 `nicobailon/pi-mcp-adapter@ff234b862359e722bf4dc1c99cde62278d4b8eb3`; its
 Blender server launches lazily through `ssh desktop` and exposes only scene/object
-inspection, viewport screenshots, and approval-gated code execution. Starting
-Pi elsewhere does not discover these eighteen skills or load the Blender MCP
-adapter/config. Pi intentionally applies ancestor traversal to `.agents/skills`,
-not `.pi/skills`; this setup uses the Pi-only `.pi` location, so start the session
-from the creative project root.
+inspection, viewport screenshots, and approval-gated code execution. Starting Pi
+outside the canonical creative subtree does not discover these eighteen skills or
+load Blender MCP. Pi's native `.pi/skills` lookup remains cwd-local in the pinned
+runtime; `creative-project-scope` supplies the root skill path to trusted descendant
+sessions and initializes the adapter with the root `.mcp.json`.
 
 ### Why Directory Symlinks?
 

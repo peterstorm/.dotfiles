@@ -104,7 +104,7 @@ describe("creative project skill scope", () => {
 		).toEqual([]);
 	});
 
-	test("does not discover the creative skills from nested or sibling directories", async () => {
+	test("native cwd-local discovery excludes nested and sibling directories before the scoped extension contributes resources", async () => {
 		const creativeProject = temporaryDirectory("pi-creative-project-");
 		const nestedDirectory = join(creativeProject, "productions", "pilot");
 		const siblingProject = temporaryDirectory("pi-unrelated-project-");
@@ -165,7 +165,7 @@ describe("creative project skill scope", () => {
 				"One scored variable per generation",
 				"Prose is the weakest identity carrier",
 				"Positive language only",
-				"The adapter formats; it does not author",
+				"Choose grammar by operating mode",
 				"fidelity diff",
 				"video carrier",
 			],

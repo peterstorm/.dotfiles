@@ -29,6 +29,15 @@ Load [the H3 response model](references/h3-response-model.md) whenever this skil
 - **Fidelity diff** — the row-by-row proof of where every ledger constraint ended up.
 - **Prompt package** — the archived brief, ledger, drafts, final prompt, references in order, seed, and settings.
 
+## Operating modes
+
+Choose the product before compiling:
+
+- **Creative montage** — optimize the audience's impression of coherent action. Use familiar action archetypes, rapid coverage changes, human or cockpit reaction inserts, positive impact consequences, and explicit escalation/landing phases. Internal cuts are useful geometry resets. This mode cannot establish exact contact topology, persistent damage, count continuity, or Mechanics-Proof.
+- **Mechanics proof / carrier edit** — optimize auditability. Use one scored physical event, continuous readable coverage or an approved motion carrier, explicit endpoint mapping, and separate QA. Do not judge this mode by trailer energy.
+
+Do not combine their grammars. A continuous mechanics-proof prompt stripped of editorial resets will usually look less exciting; a creative montage may look convincing precisely because cuts conceal or reset geometry.
+
 ## Hard rules
 
 1. **Read the contracts, not the skills' prose.** Gather each owning skill's *handoff block* (performance task, human-motion block, blocking contract, physical-state chain, prop states, light contract, look token, reference-pack manifest). Do not re-derive or reinterpret them.
@@ -37,12 +46,14 @@ Load [the H3 response model](references/h3-response-model.md) whenever this skil
 4. **Every reference has exactly one job**, stated in the manifest and respected in the prompt. More references are not better; conflicting references average.
 5. **Positive language only.** H3 has no negative-prompt field. Translate every forbidden-failure into either a positive statement ("both feet stay planted through the swing") or a QA row. Never paste a forbidden-failure battery into the prompt.
 6. **Observable or absent.** Every clause must name something visible or audible at a moment in time. Convert intent and emotion to camera-detectable behavior; delete mood adjectives, plot summary, and unbacked style words.
-7. **The budget is enforced, not aspirational.** 350–500 words for the main description; one primary action per shot; one camera idea per shot; at most two or three microbehavior channels per principal; dialogue that fits real speech time inside the duration; timestamps strictly increasing and inside the clip.
-8. **Repetition is only for identity.** Recurring characters and garments use the same descriptors verbatim at every appearance — that repetition is load-bearing. All other repetition is budget waste; contradictory scale or geometry clauses are a defect, not emphasis.
-9. **The adapter formats; it does not author.** The pinned official `h3-prompt-writing` skill owns field names, section order, labels, and timing notation. Reject its output if it adds an action, changes causal order, renumbers or invents a reference, or drops an endpoint.
-10. **One enhancer pass.** A prompt authored or enhanced once (Muse, Director) is final input; never run a second enhancer over a compiled prompt.
-11. **Distillation is traceable.** Every ledger row ends as `prompt`, `reference`, `keyframe`, `qa`, or `dropped:<reason>`. A critical constraint that lands in `dropped` blocks the generation.
-12. **Reword only after seeds.** Run four fixed seeds before changing wording; change one cause at a time — prompt, reference, seed, or mode — never several.
+7. **The budget is enforced, not aspirational.** Generation tasks use 350–500 words for the main description. Direct video-editing descriptions scale with source complexity and may be shorter, especially when the carrier already owns motion. Mechanics-proof and carrier-owned shots use one primary action and one camera idea per shot. Creative montage uses one recognizable action exchange per implicit 1–2 second coverage beat, grouped into a small number of escalating timestamp phases; each beat may cut to a new scale or axis. Both allow at most two or three microbehavior channels per principal, dialogue that fits real speech time inside the duration, and timestamps strictly increasing and inside the clip.
+8. **Endpoint timing is a preflight invariant.** Record source-carrier frames, source fps and duration together with requested and encoded target frames and duration. When the terminal camera state is scored, the carrier must explicitly map its endpoint to the target endpoint. A shorter carrier inside a longer generated timeline is blocked unless a declared deterministic conform policy says where the source endpoint lands and what fills the remainder. Prompt wording cannot repair an unowned temporal gap.
+9. **Carrier-owned ensembles stay carrier-owned.** When a video carrier already defines simultaneous role schedules, the prompt binds a stable appearance and role name to each carrier mark and summarizes the shared causal spine. It does not add secondary gestures, balance corrections, reactions or endpoints absent from the carrier. Count, role separation and motion uniqueness remain full-motion QA rows; richer prose cannot make an ambiguous carrier topology exact.
+10. **Repetition is only for identity.** Recurring characters and garments use the same descriptors verbatim at every appearance — that repetition is load-bearing. All other repetition is budget waste; contradictory scale or geometry clauses are a defect, not emphasis.
+11. **Choose grammar by operating mode.** Use the pinned official `h3-prompt-writing` document grammar for carrier edits, dialogue-sensitive work, and prompts whose reference relationships need formal retention analysis. A locally qualified prompt-led creative montage may instead use direct cinematic grammar: one-reference-job preamble, global action/look brief, chronological timestamp phases, landing, and sound. Do not wrap a proven direct montage in extra metadata merely for formality. In either grammar, reject any formatter output that adds an action, changes causal order, renumbers or invents a reference, or drops an endpoint.
+12. **One enhancer pass.** A prompt authored or enhanced once (the local prompt author, Director) is final input; never run a second enhancer over a compiled prompt.
+13. **Distillation is traceable.** Every ledger row ends as `prompt`, `reference`, `keyframe`, `qa`, or `dropped:<reason>`. A critical constraint that lands in `dropped` blocks the generation.
+14. **Reword only after seeds.** Run four fixed seeds before changing wording; change one cause at a time — prompt, reference, seed, or mode — never several.
 
 ## Stage 0 — gather
 
@@ -62,6 +73,8 @@ List the owning skills actually relevant to this shot and collect their locked h
 | blender-previz | blocking-video carrier contract + playblast/state stills | |
 
 An unlocked contract blocks compilation — distilling an unfinished specification produces a confident prompt for the wrong shot. Skip rows that genuinely do not apply; do not invent contracts for them.
+
+Before Stage 1, write the temporal contract: source frame count, source fps, source duration, requested target duration, encoded target frame count/duration, endpoint mapping, and remainder policy. If any value is unknown, inspect the consuming graph. If the source and target timelines differ and endpoint mapping is not explicit, stop before prompting.
 
 ## Stage 1 — constraint ledger
 
@@ -97,30 +110,35 @@ Allocation heuristic: **if a stronger channel can carry it, the prompt must not.
 - The carrier is generative guidance, not deterministic pixel transfer: every claimed camera, cut, path, contact, and state property still needs sampled-frame QA.
 - Raw proxy state stills are Development A/B material only; prefer Krea-resolved stills that keep the Blender projection and spacing while carrying accepted appearance.
 - The carrier plus appearance pictures form one reference stack — the paired-seed reference-count test applies to it like any other.
+- A carrier used to score terminal camera motion must be conformed to the graph's encoded target grid before generation. The conform operation is deterministic evidence and records whether it retimes, pads, holds, or trims; silent model-side alignment is not an endpoint contract.
+- For multi-person carriers, every visible proxy region has exactly one semantic role. Balls, props and people require unambiguous labels or masks; a shared appearance key that can be read as either a person or a prop blocks count-sensitive generation.
 
 ## Stage 3 — maximal draft
 
-Write the over-complete draft from the `prompt`-channel rows only, in playback order: style opening, then per shot — composition, subjects (by reference label), one primary action with cause → contact/release → reaction, camera as one natural motion sentence (type + amplitude + speed), dialogue in `<d>` with speaker IDs, synchronized sound beside its cause, end state. Then the full-video soundscape and score fields.
+Write the over-complete draft from the `prompt`-channel rows only, in playback order.
 
-This draft may exceed the budget. Its job is completeness of the prompt channel, so distillation cuts consciously rather than by accident.
+- **Mechanics proof / carrier edit:** style opening, then per shot — composition, subjects by reference label, one primary action with cause → contact/release → reaction, one natural camera sentence, synchronized sound, and end state.
+- **Creative montage:** declare each reference's one job once; state the familiar action archetype, production look, pace, and permission to cut; divide the duration into hook → exchange → reversal → landing phases. Inside each phase, write short recognizable action/reaction pairs and alternate exterior action with close, cockpit, reaction, low-angle, tracking, or wide coverage. Impact effects communicate force but remain QA-ineligible as mechanics evidence.
+
+Then add the full-video soundscape and score. This draft may exceed the budget. Its job is completeness of the prompt channel, so distillation cuts consciously rather than by accident.
 
 ## Stage 4 — distillation passes
 
 Apply in order, re-reading the draft after each:
 
 1. **De-duplicate against carriers.** Delete every clause a reference or keyframe already locks, keeping only the label anchor ("the woman from <Picture 1>").
-2. **One primary action per shot.** Move extra beats to the next shot unit or cut them; a 5-second clip performs one turn.
+2. **Match action density to mode.** Mechanics-proof and carrier-owned shots retain one primary action. Creative montage may carry several actions only when each is a familiar one-beat exchange separated by an explicit or implicit cut; prune any exchange that cannot fit in roughly 1–2 seconds. For a carrier-owned ensemble, the primary action is the carrier's shared event, while each supporting role gets only its carrier-defined contribution.
 3. **One camera idea per shot.** Collapse compound moves; state static explicitly when the frame must not move.
 4. **Positive conversion.** Rewrite every "no/never/avoid" as the visible state that is true instead, or demote it to QA.
 5. **Observable conversion.** Replace intent, emotion, and mood words with behavior, light, and sound.
 6. **Microbehavior pruning.** At most two or three channels per principal, each caused; delete generic "natural movement" residue.
 7. **Dialogue timing.** Read lines aloud against the duration; cut words, not delivery.
 8. **Sound layer separation.** Dialogue/diegetic events stay in the timeline; ambience to the soundscape field; score to the music field; `N/A` written explicitly when silence is wanted.
-9. **Word budget.** Trim to 350–500 words (dialogue-dense clips prioritize the complete spoken timeline instead). If the draft cannot fit, the shot is overloaded — split it; do not compress causality away.
+9. **Word budget.** Trim generation tasks to 350–500 words (dialogue-dense clips prioritize the complete spoken timeline instead). For direct video editing, stop once the source relationship, intended edits, action spine, camera relationship, sound and end state are explicit; padding a carrier-owned edit back to 350 words reintroduces competition. If a generation draft cannot fit, the shot is overloaded — split it; do not compress causality away.
 
-## Stage 5 — official formatting
+## Stage 5 — mode-aware formatting
 
-Hand the distilled prompt, mode, duration, and reference manifest to the pinned `h3-prompt-writing` adapter. Verify its output preserves exact field names and order, the mode's fixed instruction line, strictly increasing in-range timestamps, verbatim `<d>` content, consistent reference labels, and the stated durations. Reject and re-run on any authorial change.
+For official-document jobs, hand the distilled prompt, mode, duration, and reference manifest to the pinned `h3-prompt-writing` adapter and verify exact field order, labels, timestamps, dialogue, and duration. For a direct creative montage, preserve the proven direct structure and wording: reference-role preamble, generation brief, look/pacing paragraph, timestamp phases, landing, and sound. Never run either result through a second enhancer.
 
 ## Stage 6 — fidelity diff
 
@@ -141,6 +159,8 @@ Archive together: the shot brief, gathered handoff blocks, constraint ledger, ma
 ## Pre-delivery checklist
 
 - [ ] All relevant owning-skill contracts gathered and locked
+- [ ] Source and encoded target timelines recorded; terminal endpoint mapping and remainder policy explicit
+- [ ] Multi-person carrier roles and prop regions are semantically unambiguous
 - [ ] Exactly one scored variable named
 - [ ] Every constraint ledgered with criticality
 - [ ] Channel allocation complete; prompt carries only action/camera/sound/timing
@@ -148,6 +168,8 @@ Archive together: the shot brief, gathered handoff blocks, constraint ledger, ma
 - [ ] Maximal draft written before any cutting
 - [ ] All nine distillation passes applied
 - [ ] Word, action, camera, microbehavior, and dialogue budgets met
-- [ ] Official adapter changed format only
+- [ ] Grammar matches the declared operating mode; any adapter changed format only
+- [ ] Creative montage includes a strong hook, rapid coverage resets, escalation, and a readable landing
+- [ ] Creative montage effects are not misreported as mechanics evidence
 - [ ] Fidelity diff shows no silently dropped critical constraint
 - [ ] Prompt package archived; seed discipline recorded

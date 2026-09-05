@@ -24,7 +24,18 @@ The source video may own:
 
 It owns none of the final identity, anatomy, wardrobe, material, color, texture, lighting, world design, acting, emotion, dialogue, or final sound unless the prompt explicitly assigns that role. Pictures 1–3 own Subject A, Subject B/secondary cast, and world/look appearance respectively.
 
-Reference-to-video remains generative conditioning, not deterministic pixel-space transfer. “Video 1 owns camera” is a testable request contract, not proof that every frame transferred.
+Reference-to-video remains generative conditioning, not deterministic pixel-space transfer. The stock node starts from an empty random latent even when `<Video 1>` is connected; “Video 1 owns camera” is therefore a request contract, not proof that every frame transferred.
+
+### Source-latent editing
+
+Use `AFTERSIGNALH3SourceVideoLatent` when the output must retain the Blender trajectory. It conforms the complete 24 fps carrier to the H3 target frame grid, VAE-encodes those frames into the target video latent, retains H3's native audio latent, and samples with a declared denoise strength.
+
+Two edit modes are legal:
+
+- `all`: partial denoise only (`0 < denoiseStrength < 1`). Lower values preserve geometry but also preserve proxy appearance.
+- `magenta-yellow-keys`: full denoise is allowed only inside wide neighborhoods around pure-magenta hero pixels and pure-yellow player/ball pixels. Unkeyed court and camera pixels remain protected by H3's nested video denoise mask.
+
+For keyed carriers, reserve pure magenta and yellow exclusively for editable objects. Do not use those colors in architecture, murals, lines, or props that must remain frozen. Review a synchronized carrier/output side-by-side; successful generation alone does not prove trajectory retention.
 
 ## Profiles
 
@@ -51,7 +62,7 @@ For every carrier:
 2. Use the final H3 aspect ratio and one stable color-management configuration.
 3. Render exactly 124 or 362 frames.
 4. Prefer a readable Workbench/Eevee viewport render over detail that obscures contacts.
-5. Give every recurring proxy a stable, high-contrast role color.
+5. Give every recurring proxy a stable, high-contrast role color. For keyed source edits, use pure magenta for the hero and pure yellow for editable players/ball only.
 6. When facing direction matters, use a distinct front/back/side encoding or another unambiguous orientation cue.
 7. Keep helper objects, rig controls, labels, and viewport overlays out of the render.
 8. Keep contacts, supports, object paths, and terminal states visible.

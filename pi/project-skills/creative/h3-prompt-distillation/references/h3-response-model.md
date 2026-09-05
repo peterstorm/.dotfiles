@@ -46,6 +46,7 @@ exact. The official adapter owns this syntax; never freelance it.
 - A style declaration at the opening ([Shot 1] for base modes; one or two
   sentences before [Shot 1] for Ref2VA) — this is where the look token belongs.
 - Explicit end states — the shot needs a landing, or it drifts.
+- For prompt-led creative montage, a direct structure of reference-role preamble → global brief → look/pacing → timestamped hook/exchange/reversal/landing phases can outperform a constraint-heavy proof document. This is locally qualified behavior, not a replacement for formal carrier or dialogue grammar.
 - Identity descriptors repeated **verbatim** at every appearance of a recurring
   character or garment.
 - `N/A` in `non_diegetic_music` to force silence.
@@ -74,10 +75,12 @@ exact. The official adapter owns this syntax; never freelance it.
 
 - **Every reference gets exactly one declared job.** Undeclared multi-purpose
   images cause H3 to copy the wrong part.
-- **More references degrade.** Conflicting identity references average or pick
+- **More references can degrade.** Conflicting identity references average or pick
   arbitrarily. Reference economy: one approved full-look image usually beats a
-  face lock plus a conflicting outfit frame. Add a reference only when it owns a
-  distinct role; qualify counts with a paired-seed reference-count test.
+  face lock plus a conflicting outfit frame. A three-picture stack can remain
+  coherent when the jobs are non-overlapping and explicitly bound — machine
+  appearance, pilot face/hair, opponent appearance — but it requires a paired
+  reference-count test and full-motion review.
 - Motion/camera transfer from `<Video N>` requires the transferred action or
   move to be described; otherwise it is treated as loose visual guidance. The
   motion authority outranks prose for its assigned movement — text must not add
@@ -113,7 +116,7 @@ buying weaker enforcement.
 
 ## 7. Operational discipline
 
-- **One enhancer pass.** Muse/Director author once; never re-enhance a compiled
+- **One enhancer pass.** The prompt author/Director author once; never re-enhance a compiled
   prompt; inspect enhancer output for renumbered references or contradicted
   scene cards.
 - **Staged qualification**: prove generic mechanics with anonymous subjects
@@ -127,6 +130,11 @@ buying weaker enforcement.
 - FL2VA and REF2VA are separate serialized graphs; production baseline is BF16,
   50 steps, shifts 12/3 (FL2VA Turbo 4-step uses task shifts 6/3), CFG 1,
   batch 1. Task-matched Turbo LoRAs only; never cross families.
+- Dedicated Ref2VA PDD-8 accepts higher multiple-of-32 spatial latents. Local
+  qualified baseline is 960×544 (0.5 MP); bounded quality research may use
+  1152×640 (0.7 MP) or 1280×736 (0.9 MP). Treat resolution as a full latent-
+  generation cost, not a free output upscale, and record wall time separately.
+  Resolution does not repair generated animation cadence.
 - Wushu Action V7 runs stack the research adapter at strength 0.5 after the
   official Ref2VA Turbo LoRA and prepend `wushu_action,` to the prompt —
   Development-only, no authority.
@@ -136,3 +144,37 @@ buying weaker enforcement.
   limit, so confirm the frame-vs-seconds boundary before qualifying). Never
   stack Turbo and PDD adapters; see `docs/runbooks/minimax-h3-blender-ref2va.md`.
 - Keep text, titles, and logos out of diffusion outputs; add them in post.
+
+## 9. Local evidence: v20 Turbo-4 / PDD-8 ensemble A/B
+
+AFTERSIGNAL Development qualifications 26 and 27 used checksum-identical prompt, seed, references and Blender v20 carrier. The prompt followed the official six-section Ref2VA grammar, used 352 words in `detailed_description`, contained no negative clauses, assigned four players visibly different appearances and actions, and expressed the camera once. Qualification 26 used the official Ref2VA Turbo LoRA at four steps; qualification 27 used the dedicated Ref2VA PDD adapter at eight NFE.
+
+Human review found both variants substantially better than the earlier overloaded prompt, but neither completed the full camera move and both produced strange human behavior. Sampled frames also raised an unresolved extra-player/count concern. Therefore:
+
+- positive official-format prompting materially improved world readability and role differentiation, but did not guarantee terminal trajectory completion or natural concurrent performance;
+- changing four-step Turbo to eight-step PDD did not by itself solve the shared endpoint or ensemble-motion failures;
+- prompt detail is not a substitute for temporal conformance or unambiguous carrier topology;
+- when a carrier owns simultaneous actions, additional per-person microbehavior can compete with the carrier instead of clarifying it;
+- full-motion human review remains the authority for count, independent movement and endpoint completion.
+
+The v20 carrier is 80 frames at 24 fps (3.333 seconds), while both requested four-second H3 runs encoded 107 frames (4.458 seconds). The shared unfinished camera move is evidence of an endpoint-mapping failure; the duration mismatch is the leading hypothesis, not yet a proven sole cause. Future endpoint-scored runs must record source and encoded target timelines and use a deterministic conform policy before generation.
+
+## 10. Local evidence: direct mecha creative-montage grammar
+
+The 15-second DeeVid-style diagnostic used 389 words, zero negative clauses, fast internal cuts, familiar mecha/kaiju action archetypes, cockpit reaction inserts, positive impact effects, escalation phases, and an explicit final landing. Earlier AEGIS proof prompts were similar in length but carried 13–25 constraint terms, one unusual contact stretched across ten seconds, continuous wide coverage, two unusual conditioned geometries, and no editorial reset.
+
+Three matched diagnostic stages separate the main causes:
+
+- the direct prompt under FL2VA Turbo-8 showed severe artifacting;
+- dedicated FL2VA PDD-8 cleaned the image but left possible late duplication;
+- task-matched Ref2VA PDD-8 with separate AEGIS and Rhea jobs produced a substantially more coherent creative result.
+
+A later three-reference test bound AEGIS appearance, Rhea face/hair, and the accepted HUSH Full Combat Lock appearance in a 415-word direct prompt with zero negative clauses. At 960×544 it retained all three broad identities in sampled frames and produced energetic combat coverage. This supports the following response model:
+
+- PDD quality, prompt grammar, and reference semantics are complementary; none is a secret phrase by itself;
+- cockpit/reaction inserts are geometry resets as well as storytelling;
+- familiar punch/block/pin/recovery archetypes are easier than novel exact contact topology;
+- smoke, sparks, debris, shake, and close coverage sell force but cannot establish mechanics;
+- direct creative montage and continuous Mechanics-Proof are separate products and must not share acceptance criteria.
+
+The matched 1152×640 run generated 41.2% more pixels and took 437.4 seconds versus 256.4 seconds at 960×544 — a 70.6% wall-time increase. The matched 1280×736 run took 658.2 seconds: 27.8% more pixels and 50.5% more wall time than 0.7 MP. All files remained constant native 24 fps; perceived choppiness therefore belongs to generated animation, not container cadence. Resolution changes the latent trajectory even at the same seed, so these are not deterministic upscales and identity/action preference still requires full-motion review.

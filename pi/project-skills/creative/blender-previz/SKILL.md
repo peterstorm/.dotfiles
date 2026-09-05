@@ -2,7 +2,7 @@
 name: blender-previz
 description: "Builds and reviews minimal Blender mechanics previsualization — blocking videos — for AI-film shots. Use for Blender, 3D blockouts, previsualization, animatics, difficult lenses or framing, camera paths, character spacing, moving architecture, contact geometry, mechanisms, Blender MCP interaction, viewport review, contact sheets, or playblasts. Delivers an approved playblast, a carrier contract naming what the video proves, and optional state stills at declared frames; how a video model consumes them is the consuming skill's business. Not for face design, acting, dialogue performance, detailed final rendering, or ordinary shots that a keyframe and prompt already solve."
 license: MIT
-compatibility: "Pi project skill, available only from ~/dev/creative. Live authoring requires its pinned pi-mcp-adapter and .mcp.json plus blender-mcp-session running in Blender 5.2 on desktop. The wrapper supplies a private virtual GUI when the workstation is headless."
+compatibility: "Pi subtree skill, available from ~/dev/creative and any descendant after project trust. A scoped global extension loads the pinned pi-mcp-adapter with ~/dev/creative/.mcp.json only inside that canonical subtree. Live authoring requires blender-mcp-session in Blender 5.2 on desktop."
 ---
 
 # Blender Mechanics Previz
@@ -40,12 +40,14 @@ Read [the canonical workflow](references/workflow.md) before creating or changin
 
 ## Start a live session
 
-Start Pi from the exact project root; the skill and adapter are intentionally absent elsewhere:
+Start Pi anywhere in the trusted creative subtree; the skill and Blender adapter are intentionally absent from sibling and unrelated paths:
 
 ```bash
-cd ~/dev/creative
+cd ~/dev/creative/productions/<project>
 pi
 ```
+
+`creative-project-scope` resolves canonical paths, rejects symlink escapes, contributes the root skill directory, and loads the root `.mcp.json`. The root remains valid too.
 
 From there, start Blender on `desktop` in a durable tmux session:
 
@@ -64,6 +66,8 @@ mcp({ tool: "blender_get_viewport_screenshot", args: { max_size: 1000, user_prom
 ```
 
 Use `blender_execute_blender_code` only after reviewing the exact code. Its approval gate should be granted once per trusted session, never globally. After each mutation, inspect scene info and screenshot again.
+
+For reusable camera movement, import `scripts/camera_trajectories.py`. It provides both horizontal orbit passes and weighted overhead orbits that carry a rig up-vector through inversion, plus pure rises and robotic-arm holds/flights, as immutable Blender-independent samples. Scene scripts should only translate samples into `mathutils` transforms and keyframes; do not reimplement trajectory math per shot.
 
 ## Shot loop
 

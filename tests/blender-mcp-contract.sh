@@ -57,19 +57,34 @@ contains "$SCOPE_EXTENSION" 'ctx.isProjectTrusted()'
 contains "$SCOPE_EXTENSION" 'configPath: join(result.scope.root, ".mcp.json")'
 contains "$SCOPE_EXTENSION" 'return { skillPaths: [...creativeSkillPaths(result.scope)] }'
 
-contains "$MODULE" 'version = "1.9.0";'
-contains "$MODULE" 'f0759291b5748c35fcdabd68f89b684cfaae6c61dd475f87d591dddcef63f9fa'
+contains "$MODULE" 'version = "1.9.1";'
+contains "$MODULE" 'ede3aed34926f77142b8f00ee4f8544f68067d2dc747da8295d1c456171355b2'
 contains "$MODULE" 'dependencies = with pkgs.python3Packages;'
 contains "$MODULE" '      httpx'
 contains "$MODULE" '      mcp'
+# The telemetry flip must stay anchored on the telemetry property itself; a bare
+# `default=True,` replacement would follow whichever property upstream declares
+# first if the file is ever reordered.
+contains "$MODULE" 'telemetryConsentDescription'
+contains "$MODULE" 'Allow collection of prompts, code snippets, screenshots, and trajectory data'
 contains "$MODULE" 'default=True,'
 contains "$MODULE" 'default=False,'
+contains "$MODULE" '--replace-fail ${pkgs.lib.escapeShellArg telemetryDefaultOn}'
+# Nixpkgs' Blender already carries requests with its full closure. A bare
+# requests store path on PYTHONPATH is a dependency-less shadow of that module.
+if grep -Fq 'pkgs.python3Packages.requests' "$MODULE"; then
+  fail "Blender already ships requests; do not inject a closure-less copy on PYTHONPATH"
+fi
 contains "$MODULE" 'DISABLE_TELEMETRY=true'
 contains "$MODULE" 'BLENDER_USER_SCRIPTS'
 contains "$MODULE" 'blender-mcp-session'
 contains "$MODULE" 'pkgs.blender'
 contains "$MODULE" 'pkgs.xvfb'
 contains "$MODULE" 'Xvfb -displayfd 3 -screen 0 1920x1080x24 -nolisten tcp'
+# Both PIDs are declared before the trap arms: under `set -u` an unbound name
+# would abort cleanup and leak the X server.
+contains "$MODULE" '      xvfb_pid=""'
+contains "$MODULE" '[ -z "$xvfb_pid" ] || kill "$xvfb_pid"'
 contains "$MODULE" 'blenderMcpServer'
 
 contains "$SKILL" 'name: blender-previz'
