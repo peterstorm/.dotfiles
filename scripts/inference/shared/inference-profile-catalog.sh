@@ -30,6 +30,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   glm53-flash-exl3-k4-vllm-sm120-v8
   glm53-flash-exl3-k4-vllm-sm120-v9
   glm53-flash-exl3-k4-vllm-sm120-v10
+  glm53-flash-exl3-k4-vllm-sm120-v11
   qwen38-27b-blackfrost-abliterated-bf16-vllm
 )
 
