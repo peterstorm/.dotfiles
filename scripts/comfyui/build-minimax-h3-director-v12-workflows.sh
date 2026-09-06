@@ -109,6 +109,7 @@ jq \
   | (.nodes[] | select(.id == 430) | .widgets_values[9]) =
       "minimax_h3_fl2va_bf16.safetensors"
   | (.nodes[] | select(.id == 430) | .widgets_values[11]) = "(disabled)"
+  | (.nodes[] | select(.id == 430) | .widgets_values[12]) = "(disabled)"
   | (.nodes[] | select(.id == 430) | .widgets_values[13]) = "(disabled)"
   | (.nodes[] | select(.id == 430) | .widgets_values[15]) =
       "qwen3vl_32b_minimax_h3_bf16.safetensors"
@@ -195,7 +196,7 @@ jq -e --arg status_note "$status_note" '
   and ([.nodes[] | select(.type == "MuseHelper: Save Text With Path")
       | .widgets_values[0]] == ["Muse Collective/MiniMax H3 Prompt"])
   and ([.nodes[] | select(.type == "MuseHelper: Save Text With Path")
-      | .widgets_values[5:7]] == [[false, ".txt"]])
+      | .widgets_values[4:6]] == [[false, ".txt"]])
   and ([.nodes[] | select(.id == 430) | .widgets_values[3:6]]
     == [["(disabled)", "(disabled)", "minimax_h3_ref2va_bf16.safetensors"]])
   and ([.nodes[] | select(.id == 430) | .widgets_values[7:10]]
@@ -226,7 +227,7 @@ jq -e --arg status_note "$status_note" '
   and ([.nodes[] | select(.type == "MuseMinimaxDirectorV1_4")
       | .widgets_values[21]] == ["minimax_h3_latent_upscaler_3d_fp16.safetensors"])
   and ([.nodes[] | select(.type == "MuseMinimaxRefineV2")
-      | .widgets_values[9]] == [["minimax_h3_latent_upscaler_3d_fp16.safetensors"]])
+      | .widgets_values[9]] == ["minimax_h3_latent_upscaler_3d_fp16.safetensors"])
   and ([.nodes[] | select(.type == "ModelPreviewOverrideKJ")
       | .widgets_values[5]] | unique == ["taeh3.safetensors"])
   and ([.nodes[] | select(.id == 388) | .widgets_values[26] | fromjson
