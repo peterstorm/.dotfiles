@@ -27,6 +27,10 @@
       "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
       "thinkingLevel": "max"
     },
+    "glm-v11": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11",
+      "thinkingLevel": "max"
+    },
     "sol": {
       "model": "openai-codex/gpt-5.6-sol",
       "thinkingLevel": "high"
@@ -75,6 +79,17 @@
       "use": {
         "kind": "named",
         "target": "glm-v10-dcp2"
+      }
+    },
+    {
+      "id": "glm-v11-subagents-use-max",
+      "when": {
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11"
+      },
+      "use": {
+        "kind": "named",
+        "target": "glm-v11"
       }
     },
     {

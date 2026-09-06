@@ -18,7 +18,9 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text"],
+          "input": [
+            "text"
+          ],
           "contextWindow": 1048576,
           "maxTokens": 32768,
           "cost": {
@@ -48,7 +50,10 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 312000,
           "maxTokens": 32768,
           "cost": {
@@ -78,7 +83,10 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 98304,
           "maxTokens": 32768,
           "cost": {
@@ -108,7 +116,10 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 393216,
           "maxTokens": 32768,
           "cost": {
@@ -138,7 +149,9 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text"],
+          "input": [
+            "text"
+          ],
           "contextWindow": 393216,
           "maxTokens": 32768,
           "cost": {
@@ -168,7 +181,10 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 393216,
           "maxTokens": 32768,
           "cost": {
@@ -198,7 +214,10 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 359000,
           "maxTokens": 32768,
           "cost": {
@@ -228,7 +247,10 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 359000,
           "maxTokens": 32768,
           "cost": {
@@ -258,7 +280,43 @@
             "xhigh": null,
             "max": "max"
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 359000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
+          "id": "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11",
+          "name": "GLM-5.3 Flash EXL3 K4 v11 Vision Native-FP8 KV + MTP3 359K upstream-core-port r2",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 359000,
           "maxTokens": 32768,
           "cost": {
@@ -289,7 +347,10 @@
             "xhigh": "xhigh",
             "max": null
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 262144,
           "maxTokens": 32768,
           "cost": {
@@ -305,9 +366,14 @@
             "requiresReasoningContentOnAssistantMessages": true,
             "thinkingFormat": "chat-template",
             "chatTemplateKwargs": {
-              "enable_thinking": { "$var": "thinking.enabled" },
+              "enable_thinking": {
+                "$var": "thinking.enabled"
+              },
               "preserve_thinking": true,
-              "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
+              "reasoning_effort": {
+                "$var": "thinking.effort",
+                "omitWhenOff": true
+              }
             }
           }
         },
@@ -325,7 +391,10 @@
             "xhigh": "xhigh",
             "max": null
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 262144,
           "maxTokens": 32768,
           "cost": {
@@ -341,9 +410,14 @@
             "requiresReasoningContentOnAssistantMessages": true,
             "thinkingFormat": "chat-template",
             "chatTemplateKwargs": {
-              "enable_thinking": { "$var": "thinking.enabled" },
+              "enable_thinking": {
+                "$var": "thinking.enabled"
+              },
               "preserve_thinking": true,
-              "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
+              "reasoning_effort": {
+                "$var": "thinking.effort",
+                "omitWhenOff": true
+              }
             }
           }
         },
@@ -361,7 +435,10 @@
             "xhigh": "xhigh",
             "max": null
           },
-          "input": ["text", "image"],
+          "input": [
+            "text",
+            "image"
+          ],
           "contextWindow": 262144,
           "maxTokens": 32768,
           "cost": {
@@ -377,9 +454,14 @@
             "requiresReasoningContentOnAssistantMessages": true,
             "thinkingFormat": "chat-template",
             "chatTemplateKwargs": {
-              "enable_thinking": { "$var": "thinking.enabled" },
+              "enable_thinking": {
+                "$var": "thinking.enabled"
+              },
               "preserve_thinking": true,
-              "reasoning_effort": { "$var": "thinking.effort", "omitWhenOff": true }
+              "reasoning_effort": {
+                "$var": "thinking.effort",
+                "omitWhenOff": true
+              }
             }
           }
         }

@@ -161,6 +161,7 @@ with twelve selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v9`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11` (upstream-core-port r2: native FP8 KV, vision, thinking-disable honoured)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
