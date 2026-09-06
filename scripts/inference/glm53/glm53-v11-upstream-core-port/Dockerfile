@@ -29,68 +29,8 @@ LABEL ai.peterstorm.inference.upstream-core-port.release=r2 \
 # ADD auto-extracts the vendored, byte-pinned overlay archive.
 ADD upstream-core-port-e65b2012d4ead12c86bd03f7e435ebace3ed3ae2.tar.gz /tmp/
 
-RUN /bin/bash -o pipefail -c '/opt/venv/bin/python - <<"PY"
-import py_compile
-import shutil
-import sys
-from pathlib import Path
-
-overlay = Path("/tmp/upstream-core-port")
-manifest_path = overlay / "MANIFEST.txt"
-
-stray = sorted(p for p in overlay.rglob("*") if "__pycache__" in p.parts or p.suffix == ".pyc")
-assert not stray, f"overlay carries compiled artifacts: {stray[:5]}"
-
-mappings = []
-for line in manifest_path.read_text().splitlines():
-    line = line.strip()
-    if not line or line.startswith("#") or "->" not in line:
-        continue
-    source, destination = (part.strip() for part in line.split("->", 1))
-    mappings.append((overlay / source, Path(destination)))
-
-assert len(mappings) == 100, f"expected 100 overlay mappings, parsed {len(mappings)}"
-assert len({destination for _, destination in mappings}) == 99, "expected 99 unique overlay destinations"
-
-mapped_sources = {source.resolve() for source, _ in mappings}
-shipped = {
-    path.resolve()
-    for path in overlay.rglob("*")
-    if path.is_file() and path.name not in {"MANIFEST.txt"}
-}
-unmapped = sorted(shipped - mapped_sources)
-assert not unmapped, f"overlay ships files absent from the manifest: {unmapped[:5]}"
-
-replacements = 0
-additions = []
-for source, destination in mappings:
-    assert source.is_file(), f"manifest names a missing overlay file: {source}"
-    if destination.is_file():
-        replacements += 1
-    else:
-        # The port introduces upstream modules (dcp/pcp ops, kv_cache_layout,
-        # recoverssm, batch_shard, adaptive_verification); each must land in a
-        # package the base image already ships.
-        assert destination.parent.is_dir(), f"new overlay module has no base package: {destination}"
-        additions.append(str(destination))
-    shutil.copyfile(source, destination)
-
-assert replacements == 89, f"expected 89 base-file replacements, applied {replacements}"
-assert len(additions) == 10, f"expected 10 new modules, applied {len(additions)}: {additions}"
-
-compiled = 0
-for _, destination in mappings:
-    if destination.suffix == ".py":
-        py_compile.compile(str(destination), doraise=True)
-        compiled += 1
-
-shutil.rmtree(overlay)
-print(
-    f"V11 OVERLAY INSTALLED: {len(mappings)} manifest mappings "
-    f"({replacements} replacements + {len(additions)} new modules), "
-    f"{compiled} python destinations compile"
-)
-PY'
+COPY install-overlay.py /tmp/install-overlay.py
+RUN /opt/venv/bin/python /tmp/install-overlay.py && rm -f /tmp/install-overlay.py
 
 # The manifest travels with the image for provenance.
 COPY upstream-core-port-e65b2012d4ead12c86bd03f7e435ebace3ed3ae2.tar.gz /opt/glm53/upstream-core-port-r2.tar.gz
