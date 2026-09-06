@@ -10,7 +10,7 @@
 # Install is manifest-driven and fail-closed: every mapping in MANIFEST.txt
 # must name an existing overlay file, every destination is classified as a
 # replacement of a base-image file or a new module, and both counts are pinned
-# (89 replacements + 10 additions across 99 unique destinations; config/cache.py
+# (99 mappings: 89 replacements + 10 additions; config/cache.py
 # is mapped twice — the source tree and the venv's installed copy). New modules
 # must land in a package the base image already has. Files absent from the
 # manifest are rejected, so a blind directory copy cannot smuggle anything

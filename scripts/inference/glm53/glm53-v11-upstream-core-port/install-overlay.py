@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 OVERLAY = Path("/tmp/upstream-core-port")
-EXPECTED_MAPPINGS = 100
+EXPECTED_MAPPINGS = 99
 EXPECTED_DESTINATIONS = 99
 EXPECTED_REPLACEMENTS = 89
 EXPECTED_ADDITIONS = 10
