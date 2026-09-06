@@ -86,14 +86,24 @@ let
           hash = "sha256-n+rSPl4vztj+Wz0oVbPNPGmvziYeHyh0fbEh03NaKuo=";
         };
       });
-      comfy-aimdo = prev.comfy-aimdo.overridePythonAttrs (_old: {
-        pyproject = null;
+      comfy-aimdo = prev.buildPythonPackage {
+        # Fresh package rather than an overridePythonAttrs swap: overriding the
+        # source-built base kept its stale 0.4.13 name and its postPatch
+        # (chmod +x scripts/*.sh), which fails on the wheel's unpacked tree.
+        # ComfyUI 0.4.15 ships only binary wheels on PyPI; the pinned abi3
+        # wheel installs directly and cp39-abi3 is forward-compatible with the
+        # environment's cp314 interpreter. The import check is the load-bearing
+        # contract that the wheel actually works on cp314.
+        pname = "comfy-aimdo";
+        version = "0.4.15";
         format = "wheel";
+        doCheck = false;
+        pythonImportsCheck = [ "comfy_aimdo" ];
         src = pkgs.fetchurl {
           url = "https://files.pythonhosted.org/packages/44/b2/5b60dd92c1368ac07fe07b33ff14b6eb6940203b803f3051d78a6ad5c297/comfy_aimdo-0.4.15-cp39-abi3-manylinux2010_x86_64.manylinux2014_x86_64.manylinux_2_12_x86_64.manylinux_2_17_x86_64.whl";
           hash = "sha256-8GRxNWVrizsmTjxKDJn3gV4OyLZ6DPzk90o9EFMlDd0=";
         };
-      });
+      };
       cuda-bindings = prev.cuda-bindings.override {
         cudaPackages = binaryCudaPackages;
       };
