@@ -91,10 +91,14 @@
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
         AGENT_BACKEND = "pi";
         # Pin pi's provider/model explicitly. Without these, pi falls back to
-        # ~/.pi/agent/settings.json (github-copilot), whose quota exhausting
-        # made every reply fail with 429 and reclaw parrot prompts back.
-        RECLAW_PI_PROVIDER = "openai-codex";
-        RECLAW_PI_MODEL = "gpt-5.6-sol";
+        # ~/.pi/agent/settings.json, whose default can drift silently — the pin
+        # makes the inference target load-bearing instead of incidental.
+        # 2026-09-06: routed onto the desktop vLLM (glm v11, 192.168.0.80:8000)
+        # — the same backend this pi session runs on: zero quota (the old
+        # github-copilot default exhausted quota -> 429 parroting bug), and
+        # vision-capable for Telegram photo attachments.
+        RECLAW_PI_PROVIDER = "desktop-vllm";
+        RECLAW_PI_MODEL = "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
