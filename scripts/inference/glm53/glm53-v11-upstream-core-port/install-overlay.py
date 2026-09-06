@@ -16,8 +16,17 @@ from pathlib import Path
 
 OVERLAY = Path("/tmp/upstream-core-port")
 EXPECTED_MAPPINGS = 99
-EXPECTED_DESTINATIONS = 99
-EXPECTED_REPLACEMENTS = 89
+# Upstream's MANIFEST.txt omits two files that their Dockerfile installs anyway
+# via a blind `COPY upstream-core-port/r7/vllm/ -> .../vllm/`. Both replace real
+# base-image files and both differ from the base, so they carry changes; listing
+# them explicitly keeps this install byte-equivalent to their shipped image
+# without weakening the "nothing outside the install list" guarantee.
+SUPPLEMENTS = (
+    "r7/vllm/third_party/flash_linear_attention/ops/fused_recurrent.py",
+    "r7/vllm/third_party/flash_linear_attention/ops/fused_sigmoid_gating.py",
+)
+EXPECTED_DESTINATIONS = 101
+EXPECTED_REPLACEMENTS = 91
 EXPECTED_ADDITIONS = 10
 
 
@@ -43,6 +52,16 @@ def main() -> None:
 
     if len(mappings) != EXPECTED_MAPPINGS:
         fail(f"expected {EXPECTED_MAPPINGS} overlay mappings, parsed {len(mappings)}")
+
+    for relative in SUPPLEMENTS:
+        # r7/vllm/<path> installs to /opt/infernal-invocation/vllm/vllm/<path>.
+        mappings.append(
+            (
+                OVERLAY / relative,
+                Path("/opt/infernal-invocation/vllm/vllm") / relative.split("r7/vllm/", 1)[1],
+            )
+        )
+
     destinations = {destination for _, destination in mappings}
     if len(destinations) != EXPECTED_DESTINATIONS:
         fail(f"expected {EXPECTED_DESTINATIONS} unique destinations, parsed {len(destinations)}")
@@ -86,8 +105,9 @@ def main() -> None:
 
     shutil.rmtree(OVERLAY)
     print(
-        f"V11 OVERLAY INSTALLED: {len(mappings)} manifest mappings "
-        f"({replacements} replacements + {len(additions)} new modules), "
+        f"V11 OVERLAY INSTALLED: {len(mappings)} installs "
+        f"({EXPECTED_MAPPINGS} manifest mappings + {len(SUPPLEMENTS)} documented supplements; "
+        f"{replacements} replacements + {len(additions)} new modules), "
         f"{compiled} python destinations compile"
     )
 
