@@ -42,10 +42,13 @@ let
         };
       });
       comfyui-workflow-templates = prev.comfyui-workflow-templates.overridePythonAttrs (_old: {
-        version = "0.11.44";
+        # ComfyUI 0.34.0 pins the workflow-templates browser package exactly;
+        # 0.11.48 is the first version whose Template Library contains
+        # utility_sam3d_body.json.
+        version = "0.11.48";
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/3c/34/e3f318e92f463e379455c3771b34a2327455166ddfc4804a71eff5970c1e/comfyui_workflow_templates-0.11.44.tar.gz";
-          hash = "sha256-6C+qy6Wx4Wrlb0macBY4o/fgJPZ3WNs4RcA0OTm0ucQ=";
+          url = "https://files.pythonhosted.org/packages/93/57/78e0b686ee1a806d99516ccf4c39c5dce222a6f9f182707d48b25698683e/comfyui_workflow_templates-0.11.48.tar.gz";
+          hash = "sha256-UQ/tuOOO9504uDc5kFfaJN6CnwbKCZUL6WxprxQlVD8=";
         };
       });
       comfyui-workflow-templates-json = prev.comfyui-workflow-templates-json.overridePythonAttrs (_old: {
@@ -70,6 +73,27 @@ let
             hash = "sha256-5N6pN46RdJkKMVqCC/I6Zu0o7YS90V9y8pu10IryoMY=";
           };
         });
+      # ComfyUI 0.34.0 tightens the embedded-docs and aimdo requirements
+      # (requirements.txt ==0.5.10 / ==0.4.15). Keep all exact runtime
+      # requirements aligned with the pinned ComfyUI source instead of relying
+      # on the older package set. comfy-aimdo ships only binary wheels on PyPI,
+      # so the pinned abi3 wheel is installed directly; cp39-abi3 is
+      # forward-compatible with the environment's cp314 interpreter.
+      comfyui-embedded-docs = prev.comfyui-embedded-docs.overridePythonAttrs (_old: {
+        version = "0.5.10";
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/df/f3/e44bee076777b0fd2b1748dffe6fa1859a8aea004f9c448f746e206188ba/comfyui_embedded_docs-0.5.10.tar.gz";
+          hash = "sha256-n+rSPl4vztj+Wz0oVbPNPGmvziYeHyh0fbEh03NaKuo=";
+        };
+      });
+      comfy-aimdo = prev.comfy-aimdo.overridePythonAttrs (_old: {
+        pyproject = null;
+        format = "wheel";
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/44/b2/5b60dd92c1368ac07fe07b33ff14b6eb6940203b803f3051d78a6ad5c297/comfy_aimdo-0.4.15-cp39-abi3-manylinux2010_x86_64.manylinux2014_x86_64.manylinux_2_12_x86_64.manylinux_2_17_x86_64.whl";
+          hash = "sha256-8GRxNWVrizsmTjxKDJn3gV4OyLZ6DPzk90o9EFMlDd0=";
+        };
+      });
       cuda-bindings = prev.cuda-bindings.override {
         cudaPackages = binaryCudaPackages;
       };
@@ -144,6 +168,7 @@ let
       color-matcher
       diffusers
       einops
+      faster-whisper
       filelock
       gguf
       imageio
@@ -184,14 +209,18 @@ let
   );
 
   # Reuse Nixpkgs' writable-runtime patch and native wrapper tool while pinning
-  # the first stable ComfyUI release that contains native MiniMax Music 3.
+  # the first stable ComfyUI release that contains native SAM 3D Body
+  # (v0.33.4 still lacks comfy_extras/nodes_sam3d_body.py; native MiniMax
+  # Music 3 landed in 0.33.3). The SAM 3D Body node is built on the V3 io API,
+  # so the bump also re-qualifies every pinned node-pack contract against the
+  # new source — they fail closed if any import-level contract breaks.
   comfyui = pkgs.comfyui.overrideAttrs (old: {
-    version = "0.33.3";
+    version = "0.34.0";
     src = pkgs.fetchFromGitHub {
       owner = "Comfy-Org";
       repo = "ComfyUI";
-      rev = "4da9e2dbead52fc1e68beae33fe3d7ad63b63241";
-      hash = "sha256-c3a5xBKusx3Xk26U421JrK9tqb27XTq7I9HBiNHP1/0=";
+      rev = "12d5279438bfefc058a269eae805ceab6047777f";
+      hash = "sha256-pW02gtrtWkoPabYe6Q/gicNRM65JRYsc7vtaY1m6H1M=";
     };
     installPhase = ''
       runHook preInstall
@@ -208,6 +237,9 @@ let
       "$out/bin/comfyui" --help
       export XDG_DATA_HOME="$(mktemp -d)"
       "$out/bin/comfyui" --cpu --quick-test-for-ci
+      # Load-bearing: the SAM 3D Body workflow exists because this pin carries
+      # the node; fail closed if the rev ever drifts below it.
+      test -f "$out/share/comfyui/comfy_extras/nodes_sam3d_body.py"
       runHook postInstallCheck
     '';
     passthru = old.passthru // {
@@ -215,7 +247,7 @@ let
       pythonEnv = comfyPythonEnv;
     };
     meta = old.meta // {
-      changelog = "https://github.com/Comfy-Org/ComfyUI/releases/tag/v0.33.3";
+      changelog = "https://github.com/Comfy-Org/ComfyUI/releases/tag/v0.34.0";
     };
   });
 
@@ -230,10 +262,14 @@ let
     "text_encoders"
     "clip_vision"
     "vae"
+    "vae_approx"
+    "latent_upscale_models"
     "loras"
     "vdn"
     "pdd_acc"
     "controlnet"
+    "detection"
+    "geometry_estimation"
     "upscale_models"
     "SEEDVR2"
     "audio_encoders"
@@ -308,6 +344,54 @@ let
       modelTools
     ];
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-realism-people-lora.sh;
+  };
+
+  # Preview/upscale models owned by the Muse Director stack: Kijai's H3 TAE
+  # (MiniMax-H3 Community License gate), the madebyollin LTX2.3 preview VAE
+  # (MIT), and the LBH-123-AI Stage-2 latent upscaler (no declared license -
+  # the Development-only note travels with the model).
+  downloadMinimaxH3Tae = pkgs.writeShellApplication {
+    name = "download-minimax-h3-tae";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-tae.sh;
+  };
+
+  downloadTinyPreviewVae = pkgs.writeShellApplication {
+    name = "download-tiny-preview-vae";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-tiny-preview-vae.sh;
+  };
+
+  downloadMinimaxH3LatentUpscaler = pkgs.writeShellApplication {
+    name = "download-minimax-h3-latent-upscaler";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-latent-upscaler.sh;
+  };
+
+  # SAM 3D Body workstation model profile: the four pinned artifacts the
+  # dedicated workflow queues against. sam3.1 + sam-3d-body are Meta
+  # sam-license; MoGe-2 and RT-DETR are MIT. License-gated like VDN-H3.
+  downloadSam3dBodyModels = pkgs.writeShellApplication {
+    name = "download-sam3d-body-models";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-sam3d-body-models.sh;
   };
 
   krea2EditNode = pkgs.fetchFromGitHub {
@@ -598,6 +682,52 @@ let
     hash = "sha256-a4C72dV9K9AXWD70+LIvOTQLawTfUrRzyylM16E1J/w=";
   };
 
+  # The Muse Director + Refine V2 bug-fix bundle (the V1.2 update video pins
+  # github.com/muse-collective-26/MiniMaxH3-Director-V1.2): timeline director
+  # node with Seed Hunt scouting, two-stage sampling, and hard-frozen
+  # chunk-boundary continuity. MIT; the hybrid payload patch installs at
+  # import time and the faster-whisper transcribe route is a lazy import.
+  museDirectorV12Source = pkgs.fetchFromGitHub {
+    owner = "muse-collective-26";
+    repo = "MiniMaxH3-Director-V1.2";
+    rev = "98700398963cd75f39c963e21b29264143c758fc";
+    hash = "sha256-D99NBG89OrYcOKo+EnO+bmjmxjHU9UBb2aGgtT+P5qU=";
+  };
+
+  # One hardware-aware loader for the whole Director model stack, routing
+  # every load through H3-Multishot's H3ModelLoaderAny/H3AutoReserve system
+  # (measured VRAM per render shape, self-tightening over repeat runs,
+  # leftover sweeps). MIT. Sol-Attn was removed as an attention option
+  # upstream on 2026-09-04 after a controlled stall A/B - the same pitfall the
+  # VDN-H3 workstation gotcha records. The contract runs the loader's own
+  # fake-module test suite.
+  museUnifiedLoaderSource = pkgs.fetchFromGitHub {
+    owner = "muse-collective-26";
+    repo = "Muse-MiniMax-H3-Unified-Loader";
+    rev = "d1f26348060bbe3c2a399f68bb16584ec04a623c";
+    hash = "sha256-btKTJZrV1Mz0VKnYTFyaOiCf1FPHtKFrrTPoNcTms0c=";
+  };
+
+  # Live stopwatch with GPU temperature/utilization, VRAM, and system RAM for
+  # long Director renders. MIT; standalone node, no new dependencies.
+  museRunStatsSource = pkgs.fetchFromGitHub {
+    owner = "muse-collective-26";
+    repo = "Muse-Run-Stats";
+    rev = "2466949c90a05fb97291997d91d609ded5313fc1";
+    hash = "sha256-xAawGpWHLolqsK9vAH9LO2xVe6V9L2MCVmM55557Utw=";
+  };
+
+  # The seamless-chain pack the unified loader routes through: H3ModelLoaderAny
+  # and H3AutoReserve live here, not in the Director bundle. MIT, no Python
+  # dependencies; every optional module imports defensively, so the import
+  # contract only asserts the load-bearing classes register.
+  h3MultishotSource = pkgs.fetchFromGitHub {
+    owner = "jlucasmcrell";
+    repo = "ComfyUI-H3-Multishot";
+    rev = "d7d197709fc93c1afb125e3db1dfd4ac0ae28c60";
+    hash = "sha256-U/CmsOFnsRgQBUFIRq1cDbMfgrNNMt3J8bjSwxTxPtE=";
+  };
+
   minimaxH3TurboWorkflowSource = pkgs.fetchFromGitHub {
     owner = "ModelTC";
     repo = "Minimax-H3-Turbo";
@@ -637,6 +767,156 @@ let
         ${pkgs.bash}/bin/bash \
           ${../../scripts/comfyui/harden-minimax-h3-director.sh} \
           ${minimaxH3DirectorSource} "$out"
+      '';
+
+  # Local display/save/purge helpers for the Muse Director graph: the four
+  # third-party helper types the upstream graph wires (easy showAnything,
+  # iToolsPreviewText, SaveTextWithPath, LayerUtility: PurgeVRAM) collapse into
+  # one contract-tested local pack instead of three extra third-party pins for
+  # nine sink nodes. The suite runs hermetically (fake torch/server stubs).
+  museHelperNodes =
+    pkgs.runCommand "comfyui-muse-helper-nodes-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${../../comfyui/custom_nodes/muse_helper_nodes}/. "$out"
+        chmod -R u+w "$out"
+        ${comfyPythonEnv}/bin/python "$out/test_nodes.py"
+        chmod -R a-w "$out"
+      '';
+
+  # The Muse Director bundle: the long-form resume checkpoint is written by
+  # this same node with plain tensor/int/str values, so weights_only=True
+  # keeps the load boundary closed against a planted resume_checkpoint.pt
+  # while the resume feature itself keeps working.
+  museDirectorV12Node =
+    pkgs.runCommand "comfyui-muse-director-v12-hardened"
+      {
+        nativeBuildInputs = [
+          pkgs.gnugrep
+          pkgs.python3
+        ];
+      }
+      ''
+        cp -R ${museDirectorV12Source}/. "$out"
+        chmod -R u+w "$out"
+        substituteInPlace "$out/muse_minimax_director.py" \
+          --replace-fail \
+            'torch.load(path, map_location="cpu", weights_only=False)' \
+            'torch.load(path, map_location="cpu", weights_only=True)'
+        substituteInPlace "$out/muse_minimax_refine_v2.py" \
+          --replace-fail \
+            'return torch.load(path, map_location="cpu", weights_only=False)' \
+            'return torch.load(path, map_location="cpu", weights_only=True)'
+        if grep -RqiE 'weights_only=False' "$out"; then
+          echo "Muse Director bundle retains an unsafe deserialization boundary" >&2
+          exit 1
+        fi
+        chmod -R a-w "$out"
+      '';
+
+  # One hardware-aware loader for the Director model stack. Its own fake-module
+  # test suite is pure Python (no comfy import), so it runs in the sandbox.
+  museUnifiedLoaderNode =
+    pkgs.runCommand "comfyui-muse-unified-loader-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${museUnifiedLoaderSource}/. "$out"
+        chmod -R u+w "$out"
+        ${comfyPythonEnv}/bin/python tests/test_unified_loader.py
+        chmod -R a-w "$out"
+      '';
+
+  # PromptServer.instance is referenced at module import (the /muse/system_stats
+  # route decorator), so the hermetic contract stubs the server module.
+  museRunStatsNode =
+    pkgs.runCommand "comfyui-muse-run-stats-import-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${museRunStatsSource}/. "$out"
+        chmod -R u+w "$out"
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+        import types
+
+        package_root = pathlib.Path(sys.argv[1])
+        fake_server = types.ModuleType("server")
+
+        class FakeRoutes:
+            def get(self, *args, **kwargs):
+                def decorator(fn):
+                    return fn
+                return decorator
+
+            def post(self, *args, **kwargs):
+                return self.get(*args, **kwargs)
+
+        class FakePromptServer:
+            instance = types.SimpleNamespace(routes=FakeRoutes())
+
+        fake_server.PromptServer = FakePromptServer
+        sys.modules["server"] = fake_server
+        spec = importlib.util.spec_from_file_location(
+            "muse_run_stats_contract", package_root / "muse_run_stats.py"
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load Muse Run Stats")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        assert "MuseRunStats" in module.NODE_CLASS_MAPPINGS
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  # The seamless-chain pack the unified loader routes through. --cpu parsing
+  # before the import keeps the sandbox (no NVIDIA driver) on the CPU state;
+  # H3ModelLoaderAny and H3AutoReserve are the load-bearing classes both the
+  # unified loader and the Director's Seed Hunt loop call.
+  h3MultishotNode =
+    pkgs.runCommand "comfyui-h3-multishot-d7d1977-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${h3MultishotSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        spec = importlib.util.spec_from_file_location(
+            "h3_multishot_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load H3-Multishot")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "H3ModelLoaderAny" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError("H3-Multishot contract: H3ModelLoaderAny did not register")
+        utils = importlib.import_module("h3_multishot_contract.h3_multishot_utils")
+        missing = [name for name in ("_auto_cache_floor", "_auto_set_payload")
+                   if not hasattr(utils, name)]
+        if missing:
+            raise RuntimeError(f"H3-Multishot contract: {missing} did not register")
+        PY
+        chmod -R a-w "$out"
       '';
 
   # VDN-H3 (Video Delta Net) hybrid attention for MiniMax-H3 — the video's
@@ -734,6 +1014,11 @@ let
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
+    ln -s ${museDirectorV12Node} "$out/MiniMaxH3-Director-V1.2"
+    ln -s ${museUnifiedLoaderNode} "$out/Muse-MiniMax-H3-Unified-Loader"
+    ln -s ${museRunStatsNode} "$out/Muse-Run-Stats"
+    ln -s ${h3MultishotNode} "$out/ComfyUI-H3-Multishot"
+    ln -s ${museHelperNodes} "$out/muse_helper_nodes"
     ln -s ${superNodesSource} "$out/ComfyUI-SuperNodes"
     ln -s ${nvidiaRtxNodesSource} "$out/Nvidia_RTX_Nodes_ComfyUI"
     ln -s ${vdnH3Node} "$out/ComfyUI-VDN-H3"
@@ -2139,6 +2424,81 @@ let
         test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
       '';
 
+  # Upstream SAM 3D Body template pinned at the workflow_templates revision
+  # the workstation adaptation was made against. The four model repos get
+  # revision-pinned URLs and the creator's Model Links section is replaced
+  # with the pinned workstation profile. All sam3d nodes are core-native,
+  # first shipped in ComfyUI v0.34.0; no third-party node pack is required.
+  sam3dBodyWorkflowSource = pkgs.fetchurl {
+    url = "https://raw.githubusercontent.com/Comfy-Org/workflow_templates/db9d5859d09c21a2d4101a1c18f64fc2f70e4fa4/templates/utility_sam3d_body.json";
+    hash = "sha256-cQmjpuI4UscasRnqXU7abGpfPHpglLSXa0qoqH76QlY=";
+  };
+
+  sam3dBodyInputAsset = pkgs.fetchurl {
+    url = "https://raw.githubusercontent.com/Comfy-Org/workflow_templates/db9d5859d09c21a2d4101a1c18f64fc2f70e4fa4/input/woman_holding_water_glass.mp4";
+    hash = "sha256-2fPz5KAI/UzONPxajolLYnHk90dC4IcqFI7i+SIqpb8=";
+  };
+
+  sam3dBodyWorkflows =
+    pkgs.runCommand "sam3d-body-bf16-workflow"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out/workflows"
+        destination="$out/workflows/01 SAM 3D Body - BF16 Detection + GLB BVH Export.json"
+        jq \
+          --arg sam31_revision "f38cd62b71494b53ac2b56ca36e24f3c8d565581" \
+          --arg sam3d_revision "60476aced0b8de0a0e82a318c79a85061cc97434" \
+          --arg moge_revision "14cbe5bcaaab2fcabaccac085b24a82af2669b14" \
+          --arg sdpose_revision "f122ac7976997885e3bfeab2bb3a537a6bc250bc" \
+          --arg model_note $'## Immutable local model profile\n\n- `checkpoints/sam3.1_multiplex_fp16.safetensors` (SAM 3.1 multiplex — feeds SAM3 VideoTrack)\n- `detection/sam_3d_body_dinov3_bf16.safetensors` (BF16, not the optional int8 ConvRot quant)\n- `geometry_estimation/moge_2_vitl_normal_fp16.safetensors` (MoGe-2 metric scale → FoV)\n- `diffusion_models/rt_detr_v4-x-hgnet_fp32.safetensors` (RT-DETR person bboxes)\n\nThe downloader verifies exact byte counts and SHA-256 at Comfy-Org/sam-3d-body@60476aced0b8de0a0e82a318c79a85061cc97434, Comfy-Org/sam3.1@f38cd62b71494b53ac2b56ca36e24f3c8d565581, Comfy-Org/MoGe@14cbe5bcaaab2fcabaccac085b24a82af2669b14, and Comfy-Org/SDPose@f122ac7976997885e3bfeab2bb3a537a6bc250bc. sam3.1 and sam-3d-body ship under the Meta sam-license; MoGe-2 and RT-DETR are MIT. Run `download-sam3d-body-models` and accept the license gate before queueing. This is an analysis/reconstruction graph — poses, meshes, and exported mocap are spatial evidence, never generation guarantees.' \
+          --arg input_note $'## Input Asset\n\n- `woman_holding_water_glass.mp4` — required workflow input (`input/woman_holding_water_glass.mp4`); installed by the workstation workflow installer, or select your own footage.' '
+          walk(
+            if type == "string" then
+              gsub("Comfy-Org/sam3.1/resolve/main"; "Comfy-Org/sam3.1/resolve/" + $sam31_revision)
+              | gsub("Comfy-Org/sam-3d-body/resolve/main"; "Comfy-Org/sam-3d-body/resolve/" + $sam3d_revision)
+              | gsub("Comfy-Org/MoGe/resolve/main"; "Comfy-Org/MoGe/resolve/" + $moge_revision)
+              | gsub("Comfy-Org/SDPose/resolve/main"; "Comfy-Org/SDPose/resolve/" + $sdpose_revision)
+            else . end
+          )
+          | (.nodes[] | select(.type == "MarkdownNote" and .id == 142)
+              | .widgets_values[0]) = ($input_note + "\n\n" + $model_note)
+        ' ${sam3dBodyWorkflowSource} >"$destination"
+
+        jq -e '
+          . as $workflow
+          | ([.nodes[] | select(.type == "SAM3DBody_Loader") | .widgets_values]
+            == [["sam_3d_body_dinov3_bf16.safetensors"]])
+          and ([.nodes[] | select(.type == "CheckpointLoaderSimple") | .widgets_values]
+            == [["sam3.1_multiplex_fp16.safetensors"]])
+          and ([.nodes[] | select(.type == "LoadMoGeModel") | .widgets_values]
+            == [["moge_2_vitl_normal_fp16.safetensors"]])
+          and ([.nodes[] | select(.type == "UNETLoader") | .widgets_values]
+            == [["rt_detr_v4-x-hgnet_fp32.safetensors", "default"]])
+          and ([.nodes[] | select(.type == "LoadVideo") | .widgets_values[0]]
+            == ["woman_holding_water_glass.mp4"])
+          and (["SAM3DBody_Predict", "SAM3DBody_FaceExpression", "SAM3DBody_Smooth",
+              "SAM3DBody_Render", "BuildPoseFile", "SAM3_VideoTrack",
+              "RTDETR_detect", "Preview3D"]
+            | all(. as $t
+                | [$workflow.nodes[] | select(.type == $t)] | length == 1))
+          and all(.nodes[]; . as $node
+            | all($node.outputs[]?.links[]?;
+                . as $link_id | any($workflow.links[]; .[0] == $link_id and .[1] == $node.id)))
+        ' "$destination" >/dev/null
+        if grep -qiE 'resolve/main|tree/main' "$destination"; then
+          echo "forbidden mutable model URL in SAM 3D Body workflow" >&2
+          exit 1
+        fi
+        test "$(find "$out/workflows" -type f -name '*.json' | wc -l)" -eq 1
+      '';
+
   minimaxH3DirectorWorkflows =
     pkgs.runCommand "minimax-h3-director-local-development-workflows"
       {
@@ -2153,6 +2513,28 @@ let
           ${../../scripts/comfyui/build-minimax-h3-director-workflows.sh} \
           --source-workflow \
             ${minimaxH3DirectorSource}/example_workflows/minimax_h3_director_r2v.json \
+          --output-dir "$out/workflows"
+      '';
+
+  # The Muse Director V1.4 workstation adaptation: BF16-only selectors, the
+  # four third-party helper types rewired onto muse_helper_nodes, the Low
+  # VRAM/Balanced profiles collapsed to (disabled), and the creator's Model
+  # Links section replaced with the pinned workstation profile. See
+  # docs/runbooks/minimax-h3-muse-director-v12.md for the adaptation.
+  museDirectorV12Workflows =
+    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-director-v12-workflows.sh} \
+          --source-workflow \
+            ${museDirectorV12Source}/workflows/muse_minimax_h3_director_V1.4.json \
           --output-dir "$out/workflows"
       '';
 
@@ -2682,6 +3064,7 @@ let
     h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
+    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -2689,6 +3072,7 @@ let
     h3_vdn_realism_dir="$user_workflows/minimax-h3-vdn-h3-realism-people"
     elite_dir="$user_workflows/creative-suite"
     balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
+    sam3d_dir="$user_workflows/sam3d-body-bf16"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
@@ -2701,6 +3085,7 @@ let
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
+    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
@@ -2708,22 +3093,23 @@ let
     h3_vdn_realism_staging="$user_workflows/.minimax-h3-vdn-h3-realism-people.new"
     elite_staging="$user_workflows/.creative-suite.new"
     balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
+    sam3d_staging="$user_workflows/.sam3d-body-bf16.new"
     input_dir=/var/lib/comfyui/input
     blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
+      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
-      "$balanced_staging"
+      "$balanced_staging" "$sam3d_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$h3_safe_upscaler_staging" "$director_staging" "$h3_turbo_staging" \
+      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
-      "$balanced_staging" \
+      "$balanced_staging" "$sam3d_staging" \
       "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
@@ -2767,6 +3153,9 @@ let
     for source in ${minimaxH3DirectorWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$director_staging/$(basename "$source")"
     done
+    for source in ${museDirectorV12Workflows}/workflows/*.json; do
+      install -m 0600 "$source" "$director_v12_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
     done
@@ -2782,6 +3171,10 @@ let
     for source in ${minimaxH3VdnRealismWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_vdn_realism_staging/$(basename "$source")"
     done
+    for source in ${sam3dBodyWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$sam3d_staging/$(basename "$source")"
+    done
+    install -m 0600 ${sam3dBodyInputAsset} "$input_dir/woman_holding_water_glass.mp4"
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
       install -d -m 0700 "$destination"
@@ -2796,8 +3189,9 @@ let
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
-      "$director_dir" "$h3_turbo_dir" "$h3_blender_dir" \
+      "$director_dir" "$director_v12_dir" "$h3_turbo_dir" "$h3_blender_dir" \
       "$h3_motion_context_dir" "$h3_vdn_dir" "$h3_vdn_realism_dir" "$elite_dir" "$balanced_dir"
+    mv "$sam3d_staging" "$sam3d_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -2810,6 +3204,7 @@ let
     mv "$upscaler_staging" "$upscaler_dir"
     mv "$h3_safe_upscaler_staging" "$h3_safe_upscaler_dir"
     mv "$director_staging" "$director_dir"
+    mv "$director_v12_staging" "$director_v12_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
@@ -2836,6 +3231,10 @@ in
     downloadMinimaxH3FunControlnet
     downloadMinimaxH3VdnStage
     downloadMinimaxH3RealismPeopleLora
+    downloadMinimaxH3Tae
+    downloadTinyPreviewVae
+    downloadMinimaxH3LatentUpscaler
+    downloadSam3dBodyModels
     modelTools
     pkgs.ffmpeg-full
   ];
