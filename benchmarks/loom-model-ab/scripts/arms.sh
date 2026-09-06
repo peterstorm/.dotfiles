@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol)
+BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol)
 BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
 BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
 BENCHMARK_V1_PROTOCOL_FILES=(
@@ -138,33 +138,6 @@ benchmark_arm_record() {
         'bash ~/.dotfiles/scripts/inference/qwen38/switch-qwen38-flash-next-profile-v2.sh start' \
         'Qwen3.8 Flash-Next v2 FP8 vLLM TP2 + UVA PLE + exact QSA + recurrent-state safety'
       ;;
-    glm-dflash)
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max' \
-        'glm-5.3-flash-exl3-k4-vision' \
-        '98304' \
-        'glm53-flash-exl3-k4-vllm-sm120-v3' \
-        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v3.sh start' \
-        'GLM-5.3 Flash EXL3 K4 v84 Vision + DFlash2 K7'
-      ;;
-    glm-mtp)
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max' \
-        'glm-5.3-flash-exl3-k4-vision-mtp-384k' \
-        '393216' \
-        'glm53-flash-exl3-k4-vllm-sm120-v5' \
-        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v5.sh start' \
-        'GLM-5.3 Flash EXL3 K4 v84 Vision + MTP3 384K'
-      ;;
-    glm-fp8)
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max' \
-        'glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k' \
-        '393216' \
-        'glm53-flash-exl3-k4-vllm-sm120-v6' \
-        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v6.sh start' \
-        'GLM-5.3 Flash EXL3 K4 v84 Text FP8 KV + MTP3 384K'
-      ;;
     glm-v10-dcp2)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max' \
@@ -173,6 +146,15 @@ benchmark_arm_record() {
         'glm53-flash-exl3-k4-vllm-sm120-v10' \
         'bash ~/.dotfiles/scripts/inference/glm53/run-glm53-flash-exl3-k4-vllm-sm120-v10.sh --launch' \
         'GLM-5.3 Flash EXL3 K4 Vision FP8 KV + MTP3 TP2/EP2/DCP2 v10'
+      ;;
+    glm-v11)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max' \
+        'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11' \
+        '359000' \
+        'glm53-flash-exl3-k4-vllm-sm120-v11' \
+        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v11.sh start' \
+        'GLM-5.3 Flash EXL3 K4 v11 upstream-core-port r2 native FP8 KV + MTP3 TP2/EP2/DCP2'
       ;;
     sol)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \

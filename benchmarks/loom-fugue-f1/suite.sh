@@ -13,30 +13,20 @@ FUGUE_PROTOCOL_FILES=(
   hidden/acceptance-scenarios.md
   rubric.md
 )
-FUGUE_EXTRA_ARM_IDS=(glm-v8)
 
+# Every local arm now lives in the shared model-ab catalog, so this suite no
+# longer carries a private arm record. The extra-arm hook existed only for the
+# retired glm-v8 profile.
 fugue_benchmark_arm_ids() {
   local arm record
   while IFS= read -r arm; do
     record="$(benchmark_arm_record "$arm")"
     [[ "${record%%$'\t'*}" == desktop-vllm/* ]] && printf '%s\n' "$arm"
   done < <(benchmark_arm_ids)
-  printf '%s\n' "${FUGUE_EXTRA_ARM_IDS[@]}"
 }
 
 fugue_benchmark_arm_record() {
-  case "${1:-}" in
-    glm-v8)
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8:max' \
-        'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8' \
-        '359000' \
-        'glm53-flash-exl3-k4-vllm-sm120-v8' \
-        'bash ~/.dotfiles/scripts/inference/glm53/switch-glm53-exl3-profile-v8.sh start' \
-        'GLM-5.3 Flash EXL3 K4 v84 Vision FP8 KV + MTP3 359K v8'
-      ;;
-    *) benchmark_arm_record "$1" ;;
-  esac
+  benchmark_arm_record "$1"
 }
 
 fugue_protocol_files() {

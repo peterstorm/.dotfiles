@@ -47,7 +47,7 @@ V2_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v2)"
 status=0
 benchmark_protocol_sha "$BENCH" future >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "protocol hasher accepted an unknown version"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-dflash glm-mtp glm-fp8 glm-v10-dcp2 sol' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -80,12 +80,10 @@ contains "$ARMS" 'qwen38-flash-next-fp8-vllm-v1'
 contains "$ARMS" 'switch-qwen38-flash-next-profile-v1.sh start'
 contains "$ARMS" 'qwen38-flash-next-fp8-vllm-v2'
 contains "$ARMS" 'switch-qwen38-flash-next-profile-v2.sh start'
-contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision:max'
-contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max'
-contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max'
-contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v3'
-contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v5'
-contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v6'
+contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max'
+contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max'
+contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v10'
+contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v11'
 contains "$RUN" 'stale benchmark baseline:'
 contains "$RUN" 'Cortex is active; cross-arm memory would contaminate this run.'
 contains "$RUN" '~/.config/glm53/api-key'
@@ -122,7 +120,7 @@ contains "$ANON" 'glm[-_ ]?5\.?3'
 contains "$ANON" 'qwen ?3\.?8[-_ ]?flash[-_ ]?next'
 contains "$ANON" 'refusing mixed-protocol blind batch'
 contains "$ANON" 'dflash2?'
-contains "$README" 'glm-mtp'
+contains "$README" 'glm-v11'
 contains "$README" 'implementation-ready planning'
 
 [[ "$(sha256sum "$BENCH/frozen/answer-key.md" | cut -d' ' -f1)" == '6e592bcb1b039ec84a94f5907c904a2ed8a85d1435570ee8499bcfb0238b9f2f' ]] \
@@ -169,16 +167,12 @@ jq -e '
     .contextWindow == 312000 and
     .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
-    .id == "glm-5.3-flash-exl3-k4-vision" and
-    .contextWindow == 98304 and
+    .id == "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11" and
+    .contextWindow == 359000 and
     .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
-    .id == "glm-5.3-flash-exl3-k4-vision-mtp-384k" and
-    .contextWindow == 393216 and
-    .thinkingLevelMap.max == "max") and
-  any(.providers["desktop-vllm"].models[];
-    .id == "glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k" and
-    .contextWindow == 393216 and
+    .id == "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
+    .contextWindow == 359000 and
     .thinkingLevelMap.max == "max")
 ' "$PI_MODELS" >/dev/null || fail "Pi lacks a compatible GLM benchmark model"
 
@@ -195,17 +189,17 @@ rm -rf "$mixed_protocol_sandbox"
 attestation_sandbox="$(mktemp -d)"
 trap 'rm -rf "$attestation_sandbox"' EXIT
 cat >"$attestation_sandbox/run.json" <<'JSON'
-{"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}
+{"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"}
 JSON
 cat >"$attestation_sandbox/session.jsonl" <<'JSONL'
-{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"brainstorm-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}}]}}}
-{"type":"message","message":{"role":"toolResult","toolName":"loom_interactive_subagent","details":{"results":[{"agent":"specify-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"glm-5.3-flash-exl3-k4-vision-mtp-384k","requestedModel":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}}]}}}
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"brainstorm-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"}}]}}}
+{"type":"message","message":{"role":"toolResult","toolName":"loom_interactive_subagent","details":{"results":[{"agent":"specify-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11","requestedModel":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"}}]}}}
 JSONL
 bash "$VERIFY_MODELS" "$attestation_sandbox" >/dev/null
 jq -e '.passed == true and .checked_children == 2' "$attestation_sandbox/model-attestation.json" >/dev/null \
   || fail "matching child model receipts did not attest"
 
-sed -i 's#desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max#desktop-vllm/qwen3.8-27b:xhigh#g' \
+sed -i 's#desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max#desktop-vllm/qwen3.8-27b:xhigh#g' \
   "$attestation_sandbox/session.jsonl"
 status=0
 bash "$VERIFY_MODELS" "$attestation_sandbox" >/dev/null 2>&1 || status=$?
@@ -262,10 +256,10 @@ jq -n --arg sha "$V1_PROTOCOL_SHA" '{
   benchmark_kind: "planning-only",
   stop_before: "wave-1-implementation",
   protocol_sha256: $sha,
-  model: "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"
+  model: "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"
 }' > "$planning_run/run.json"
 cat > "$planning_run/session.jsonl" <<'JSONL'
-{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"decompose-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"}}]}}}
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","details":{"results":[{"agent":"decompose-agent","messages":[{"role":"assistant","content":[]}],"usage":{"turns":1},"model":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max","routing":{"effective":"desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"}}]}}}
 JSONL
 printf 'No interview questions.\n' > "$planning_run/interview.md"
 bash "$GRADE" "$planning_worktree" "$planning_run" >/dev/null
@@ -299,7 +293,7 @@ jq -n --arg sha "$V2_PROTOCOL_SHA" '{
   protocol_version: "v2",
   stop_before: "wave-1-implementation",
   protocol_sha256: $sha,
-  model: "desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max"
+  model: "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"
 }' > "$v2_run/run.json"
 cp "$planning_run/session.jsonl" "$planning_run/interview.md" "$v2_run/"
 bash "$GRADE" "$v2_worktree" "$v2_run" >/dev/null

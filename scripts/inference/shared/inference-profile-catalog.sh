@@ -19,16 +19,6 @@ INFERENCE_PROFILE_CONTAINERS=(
   qwen38-27b-bf16-dflash2-vllm-v3
   qwen38-flash-next-fp8-vllm-v1
   qwen38-flash-next-fp8-vllm-v2
-  glm53-flash-nvfp4-vllm-sm120-v2
-  glm53-flash-exl3-k4-vllm-sm120-v1
-  glm53-flash-exl3-k4-vllm-sm120-v2
-  glm53-flash-exl3-k4-vllm-sm120-v3
-  glm53-flash-exl3-k4-vllm-sm120-v4
-  glm53-flash-exl3-k4-vllm-sm120-v5
-  glm53-flash-exl3-k4-vllm-sm120-v6
-  glm53-flash-exl3-k4-vllm-sm120-v7
-  glm53-flash-exl3-k4-vllm-sm120-v8
-  glm53-flash-exl3-k4-vllm-sm120-v9
   glm53-flash-exl3-k4-vllm-sm120-v10
   glm53-flash-exl3-k4-vllm-sm120-v11
   qwen38-27b-blackfrost-abliterated-bf16-vllm

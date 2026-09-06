@@ -28,10 +28,11 @@ PROTOCOL_SHA="$(fugue_protocol_sha "$BENCH")"
 [[ "$FUGUE_SUITE_ID" == 'fugue-f1-map-v1' && "$FUGUE_PROTOCOL_VERSION" == v1 ]] || fail 'suite identity drifted'
 [[ "$PROTOCOL_SHA" == 'd2629e9eb966e25364e24a34423e55247040344115874dc2f2de5fee415beed1' ]] || fail 'immutable protocol hash changed'
 ARM_LIST="$(bash "$RUN" --list | tail -n +2)"
-[[ "$(wc -l <<<"$ARM_LIST")" -eq 9 ]] || fail 'local arm list is incomplete'
+[[ "$(wc -l <<<"$ARM_LIST")" -eq 8 ]] || fail 'local arm list is incomplete'
 grep -q '^glm-v10-dcp2 ' <<<"$ARM_LIST" || fail 'v10 arm is absent'
 ! grep -q '^sol ' <<<"$ARM_LIST" || fail 'cloud arm leaked into the local-only F1 harness'
-[[ "$(fugue_benchmark_arm_record glm-v8 | cut -f2)" == 'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8' ]] || fail 'v8 arm identity drifted'
+grep -q '^glm-v11 ' <<<"$ARM_LIST" || fail 'v11 arm is absent'
+[[ "$(fugue_benchmark_arm_record glm-v11 | cut -f2)" == 'glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11' ]] || fail 'v11 arm identity drifted'
 
 contains "$BENCH/frozen/brief.md" 'one statically declared worker computation'
 contains "$BENCH/frozen/brief.md" 'Do not implement anything.'
@@ -93,7 +94,7 @@ TARGET_SHA="$(fugue_source_lock_value "$BENCH" '.target.base_sha')"
 RUNTIME_SHA="$(fugue_source_lock_value "$BENCH" '.loom_runtime.base_sha')"
 TARGET_REPOSITORY="$(fugue_source_lock_value "$BENCH" '.target.repository')"
 PI_VERSION="$(fugue_source_lock_value "$BENCH" '.pi.version')"
-ARM='glm-mtp'
+ARM='glm-v11'
 IFS=$'\t' read -r MODEL SERVED CONTEXT PROFILE _ <<<"$(fugue_benchmark_arm_record "$ARM")"
 PI_MODELS_SHA="$(sha256sum "$ROOT/pi/models.json" | cut -d' ' -f1)"
 sandbox="$(mktemp -d)"

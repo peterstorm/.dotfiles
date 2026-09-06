@@ -19,10 +19,6 @@
       "model": "desktop-vllm/qwen3.8-flash-next-fp8",
       "thinkingLevel": "xhigh"
     },
-    "glm": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
-      "thinkingLevel": "max"
-    },
     "glm-v10-dcp2": {
       "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
       "thinkingLevel": "max"
@@ -57,17 +53,6 @@
       "use": {
         "kind": "named",
         "target": "qwen-flash-next-v2"
-      }
-    },
-    {
-      "id": "glm-v8-subagents-use-max",
-      "when": {
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8"
-      },
-      "use": {
-        "kind": "named",
-        "target": "glm"
       }
     },
     {

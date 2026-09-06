@@ -154,13 +154,7 @@ with twelve selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/deepseek-v4-flash-vision`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision` (DFlash benchmark arm)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k` (v5 rollback)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v9`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10`
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10` (DCP2 candidate, fixed 3.5 GiB/GPU KV; v11 rollback target)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11` (upstream-core-port r2: native FP8 KV, vision, thinking-disable honoured)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
@@ -244,14 +238,10 @@ runtime qualification and all v7 boot, prefix-cache, vision, and latency qualifi
 pending.
 
 ```bash
-pi --list-models glm-5.3-flash-exl3-k4-vision
-pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision:max
-pi --list-models glm-5.3-flash-exl3-k4-vision-mtp-384k
-pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max
-pi --list-models glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k
-pi --model desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max
-pi --list-models glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7
-pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k-fair-v7:max
+pi --list-models glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max
+pi --list-models glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10
+pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max
 ```
 
 ### Qwen3.8 27B
@@ -345,8 +335,8 @@ tracked policy publishes `qwen` and `glm` as named exact targets beside parent i
       "model": "desktop-vllm/qwen3.8-27b",
       "thinkingLevel": "xhigh"
     },
-    "glm": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k",
+    "glm-v11": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11",
       "thinkingLevel": "max"
     }
   }

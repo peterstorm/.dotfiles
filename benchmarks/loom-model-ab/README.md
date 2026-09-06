@@ -69,10 +69,8 @@ This measures planning directly. No implementation is generated or inferred.
 | `qwen-vllm-bf16kv` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dflash2-vllm-v3` |
 | `qwen-flash-next` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v1` |
 | `qwen-flash-next-v2` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v2` |
-| `glm-dflash` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision:max` | 98,304 | `glm53-flash-exl3-k4-vllm-sm120-v3` |
-| `glm-mtp` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v5` |
-| `glm-fp8` | `desktop-vllm/glm-5.3-flash-exl3-k4-text-fp8kv-mtp-384k:max` | 393,216 | `glm53-flash-exl3-k4-vllm-sm120-v6` |
 | `glm-v10-dcp2` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max` | 359,000 | `glm53-flash-exl3-k4-vllm-sm120-v10` |
+| `glm-v11` | `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max` | 359,000 | `glm53-flash-exl3-k4-vllm-sm120-v11` |
 
 List the machine-readable catalog with:
 
@@ -88,10 +86,10 @@ DFlash2/BF16-KV profile;
 the original experimental TP2 FP8 profile; `qwen-flash-next-v2` measures the
 source-reconstructible safety revision with UVA PLE, exact QSA selection,
 recurrent-state safeguards, and MTP3.
-`glm-v10-dcp2` follows the qualified active GLM route. `glm-fp8` preserves the
-historical v6 comparison, `glm-mtp` remains the multimodal v5 comparison arm,
-and `glm-dflash` is runtime-profile evidence—not an independent base-model
-observation.
+`glm-v10-dcp2` is the previously qualified GLM route and v11's rollback target;
+`glm-v11` is the upstream-core-port r2 runtime with native FP8 KV and vision.
+The historical `glm-dflash`, `glm-mtp`, and `glm-fp8` arms were retired with
+their serving profiles; their recorded runs remain under `runs/`.
 
 ### Asymmetries that remain part of the experiment
 

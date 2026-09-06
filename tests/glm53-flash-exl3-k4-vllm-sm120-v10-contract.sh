@@ -32,6 +32,21 @@ done
 for file in "$PULL" "$RUN" "$SWITCH"; do bash -n "$file"; done
 jq -e . "$PI_MODELS" >/dev/null
 
+# v10 is built FROM the v9 image, so v10 is reproducible only while the v9 build
+# chain is. The v9 serving profile is retired, but its builder is this release's
+# base layer, so the digests it pins are asserted here rather than lost with it.
+V9_PULL="$ROOT/scripts/inference/glm53/pull-glm53-flash-exl3-k4-vllm-sm120-v9-image.sh"
+[ -x "$V9_PULL" ] || { echo "FAIL: v10's base-layer builder is missing: $V9_PULL" >&2; exit 1; }
+bash -n "$V9_PULL"
+contains "$V9_PULL" 'BASE_INDEX="sha256:0f1cdcc8891f1cc3a444121eb61d366289a1cbba285f0892dcbb24bc94961692"'
+contains "$V9_PULL" 'verdictai/glm53-flash-exl3-k4@sha256:184cfdb86fb08902898999ce5d7101f5711e3138f82b4738ba823145c17f8140'
+contains "$V9_PULL" 'BASE_ID="sha256:f28ba4b2192d8306f2ab93be9ea868459f76e2fd5893d4eef9f7cc48f9180578"'
+contains "$V9_PULL" 'DERIVED_ID="sha256:82ea6cb3874e4869d43993146bf52b2522f010c1206c7a5f7bd3ec04bc2bcdf2"'
+contains "$V9_PULL" 'a8e288ec067fed7e2e38762ca71e6034982dc4d40dc02ceec5caa1dc319ace85'
+contains "$V9_PULL" '4ecec3de89f52125fc5884e4924ed5fb326bb1d9e6a97fc04a005147e22ea528'
+contains "$V9_PULL" '8baae7bea9cb85cf72dfc86702187b0227ff585fcb81dbdc8b30747195c24395'
+contains "$V9_PULL" 'b144bf4e1f0d2455e016191de4bca50bc72cdf517593b374940f9cb2fc68e415'
+
 contains "$PULL" 'sha256:82ea6cb3874e4869d43993146bf52b2522f010c1206c7a5f7bd3ec04bc2bcdf2'
 contains "$PULL" 'sha256:ef5f2fcb25d16abdcd800ff70b158e077780f2cb550a0ebf5bd1fe12e9f44553'
 contains "$PULL" 'vllm-project/vllm#50287@3a91629d06826edb624323694c211831234a64a6'
@@ -176,8 +191,10 @@ if grep -Fq 'docker update --restart=unless-stopped' "$SWITCH"; then
   echo 'FAIL: unqualified v10 switcher promotes restart policy' >&2
   exit 1
 fi
-contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v9'
+# The v9 container name is gone from the catalog with its profile; v10 and v11
+# are the only GLM entries that remain.
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v10'
+contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v11'
 contains "$RUNBOOK" 'ef5f2fcb25d16abdcd800ff70b158e077780f2cb550a0ebf5bd1fe12e9f44553'
 
 jq -e '

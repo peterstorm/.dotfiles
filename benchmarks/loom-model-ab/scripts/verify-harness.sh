@@ -89,12 +89,12 @@ jq -e '
     "model": "desktop-vllm/qwen3.8-flash-next-fp8",
     "thinkingLevel": "xhigh"
   } and
-  .targets.glm == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v8",
-    "thinkingLevel": "max"
-  } and
   .targets["glm-v10-dcp2"] == {
     "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
+    "thinkingLevel": "max"
+  } and
+  .targets["glm-v11"] == {
+    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11",
     "thinkingLevel": "max"
   } and
   .targets.sol == {
@@ -115,6 +115,10 @@ jq -e '
     .id == "glm-v10-dcp2-subagents-use-max" and
     .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
     .use == {"kind": "named", "target": "glm-v10-dcp2"}) and
+  any(.rules[];
+    .id == "glm-v11-subagents-use-max" and
+    .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11" and
+    .use == {"kind": "named", "target": "glm-v11"}) and
   any(.rules[];
     .id == "sol-subagents-use-high" and
     .when.parentClass == "cloud" and
