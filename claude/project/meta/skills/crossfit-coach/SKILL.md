@@ -146,6 +146,15 @@ test -f ~/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts && echo p
 ```
 
 - **Present:** pipe the workout JSON to `bun ~/dev/claude-plugins/reclaw/scripts/garmin-schedule-workout.ts YYYY-MM-DD` (date resolved fresh via `date +%F` — never a date carried from context; a past date is a bug, Garmin silently accepts it and buries the workout).
+- **Headless credential extraction (reclaw session):** the script needs `GARMIN_EMAIL`/`GARMIN_PASSWORD`, which are SOPS-injected into the **running `reclaw.service`** environment — not in any `.env` file. Extract them headlessly:
+
+```bash
+export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+PID=$(systemctl --user show reclaw.service --property=MainPID --value)
+export GARMIN_EMAIL=$(tr '\0' '\n' < /proc/$PID/environ | grep '^GARMIN_EMAIL=' | cut -d= -f2-)
+export GARMIN_PASSWORD=$(tr '\0' '\n' < /proc/$PID/environ | grep '^GARMIN_PASSWORD=' | cut -d= -f2-)
+```
+
 - **Missing (this machine's reclaw checkout has no `scripts/`):** don't fail silently — output the complete workout JSON in a fenced block, state that the schedule script only exists in the reclaw deployment that holds the Garmin credentials, and tell the user to schedule it from there.
 
 On failure: auth error → report and stop; API error → report the error and show the JSON so the user can debug.
