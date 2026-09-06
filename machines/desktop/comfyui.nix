@@ -42,9 +42,10 @@ let
         };
       });
       comfyui-workflow-templates = prev.comfyui-workflow-templates.overridePythonAttrs (_old: {
-        # ComfyUI 0.34.0 pins the workflow-templates browser package exactly;
-        # 0.11.48 is the first version whose Template Library contains
-        # utility_sam3d_body.json.
+        # ComfyUI 0.34.0 pins the workflow-templates browser package exactly
+        # (requirements.txt ==0.11.48). The sam3d template is NOT in the
+        # 0.11.48 package — the dedicated workflow pins the template directly
+        # from the workflow_templates repo at its own revision.
         version = "0.11.48";
         src = pkgs.fetchurl {
           url = "https://files.pythonhosted.org/packages/93/57/78e0b686ee1a806d99516ccf4c39c5dce222a6f9f182707d48b25698683e/comfyui_workflow_templates-0.11.48.tar.gz";
@@ -52,25 +53,32 @@ let
         };
       });
       comfyui-workflow-templates-json = prev.comfyui-workflow-templates-json.overridePythonAttrs (_old: {
-        version = "0.1.50";
+        # Runtime-deps pins demanded by the workflow-templates 0.11.48
+        # metadata (pythonRuntimeDepsCheckHook enforces the == constraints).
+        # The production-curated suite stays on the audited 0.1.37 JSON corpus
+        # via qualifiedWorkflowTemplatesJsonSource — this bump changes only
+        # what the browser package's metadata demands.
+        version = "0.1.57";
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/78/eb/c1728bc38aab20294e0ba2b240cbc0740f875850a3f9b4425edbd5c982c6/comfyui_workflow_templates_json-0.1.50.tar.gz";
-          hash = "sha256-C348ww+sejtpXeInN8Q7qxk81VUxbQBfHc/nmuEs9hk=";
+          url = "https://files.pythonhosted.org/packages/0a/a0/ec65132b0eea7d8b364b9a4f03c80bf4f987f20c0f221a5ec3c871829e5e/comfyui_workflow_templates_json-0.1.57.tar.gz";
+          hash = "sha256-IvtKBhnYRqreS2w8t7xJE65F97B3Aai9+MWYR+CdINw=";
         };
       });
       comfyui-workflow-templates-core = prev.comfyui-workflow-templates-core.overridePythonAttrs (_old: {
-        version = "0.3.315";
+        # Demanded exactly by the workflow-templates 0.11.48 metadata.
+        version = "0.3.322";
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/60/33/3f86ee718c21ba7f67fb23d12f8de51597fd93f281572643bbbecc4f2067/comfyui_workflow_templates_core-0.3.315.tar.gz";
-          hash = "sha256-/klBIRx7cS8OiKeOQEQY+gCg6WYyj2ehwX7fZH1R7A4=";
+          url = "https://files.pythonhosted.org/packages/ce/16/7e56f6c6073321ccabb193d085e0434934eee8572613f65ea43310057ed9/comfyui_workflow_templates_core-0.3.322.tar.gz";
+          hash = "sha256-+odtVI5o5YP+u5P4T90NaWTSFlxtBm9XxYXyai8r0yk=";
         };
       });
       comfyui-workflow-templates-media-assets-01 =
         prev.comfyui-workflow-templates-media-assets-01.overridePythonAttrs (_old: {
-          version = "0.1.30";
+          # Demanded exactly by the workflow-templates 0.11.48 metadata.
+          version = "0.1.35";
           src = pkgs.fetchurl {
-            url = "https://files.pythonhosted.org/packages/63/48/7c276531b1274901bb9f19658118cbd53d4d44f12cad6e654fee06eae347/comfyui_workflow_templates_media_assets_01-0.1.30.tar.gz";
-            hash = "sha256-5N6pN46RdJkKMVqCC/I6Zu0o7YS90V9y8pu10IryoMY=";
+            url = "https://files.pythonhosted.org/packages/c5/4f/f3fb359bd9be8c12541595344d0baf97ff3df27be83414afb9ca77066527/comfyui_workflow_templates_media_assets_01-0.1.35.tar.gz";
+            hash = "sha256-xrzUGrvjhWyUhYxs4H2QNIf5PsbEBXTsu4OU3eEkk6M=";
           };
         });
       # ComfyUI 0.34.0 tightens the embedded-docs and aimdo requirements
