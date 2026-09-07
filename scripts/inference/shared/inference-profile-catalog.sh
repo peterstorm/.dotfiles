@@ -21,6 +21,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   qwen38-flash-next-fp8-vllm-v2
   glm53-flash-exl3-k4-vllm-sm120-v10
   glm53-flash-exl3-k4-vllm-sm120-v11
+  glm53-flash-exl3-k4-vllm-sm120-v11.1
   qwen38-27b-blackfrost-abliterated-bf16-vllm
 )
 

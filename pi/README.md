@@ -156,6 +156,7 @@ with twelve selectable models:
 - `desktop-vllm/deepseek-v4-flash-vision`
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10` (DCP2 candidate, fixed 3.5 GiB/GPU KV; v11 rollback target)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11` (upstream-core-port r2: native FP8 KV, vision, thinking-disable honoured)
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1` (upstream-core-port r2.1: v11 plus the admission deadlock fix — r2 wedges once a long session heads the waiting queue)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
