@@ -368,10 +368,11 @@ let
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-realism-people-lora.sh;
   };
 
-  # Preview/upscale models owned by the Muse Director stack: Kijai's H3 TAE
-  # (MiniMax-H3 Community License gate), the video-linked OzzyGT LTX2.3
-  # preview VAE (Apache-2.0), and the LBH-123-AI Stage-2 latent upscaler
-  # (no declared license - the Development-only note travels with the model).
+  # Preview/upscale model tools associated with the Muse Director stack:
+  # Kijai's active H3 TAE (MiniMax-H3 Community License gate), the optional
+  # video-linked OzzyGT LTX2.3 fallback (Apache-2.0; inactive in V1.7), and the
+  # LBH-123-AI Stage-2 latent upscaler (no declared license - the
+  # Development-only note travels with the model).
   downloadMinimaxH3Tae = pkgs.writeShellApplication {
     name = "download-minimax-h3-tae";
     runtimeInputs = [
@@ -2581,12 +2582,12 @@ let
           --output-dir "$out/workflows"
       '';
 
-  # The Muse Director V1.6 workstation adaptation of the upstream V1.4 graph:
-  # Maximum Quality forced to the unpruned BF16 set, four third-party helper
-  # types rewired onto muse_helper_nodes, lower profiles collapsed to
-  # (disabled), and stale creator selectors stripped from every widget mirror.
+  # The Muse Director V1.7 workstation adaptation of the upstream V1.4 graph:
+  # Maximum Quality forced to the unpruned BF16 set, Analyze pinned to the live
+  # authenticated vision endpoint, inactive LTX state removed, helper types
+  # rewired locally, and lower profiles made unrepresentable.
   museDirectorV12Workflows =
-    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-v1-6-workflows"
+    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-v1-7-workflows"
       {
         nativeBuildInputs = [
           pkgs.coreutils
@@ -3149,7 +3150,7 @@ let
     h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
-    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.6"
+    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.7"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -3170,7 +3171,7 @@ let
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
-    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.6.new"
+    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.7.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
