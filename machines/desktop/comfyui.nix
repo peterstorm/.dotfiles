@@ -369,9 +369,9 @@ let
   };
 
   # Preview/upscale models owned by the Muse Director stack: Kijai's H3 TAE
-  # (MiniMax-H3 Community License gate), the madebyollin LTX2.3 preview VAE
-  # (MIT), and the LBH-123-AI Stage-2 latent upscaler (no declared license -
-  # the Development-only note travels with the model).
+  # (MiniMax-H3 Community License gate), the video-linked OzzyGT LTX2.3
+  # preview VAE (Apache-2.0), and the LBH-123-AI Stage-2 latent upscaler
+  # (no declared license - the Development-only note travels with the model).
   downloadMinimaxH3Tae = pkgs.writeShellApplication {
     name = "download-minimax-h3-tae";
     runtimeInputs = [
@@ -390,6 +390,20 @@ let
       modelTools
     ];
     text = builtins.readFile ../../scripts/comfyui/download-tiny-preview-vae.sh;
+  };
+
+  # The video uses Whisper medium for its most accurate transcription route.
+  # Pin the converted model locally and harden the Director to accept only that
+  # path, preventing first-click model downloads or lower-quality fallback.
+  downloadMuseWhisperMedium = pkgs.writeShellApplication {
+    name = "download-muse-whisper-medium";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-muse-whisper-medium.sh;
   };
 
   downloadMinimaxH3LatentUpscaler = pkgs.writeShellApplication {
@@ -826,13 +840,41 @@ let
         substituteInPlace "$out/muse_minimax_director.py" \
           --replace-fail \
             'torch.load(path, map_location="cpu", weights_only=False)' \
-            'torch.load(path, map_location="cpu", weights_only=True)'
+            'torch.load(path, map_location="cpu", weights_only=True)' \
+          --replace-fail \
+            '_MUSE_MINIMAX_WHISPER_MODEL_SIZES = ("tiny", "base", "small", "medium")' \
+            '_MUSE_MINIMAX_WHISPER_MODEL_SIZES = ("medium",)' \
+          --replace-fail \
+            'WhisperModel(model_size, device="cpu", compute_type="float32")' \
+            'WhisperModel(os.environ["MUSE_WHISPER_MEDIUM_PATH"], device="cpu", compute_type="float32")' \
+          --replace-fail \
+            'data.get("whisper_model") or "small"' \
+            'data.get("whisper_model") or "medium"' \
+          --replace-fail \
+            'model_size = "small"' \
+            'model_size = "medium"'
+        substituteInPlace "$out/js/muse_minimax_director.js" \
+          --replace-fail \
+            'for (const size of ["tiny", "base", "small", "medium"])' \
+            'for (const size of ["medium"])' \
+          --replace-fail \
+            'entry.whisper_model || "small"' \
+            'entry.whisper_model || "medium"'
         substituteInPlace "$out/muse_minimax_refine_v2.py" \
           --replace-fail \
             'return torch.load(path, map_location="cpu", weights_only=False)' \
             'return torch.load(path, map_location="cpu", weights_only=True)'
         if grep -RqiE 'weights_only=False' "$out"; then
           echo "Muse Director bundle retains an unsafe deserialization boundary" >&2
+          exit 1
+        fi
+        grep -Fq '_MUSE_MINIMAX_WHISPER_MODEL_SIZES = ("medium",)' \
+          "$out/muse_minimax_director.py"
+        grep -Fq 'WhisperModel(os.environ["MUSE_WHISPER_MEDIUM_PATH"]' \
+          "$out/muse_minimax_director.py"
+        if grep -Fq 'entry.whisper_model || "small"' \
+          "$out/js/muse_minimax_director.js"; then
+          echo "Muse Director retains a lower-quality Whisper fallback" >&2
           exit 1
         fi
         chmod -R a-w "$out"
@@ -2539,12 +2581,12 @@ let
           --output-dir "$out/workflows"
       '';
 
-  # The Muse Director V1.5 workstation adaptation of the upstream V1.4 graph:
-  # BF16-only selectors, four third-party helper types rewired onto
-  # muse_helper_nodes, Low VRAM/Balanced profiles collapsed to (disabled), and
-  # stale creator selectors stripped from active and bypassed widget mirrors.
+  # The Muse Director V1.6 workstation adaptation of the upstream V1.4 graph:
+  # Maximum Quality forced to the unpruned BF16 set, four third-party helper
+  # types rewired onto muse_helper_nodes, lower profiles collapsed to
+  # (disabled), and stale creator selectors stripped from every widget mirror.
   museDirectorV12Workflows =
-    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-v1-5-workflows"
+    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-v1-6-workflows"
       {
         nativeBuildInputs = [
           pkgs.coreutils
@@ -3107,7 +3149,7 @@ let
     h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
-    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.5"
+    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.6"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -3128,7 +3170,7 @@ let
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
-    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.5.new"
+    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.6.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
@@ -3278,6 +3320,7 @@ in
     downloadMinimaxH3RealismPeopleLora
     downloadMinimaxH3Tae
     downloadTinyPreviewVae
+    downloadMuseWhisperMedium
     downloadMinimaxH3LatentUpscaler
     downloadSam3dBodyModels
     modelTools
@@ -3321,6 +3364,7 @@ in
       MUSE_GLIMMER_BASE_URL = "http://127.0.0.1:8000/v1";
       MUSE_GLIMMER_API_KEY_FILE = "/home/peterstorm/.config/qwen38/api-key";
       MINIMAX_H3_DIRECTOR_LLM_API_KEY_FILE = "/home/peterstorm/.config/qwen38/api-key";
+      MUSE_WHISPER_MEDIUM_PATH = "/models/comfyui/audio_encoders/faster-whisper-medium";
     };
 
     serviceConfig = {

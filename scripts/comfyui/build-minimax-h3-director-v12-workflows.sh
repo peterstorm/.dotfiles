@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the workstation BF16 V1.5 adaptation of the upstream Muse Minimax
+# Build the workstation BF16 V1.6 adaptation of the upstream Muse Minimax
 # Director V1.4 workflow (the Muse Director + Refine V2 bug-fix bundle the
 # video pins).
 #
@@ -10,10 +10,9 @@
 #     - 1:1 call-contract mirrors, so every sink and passthrough link stays
 #     valid and the graph topology is preserved exactly.
 #   * Pins every model selector to the workstation checksum-verified BF16
-#     set: the unified loader Low VRAM and Balanced profiles collapse to
-#     (disabled) (the workstation policy is BF16-only, so no GGUF or int8
-#     route exists here), Maximum Quality pins to the unpruned BF16 families,
-#     and the plain subgraph loaders match. The one load-bearing LoRA is the
+#     set: the unified loader is forced to Maximum Quality, its upstream
+#     quantized selectors are replaced by the unpruned BF16 families, Low VRAM
+#     and Balanced collapse to (disabled), and the plain subgraph loaders match. The one load-bearing LoRA is the
 #     workstation turbo 8-step file; optional creator style LoRAs are stripped
 #     from both active and bypassed selectors, so slots 2/3 stay (disabled) and
 #     stacked style drift is unrepresentable.
@@ -52,13 +51,13 @@ done
 [[ -f "$source_workflow" && -n "$output_dir" ]] || usage
 mkdir -p "$output_dir"
 
-full="$output_dir/01 MiniMax H3 Muse Director V1.5 - BF16 Local Development.json"
+full="$output_dir/01 MiniMax H3 Muse Director V1.6 - Maximum Quality BF16 Local Development.json"
 
-model_note=$'## Workstation Model Links (pinned local profile)\n\nThis adapted graph pins every selector to the workstation checksum-verified BF16 set. Model installation is owned by the local downloaders; nothing here downloads at runtime.\n\n- `diffusion_models/minimax_h3_ref2va_bf16.safetensors` - Reference model (unpruned BF16)\n- `diffusion_models/minimax_h3_fl2va_bf16.safetensors` - First/Last-frame model (unpruned BF16)\n- `text_encoders/qwen3vl_32b_minimax_h3_bf16.safetensors` - BF16 Qwen3-VL-32B encoder\n- `vae/minimax_h3_video_vae_fp16.safetensors` + `vae/minimax_h3_audio_vae_fp32.safetensors` - full VAEs\n- `latent_upscale_models/minimax_h3_latent_upscaler_3d_fp16.safetensors` - Stage-2 upscale model (Two-Stage Sampling is on by default)\n- `loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` - the one load-bearing LoRA, strength 1.0, both models\n- `vae_approx/taeh3.safetensors` - H3 sampling preview for the Model Preview Override tiny_vae box\n- `vae/taeltx2_3.safetensors` - lightweight LTX2.3 preview VAE for the Model Preview Override vae input\n\nThe unified loader Low VRAM and Balanced profiles are pinned to (disabled): the workstation policy is BF16-only, so no lower-precision route exists here. Optional creator style LoRAs are intentionally absent; slots 2/3 stay (disabled) so stacked style drift is unrepresentable.\n\nThe Director Analyze Backend points at the local prompt-author LLM (OpenAI Compatible, http://127.0.0.1:8000, qwen3.8-27b).'
+model_note=$'## Workstation Model Links (pinned local profile)\n\nThis adapted graph pins every selector to the workstation checksum-verified BF16 set. Model installation is owned by the local downloaders; nothing here downloads at runtime.\n\n- `diffusion_models/minimax_h3_ref2va_bf16.safetensors` - Reference model (unpruned BF16)\n- `diffusion_models/minimax_h3_fl2va_bf16.safetensors` - First/Last-frame model (unpruned BF16)\n- `text_encoders/qwen3vl_32b_minimax_h3_bf16.safetensors` - BF16 Qwen3-VL-32B encoder\n- `vae/minimax_h3_video_vae_fp16.safetensors` + `vae/minimax_h3_audio_vae_fp32.safetensors` - full VAEs\n- `latent_upscale_models/minimax_h3_latent_upscaler_3d_fp16.safetensors` - Stage-2 upscale model (Two-Stage Sampling is on by default)\n- `loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` - the one load-bearing LoRA, strength 1.0, both models\n- `vae_approx/taeh3.safetensors` - H3 sampling preview for the Model Preview Override tiny_vae box\n- `vae/taeltx2_3.safetensors` - lightweight LTX2.3 preview VAE for the Model Preview Override vae input\n\nThe unified loader is forced to Maximum Quality. Every upstream quantized selector in that route is replaced by the corresponding unpruned BF16 model; Low VRAM and Balanced stay (disabled), so an automatic hardware probe cannot silently select a lower-quality route. Optional creator style LoRAs are intentionally absent; slots 2/3 stay (disabled) so stacked style drift is unrepresentable.\n\nThe Director Analyze Backend points at the local prompt-author LLM (OpenAI Compatible, http://127.0.0.1:8000, qwen3.8-27b).'
 
-status_note=$'Maximum Quality was automatically selected. Detected VRAM: 94.14 GB. LoRAs: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors. Patches: SageAttention, Low-VRAM attention, chunked feed-forward. First/Last-frame branch uses the maximum-quality model: minimax_h3_fl2va_bf16.safetensors.'
+status_note=$'Maximum Quality is pinned by the workstation profile. Available VRAM: 94.14 GB. LoRAs: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors. Patches: SageAttention, Low-VRAM attention, chunked feed-forward. First/Last-frame branch uses the unpruned BF16 model: minimax_h3_fl2va_bf16.safetensors.'
 
-custom_nodes_note=$'# Download These First - Custom Nodes\n\nThe ComfyUI "Install Missing Custom Nodes" scanner will not catch the internal dependencies below: they are called by other nodes own code at runtime, not wired in as visible boxes, so nothing flags them as missing. All three are pinned and deployed declaratively by the workstation configuration; nothing to install by hand.\n\n## Required\n\n1. **ComfyUI-H3-Multishot** - Two-Stage Sampling (on by default) and every Muse Unified Loader model/clip load.\n2. **ComfyUI-H3-Motion-Context-MultiRef** - VAE Re-encode Carry and Raw Latent Carry (both on by default). This is the seitanism fork, not the original it forked from.\n3. **ComfyUI-KJNodes** - SageAttention support in the Muse Unified Loader (on by default), plus the Model Preview Override H3 patch.\n\n## Optional\n\n4. **ComfyUI-GGUF** - only if the Low VRAM or Balanced quality profile is ever enabled. Both profiles are pinned to (disabled) on this workstation, so no GGUF route exists here.'
+custom_nodes_note=$'# Download These First - Custom Nodes\n\nThe ComfyUI "Install Missing Custom Nodes" scanner will not catch the internal dependencies below: they are called by other nodes own code at runtime, not wired in as visible boxes, so nothing flags them as missing. All three are pinned and deployed declaratively by the workstation configuration; nothing to install by hand.\n\n## Required\n\n1. **ComfyUI-H3-Multishot** - Two-Stage Sampling (on by default) and every Muse Unified Loader model/clip load.\n2. **ComfyUI-H3-Motion-Context-MultiRef** - VAE Re-encode Carry and Raw Latent Carry (both on by default). This is the seitanism fork, not the original it forked from.\n3. **ComfyUI-KJNodes** - SageAttention support in the Muse Unified Loader (on by default), plus the Model Preview Override H3 patch.\n\n## Deliberately omitted\n\nThe lower-quality GGUF profiles and optional creator style LoRAs are not part of this workstation profile. Maximum Quality is pinned to the locally verified unpruned BF16 set.'
 
 jq \
   --arg model_note "$model_note" \
@@ -99,9 +98,10 @@ jq \
   | (.nodes[] | select(.id == 391) | .widgets_values[0]) =
       "Muse Collective/MiniMax H3 Prompt"
 
-  # Unified Loader: the Low VRAM and Balanced profiles collapse to (disabled);
-  # the workstation policy is BF16-only, so no GGUF or int8 route exists here.
-  # Maximum Quality pins to the unpruned BF16 families and the BF16 encoder.
+  # Unified Loader: force Maximum Quality rather than trusting a hardware
+  # probe, replace that route with unpruned BF16, and make lower profiles
+  # unrepresentable.
+  | (.nodes[] | select(.id == 430) | .widgets_values[1]) = "Maximum Quality"
   | (.nodes[] | select(.id == 430) | .widgets_values[3]) = "(disabled)"
   | (.nodes[] | select(.id == 430) | .widgets_values[4]) = "(disabled)"
   | (.nodes[] | select(.id == 430) | .widgets_values[5]) =
@@ -127,7 +127,8 @@ jq \
   # source of truth; these values prevent stale UI metadata from resurrecting
   # selectors the workstation profile makes illegal.
   | (.nodes[] | select(.id == 430) | .widgets_values_named) |= (
-      .low_vram_model = "(disabled)"
+      .profile = "Maximum Quality"
+      | .low_vram_model = "(disabled)"
       | .balanced_model = "(disabled)"
       | .maximum_quality_model = "minimax_h3_ref2va_bf16.safetensors"
       | .low_vram_fl2va = "(disabled)"
@@ -255,6 +256,10 @@ jq -e --arg status_note "$status_note" '
       | .widgets_values[0]] == ["Muse Collective/MiniMax H3 Prompt"])
   and ([.nodes[] | select(.type == "MuseHelper: Save Text With Path")
       | .widgets_values[4:6]] == [[false, ".txt"]])
+  and ([.nodes[] | select(.id == 430) | .widgets_values[1]]
+    == ["Maximum Quality"])
+  and ([.nodes[] | select(.id == 430) | .widgets_values_named.profile]
+    == ["Maximum Quality"])
   and ([.nodes[] | select(.id == 430) | .widgets_values[3:6]]
     == [["(disabled)", "(disabled)", "minimax_h3_ref2va_bf16.safetensors"]])
   and ([.nodes[] | select(.id == 430) | .widgets_values[7:10]]

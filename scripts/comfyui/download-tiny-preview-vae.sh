@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Download the lightweight LTX2.3 preview VAE (madebyollin/taehv) for the Model
-# Preview Override nodes: installed under models/vae, then selected as a
-# separate Load VAE feeding the preview override vae input. Tiny cosmetic
-# preview only - the workflow runs fine without it.
+# Download the lightweight LTX2.3 preview VAE from the repository linked by
+# the Muse update video (OzzyGT/LTX2_tiny_vaes) for the Model Preview Override
+# nodes. It is installed under models/vae, then selected through a separate
+# Load VAE node. Tiny cosmetic preview only - the workflow runs without it.
 set -euo pipefail
 
 MODELS_ROOT="${COMFYUI_MODELS_ROOT:-/models/comfyui}"
-PROFILE_REV="tiny-preview-vae-taeltx2-3-011dfc2-v1"
+PROFILE_REV="tiny-preview-vae-taeltx2-3-a71b16f-v2"
 STAGING="$MODELS_ROOT/.staging-$PROFILE_REV"
 MARKER="$MODELS_ROOT/.$PROFILE_REV.complete"
 LOCK="$MODELS_ROOT/.$PROFILE_REV.lock"
 
 # sha256, exact bytes, repository, immutable revision, source, destination
 read -r -d '' MANIFEST <<'EOF' || true
-f0773b4e3e57318e6aa4dd4a35e1d16213a5f160fbc0376163f06888bbcbe246 23531296 madebyollin/taehv 011dfc2112197741c540e0bdd5b7b67bcc930771 taeltx2_3.safetensors vae/taeltx2_3.safetensors
+f0773b4e3e57318e6aa4dd4a35e1d16213a5f160fbc0376163f06888bbcbe246 23531296 OzzyGT/LTX2_tiny_vaes a71b16f6b0cd2b439fda8fc4b0a8e6a5f0a593f3 taeltx2_3.safetensors vae/taeltx2_3.safetensors
 EOF
 
 verification_manifest() {
