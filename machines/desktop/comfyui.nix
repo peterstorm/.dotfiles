@@ -848,6 +848,7 @@ let
       ''
         cp -R ${museUnifiedLoaderSource}/. "$out"
         chmod -R u+w "$out"
+        cd "$out"
         ${comfyPythonEnv}/bin/python tests/test_unified_loader.py
         chmod -R a-w "$out"
       '';
