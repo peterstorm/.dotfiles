@@ -240,6 +240,10 @@ let
       rev = "12d5279438bfefc058a269eae805ceab6047777f";
       hash = "sha256-pW02gtrtWkoPabYe6Q/gicNRM65JRYsc7vtaY1m6H1M=";
     };
+    # Nixpkgs' patch targets an older cli_args.py. v0.34.0 resolves the
+    # effective user database path upstream, so only the writable XDG base and
+    # custom-node directory creation remain necessary.
+    patches = [ ./patches/comfyui-0.34.0-writable-runtime-paths.patch ];
     installPhase = ''
       runHook preInstall
       mkdir -p $out/share/comfyui $out/bin

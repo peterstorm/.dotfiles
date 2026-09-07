@@ -1,0 +1,33 @@
+diff --git a/comfy/cli_args.py b/comfy/cli_args.py
+--- a/comfy/cli_args.py
++++ b/comfy/cli_args.py
+@@ -70 +70,9 @@
+-parser.add_argument("--base-directory", type=str, default=None, help="Set the ComfyUI base directory for models, custom_nodes, input, output, temp, and user directories.")
++xdg_data_home = os.environ.get("XDG_DATA_HOME")
++if xdg_data_home is None:
++    home = os.environ.get("HOME")
++    if home is None:
++        xdg_data_home = "/var/lib"
++    else:
++        xdg_data_home = os.path.join(home, ".local", "share")
++comfyui_data_home = os.path.join(xdg_data_home, "comfyui")
++parser.add_argument("--base-directory", type=str, default=comfyui_data_home, help="Set the ComfyUI base directory for models, custom_nodes, input, output, temp, and user directories.")
+diff --git a/folder_paths.py b/folder_paths.py
+--- a/folder_paths.py
++++ b/folder_paths.py
+@@ -45 +45,2 @@
+-folder_names_and_paths["custom_nodes"] = ([os.path.join(base_path, "custom_nodes")], set())
++custom_nodes_directory = os.path.join(base_path, "custom_nodes")
++folder_names_and_paths["custom_nodes"] = ([custom_nodes_directory], set())
+@@ -116,5 +117,6 @@
+-if not os.path.exists(input_directory):
+-    try:
+-        os.makedirs(input_directory)
+-    except:
+-        logging.error("Failed to create input directory")
++for default_directory in (input_directory, custom_nodes_directory):
++    if not os.path.exists(default_directory):
++        try:
++            os.makedirs(default_directory)
++        except:
++            logging.error(f"Failed to create {default_directory}")
