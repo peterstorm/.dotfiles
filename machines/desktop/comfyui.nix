@@ -2458,7 +2458,7 @@ let
   };
 
   sam3dBodyWorkflows =
-    pkgs.runCommand "sam3d-body-bf16-workflow"
+    pkgs.runCommand "sam3d-body-bf16-v1-0-workflow"
       {
         nativeBuildInputs = [
           pkgs.coreutils
@@ -2469,7 +2469,7 @@ let
       ''
         set -euo pipefail
         mkdir -p "$out/workflows"
-        destination="$out/workflows/01 SAM 3D Body - BF16 Detection + GLB BVH Export.json"
+        destination="$out/workflows/01 SAM 3D Body v1.0 - BF16 Detection + GLB BVH Export.json"
         jq \
           --arg sam31_revision "f38cd62b71494b53ac2b56ca36e24f3c8d565581" \
           --arg sam3d_revision "60476aced0b8de0a0e82a318c79a85061cc97434" \
@@ -2534,13 +2534,12 @@ let
           --output-dir "$out/workflows"
       '';
 
-  # The Muse Director V1.4 workstation adaptation: BF16-only selectors, the
-  # four third-party helper types rewired onto muse_helper_nodes, the Low
-  # VRAM/Balanced profiles collapsed to (disabled), and the creator's Model
-  # Links section replaced with the pinned workstation profile. See
-  # docs/runbooks/minimax-h3-muse-director-v12.md for the adaptation.
+  # The Muse Director V1.5 workstation adaptation of the upstream V1.4 graph:
+  # BF16-only selectors, four third-party helper types rewired onto
+  # muse_helper_nodes, Low VRAM/Balanced profiles collapsed to (disabled), and
+  # stale creator selectors stripped from active and bypassed widget mirrors.
   museDirectorV12Workflows =
-    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-workflows"
+    pkgs.runCommand "minimax-h3-muse-director-v12-local-development-v1-5-workflows"
       {
         nativeBuildInputs = [
           pkgs.coreutils
@@ -3068,6 +3067,27 @@ let
 
   installCreativeWorkflows = pkgs.writeShellScript "install-creative-workflows" ''
     set -eu
+
+    verify_versioned_workflow_install() {
+      local staging=$1
+      local destination=$2
+      if { [ -e "$destination" ] || [ -L "$destination" ]; } \
+        && ! ${pkgs.diffutils}/bin/diff -qr "$destination" "$staging" >/dev/null; then
+        echo "refusing to overwrite versioned workflow directory: $destination" >&2
+        return 1
+      fi
+    }
+
+    install_versioned_workflow_dir() {
+      local staging=$1
+      local destination=$2
+      if [ -e "$destination" ] || [ -L "$destination" ]; then
+        rm -rf "$staging"
+      else
+        mv "$staging" "$destination"
+      fi
+    }
+
     user_workflows=/var/lib/comfyui/user/default/workflows
     ep24_dir="$user_workflows/pixaroma-ep24-krea2-bf16"
     ep29_dir="$user_workflows/pixaroma-ep29-h3-bf16"
@@ -3082,7 +3102,7 @@ let
     h3_safe_upscaler_dir="$user_workflows/minimax-h3-upscaler-local-safe"
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
-    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development"
+    director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.5"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -3090,7 +3110,7 @@ let
     h3_vdn_realism_dir="$user_workflows/minimax-h3-vdn-h3-realism-people"
     elite_dir="$user_workflows/creative-suite"
     balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
-    sam3d_dir="$user_workflows/sam3d-body-bf16"
+    sam3d_dir="$user_workflows/sam3d-body-bf16-v1.0"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
@@ -3103,7 +3123,7 @@ let
     upscaler_staging="$user_workflows/.image-upscaler-qualification-v1.new"
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
-    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development.new"
+    director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.5.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
@@ -3111,7 +3131,7 @@ let
     h3_vdn_realism_staging="$user_workflows/.minimax-h3-vdn-h3-realism-people.new"
     elite_staging="$user_workflows/.creative-suite.new"
     balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
-    sam3d_staging="$user_workflows/.sam3d-body-bf16.new"
+    sam3d_staging="$user_workflows/.sam3d-body-bf16-v1.0.new"
     input_dir=/var/lib/comfyui/input
     blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
@@ -3203,13 +3223,15 @@ let
     install -m 0600 \
       ${../../comfyui/workflows/minimax-h3-balanced-supercc-v1.0-t2v.json} \
       "$balanced_staging/MiniMax H3 BF16 Balanced SuperCC v1.0 - Text To Video.json"
+    verify_versioned_workflow_install "$director_v12_staging" "$director_v12_dir"
+    verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
       "$krea_max_dir" "$contest_dir" "$h3_production_dir" "$music3_dir" \
       "$upscaler_dir" "$h3_safe_upscaler_dir" "$blocked_h3_upscaler_dir" \
-      "$director_dir" "$director_v12_dir" "$h3_turbo_dir" "$h3_blender_dir" \
+      "$director_dir" "$h3_turbo_dir" "$h3_blender_dir" \
       "$h3_motion_context_dir" "$h3_vdn_dir" "$h3_vdn_realism_dir" "$elite_dir" "$balanced_dir"
-    mv "$sam3d_staging" "$sam3d_dir"
+    install_versioned_workflow_dir "$sam3d_staging" "$sam3d_dir"
     mv "$ep24_staging" "$ep24_dir"
     mv "$ep29_staging" "$ep29_dir"
     mv "$ep30_staging" "$ep30_dir"
@@ -3222,7 +3244,7 @@ let
     mv "$upscaler_staging" "$upscaler_dir"
     mv "$h3_safe_upscaler_staging" "$h3_safe_upscaler_dir"
     mv "$director_staging" "$director_dir"
-    mv "$director_v12_staging" "$director_v12_dir"
+    install_versioned_workflow_dir "$director_v12_staging" "$director_v12_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
