@@ -719,6 +719,17 @@ let
     hash = "sha256-a4C72dV9K9AXWD70+LIvOTQLawTfUrRzyylM16E1J/w=";
   };
 
+  # MatlowAI's Motion Lab implements the De-RoPE anti-smearing pass shown in
+  # Machine Delusions' IlVPJI9ceKM video: latent jerk oracle -> adaptive frame
+  # holds -> partial second diffusion pass -> exact 24 fps recovery. GPL-3.0;
+  # v1.1.3 is the public release contemporary with the video.
+  mainodesSource = pkgs.fetchFromGitHub {
+    owner = "matlowai";
+    repo = "ComfyUI-MAINodes";
+    rev = "f4868b4a08e8a504ce86db54a17961d399ffa2bc";
+    hash = "sha256-+J7FmvLHRU5hGIlVxmcytJb413Bsu5sPvbE/bM1LOsE=";
+  };
+
   # The Muse Director + Refine V2 bug-fix bundle (the V1.2 update video pins
   # github.com/muse-collective-26/MiniMaxH3-Director-V1.2): timeline director
   # node with Seed Hunt scouting, two-stage sampling, and hard-frozen
@@ -778,6 +789,32 @@ let
     rev = "311a65dd53832d8a5f8177a9d5fb923c09e35a90";
     hash = "sha256-jqjqdww2pUYPOr+5ox0GtculgpL1OjKGlgALb4eN1vk=";
   };
+
+  mainodesNode =
+    pkgs.runCommand "comfyui-mainodes-f4868b4-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${mainodesSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        cd "$out"
+        ${comfyPythonEnv}/bin/python tests/test_audio_smear.py
+        ${comfyPythonEnv}/bin/python tests/test_timesmear_target_grid.py
+        ${comfyPythonEnv}/bin/python - <<'PY'
+        import motion
+
+        required = {
+            "H3JerkOracle", "H3TimeSmear", "H3V2VInit", "H3ExactRecover",
+            "H3AudioSmear", "H3AudioRecover", "H3ManualHoldMap",
+        }
+        missing = required - motion.TIMESMEAR_CLASS_MAPPINGS.keys()
+        if missing:
+            raise RuntimeError(f"MAINodes De-RoPE contract missing: {sorted(missing)}")
+        PY
+        chmod -R a-w "$out"
+      '';
 
   minimaxH3PddNode =
     pkgs.runCommand "comfyui-minimax-h3-pdd-acc-311a65d-tested"
@@ -1080,6 +1117,7 @@ let
     ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
     ln -s ${seedVR2Node} "$out/ComfyUI-SeedVR2_VideoUpscaler"
     ln -s ${minimaxH3DirectorNode} "$out/ComfyUI_MiniMaxH3_Director"
+    ln -s ${mainodesNode} "$out/ComfyUI-MAINodes"
     ln -s ${museDirectorV12Node} "$out/MiniMaxH3-Director-V1.2"
     ln -s ${museUnifiedLoaderNode} "$out/Muse-MiniMax-H3-Unified-Loader"
     ln -s ${museRunStatsNode} "$out/Muse-Run-Stats"
@@ -2603,6 +2641,24 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3DeropeWorkflows =
+    pkgs.runCommand "minimax-h3-derope-v1-0-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-derope-workflows.sh} \
+          --automatic-source ${mainodesSource}/examples/motion_pipeline.json \
+          --targeted-source ${mainodesSource}/examples/motion_pipeline_targeted.json \
+          --ref2va-source ${mainodesSource}/examples/motion_pipeline_ref2va_audioinit.json \
+          --output-dir "$out/workflows"
+      '';
+
   minimaxH3TurboLoraWorkflows =
     pkgs.runCommand "minimax-h3-turbo-lora-qualification-workflows"
       {
@@ -3151,6 +3207,7 @@ let
     blocked_h3_upscaler_dir="$user_workflows/minimax-h3-upscaler-research-only"
     director_dir="$user_workflows/minimax-h3-director-local-development"
     director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.7"
+    h3_derope_dir="$user_workflows/minimax-h3-derope-development-v1.0"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -3172,6 +3229,7 @@ let
     h3_safe_upscaler_staging="$user_workflows/.minimax-h3-upscaler-local-safe.new"
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.7.new"
+    h3_derope_staging="$user_workflows/.minimax-h3-derope-development-v1.0.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
@@ -3186,14 +3244,14 @@ let
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_turbo_staging" \
+      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_derope_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_turbo_staging" \
+      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_derope_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
       "$input_dir" "$blender_input_dir"
@@ -3242,6 +3300,9 @@ let
     for source in ${museDirectorV12Workflows}/workflows/*.json; do
       install -m 0600 "$source" "$director_v12_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3DeropeWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_derope_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
     done
@@ -3272,6 +3333,7 @@ let
       ${../../comfyui/workflows/minimax-h3-balanced-supercc-v1.0-t2v.json} \
       "$balanced_staging/MiniMax H3 BF16 Balanced SuperCC v1.0 - Text To Video.json"
     verify_versioned_workflow_install "$director_v12_staging" "$director_v12_dir"
+    verify_versioned_workflow_install "$h3_derope_staging" "$h3_derope_dir"
     verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
@@ -3293,6 +3355,7 @@ let
     mv "$h3_safe_upscaler_staging" "$h3_safe_upscaler_dir"
     mv "$director_staging" "$director_dir"
     install_versioned_workflow_dir "$director_v12_staging" "$director_v12_dir"
+    install_versioned_workflow_dir "$h3_derope_staging" "$h3_derope_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
