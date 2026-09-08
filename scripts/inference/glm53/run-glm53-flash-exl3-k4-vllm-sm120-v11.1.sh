@@ -13,8 +13,8 @@
 #   VLLM_MAMBA_ALIGN_CAP_LEGACY is the kill-switch that restores r2's inflated
 #     null-slot billing — the deadlock — and is deliberately never set here.
 # r2.1 also removes r2's Fix B prefill chunk cap upstream; decode protection is
-# now --prefill-schedule-interval alone, so this profile must re-qualify under
-# the mixed-traffic gate before promotion.
+# now --prefill-schedule-interval alone. The profile passed the mixed-traffic,
+# long-context, restart, and soak qualification gates before promotion.
 #
 # The v11 env note still applies: v10's VLLM_DCP_GLOBAL_TOPK / TRELLIS /
 # ROUTE128 / PCIE_ALLREDUCE / GLM_NOPE_FP8 switches belong to the retired patch
@@ -263,4 +263,4 @@ printf "Started upstream-core-port r2.1 native-FP8 multimodal profile '%s'. Foll
 printf "API key: %s (send as 'Authorization: Bearer <key>')\n" "$KEYFILE"
 printf '%s\n' 'v11.1 is v11 (legend r2) plus upstream 832e6000, the admission deadlock fix: 0004 align cap bills the real footprint, 0005 reserve aging escape, 0006 unconditional deferred-free drain. r2 wedged (running=0, waiting=N, KV 0%) whenever a long session headed the waiting queue.'
 printf '%s\n' 'KV is native fp8_ds_mla on the validated 528-byte GLM_NOPE record (VLLM_B12X_FP8_KV=1); the mamba-state reserve stays on at 16 with an aging escape of 128 attempts; vision stays on through the multimodal chat template.'
-printf '%s\n' 'r2.1 removed the Fix B prefill chunk cap upstream, so decode protection is --prefill-schedule-interval alone; the v11.1 switcher records exact KV capacity and retains restart=no until equivalence, mixed-traffic, long-session, and soak gates pass.'
+printf '%s\n' 'r2.1 removed the Fix B prefill chunk cap upstream, so decode protection is --prefill-schedule-interval alone; the v11.1 switcher records exact KV capacity, verifies authenticated exact-model readiness, then promotes the accepted container to restart=unless-stopped.'

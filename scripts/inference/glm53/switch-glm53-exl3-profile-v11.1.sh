@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Safely start/stop the unpromoted v11.1 upstream-core-port r2.1 candidate.
+# Safely start/stop the promoted v11.1 upstream-core-port r2.1 profile.
 # v11.1 is v11 plus upstream's admission deadlock fix. The rollback target is
 # v10: v11 (r2) is the release that wedges, so a failed v11.1 acceptance must
-# restore whatever profile set was running before — never v11 by name.
+# restore whatever profile set was running before — never v11 by name. Launch
+# remains transactional at restart=no; only a fully accepted target is promoted.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -137,14 +138,12 @@ report_kv_capacity() {
     "$KV_RECEIPT" "$kv_dtype" "$retention" "$protect" "$protect_age" "$capacity_line"
 }
 
-retain_candidate_restart_policy() {
-  local restart_policy
-  restart_policy="$(docker inspect "$TARGET" --format '{{.HostConfig.RestartPolicy.Name}}')" || return 1
-  [ "$restart_policy" = no ] || {
-    echo "error: unpromoted v11.1 candidate restart policy is $restart_policy, expected no" >&2
+promote_restart_policy() {
+  docker update --restart=unless-stopped "$TARGET" >/dev/null || {
+    echo "error: could not promote $TARGET to restart=unless-stopped" >&2
     return 1
   }
-  echo "UNPROMOTED: restart=no retained pending equivalence and soak gates"
+  echo "PROMOTED: restart=unless-stopped"
 }
 
 restore_profiles() {
@@ -184,7 +183,7 @@ case "$MODE" in
       if [ "$container" = "$TARGET" ]; then
         wait_for_target
         report_kv_capacity
-        retain_candidate_restart_policy
+        promote_restart_policy
         exit 0
       fi
     done
@@ -205,7 +204,7 @@ case "$MODE" in
       restore_profiles "${previous[@]}" || true
       exit 1
     fi
-    if ! wait_for_target || ! report_kv_capacity || ! retain_candidate_restart_policy; then
+    if ! wait_for_target || ! report_kv_capacity || ! promote_restart_policy; then
       docker logs --tail 200 "$TARGET" >&2 || true
       inference_quiesce_failed_container "$TARGET" || true
       echo "error: multimodal FP8-DS-MLA v11.1 acceptance failed; restoring previous profile set" >&2

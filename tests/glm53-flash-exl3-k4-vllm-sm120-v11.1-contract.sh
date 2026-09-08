@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static release contract for the GLM-5.3 v11.1 upstream-core-port r2.1 candidate.
+# Static release contract for the promoted GLM-5.3 v11.1 upstream-core-port r2.1 profile.
 #
 # v11.1 is v11 (legend r2) plus the single upstream commit that fixes r2's
 # admission deadlock (running=0, waiting=N, KV usage 0% once a long session
@@ -189,9 +189,9 @@ contains "$SWITCH" 'length == 1 and .[0].id == $expected'
 contains "$SWITCH" 'IDLE GATE: no running or waiting requests across three samples'
 contains "$SWITCH" 'GPU KV cache size:'
 contains "$SWITCH" 'mamba_state_protect_age=%s'
-contains "$SWITCH" 'UNPROMOTED: restart=no retained pending equivalence and soak gates'
+contains "$SWITCH" 'docker update --restart=unless-stopped "$TARGET"'
+contains "$SWITCH" 'PROMOTED: restart=unless-stopped'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
-lacks "$SWITCH" 'docker update --restart=unless-stopped'
 
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v10'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v11'
@@ -245,4 +245,4 @@ else
 fi
 contains "$RUN" 'IMAGE="$IMAGE_CONFIG"'
 
-echo 'PASS: GLM-5.3 v11.1 is v11 plus exactly upstream r2.1 (admission deadlock fix 0004/0005/0006, Fix B cap removed), byte-pinned, fail-closed, unlaunchable until its image id is recorded'
+echo 'PASS: GLM-5.3 v11.1 is v11 plus exactly upstream r2.1 (admission deadlock fix 0004/0005/0006, Fix B cap removed), byte-pinned, fail-closed, and promoted only after acceptance'
