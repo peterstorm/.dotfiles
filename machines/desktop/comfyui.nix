@@ -2659,6 +2659,24 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3DeropeTurboWorkflows =
+    pkgs.runCommand "minimax-h3-derope-turbo-v1-0-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-derope-turbo-workflows.sh} \
+          --ref2va-source ${mainodesSource}/examples/motion_pipeline_ref2va_audioinit.json \
+          --fast-source ${mainodesSource}/examples/motion_pipeline_fast_iterate.json \
+          --upscale-source ${mainodesSource}/examples/motion_pipeline_upscale_derope.json \
+          --output-dir "$out/workflows"
+      '';
+
   minimaxH3TurboLoraWorkflows =
     pkgs.runCommand "minimax-h3-turbo-lora-qualification-workflows"
       {
@@ -3208,6 +3226,7 @@ let
     director_dir="$user_workflows/minimax-h3-director-local-development"
     director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.7"
     h3_derope_dir="$user_workflows/minimax-h3-derope-development-v1.0"
+    h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.0"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -3230,6 +3249,7 @@ let
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.7.new"
     h3_derope_staging="$user_workflows/.minimax-h3-derope-development-v1.0.new"
+    h3_derope_turbo_staging="$user_workflows/.minimax-h3-derope-turbo-development-v1.0.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
@@ -3244,14 +3264,16 @@ let
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_derope_staging" "$h3_turbo_staging" \
+      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
+      "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
-      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" "$h3_derope_staging" "$h3_turbo_staging" \
+      "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
+      "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
       "$input_dir" "$blender_input_dir"
@@ -3303,6 +3325,9 @@ let
     for source in ${minimaxH3DeropeWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_derope_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3DeropeTurboWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_derope_turbo_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
     done
@@ -3334,6 +3359,7 @@ let
       "$balanced_staging/MiniMax H3 BF16 Balanced SuperCC v1.0 - Text To Video.json"
     verify_versioned_workflow_install "$director_v12_staging" "$director_v12_dir"
     verify_versioned_workflow_install "$h3_derope_staging" "$h3_derope_dir"
+    verify_versioned_workflow_install "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
@@ -3356,6 +3382,7 @@ let
     mv "$director_staging" "$director_dir"
     install_versioned_workflow_dir "$director_v12_staging" "$director_v12_dir"
     install_versioned_workflow_dir "$h3_derope_staging" "$h3_derope_dir"
+    install_versioned_workflow_dir "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
