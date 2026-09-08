@@ -21,7 +21,7 @@ The video's Patreon graph is account-gated and is not copied. These workflows ar
 
 The v1.0 directory is immutable: deployment refuses to overwrite it with different content. Any graph change requires v1.1 or another new version. Existing production, Director, Turbo, Motion Context, and VDN workflows remain untouched.
 
-For the maintained 12-step-base/6-step-Turbo repair recipes, use the separate immutable [`minimax-h3-derope-turbo-development-v1.0`](minimax-h3-derope-turbo.md) package. Do not add a Turbo LoRA directly to these older 25-step graphs; the node author reports that recipe becomes jerky and pixelated.
+For the maintained 12-step-base/6-step-Turbo repair recipes, use the separate immutable [`minimax-h3-derope-turbo-development-v1.1`](minimax-h3-derope-turbo.md) package. Do not add a Turbo LoRA directly to these older 25-step graphs; the node author reports that recipe becomes jerky and pixelated.
 
 ## What the nodes do
 

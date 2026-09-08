@@ -49,8 +49,10 @@ contains "$BUILDER" '["beta", 6, 0.5, "faithful detail 0.50 (metric best)"]'
 contains "$BUILDER" '.[0] == $base_model_link and .[1] != 303'
 contains "$BUILDER" '.[0] == $turbo_model_link and .[1] == 303'
 contains "$BUILDER" '([.nodes[] | select(.type == "LoraLoaderModelOnly") | .widgets_values])'
-contains "$BUILDER" 'PathchSageAttentionKJ'
-contains "$BUILDER" 'MiniMaxH3MemoryEfficientSageAttentionPatch'
+contains "$BUILDER" '.id != 300 and .id != 301'
+contains "$BUILDER" '([.nodes[] | select(.type == "PathchSageAttentionKJ"'
+contains "$BUILDER" 'or .type == "MiniMaxH3MemoryEfficientSageAttentionPatch")] | length) == 0'
+contains "$BUILDER" '[[9201, 127, 0, 302, 0, "MODEL"]]'
 contains "$BUILDER" 'MiniMaxChunkFeedForward'
 contains "$BUILDER" "grep -RqiE 'pruned_int8|nvfp4|int8_convrot|lightx2v|resolve/main|tree/main|ComfyUI-Manager|api[_-]?key|token'"
 contains "$BUILDER" '[[ $(find "$output_dir" -type f -name '\''*.json'\'' | wc -l) -eq 3 ]]'
@@ -58,15 +60,15 @@ contains "$MODEL_DOWNLOAD" 'c396a9a06f58399e9df9754b18299818d84a2ddd371724ba48fe
 contains "$MODEL_DOWNLOAD" '5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c 1956193000 loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors'
 
 for filename in \
-  '01 MiniMax H3 De-RoPE Turbo v1.0 - REF2VA Balanced Audio Development.json' \
-  '02 MiniMax H3 De-RoPE Turbo v1.0 - FL2VA Fast Iterate Development.json' \
-  '03 MiniMax H3 De-RoPE Turbo v1.0 - FL2VA Upscale Development.json'; do
+  '01 MiniMax H3 De-RoPE Turbo v1.1 - REF2VA Balanced Audio Development.json' \
+  '02 MiniMax H3 De-RoPE Turbo v1.1 - FL2VA Fast Iterate Development.json' \
+  '03 MiniMax H3 De-RoPE Turbo v1.1 - FL2VA Upscale Development.json'; do
   contains "$BUILDER" "$filename"
 done
 
-# The new package has its own immutable directory and does not alter v1.0.
-contains "$MODULE" 'pkgs.runCommand "minimax-h3-derope-turbo-v1-0-development-workflows"'
-contains "$MODULE" 'h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.0"'
+# The corrected package has its own immutable directory and does not alter full-quality v1.0.
+contains "$MODULE" 'pkgs.runCommand "minimax-h3-derope-turbo-v1-1-development-workflows"'
+contains "$MODULE" 'h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.1"'
 contains "$MODULE" 'for source in ${minimaxH3DeropeTurboWorkflows}/workflows/*.json; do'
 contains "$MODULE" 'verify_versioned_workflow_install "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"'
 contains "$MODULE" 'install_versioned_workflow_dir "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"'
@@ -74,8 +76,10 @@ contains "$MODULE" 'h3_derope_dir="$user_workflows/minimax-h3-derope-development
 
 contains "$RUNBOOK" 'putting a Turbo LoRA into the older 25-step/simple/`res_multistep` graph'
 contains "$RUNBOOK" 'Turbo is downstream of pass 1 and cannot decide the initial choreography.'
+contains "$RUNBOOK" 'V1.1 removes both SageAttention-dependent nodes'
+contains "$RUNBOOK" 'Do not use the v1.0 folder.'
 contains "$RUNBOOK" 'Compare against the full-BF16 25+25-step REF2VA graph'
 contains "$RUNBOOK" 'Development-only'
 
 nix-instantiate --parse "$MODULE" >/dev/null
-printf 'PASS: MiniMax H3 De-RoPE Turbo v1.0 preserves the maintained two-pass recipes, task-matched adapters, and immutable Development deployment\n'
+printf 'PASS: MiniMax H3 De-RoPE Turbo v1.1 preserves the maintained two-pass recipes, task-matched adapters, executable attention path, and immutable Development deployment\n'

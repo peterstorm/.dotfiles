@@ -54,11 +54,11 @@ require_sha256 "$fast_source" ed2970f5bea60d1de402a5d821f7cb2a615655d68906952073
 require_sha256 "$upscale_source" 5a49a4a8c04925629e1385a4649562b5d5bc6c1819fcf5971f15d1660f3bc858 'FL2VA upscale Turbo workflow'
 
 mkdir -p "$output_dir"
-ref2va="$output_dir/01 MiniMax H3 De-RoPE Turbo v1.0 - REF2VA Balanced Audio Development.json"
-fast="$output_dir/02 MiniMax H3 De-RoPE Turbo v1.0 - FL2VA Fast Iterate Development.json"
-upscale="$output_dir/03 MiniMax H3 De-RoPE Turbo v1.0 - FL2VA Upscale Development.json"
+ref2va="$output_dir/01 MiniMax H3 De-RoPE Turbo v1.1 - REF2VA Balanced Audio Development.json"
+fast="$output_dir/02 MiniMax H3 De-RoPE Turbo v1.1 - FL2VA Fast Iterate Development.json"
+upscale="$output_dir/03 MiniMax H3 De-RoPE Turbo v1.1 - FL2VA Upscale Development.json"
 
-common_note=$'## MiniMax H3 De-RoPE Turbo v1.0 — Development qualification\n\nThese are MatlowAI MAINodes v1.1.3 maintained August 19 recipes, not the older 25-step graph with a Turbo LoRA dropped into it. Pass 1 stays on the task-matched full-BF16 base for 12 linear-quadratic steps and decides choreography. Only pass 2 receives the task-matched 4-step Turbo adapter; its beta schedule has six total steps and the faithful-detail 0.50 injection executes three.\n\nThe complete source speed-patch chain is retained. Compare baseline, oracle heatmap, dilated preview, and recovered output. Turbo can lose detail on the exact clip being repaired, so this immutable package remains Development evidence beside the slower v1.0 full-BF16 control.'
+common_note=$'## MiniMax H3 De-RoPE Turbo v1.1 — Development qualification\n\nThese are MatlowAI MAINodes v1.1.3 maintained August 19 recipes, not the older 25-step graph with a Turbo LoRA dropped into it. Pass 1 stays on the task-matched full-BF16 base for 12 linear-quadratic steps and decides choreography. Only pass 2 receives the task-matched 4-step Turbo adapter; its beta schedule has six total steps and the faithful-detail 0.50 injection executes three.\n\nThe exact chunked-feed-forward patch is retained. Both SageAttention patches are removed because the pinned runtime intentionally has no SageAttention module; ComfyUI uses its supported PyTorch attention path instead. Compare baseline, oracle heatmap, dilated preview, and recovered output. Turbo can lose detail on the exact clip being repaired, so this immutable package remains Development evidence beside the slower v1.0 full-BF16 control.'
 
 build_workflow() {
   local source=$1 destination=$2 model=$3 lora=$4 title=$5 baseline_prefix=$6 recovered_prefix=$7 profile_note=$8
@@ -90,6 +90,14 @@ build_workflow() {
       | (.nodes[] | select(.type == "KSamplerSelect") | .widgets_values) = ["gradient_estimation"]
       | (.nodes[] | select(.type == "H3InjectSchedule") | .widgets_values) =
           ["beta", 6, 0.5, "faithful detail 0.50 (metric best)"]
+      | .nodes |= map(select(.id != 300 and .id != 301))
+      | .links |= map(select(
+          (.[1] != 300 and .[3] != 300)
+          and (.[1] != 301 and .[3] != 301)))
+      | (.nodes[] | select(.id == 127) | .outputs[0].links) = [9201]
+      | (.nodes[] | select(.id == 302) | .inputs[0].link) = 9201
+      | .links += [[9201, 127, 0, 302, 0, "MODEL"]]
+      | .last_link_id = ([.last_link_id, 9201] | max)
       | (.nodes[] | select(.id == 92) | .widgets_values[0]) = $baseline_prefix
       | (.nodes[] | select(.id == 215) | .widgets_values[0]) = $recovered_prefix
       | .last_node_id = ([.last_node_id, 9200] | max)
@@ -115,14 +123,14 @@ build_workflow \
   "$ref2va_source" "$ref2va" \
   minimax_h3_ref2va_bf16.safetensors \
   minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors \
-  'De-RoPE Turbo v1.0 — recommended REF2VA balanced/audio profile' \
-  video/DeRoPE_Turbo_v1_0/REF2VA_Balanced_Baseline \
-  video/DeRoPE_Turbo_v1_0/REF2VA_Balanced_Recovered \
+  'De-RoPE Turbo v1.1 — recommended REF2VA balanced/audio profile' \
+  video/DeRoPE_Turbo_v1_1/REF2VA_Balanced_Baseline \
+  video/DeRoPE_Turbo_v1_1/REF2VA_Balanced_Recovered \
   'Recommended first trial: replace example.png with one appearance reference. Native 1344×768, 124 frames. The primary recovered output keeps pass-1 audio; the seeded-foley output is an explicit alternate.'
 
 # Preserve the explicit alternate foley output in the audio-initialized graph.
 jq '(.nodes[] | select(.id == 9105) | .widgets_values[0]) =
-      "video/DeRoPE_Turbo_v1_0/REF2VA_Balanced_Recovered_Seeded_Foley"' \
+      "video/DeRoPE_Turbo_v1_1/REF2VA_Balanced_Recovered_Seeded_Foley"' \
   "$ref2va" >"$ref2va.tmp"
 mv "$ref2va.tmp" "$ref2va"
 
@@ -130,18 +138,18 @@ build_workflow \
   "$fast_source" "$fast" \
   minimax_h3_fl2va_bf16.safetensors \
   minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors \
-  'De-RoPE Turbo v1.0 — FL2VA fast-iterate scouting profile' \
-  video/DeRoPE_Turbo_v1_0/FL2VA_FastIterate_Baseline \
-  video/DeRoPE_Turbo_v1_0/FL2VA_FastIterate_Recovered \
+  'De-RoPE Turbo v1.1 — FL2VA fast-iterate scouting profile' \
+  video/DeRoPE_Turbo_v1_1/FL2VA_FastIterate_Baseline \
+  video/DeRoPE_Turbo_v1_1/FL2VA_FastIterate_Recovered \
   'Scouting only: 0.2 MP pass 1 and 0.4 MP De-RoPE pass. Use it to find a prompt, seed, and motion pattern quickly; do not use its image quality to judge a keeper.'
 
 build_workflow \
   "$upscale_source" "$upscale" \
   minimax_h3_fl2va_bf16.safetensors \
   minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors \
-  'De-RoPE Turbo v1.0 — FL2VA integrated-upscale profile' \
-  video/DeRoPE_Turbo_v1_0/FL2VA_Upscale_Baseline \
-  video/DeRoPE_Turbo_v1_0/FL2VA_Upscale_Recovered \
+  'De-RoPE Turbo v1.1 — FL2VA integrated-upscale profile' \
+  video/DeRoPE_Turbo_v1_1/FL2VA_Upscale_Baseline \
+  video/DeRoPE_Turbo_v1_1/FL2VA_Upscale_Recovered \
   'Balanced spatial experiment: pass 1 renders at 0.4 MP and the De-RoPE pass rebuilds at 1.5 MP. It is faster than native high-resolution De-RoPE but can give the oracle softer evidence.'
 
 validate_workflow() {
@@ -168,9 +176,11 @@ validate_workflow() {
     and ([.nodes[] | select(.type == "H3ExactRecover")] | length) == 1
     and ([.nodes[] | select(.type == "H3AudioSmear")] | length) == 1
     and ([.nodes[] | select(.type == "H3AudioRecover")] | length) >= 1
-    and ([.nodes[] | select(.type == "PathchSageAttentionKJ")] | length) == 1
-    and ([.nodes[] | select(.type == "MiniMaxH3MemoryEfficientSageAttentionPatch")] | length) == 1
+    and ([.nodes[] | select(.type == "PathchSageAttentionKJ"
+      or .type == "MiniMaxH3MemoryEfficientSageAttentionPatch")] | length) == 0
     and ([.nodes[] | select(.type == "MiniMaxChunkFeedForward")] | length) == 1
+    and ([.links[] | select(.[1] == 127 and .[3] == 302 and .[4] == 0)])
+      == [[9201, 127, 0, 302, 0, "MODEL"]]
     and ([.nodes[] | select(.type == "MarkdownNote" and .id == 9200)] | length) == 1
     and ((.nodes[] | select(.type == "BasicScheduler") | .inputs[0].link) as $base_model_link
       | any(.links[]; .[0] == $base_model_link and .[1] != 303))

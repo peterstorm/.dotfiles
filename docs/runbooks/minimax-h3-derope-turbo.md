@@ -1,4 +1,4 @@
-# MiniMax H3 De-RoPE Turbo v1.0 — qualification workflows
+# MiniMax H3 De-RoPE Turbo v1.1 — qualification workflows
 
 Development-only Turbo variants of the Motion Lab De-RoPE pipeline. Use these when the full 25+25-step package is too slow for iteration, then compare any keeper against the slower control in [`minimax-h3-derope.md`](minimax-h3-derope.md).
 
@@ -13,13 +13,15 @@ Every source is checksum-gated by [`scripts/comfyui/build-minimax-h3-derope-turb
 ## Installed workflows
 
 ```text
-/var/lib/comfyui/user/default/workflows/minimax-h3-derope-turbo-development-v1.0/
-├── 01 MiniMax H3 De-RoPE Turbo v1.0 - REF2VA Balanced Audio Development.json
-├── 02 MiniMax H3 De-RoPE Turbo v1.0 - FL2VA Fast Iterate Development.json
-└── 03 MiniMax H3 De-RoPE Turbo v1.0 - FL2VA Upscale Development.json
+/var/lib/comfyui/user/default/workflows/minimax-h3-derope-turbo-development-v1.1/
+├── 01 MiniMax H3 De-RoPE Turbo v1.1 - REF2VA Balanced Audio Development.json
+├── 02 MiniMax H3 De-RoPE Turbo v1.1 - FL2VA Fast Iterate Development.json
+└── 03 MiniMax H3 De-RoPE Turbo v1.1 - FL2VA Upscale Development.json
 ```
 
 The directory is immutable. A graph change requires a new version; deployment refuses a differing overwrite. The full-quality v1.0 De-RoPE graphs and all existing Turbo workflow families remain unchanged.
+
+Turbo package v1.0 is superseded: its first live smoke test failed at the source `PathchSageAttentionKJ` node because the pinned ComfyUI environment intentionally has no `sageattention` module. V1.1 removes both SageAttention-dependent nodes, wires the BF16 base directly into the exact chunked-feed-forward patch, and uses ComfyUI's supported PyTorch attention path. Do not use the v1.0 folder.
 
 ## Why this is not “add a LoRA to the old graph”
 
@@ -33,7 +35,7 @@ MAINodes documents that putting a Turbo LoRA into the older 25-step/simple/`res_
 | injection | `faithful detail 0.50`, so three of the six pass-2 steps execute |
 | recovery | `H3ExactRecover` at 24 fps; original pass-1 audio is the safe default |
 
-The source Sage-attention and chunked-feed-forward chain is retained as one tested recipe rather than mixed piecemeal with unrelated Turbo graphs.
+The source's exact `MiniMaxChunkFeedForward` patch is retained. The two optional SageAttention patches are deliberately absent because they cannot execute in the pinned environment; the first smoke test proved that failure boundary before any sampling began.
 
 ## Pinned workstation selectors
 
@@ -54,7 +56,7 @@ All three use `qwen3vl_32b_minimax_h3_bf16.safetensors`, the FP16 video VAE, and
 ## Qualification trial
 
 1. Stop other two-GPU inference workloads and start ComfyUI.
-2. Open **User workflows → `minimax-h3-derope-turbo-development-v1.0`**.
+2. Open **User workflows → `minimax-h3-derope-turbo-development-v1.1`**.
 3. Start with the REF2VA Balanced Audio graph and a 2–5 second reference-safe test.
 4. Preserve prompt, input, seed, duration, and output from the baseline and recovered arms.
 5. Scrub both outputs frame by frame around the oracle’s hot burst, then watch at normal speed with audio.

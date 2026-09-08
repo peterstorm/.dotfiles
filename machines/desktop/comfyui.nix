@@ -2660,7 +2660,7 @@ let
       '';
 
   minimaxH3DeropeTurboWorkflows =
-    pkgs.runCommand "minimax-h3-derope-turbo-v1-0-development-workflows"
+    pkgs.runCommand "minimax-h3-derope-turbo-v1-1-development-workflows"
       {
         nativeBuildInputs = [
           pkgs.coreutils
@@ -3226,7 +3226,7 @@ let
     director_dir="$user_workflows/minimax-h3-director-local-development"
     director_v12_dir="$user_workflows/minimax-h3-muse-director-v12-local-development-v1.7"
     h3_derope_dir="$user_workflows/minimax-h3-derope-development-v1.0"
-    h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.0"
+    h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.1"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
@@ -3249,7 +3249,7 @@ let
     director_staging="$user_workflows/.minimax-h3-director-local-development.new"
     director_v12_staging="$user_workflows/.minimax-h3-muse-director-v12-local-development-v1.7.new"
     h3_derope_staging="$user_workflows/.minimax-h3-derope-development-v1.0.new"
-    h3_derope_turbo_staging="$user_workflows/.minimax-h3-derope-turbo-development-v1.0.new"
+    h3_derope_turbo_staging="$user_workflows/.minimax-h3-derope-turbo-development-v1.1.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
