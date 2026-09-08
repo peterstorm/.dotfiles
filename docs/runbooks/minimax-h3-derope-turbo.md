@@ -65,6 +65,21 @@ All three use `qwen3vl_32b_minimax_h3_bf16.safetensors`, the FP16 video VAE, and
 
 Judge fast hands, faces, limbs, props, cloth, rotating edges, camera motion, lip sync, and audio transitions. A successful queue is technical evidence only; these workflows remain Development-only.
 
+## First desktop qualification — 2026-09-08
+
+The first v1.0 queue failed before sampling at `PathchSageAttentionKJ` with `ModuleNotFoundError: sageattention`. That failure produced no media and is the reason for the immutable v1.1 correction.
+
+V1.1 then completed two real two-pass queues on `desktop`:
+
+| Trial | Result | Runtime | Outputs |
+|---|---|---:|---|
+| FL2VA Fast Iterate, source prompt/seeds | success | 91 s after the failed run had already staged models | baseline + recovered, 107 frames at 24 fps; 448² baseline and 640² recovered |
+| REF2VA Balanced Audio, generated synthetic reference, 2.3 s | success | 190 s after a ComfyUI restart | baseline + recovered + seeded-foley alternate, each 56 frames at 24 fps and 1024² |
+
+Outputs are retained under `/var/lib/comfyui/output/video/DeRoPE_Turbo_v1_1/` with `Smoke_` prefixes. `ffprobe` confirmed exact matching frame count, rate, duration, stereo 32 kHz audio, and decodability for each paired result. The REF2VA baseline/recovered pair measured SSIM `0.881230`; global `blurdetect` means were `7.9202085` and `7.8838733`, respectively. Those whole-frame measurements show close structural retention but are not a motion-smear verdict.
+
+Contact-sheet review found the REF2VA repair materially more promising than the scout: it kept the subject, setting, major poses, and sword trajectory close while rendering the bright sword arc and fast-turn silhouettes more cleanly. The low-resolution Fast Iterate result showed much larger pose reinterpretation, confirming its role as a prompt/seed scout rather than a keeper path. Normal-speed human playback and listening are still required before any quality promotion.
+
 ## Verification
 
 ```bash
