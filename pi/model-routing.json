@@ -24,8 +24,12 @@
       "thinkingLevel": "max"
     },
     "glm-v11": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11",
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1",
       "thinkingLevel": "max"
+    },
+    "glm-v11-verify": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1",
+      "thinkingLevel": "low"
     },
     "sol": {
       "model": "openai-codex/gpt-5.6-sol",
@@ -70,11 +74,23 @@
       "id": "glm-v11-subagents-use-max",
       "when": {
         "parentClass": "local",
-        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11"
+        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1"
       },
       "use": {
         "kind": "named",
         "target": "glm-v11"
+      }
+    },
+    {
+      "id": "engine-review-verifiers-local-low",
+      "when": {
+        "profile": "refutation",
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/*"
+      },
+      "use": {
+        "kind": "named",
+        "target": "glm-v11-verify"
       }
     },
     {
@@ -86,6 +102,17 @@
       "use": {
         "kind": "named",
         "target": "sol"
+      }
+    },
+    {
+      "id": "cloud-workers-use-parent",
+      "when": {
+        "parentClass": "cloud",
+        "workload": "subagent",
+        "agent": "worker"
+      },
+      "use": {
+        "kind": "parent"
       }
     },
     {
