@@ -409,24 +409,38 @@ in
   #     (enable=1) is rock-solid — duty holds exactly until changed.
   #
   # So instead of fighting the chip's engine, this drives both fans in MANUAL
-  # mode from userspace: a oneshot at boot plus a 60 s timer re-read the CPU's
-  # PECI temp (temp8), interpolate the curve, and write the duty. Deterministic,
-  # immune to the EC re-asserting registers, and self-healing: any tick that
-  # finds enable flipped back repairs it within a minute.
+  # mode from userspace: a long-running daemon (no timer unit) re-reads the
+  # CPU's PECI temp (temp8) every 20 s, interpolates the curve, and writes the
+  # duty. Deterministic, immune to the EC re-asserting registers, and
+  # self-healing: every cycle repairs an enable flip-back within seconds and
+  # Restart=on-failure recovers from transient sysfs failures.
   #
-  # Timer trap (2026-08-18 incident): the first version used
-  # OnUnitActiveSec=60 with RemainAfterExit=true. The oneshot stayed
-  # "active (exited)" after its boot run, so every elapse queued a no-op
-  # start job and duties were computed once from the cold boot temp — fans
-  # sat at ~35 % while vLLM held the package >80 C. OnUnitActiveSec alone
-  # also proved unreliable at re-arming (timer left with no NextElapse),
-  # so the timer uses absolute OnCalendar elapses and the service has no
-  # RemainAfterExit.
+  # Timer trap (2026-08-18 incident, historical): the first version was a
+  # oneshot + 60 s timer. OnUnitActiveSec with RemainAfterExit=true queued
+  # no-op start jobs and duties were computed once from the cold boot temp —
+  # fans sat at ~35 % while vLLM held the package >80 C; OnUnitActiveSec also
+  # proved unreliable at re-arming, so an absolute-OnCalendar timer variant
+  # fixed the trigger but kept 60 s granularity, which lagged load spikes by
+  # up to a minute (PECI spiked 77 °C while a stale 50 °C duty was applied).
+  # Replaced 2026-09 by this daemon: the 20 s loop re-applies duties fast
+  # enough to ride out the chip's register re-asserts without a timer unit.
   #
-  # Curves (PECI temp → duty 0-255) — raised 2026-08: higher floors, and the
-  # 100 % ceiling now 5 °C earlier (vLLM loads keep the package hot):
+  # Curves (PECI temp → duty 0-255) — raised 2026-08; case-fan ceiling capped
+  # 2026-09 after a live A/B:
   #   * CPU fan (pwm1/fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
-  #   * Case fan (pwm6/fan6): 105 (41 %) @ 25 °C … 255 (100 %) @ 65 °C
+  #   * Case fan (pwm6/fan6): 105 (41 %) @ 25 °C, rising with PECI, hard-
+  #     ceilinged at duty 208 (~1700 RPM — the shared tach reads 1687-1715
+  #     there; at 255 it reads ~2080).
+  #
+  # Case-fan ceiling rationale (live-verified 2026-09): with the stock 255
+  # ceiling the case fans ramp to ~2080 RPM under load; capped at 208 they
+  # hold ~1700 flat through the entire realistic load band (PECI 52-85 °C,
+  # Tctl up to Tjmax with the CPU fan at 100 % compensating — sustained-load
+  # probe held PECI 83-84 °C for 75 s+ with the cap flat). A thermal
+  # guardrail with hysteresis releases the cap only in genuine extremes:
+  # released at PECI >= 85 °C (Tctl ~93+, throttle territory), re-clamped
+  # below 80 °C; the 80-85 band holds the current state so the load's
+  # 77-84 °C bouncing cannot flap the fans between 1700 and 2080 RPM.
   #
   # fan2 (CPU_OPT) keeps its BIOS curve — it was already PECI-driven and runs
   # at ~100 % under load. PWM channels 3/4/5/7 read 0 RPM even at full duty:
@@ -438,8 +452,9 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "systemd-modules-load.service" ];
     serviceConfig = {
-      Type = "oneshot";
-      # deliberately no RemainAfterExit — it breaks the timer re-trigger (see above)
+      Type = "simple";
+      Restart = "on-failure";
+      RestartSec = "10s";
       ExecStart = lib.getExe (pkgs.writeShellApplication {
         name = "asus-fan-control";
         runtimeInputs = [ pkgs.coreutils ];
@@ -471,33 +486,47 @@ in
             echo $(( p0 + (p1 - p0) * (t - t0) / (t1 - t0) ))
           }
 
-          peci=$(cat "$h/temp8_input")
+          # Case-fan cap state (hysteresis): released at PECI >= 85 °C,
+          # re-clamped below 80 °C; the 80-85 band holds the current state so
+          # the load's temp bouncing cannot flap the fans. Starts clamped at
+          # boot (cold).
+          released=0
 
-          # CPU fan (fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
-          d1=$(interp "$peci" 35000 120 65000 255)
-          # Case fan (fan6): 105 (41 %) @ 25 °C … 255 (100 %) @ 65 °C
-          d6=$(interp "$peci" 25000 105 65000 255)
+          # Main loop — re-apply every 20 s. Fast enough to repair the
+          # chip/EC flipping pwm*_enable back within one cycle.
+          while true; do
+            peci=$(cat "$h/temp8_input")
 
-          ed pwm1_enable 1
-          ed pwm1 "$d1"
-          ed pwm6_enable 1
-          ed pwm6 "$d6"
+            # CPU fan (fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
+            d1=$(interp "$peci" 35000 120 65000 255)
+            ed pwm1_enable 1
+            ed pwm1 "$d1"
+
+            # Case fan (fan6): 105 (41 %) @ 25 °C, hard-ceilinged at duty
+            # 208 (~1700 RPM); guardrail releases at PECI >= 85 °C.
+            d6=$(interp "$peci" 25000 105 65000 255)
+            if [ "$peci" -ge 85000 ]; then
+              released=1
+            elif [ "$peci" -lt 80000 ]; then
+              released=0
+            fi
+            if [ "$released" -eq 1 ]; then
+              d6=255
+            elif [ "$d6" -gt 208 ]; then
+              d6=208
+            fi
+            ed pwm6_enable 1
+            ed pwm6 "$d6"
+
+            sleep 20
+          done
         '';
       });
     };
   };
 
-  systemd.timers.asus-fan-control = {
-    description = "Re-apply NCT6799D fan duties every minute";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      # Absolute elapses — OnUnitActiveSec did not re-arm for this oneshot
-      # (see note above). Fires at :00s past each minute, plus a boot offset.
-      OnBootSec = "30";
-      OnCalendar = "*-*-* *:*:00";
-    };
-  };
-
+  # (The 60 s timer variant was replaced 2026-09 by the daemon above — the
+  # 20 s loop needs no timer unit at all.)
 
   # --- Local inference token ledger + heatmap -------------------------------
   #
