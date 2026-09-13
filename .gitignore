@@ -10,6 +10,9 @@ __pycache__/
 !.claude/state/.gitkeep
 .claude/reviews/
 
+# Cortex plugin memory-extraction dumps (runtime, not persisted)
+.cortex_memory_extraction.json
+
 # Node modules (all subdirectories)
 **/node_modules/
 .claude/plugins/cortex/engine/:memory:*
