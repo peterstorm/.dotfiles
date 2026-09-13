@@ -1,5 +1,26 @@
 { config, pkgs, lib, util, ... }:
 
+let
+  # Redis 8.10 writes RDB format 15 into Reclaw's multipart AOF. Nixpkgs later
+  # regressed its `redis` package to 8.8.1, which cannot read that format and
+  # leaves the durable BullMQ state offline. Keep this data store on the first
+  # known-compatible release; upgrades remain safe, downgrades do not.
+  reclawRedis = pkgs.redis.overrideAttrs (previous: rec {
+    version = "8.10.1";
+    src = pkgs.fetchFromGitHub {
+      owner = "redis";
+      repo = "redis";
+      tag = version;
+      hash = "sha256-fGLuOuiM3VHj70qlSpb2s25RYD8gFARrqwAhW6CIHXE=";
+    };
+    patches = [
+      (pkgs.fetchpatch2 {
+        url = "https://github.com/redis/redis/commit/c027c8effe13564bcbc903741305acd929cc23da.patch";
+        hash = "sha256-MynmKLQ04JjyHMVbfeSIEnKaj4jvjS1FjQNpfvQz3Pw=";
+      })
+    ] ++ previous.patches;
+  });
+in
 (util.sops.mkSecretsAndTemplatesConfig
   # 1. Secrets — decrypted to /run/secrets/
   [
@@ -47,6 +68,7 @@
     ];
 
     # Redis instance for reclaw on port 6380
+    services.redis.package = reclawRedis;
     services.redis.servers.reclaw = {
       enable = true;
       port = 6380;
