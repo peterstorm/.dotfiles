@@ -9,7 +9,7 @@ Use one Nix-managed ComfyUI service and keep the workflow native-first:
 
 - **Blackfrost abliterated Qwen3.8-27B BF16** on physical GPU0 writes and compiles
   creative briefs into model-ready prompts.
-- **ComfyUI 0.33.3** on physical GPU1 runs local Krea 2, MiniMax H3, and
+- **ComfyUI 0.34.0** on physical GPU1 runs local Krea 2, MiniMax H3, and
   MiniMax Music 3 workflows. The UI listens only on `127.0.0.1:8188` and is
   reached through an SSH tunnel.
 - **Krea 2 has separate BF16 production tiers.** Turbo remains the fast,
@@ -55,7 +55,7 @@ ComfyUI remains loopback-only and systemd-confined.
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
 | Curated creative suite | 54 workflows under six task folders: 53 official adaptations plus one pinned Krea realism derivation | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
 | MiniMax Music 3 workflow | Official Comfy workflow adapted to the full-quality selectors | workflow-templates commit + exact file hash + JSON/model gate |
-| Full Template Library | official workflow browser library | Comfy package 0.11.44 in the Nix closure |
+| Full Template Library | official workflow browser library | Comfy package 0.11.48 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | FLUX.2 Klein 9B BF16, encoder, VAE, and two Krea LoRAs | `/models/comfyui/` | HF revisions/Civitai model versions + exact size + SHA-256 manifest |
 | Gokay Krea 2 Realism LoRA | `/models/comfyui/loras/krea2_realism_lora.safetensors` | HF revision `32f0436...` + exact 469,288,512-byte size + SHA-256 |
@@ -65,11 +65,11 @@ ComfyUI remains loopback-only and systemd-confined.
 | Comfy account/partner credits | Comfy account | external prepaid service |
 | Blackfrost Qwen bearer key | `~/.config/qwen38/api-key` | private file, never a node widget |
 
-The current flake resolves ComfyUI 0.33.3 at commit
-`4da9e2dbead52fc1e68beae33fe3d7ad63b63241`, frontend 1.49.6, workflow
-templates 0.11.44, comfy-kitchen 0.2.31, and PyTorch 2.12.0 with CUDA 13.2
+The current flake resolves ComfyUI 0.34.0 at commit
+`12d5279438bfefc058a269eae805ceab6047777f`, frontend 1.49.6, workflow
+templates 0.11.48, comfy-kitchen 0.2.31, and PyTorch 2.11.0 with CUDA 13.2
 libraries. Music 3 native core support landed in
-`efd4e951a00e85bd92e79f1d685427912b0dad5e`; 0.33.3 contains that commit.
+`efd4e951a00e85bd92e79f1d685427912b0dad5e`, which the 0.34.0 pin contains.
 
 ## Why this architecture
 
@@ -1023,11 +1023,12 @@ There are three distinct workflow inventories; do not conflate them:
   separate legal gates. Other local graphs remain weightless until their own
   profile is licensed, pinned, downloaded, and qualified.
 
-The workflow browser uses Comfy's required 0.11.44 package, while the curated 54
+The workflow browser uses Comfy's required 0.11.48 package, while the curated 54
 remain sourced from the separately pinned and previously qualified JSON corpus
 0.1.37. The newer 0.1.50 JSON silently added active Turbo LoRA nodes to the H3
-T2V/I2V templates; those graphs are not promoted into the production suite
-without a new topology audit. The curated files come from official immutable
+T2V/I2V templates, and the browser's metadata now demands 0.1.57; the curated
+corpus stays on the audited 0.1.37 and those graphs are not promoted into the
+production suite without a new topology audit. The curated files come from official immutable
 sources, not community workflow aggregators. They provide:
 
 | Folder | Count | Production capabilities |
@@ -1559,7 +1560,7 @@ fragmentation. REF2VA with `ref_image_size=max`, several videos, or long audio
 can consume much more than the weight-only table suggests. During a GPU phase,
 offloaded weights and cached node outputs also consume host RAM.
 
-ComfyUI 0.33.3 runs its RAM-pressure cache by default. On this 91 GiB host it
+ComfyUI 0.34.0 runs its RAM-pressure cache by default. On this 91 GiB host it
 tries to retain roughly 9 GiB of free RAM and evicts cached node outputs as
 pressure rises. Its model manager also supports partial GPU residency. Those are
 safety mechanisms, not a guarantee: the full BF16 profile remains unqualified
@@ -2303,12 +2304,12 @@ problems inside a long generation.
 | ComfyUI-Krea2T-Enhancer | **Installed**, MIT, pinned to the workflow's exact commit |
 | Pixaroma | **Installed**, pinned to Episode 30 commit; broad route/node surface accepted only because all seven requested workflows depend on it and the service is confined to loopback |
 | ComfyUI-Manager | Mutable git/pip state outside Nix; intentionally absent |
-| VideoHelperSuite | Established, but core `VIDEO`, `LoadVideo`, `CreateVideo`, and `SaveVideo` cover this stack |
+| VideoHelperSuite | **Installed**, MIT, pinned commit; `VHS_LoadVideo`/`VHS_VideoCombine` video seams used by the Blender REF2VA and H3 motion-context workflows |
 | ComfyUI-Detail-Daemon | **Installed**, MIT, pinned commit; exact sampler seam used by the Krea/FLUX workflow |
 | KJNodes | **Installed**, GPL-3.0, pinned commit; exact `ColorMatch` seam used by the Krea/FLUX workflow |
 | rgthree-comfy | Not installed; Episode 24's two Power LoRA nodes are deterministically converted to core `LoraLoaderModelOnly` nodes |
 | IF AI Tools | Archived and dependency-heavy; the in-repo Blackfrost Qwen node is narrower and uses the existing endpoint |
-| New H3 “director/turbo/cache” nodes | Too new and overlapping with native H3; no baseline evidence yet |
+| New H3 “director/turbo/cache” nodes | **Installed** as hardened Development pins (Director-V1.2/Muse bundle, unified loader, run stats, Multishot); Development evidence only — see their dedicated runbooks |
 
 After a clean native baseline, Sage Attention is the first optional performance
 experiment worth considering. KJNodes is present for color matching, but that
@@ -2343,7 +2344,7 @@ Do not call the stack qualified until:
       activation starts it on loopback only.
 - [ ] Comfy logs load Blackfrost Qwen plus all pinned Episode 24/29/30, Detail Daemon, and KJNodes dependencies with no failed imports.
 - [ ] Twelve BF16 Episode 24 workflows, one Krea/FLUX Klein workflow, eight Episode 29 workflows, seven Episode 30 workflows, 21 contest-production workflows, 54 curated workflows, one full-quality Music 3 workflow, and 16 unique sample inputs are present.
-- [ ] ComfyUI is exactly 0.33.3 with frontend 1.49.6, workflow templates 0.11.44, and comfy-kitchen 0.2.31.
+- [ ] ComfyUI is exactly 0.34.0 with frontend 1.49.6, workflow templates 0.11.48, and comfy-kitchen 0.2.31.
 - [ ] Episode 24 simple, LoRA, prompt-enhancer, low-VRAM, extra-pass, and 2K graphs expose only the BF16 Krea DiT, expected standard/abliterated BF16 encoder, and pinned Qwen VAE.
 - [ ] The three abliterated-encoder graphs complete the same fixed prompts as their standard counterparts; record refusal behavior, prompt adherence, quality, and peak VRAM.
 - [ ] Every curated workflow parses and every required node type is registered.
@@ -2469,7 +2470,7 @@ Sources accessed 2026-08-21–22:
 - [ComfyUI Krea 2 local workflows](https://docs.comfy.org/tutorials/image/krea/krea-2)
 - [ComfyUI Krea 2 partner nodes](https://docs.comfy.org/tutorials/partner-nodes/krea2/krea2-t2i)
 - [ComfyUI partner-node security/account model](https://docs.comfy.org/tutorials/partner-nodes/overview)
-- [ComfyUI 0.33.3 source](https://github.com/Comfy-Org/ComfyUI/tree/v0.33.3)
+- [ComfyUI 0.34.0 source](https://github.com/Comfy-Org/ComfyUI/tree/v0.34.0)
 - [MiniMax Music 3 model and community license](https://github.com/MiniMax-AI/MiniMax-Music3/tree/945655064d59b98004dd70002e7eb5c8c6e11373)
 - [ComfyUI MiniMax Music 3 support commit](https://github.com/Comfy-Org/ComfyUI/commit/efd4e951a00e85bd92e79f1d685427912b0dad5e)
 - [ComfyUI workflow templates](https://github.com/Comfy-Org/workflow_templates)
