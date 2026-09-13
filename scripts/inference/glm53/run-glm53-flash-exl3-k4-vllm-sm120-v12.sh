@@ -31,7 +31,7 @@ source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 
 # Recorded from pull-glm53-flash-exl3-k4-vllm-sm120-v12-image.sh's derived_id
 # on the serving host. Until then the profile is unlaunchable by construction.
-IMAGE_CONFIG="unrecorded"
+IMAGE_CONFIG="sha256:a8b8c5bd83c8df4112fd1badfbcdd6cb4e8a8bea7b3a03508f4f9dda5b67f6eb"
 IMAGE="$IMAGE_CONFIG"
 MODEL_HOST="${MODEL_HOST:-$HOME/models/GLM-5.3-Flash-EXL3-K4-v1}"
 MODEL_CONTAINER="/model"
