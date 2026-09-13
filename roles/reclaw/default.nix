@@ -93,12 +93,12 @@
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json, whose default can drift silently — the pin
         # makes the inference target load-bearing instead of incidental.
-        # 2026-09-06: routed onto the desktop vLLM (glm v11, 192.168.0.80:8000)
-        # — the same backend this pi session runs on: zero quota (the old
-        # github-copilot default exhausted quota -> 429 parroting bug), and
-        # vision-capable for Telegram photo attachments.
-        RECLAW_PI_PROVIDER = "desktop-vllm";
-        RECLAW_PI_MODEL = "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11";
+        # 2026-09-11: routed onto GitHub Copilot's claude-opus-4.8 — the model
+        # this dotfiles session is actively running, vision-capable for
+        # Telegram photo attachments. No thinking suffix: pi honours the
+        # model's defaultThinkingLevel.
+        RECLAW_PI_PROVIDER = "github-copilot";
+        RECLAW_PI_MODEL = "claude-opus-4.8";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
