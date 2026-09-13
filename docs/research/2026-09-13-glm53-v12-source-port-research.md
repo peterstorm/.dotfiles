@@ -36,6 +36,19 @@ core candidate is green. LMCache is a separate `v12-cache` child because it
 activates new scheduler, recurrent-checkpoint, transfer-lifetime, host-memory,
 and filesystem failure modes.
 
+**Implementation status (2026-09-14)**: the recommended first candidate is
+implemented as **v12** — `scripts/inference/glm53/glm53-v12-upstream-core-port/`
+(byte-pinned overlay archive `upstream-core-port-v12-pr710-pr718-pr694.tar.gz`,
+SHA-256 `898db34d0535fbd32312f7071a9354e10174aeed623dafba2ee4f4d9aff5d288`, 102
+files), pull/run/switch scripts, and
+`tests/glm53-flash-exl3-k4-vllm-sm120-v12-contract.sh` (PASS). The upstream
+patches do not apply to the legend r2.1 overlay files, so the port is by hand;
+see the deployment receipt
+`benchmarks/vllm-tps/2026-09-14-glm53-v12-deployment-receipt.md` for the four
+ported changes, the pinned artifacts, and the operator steps (the build and
+qualification run on the desktop host). Image id unrecorded until the first
+build.
+
 ---
 
 ## 1. Scope and method
