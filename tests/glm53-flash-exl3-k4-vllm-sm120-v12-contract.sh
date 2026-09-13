@@ -188,7 +188,7 @@ contains "$INSTALLER" '("upstream-g1/vllm/v1/core/single_type_kv_cache_manager.p
 contains "$INSTALLER" '("upstream-g1/vllm/v1/core/sched/scheduler.py", "[DEFER-FREE-DRAIN]")'
 contains "$INSTALLER" '("upstream-g1/vllm/v1/core/single_type_kv_cache_manager.py", "[MAMBA-NULL-GAP]")'
 contains "$INSTALLER" '("upstream-g2/vllm/v1/worker/gpu_worker.py", "[GRAPH-MEMORY-ONCE]")'
-contains "$INSTALLER" '("upstream-g2/vllm/v1/model_executor/layers/attention/mla_attention.py", "[SM120-DISJOINT-BMM]")'
+contains "$INSTALLER" '("upstream-g2/vllm/model_executor/layers/attention/mla_attention.py", "[SM120-DISJOINT-BMM]")'
 contains "$INSTALLER" '("upstream-g2/vllm/v1/attention/ops/dcp.py", "[SM120-DISJOINT-BMM]")'
 contains "$INSTALLER" 'py_compile.compile(str(destination), doraise=True)'
 contains "$INSTALLER" 'V12 OVERLAY INSTALLED'

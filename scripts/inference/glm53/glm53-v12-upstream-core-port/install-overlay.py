@@ -41,7 +41,7 @@ FIX_MARKERS = (
     ("upstream-g1/vllm/v1/core/sched/scheduler.py", "[DEFER-FREE-DRAIN]"),
     ("upstream-g1/vllm/v1/core/single_type_kv_cache_manager.py", "[MAMBA-NULL-GAP]"),
     ("upstream-g2/vllm/v1/worker/gpu_worker.py", "[GRAPH-MEMORY-ONCE]"),
-    ("upstream-g2/vllm/v1/model_executor/layers/attention/mla_attention.py", "[SM120-DISJOINT-BMM]"),
+    ("upstream-g2/vllm/model_executor/layers/attention/mla_attention.py", "[SM120-DISJOINT-BMM]"),
     ("upstream-g2/vllm/v1/attention/ops/dcp.py", "[SM120-DISJOINT-BMM]"),
 )
 
