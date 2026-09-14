@@ -23,12 +23,12 @@
       "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
       "thinkingLevel": "max"
     },
-    "glm-v11": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1",
+    "glm-v13": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
       "thinkingLevel": "max"
     },
-    "glm-v11-verify": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1",
+    "glm-v13-verify": {
+      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
       "thinkingLevel": "low"
     },
     "sol": {
@@ -71,14 +71,14 @@
       }
     },
     {
-      "id": "glm-v11-subagents-use-max",
+      "id": "glm-v13-subagents-use-max",
       "when": {
         "parentClass": "local",
-        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1"
+        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13"
       },
       "use": {
         "kind": "named",
-        "target": "glm-v11"
+        "target": "glm-v13"
       }
     },
     {
@@ -90,7 +90,7 @@
       },
       "use": {
         "kind": "named",
-        "target": "glm-v11-verify"
+        "target": "glm-v13-verify"
       }
     },
     {
