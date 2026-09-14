@@ -10,8 +10,16 @@ base-image file or a new module, and every installed python file must
 byte-compile with the image's interpreter. The overlay differs from v12's in
 exactly four new overlay files and four manifest lines, so the pinned counts
 move from v12's (100 mappings / 102 destinations / 92 replacements / 10
-additions) to 104 / 106 / 96 / 10; a differing count means the vendored
+additions) to 104 / 105 / 96 / 10; a differing count means the vendored
 archive is not the v13 overlay this installer was written for.
+
+One v13 manifest line is an intentional override, not an error: v12's manifest
+already maps r7/vllm/v1/worker/gpu/warmup.py (upstream's r7 warmup) to
+/opt/infernal-invocation/vllm/vllm/v1/worker/gpu/warmup.py, and the ported
+warmup (the #55455 defer + the #52477 stride resize) must win that destination.
+The installer deduplicates by destination keeping the LAST mapping — manifest
+order puts the override line after r7's — so the served tree gets the ported
+warmup, deterministically.
 """
 
 from __future__ import annotations
@@ -32,7 +40,10 @@ SUPPLEMENTS = (
     "r7/vllm/third_party/flash_linear_attention/ops/fused_recurrent.py",
     "r7/vllm/third_party/flash_linear_attention/ops/fused_sigmoid_gating.py",
 )
-EXPECTED_DESTINATIONS = 106
+EXPECTED_DESTINATIONS = 105  # 103 unique manifest destinations + 2 supplements;
+                             # v12's r7/vllm/v1/worker/gpu/warmup.py mapping is
+                             # overridden by the ported warmup (last wins), so
+                             # v12's 104 unique destinations lose one here.
 EXPECTED_REPLACEMENTS = 96
 EXPECTED_ADDITIONS = 10
 # The r2.1 fix sites, the four v12 port sites, and the three v13 port sites
@@ -78,6 +89,14 @@ def main() -> None:
 
     if len(mappings) != EXPECTED_MAPPINGS:
         fail(f"expected {EXPECTED_MAPPINGS} overlay mappings, parsed {len(mappings)}")
+
+    # A duplicate destination is an override: the LAST mapping wins. The dict
+    # keeps the first position and re-assignment swaps the source, so each
+    # destination is copied exactly once, with the override's source.
+    resolved: dict[Path, Path] = {}
+    for source, destination in mappings:
+        resolved[destination] = source
+    mappings = list(resolved.items())
 
     for relative in SUPPLEMENTS:
         # r7/vllm/<path> installs to /opt/infernal-invocation/vllm/vllm/<path>.
