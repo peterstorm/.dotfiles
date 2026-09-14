@@ -91,10 +91,14 @@ def main() -> None:
         fail(f"expected {EXPECTED_MAPPINGS} overlay mappings, parsed {len(mappings)}")
 
     # A duplicate destination is an override: the LAST mapping wins. The dict
-    # is keyed by destination; rebuilding the (source, destination) tuples from
-    # its items keeps the override's source and each destination copied once.
+    # is keyed by destination; the source it replaces is recorded as overridden
+    # so the unmapped check below does not fail on a file whose destination is
+    # owned by the override (v13: r7's warmup yields to the ported warmup).
     resolved: dict[Path, Path] = {}
+    overridden: set[Path] = set()
     for source, destination in mappings:
+        if destination in resolved:
+            overridden.add(resolved[destination])
         resolved[destination] = source
     mappings = [(source, destination) for destination, source in resolved.items()]
 
@@ -112,6 +116,7 @@ def main() -> None:
         fail(f"expected {EXPECTED_DESTINATIONS} unique destinations, parsed {len(destinations)}")
 
     mapped = {source.resolve() for source, _ in mappings}
+    mapped.update(path.resolve() for path in overridden)
     shipped = {
         path.resolve()
         for path in OVERLAY.rglob("*")
