@@ -53,8 +53,10 @@ done
 } >> "$work/upstream-core-port/MANIFEST.txt"
 
 # 4. Tar the assembled overlay; the archive is the only engine code source.
+# Fixed mtimes/owner and gzip -n make the archive byte-deterministic given
+# identical content, so re-running this script reproduces the pinned sha256.
 mkdir -p "$OUT_DIR"
-tar -czf "$V13_ARCHIVE" -C "$work" upstream-core-port
+tar -czf "$V13_ARCHIVE" --mtime='UTC 2026-09-21' --owner=0 --group=0 --numeric-owner -C "$work" upstream-core-port
 archive_sha256="$(sha256sum "$V13_ARCHIVE" | cut -d' ' -f1)"
 
 # 5. Receipt with everything a local verifier needs to detect mangling.
