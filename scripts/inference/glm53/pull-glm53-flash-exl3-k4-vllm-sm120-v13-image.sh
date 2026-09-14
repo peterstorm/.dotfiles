@@ -274,8 +274,10 @@ assert manager.req_to_blocks["r"][0].is_null
 assert manager.req_to_blocks["r"][1].ref_cnt == 1
 assert pool.get_num_free_blocks() == 6
 
-# No rescan of history: repeat calls over an already-cleaned table read no
-# blocks (the _num_retired_blocks high-water mark) and never advance past it.
+# No rescan of history: the table is longer than the computed position (5000
+# entries vs 16000 tokens = 4000 blocks-worth) so the tail state is genuinely
+# in-flight; repeat calls over the already-cleaned table read no blocks (the
+# _num_retired_blocks high-water mark) and never advance past it.
 class CountedBlocks(list):
     reads = 0
 
@@ -286,15 +288,15 @@ class CountedBlocks(list):
 
 manager2 = MambaManager(
     align_spec,
-    block_pool=BlockPool(num_gpu_blocks=8, enable_caching=False, hash_block_size=4),
+    block_pool=BlockPool(num_gpu_blocks=16, enable_caching=False, hash_block_size=4),
     enable_caching=False,
     kv_cache_group_id=0,
     scheduler_block_size=4,
 )
 manager2.remove_skipped_blocks("r2", 16000)
-blocks = CountedBlocks([manager2.block_pool.null_block] * 1000)
+blocks = CountedBlocks([manager2.block_pool.null_block] * 5000)
 stale, live = manager2.block_pool.get_new_blocks(2)
-blocks[10], blocks[999] = stale, live
+blocks[10], blocks[4999] = stale, live
 manager2.req_to_blocks["r2"] = blocks
 manager2.remove_skipped_blocks("r2", 16000)
 assert stale.ref_cnt == 0, "stale state beyond the null gap was stranded"
@@ -305,7 +307,7 @@ for _ in range(100):
     manager2.remove_skipped_blocks("r2", 15999)
 assert blocks.reads == 0, "cleanup rescanned already-retired history"
 manager2.free("r2")
-assert manager2.block_pool.get_num_free_blocks() == 7
+assert manager2.block_pool.get_num_free_blocks() == 15
 
 # Non-align defer: the base stop-at-first-null behavior is preserved exactly.
 manager3 = MambaManager(
