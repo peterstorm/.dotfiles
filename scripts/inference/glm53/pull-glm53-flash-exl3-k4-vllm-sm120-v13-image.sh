@@ -115,7 +115,9 @@ source_port_label="$(docker image inspect "$DERIVED_TAG" \
 # is gone, and — with a focused CPU test — that the ported Mamba cleanup still
 # crosses null gaps, is idempotent, does not rescan history, and defers to the
 # base stop-at-first-null behavior outside align mode.
-docker run --rm --entrypoint /opt/venv/bin/python "$DERIVED_TAG" - <<'PY'
+# -i attaches the heredoc to the container's stdin; without it python reads an
+# empty script and exits 0, making this proof a no-op.
+docker run --rm -i --entrypoint /opt/venv/bin/python "$DERIVED_TAG" - <<'PY'
 import pathlib
 import sys
 
@@ -128,7 +130,7 @@ kv_manager = (core / "kv_cache_manager.py").read_text()
 single_type = (core / "single_type_kv_cache_manager.py").read_text()
 scheduler = (core / "sched/scheduler.py").read_text()
 gpu_worker = (root / "vllm/vllm/v1/worker/gpu_worker.py").read_text()
-mla = (root / "vllm/model_executor/layers/attention/mla_attention.py").read_text()
+mla = (root / "vllm/vllm/model_executor/layers/attention/mla_attention.py").read_text()
 dcp = (root / "vllm/vllm/v1/attention/ops/dcp.py").read_text()
 so_worker = (root / "vllm/vllm/v1/worker/gpu/structured_outputs.py").read_text()
 so_producer = (root / "vllm/vllm/v1/structured_output/__init__.py").read_text()
