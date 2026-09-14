@@ -408,11 +408,12 @@ in
   #     the register values we wrote, and write-back readouts drift. Manual mode
   #     (enable=1) is rock-solid — duty holds exactly until changed.
   #
-  # So instead of fighting the chip's engine, this drives both fans in MANUAL
-  # mode from userspace: a long-running daemon (no timer unit) re-reads the
-  # CPU's PECI temp (temp8) every 20 s, interpolates the curve, and writes the
-  # duty. Deterministic, immune to the EC re-asserting registers, and
-  # self-healing: every cycle repairs an enable flip-back within seconds and
+  # So instead of fighting the chip's engine, this drives the cooler
+  # (fan2/CPU_OPT) and the case fan (fan6) in MANUAL mode from userspace: a
+  # long-running daemon (no timer unit) re-reads the CPU's PECI temp (temp8)
+  # every 20 s, interpolates the curves, and writes the duties.
+  # Deterministic, immune to the EC re-asserting registers, and self-healing:
+  # every cycle repairs an enable flip-back within seconds and
   # Restart=on-failure recovers from transient sysfs failures.
   #
   # Timer trap (2026-08-18 incident, historical): the first version was a
@@ -425,9 +426,11 @@ in
   # Replaced 2026-09 by this daemon: the 20 s loop re-applies duties fast
   # enough to ride out the chip's register re-asserts without a timer unit.
   #
-  # Curves (PECI temp → duty 0-255) — raised 2026-08; case-fan ceiling capped
-  # 2026-09 after a live A/B:
-  #   * CPU fan (pwm1/fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
+  # Curves (PECI temp → duty 0-255) — case-fan ceiling capped 2026-09 after a
+  # live A/B; cooler curve replaced 2026-09-14 with the Arctic AIO swap:
+  #   * Cooler (pwm2/fan2, CPU_OPT): 110 (43 %) @ 35 °C … 150 (59 %) @ 65 °C,
+  #     hard-ceilinged at 150 (~1940 RPM live-verified; at 255 it reads
+  #     2631-2872 RPM).
   #   * Case fan (pwm6/fan6): 105 (41 %) @ 25 °C, rising with PECI, hard-
   #     ceilinged at duty 208 (~1700 RPM — the shared tach reads 1687-1715
   #     there; at 255 it reads ~2080).
@@ -442,10 +445,18 @@ in
   # below 80 °C; the 80-85 band holds the current state so the load's
   # 77-84 °C bouncing cannot flap the fans between 1700 and 2080 RPM.
   #
-  # fan2 (CPU_OPT) keeps its BIOS curve — it was already PECI-driven and runs
-  # at ~100 % under load. PWM channels 3/4/5/7 read 0 RPM even at full duty:
-  # no tach signal, so no fans (or tach-less fans) on those headers — the three
-  # physical case fans (2 front + 1 rear) share CHA_FAN1's tach or are wired
+  # 2026-09-14 hardware change, ear-verified A/B: the air cooler was swapped
+  # for an Arctic AIO whose pump + rad fans ride one unified cable plugged
+  # into CPU_OPT (fan2), NOT CPU_FAN. CPU_FAN (pwm1/fan1) is now empty — 0 RPM
+  # tach, the EC runs the header full-speed (enable=0) and re-asserts that
+  # mode, and register writes there never reach a device (a pwm1 duty-80 write
+  # held in-register with zero RPM, temp, or sound change). The old pwm1
+  # CPU-fan curve was removed with it. On fan2, manual-mode register writes DO
+  # drive the device: duty 110 dropped it 2872 → 1560 RPM audibly while Tctl
+  # rose only ~3 °C under full GPU load — the cooler is massively
+  # overpowered, so this curve is mostly a noise control. PWM channel 1
+  # (empty) and 3/4/5/7 (no tach) stay on BIOS/EC defaults; the three
+  # physical case fans (2 front + 1 rear) share fan6's tach or are wired
   # without tach feedback.
   systemd.services.asus-fan-control = {
     description = "PECI-driven fan duty controller for the NCT6799D (ProArt X870E-CREATOR)";
@@ -486,10 +497,10 @@ in
             echo $(( p0 + (p1 - p0) * (t - t0) / (t1 - t0) ))
           }
 
-          # Case-fan cap state (hysteresis): released at PECI >= 85 °C,
-          # re-clamped below 80 °C; the 80-85 band holds the current state so
-          # the load's temp bouncing cannot flap the fans. Starts clamped at
-          # boot (cold).
+          # Thermal guardrail state shared by the cooler and case-fan caps
+          # (hysteresis): released at PECI >= 85 °C, re-clamped below 80 °C;
+          # the 80-85 band holds the current state so the load's temp bouncing
+          # cannot flap the fans. Starts clamped at boot (cold).
           released=0
 
           # Main loop — re-apply every 20 s. Fast enough to repair the
@@ -497,19 +508,29 @@ in
           while true; do
             peci=$(cat "$h/temp8_input")
 
-            # CPU fan (fan1): 120 (47 %) @ 35 °C … 255 (100 %) @ 65 °C
-            d1=$(interp "$peci" 35000 120 65000 255)
-            ed pwm1_enable 1
-            ed pwm1 "$d1"
-
-            # Case fan (fan6): 105 (41 %) @ 25 °C, hard-ceilinged at duty
-            # 208 (~1700 RPM); guardrail releases at PECI >= 85 °C.
-            d6=$(interp "$peci" 25000 105 65000 255)
+            # Shared thermal guardrail: released at PECI >= 85 °C, re-clamped
+            # below 80 °C; the 80-85 band holds the current state.
             if [ "$peci" -ge 85000 ]; then
               released=1
             elif [ "$peci" -lt 80000 ]; then
               released=0
             fi
+
+            # Cooler (fan2/CPU_OPT): Arctic AIO pump + rad fans on one cable.
+            # 110 (43 %) @ 35 °C … 150 (59 %) @ 65 °C, hard-ceilinged at 150
+            # (~1940 RPM); guardrail releases to 255 at PECI >= 85 °C.
+            d2=$(interp "$peci" 35000 110 65000 150)
+            if [ "$released" -eq 1 ]; then
+              d2=255
+            elif [ "$d2" -gt 150 ]; then
+              d2=150
+            fi
+            ed pwm2_enable 1
+            ed pwm2 "$d2"
+
+            # Case fan (fan6): 105 (41 %) @ 25 °C, hard-ceilinged at duty
+            # 208 (~1700 RPM); guardrail releases at PECI >= 85 °C.
+            d6=$(interp "$peci" 25000 105 65000 255)
             if [ "$released" -eq 1 ]; then
               d6=255
             elif [ "$d6" -gt 208 ]; then
