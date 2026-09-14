@@ -1,0 +1,5 @@
+=== base provenance (image shas the port was made from) ===
+593c70e8f7cbe4a52cfb7bc3e7ef29458a52ca317af4b4425e9ef04c6f9c329b  /opt/infernal-invocation/vllm/vllm/v1/structured_output/__init__.py
+fa970e59fad4e216b4190a458022b4ef7962604ae2f52089477f0a09dd90429a  /opt/infernal-invocation/vllm/vllm/v1/structured_output/utils.py
+3841947d56e05ada7fc11be7641a55e5389006f0a9492f53bb2edaddb690b7d1  /opt/infernal-invocation/vllm/vllm/v1/worker/gpu/structured_outputs.py
+7ed8bcd8288636ed698acb1c1c3be0ee43b8b478aac86d6fdc418f18860de9c9  /opt/infernal-invocation/vllm/vllm/v1/worker/gpu/warmup.py
