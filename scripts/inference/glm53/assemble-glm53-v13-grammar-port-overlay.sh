@@ -1,22 +1,8 @@
 #!/usr/bin/env bash
-# Assemble the GLM-5.3 v13 overlay archive: v12's overlay tree (the legend
-# r2.1 lineage plus the four v12 ported changes) plus the four files ported
-# from the v13 grammar-port staging, added as four new overlay entries.
-#
-# v13 = v12 plus exactly:
-#   the PR #52477 grammar redesign port (worker/gpu/structured_outputs.py full
-#     rewrite; producer/utils ported to fixed-width stride; warmup bitmask
-#     resized), and
-#   two upstream hardening fixes confirmed missing from the fork base:
-#     upstream #53046 (validate-before-accept when reasoning ends mid-window,
-#     in the producer's grammar_bitmask), and
-#     upstream #55455 (warmup defers DSpark adaptive verification during
-#     warmup; body moved to _warmup_kernels).
-# The overlay differs from v12's in exactly four modified files plus four
-# manifest lines; every other overlay file is byte-identical to v12's.
-#
-# CPU-only: tar assembly + sha256 receipt. No Docker, no GPU, no serving
-# impact — v11.1 stays served throughout.
+# Assemble the GLM-5.3 v13 overlay archive: v12's overlay tree (legend
+# r2.1 + the Spark TP2 port) plus the four ported files from the v13 staging,
+# added as four new overlay entries. CPU-only: tar assembly + sha256 receipt.
+# No Docker, no GPU, no serving impact — v11.1 stays served throughout.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -75,7 +61,7 @@ archive_sha256="$(sha256sum "$V13_ARCHIVE" | cut -d' ' -f1)"
 file_count="$(tar -tzf "$V13_ARCHIVE" | grep -vc '/$')"
 marker_count="$(grep -c 'PR53046-PORT' "$work/upstream-core-port/upstream-g2/vllm/v1/structured_output/__init__.py" | cut -d: -f2 || true)"
 warmup_defer_count="$(grep -c 'PR55455-PORT' "$work/upstream-core-port/upstream-g2/vllm/v1/worker/gpu/warmup.py" || true)"
-crash_design_count="$(grep -c '_build_grammar_row_mapping' "$work/upstream-g2/vllm/v1/worker/gpu/structured_outputs.py" || true)"
+crash_design_count="$(grep -c '_build_grammar_row_mapping' "$work/upstream-core-port/upstream-g2/vllm/v1/worker/gpu/structured_outputs.py" || true)"
 manifest_lines="$(tar -xzf "$V13_ARCHIVE" -O upstream-core-port/MANIFEST.txt | grep -vc '^$')"
 {
   printf 'v13_overlay_archive=%s\n' "$V13_ARCHIVE"
