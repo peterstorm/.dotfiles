@@ -91,12 +91,12 @@ def main() -> None:
         fail(f"expected {EXPECTED_MAPPINGS} overlay mappings, parsed {len(mappings)}")
 
     # A duplicate destination is an override: the LAST mapping wins. The dict
-    # keeps the first position and re-assignment swaps the source, so each
-    # destination is copied exactly once, with the override's source.
+    # is keyed by destination; rebuilding the (source, destination) tuples from
+    # its items keeps the override's source and each destination copied once.
     resolved: dict[Path, Path] = {}
     for source, destination in mappings:
         resolved[destination] = source
-    mappings = list(resolved.items())
+    mappings = [(source, destination) for destination, source in resolved.items()]
 
     for relative in SUPPLEMENTS:
         # r7/vllm/<path> installs to /opt/infernal-invocation/vllm/vllm/<path>.
