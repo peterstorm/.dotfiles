@@ -426,14 +426,18 @@ in
   # Replaced 2026-09 by this daemon: the 20 s loop re-applies duties fast
   # enough to ride out the chip's register re-asserts without a timer unit.
   #
-  # Curves (PECI temp → duty 0-255) — case-fan ceiling capped 2026-09 after a
-  # live A/B; cooler curve replaced 2026-09-14 with the Arctic AIO swap:
-  #   * Cooler (pwm2/fan2, CPU_OPT): 110 (43 %) @ 35 °C … 150 (59 %) @ 65 °C,
-  #     hard-ceilinged at 150 (~1940 RPM live-verified; at 255 it reads
-  #     2631-2872 RPM).
+  # Curves (PECI temp → duty 0-255) — retuned 2026-09-14 after live A/Bs
+  # with the Arctic AIO (duty 150 → 125 → 110 probes under full GPU load):
+  #   * Cooler (pwm2/fan2, CPU_OPT): FLAT duty 110 (~1550 RPM incl. pump).
+  #     Tctl barely responds to fan speed in this load band — 90.0 °C at
+  #     150/255, 90.6 °C at 110 — so the curve is flat at zero thermal cost
+  #     and the emergency valve does all the thermal work (255 reads
+  #     2631-2872 RPM, ~5 °C cooler).
   #   * Case fan (pwm6/fan6): 105 (41 %) @ 25 °C, rising with PECI, hard-
-  #     ceilinged at duty 208 (~1700 RPM — the shared tach reads 1687-1715
-  #     there; at 255 it reads ~2080).
+  #     ceilinged at duty 175 (~1430 RPM live-verified; at 255 it reads
+  #     ~2080). Slowing 208 → 175 cost ~3 °C Tctl.
+  #   * Case fan (pwm3/fan3, CHA_FAN1): user-rewired during the swap; same
+  #     curve, hard-ceilinged at duty 205 (~1310 RPM; duty 167 → 1125).
   #
   # Case-fan ceiling rationale (live-verified 2026-09): with the stock 255
   # ceiling the case fans ramp to ~2080 RPM under load; capped at 208 they
@@ -454,10 +458,13 @@ in
   # CPU-fan curve was removed with it. On fan2, manual-mode register writes DO
   # drive the device: duty 110 dropped it 2872 → 1560 RPM audibly while Tctl
   # rose only ~3 °C under full GPU load — the cooler is massively
-  # overpowered, so this curve is mostly a noise control. PWM channel 1
-  # (empty) and 3/4/5/7 (no tach) stay on BIOS/EC defaults; the three
-  # physical case fans (2 front + 1 rear) share fan6's tach or are wired
-  # without tach feedback.
+  # overpowered, so this curve is mostly a noise control. Follow-up probes
+  # the same day: duty 125 → ~1700 RPM / Tctl 90.0, duty 110 → ~1550 RPM /
+  # Tctl 90.6 — fan speed is almost purely a noise knob here, so the curve
+  # is flat at 110. fan3 (CHA_FAN1) gained a tach in the rewire (user moved
+  # a case fan onto it) and joins the daemon; PWM channels 1 (empty) and
+  # 4/5/7 (no tach) stay on BIOS/EC defaults; the remaining case fans share
+  # fan6's tach or are wired without tach feedback.
   systemd.services.asus-fan-control = {
     description = "PECI-driven fan duty controller for the NCT6799D (ProArt X870E-CREATOR)";
     wantedBy = [ "multi-user.target" ];
@@ -498,9 +505,12 @@ in
           }
 
           # Thermal guardrail state shared by the cooler and case-fan caps
-          # (hysteresis): released at PECI >= 85 °C, re-clamped below 80 °C;
-          # the 80-85 band holds the current state so the load's temp bouncing
-          # cannot flap the fans. Starts clamped at boot (cold).
+          # (hysteresis): released at PECI >= 82 °C, re-clamped below 76 °C.
+          # The Arctic's PECI→Tctl offset is ~11.5 °C (PECI 79 ↔ Tctl 90.6),
+          # so the old 85 °C trigger fired at Tctl ~96.5 — past Tjmax; 82 °C
+          # fires at Tctl ~93.5, just before throttle. The 76-82 band holds
+          # the current state so the load's temp bouncing cannot flap the
+          # fans. Starts clamped at boot (cold).
           released=0
 
           # Main loop — re-apply every 20 s. Fast enough to repair the
@@ -508,36 +518,48 @@ in
           while true; do
             peci=$(cat "$h/temp8_input")
 
-            # Shared thermal guardrail: released at PECI >= 85 °C, re-clamped
-            # below 80 °C; the 80-85 band holds the current state.
-            if [ "$peci" -ge 85000 ]; then
+            # Shared thermal guardrail: released at PECI >= 82 °C (Tctl
+            # ~93.5, throttle approach), re-clamped below 76 °C (Tctl ~87.5);
+            # the 76-82 band holds the current state.
+            if [ "$peci" -ge 82000 ]; then
               released=1
-            elif [ "$peci" -lt 80000 ]; then
+            elif [ "$peci" -lt 76000 ]; then
               released=0
             fi
 
-            # Cooler (fan2/CPU_OPT): Arctic AIO pump + rad fans on one cable.
-            # 110 (43 %) @ 35 °C … 150 (59 %) @ 65 °C, hard-ceilinged at 150
-            # (~1940 RPM); guardrail releases to 255 at PECI >= 85 °C.
-            d2=$(interp "$peci" 35000 110 65000 150)
+            # Cooler (fan2/CPU_OPT): Arctic AIO pump + rad fans on one cable,
+            # flat duty 110 (~1550 RPM) — live-verified: Tctl 90.6 °C at 110
+            # vs 90.0 °C at 150/255 under full GPU load, so the flat curve
+            # is quiet at zero thermal cost; the emergency valve does the
+            # rest.
+            d2=110
             if [ "$released" -eq 1 ]; then
               d2=255
-            elif [ "$d2" -gt 150 ]; then
-              d2=150
             fi
             ed pwm2_enable 1
             ed pwm2 "$d2"
 
             # Case fan (fan6): 105 (41 %) @ 25 °C, hard-ceilinged at duty
-            # 208 (~1700 RPM); guardrail releases at PECI >= 85 °C.
+            # 175 (~1430 RPM); guardrail releases at PECI >= 82 °C.
             d6=$(interp "$peci" 25000 105 65000 255)
             if [ "$released" -eq 1 ]; then
               d6=255
-            elif [ "$d6" -gt 208 ]; then
-              d6=208
+            elif [ "$d6" -gt 175 ]; then
+              d6=175
             fi
             ed pwm6_enable 1
             ed pwm6 "$d6"
+
+            # Case fan (fan3/CHA_FAN1): user-rewired during the swap, same
+            # curve, hard-ceilinged at duty 205 (~1310 RPM).
+            d3=$(interp "$peci" 25000 105 65000 255)
+            if [ "$released" -eq 1 ]; then
+              d3=255
+            elif [ "$d3" -gt 205 ]; then
+              d3=205
+            fi
+            ed pwm3_enable 1
+            ed pwm3 "$d3"
 
             sleep 20
           done
