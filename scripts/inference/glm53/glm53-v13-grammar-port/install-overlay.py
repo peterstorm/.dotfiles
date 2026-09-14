@@ -10,7 +10,7 @@ base-image file or a new module, and every installed python file must
 byte-compile with the image's interpreter. The overlay differs from v12's in
 exactly four new overlay files and four manifest lines, so the pinned counts
 move from v12's (100 mappings / 102 destinations / 92 replacements / 10
-additions) to 104 / 105 / 96 / 10; a differing count means the vendored
+additions) to 104 / 105 / 95 / 10; a differing count means the vendored
 archive is not the v13 overlay this installer was written for.
 
 One v13 manifest line is an intentional override, not an error: v12's manifest
@@ -44,7 +44,11 @@ EXPECTED_DESTINATIONS = 105  # 103 unique manifest destinations + 2 supplements;
                              # v12's r7/vllm/v1/worker/gpu/warmup.py mapping is
                              # overridden by the ported warmup (last wins), so
                              # v12's 104 unique destinations lose one here.
-EXPECTED_REPLACEMENTS = 96
+EXPECTED_REPLACEMENTS = 95   # v12's 92 + the three ported destinations new to
+                             # the install (producer __init__/utils, worker
+                             # structured_outputs); the ported warmup overrides
+                             # r7's existing warmup replacement, so it adds no
+                             # fourth replacement.
 EXPECTED_ADDITIONS = 10
 # The r2.1 fix sites, the four v12 port sites, and the three v13 port sites
 # must be present in the overlay being installed, or this is a v12 archive

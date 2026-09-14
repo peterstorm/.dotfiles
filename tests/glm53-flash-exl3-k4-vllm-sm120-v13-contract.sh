@@ -207,7 +207,7 @@ contains "$DOCKERFILE" 'COPY upstream-core-port-v13-pr52477-pr53046-pr55455.tar.
 
 contains "$INSTALLER" 'EXPECTED_MAPPINGS = 104'
 contains "$INSTALLER" 'EXPECTED_DESTINATIONS = 105'
-contains "$INSTALLER" 'EXPECTED_REPLACEMENTS = 96'
+contains "$INSTALLER" 'EXPECTED_REPLACEMENTS = 95'
 contains "$INSTALLER" 'EXPECTED_ADDITIONS = 10'
 contains "$INSTALLER" '"r7/vllm/third_party/flash_linear_attention/ops/fused_recurrent.py"'
 contains "$INSTALLER" '"r7/vllm/third_party/flash_linear_attention/ops/fused_sigmoid_gating.py"'
