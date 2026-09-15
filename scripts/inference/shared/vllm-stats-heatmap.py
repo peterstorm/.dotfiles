@@ -4,6 +4,7 @@ import argparse
 import csv
 import datetime as dt
 import html
+import json
 import os
 import sys
 from collections import defaultdict
@@ -16,6 +17,142 @@ LEGACY_COLUMNS = ["ts", "when", "prompt_tokens", "generation_tokens", "requests"
 
 WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+# --- Cloud cost counterfactual -------------------------------------------
+# Reference hosted prices per token, for pricing the recorded (self-hosted,
+# $0 API-fee) usage as if it had been served by a hosted API.
+PRICING_SOURCE = "LiteLLM model DB"
+PRICING_AS_OF = "15 Sep 2026"
+DEFAULT_CACHE_HIT = 0.80
+
+PRICING = [
+    {
+        "id": "gpt-5.6-sol",
+        "label": "GPT-5.6 Sol · OpenAI",
+        "input": 4.0e-6, "output": 2.0e-5, "cache_read": 4.0e-7,
+        "note": "$4.00/M in · $20.00/M out · $0.40/M cache-read",
+    },
+    {
+        "id": "gpt-5.6-terra",
+        "label": "GPT-5.6 Terra · OpenAI",
+        "input": 2.0e-6, "output": 1.2e-5, "cache_read": 2.0e-7,
+        "note": "$2.00/M in · $12.00/M out · $0.20/M cache-read",
+    },
+    {
+        "id": "gpt-5.6-luna",
+        "label": "GPT-5.6 Luna · OpenAI",
+        "input": 2.0e-7, "output": 1.2e-6, "cache_read": 2.0e-8,
+        "note": "$0.20/M in · $1.20/M out · $0.02/M cache-read",
+    },
+    {
+        "id": "deepseek-v4.1-flash-openrouter",
+        "label": "DeepSeek V4.1 Flash · OpenRouter",
+        "input": 1.5e-7, "output": 6.0e-7, "cache_read": 3.0e-9,
+        "note": "$0.15/M in · $0.60/M out · $0.003/M cache-read",
+    },
+    {
+        "id": "deepseek-v4.1-flash-official",
+        "label": "DeepSeek V4.1 Flash · official-pattern",
+        "input": 3.0e-7, "output": 1.2e-6, "cache_read": 6.0e-9,
+        "note": "$0.30/M in · $1.20/M out · mirrors DeepSeek's official v4-flash price",
+    },
+]
+
+COST_CSS = """\
+  .cost { margin-top:30px; } .cost h2 { margin-bottom:4px; }
+  .cost > p { color:var(--muted); margin-bottom:14px; font-size:13px; max-width:76ch; }
+  .cost-controls { display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center;
+    margin-bottom:14px; color:var(--muted); font-size:12px; }
+  .cost-controls label { display:flex; align-items:center; gap:8px; }
+  select { background:var(--surface-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:6px 9px; font:inherit; }
+  select:hover { border-color:#59636e; }
+  input[type="range"] { accent-color:var(--green-soft); width:150px; }
+  output { color:var(--text); font-variant-numeric:tabular-nums; min-width:36px; }
+  .pricing-note { color:var(--muted); font-size:12px; }
+  tfoot tr { border-top:1px solid var(--border); background:var(--surface-2); }
+  tfoot th, tfoot td { border-bottom:0; }
+  tfoot th { color:var(--text); font-weight:600; }
+"""
+
+COST_JS = """\
+(() => {
+  const data = JSON.parse(document.getElementById('cost-data').textContent);
+  const monthSelect = document.getElementById('cost-month');
+  const priceSelect = document.getElementById('cost-pricing');
+  const hitInput = document.getElementById('cost-hit');
+  const hitLabel = document.getElementById('cost-hit-label');
+  const note = document.getElementById('cost-pricing-note');
+  const body = document.getElementById('cost-body');
+  const totals = {
+    prompt: document.getElementById('cost-total-prompt'),
+    gen: document.getElementById('cost-total-gen'),
+    in: document.getElementById('cost-total-in'),
+    out: document.getElementById('cost-total-out'),
+    total: document.getElementById('cost-total'),
+  };
+
+  function usd(value) {
+    if (value >= 100) return '$' + value.toLocaleString('en-US', {maximumFractionDigits: 0});
+    if (value >= 1) return '$' + value.toFixed(2);
+    return '$' + value.toFixed(4);
+  }
+  function perM(value) {
+    return '$' + (value >= 1 ? value.toFixed(2) : value.toFixed(3)) + '/M';
+  }
+  function tokens(value) {
+    value = Math.round(value);
+    if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
+    if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+    if (value >= 1e3) return Math.round(value / 1e3) + 'K';
+    return String(value);
+  }
+  function estimate(prompt, generation, pricing, hit) {
+    const effIn = (1 - hit) * pricing.input + hit * pricing.cache_read;
+    const inputCost = prompt * effIn;
+    const outputCost = generation * pricing.output;
+    return {inputCost, outputCost, total: inputCost + outputCost, effInPerM: effIn * 1e6};
+  }
+  function render() {
+    const month = data.months[monthSelect.value] || {};
+    const pricing = data.pricing.find(entry => entry.id === priceSelect.value) || data.pricing[0];
+    const hit = Number(hitInput.value) / 100;
+    hitLabel.textContent = Math.round(hit * 100) + '%';
+    let sumPrompt = 0, sumGen = 0, sumIn = 0, sumOut = 0, sumTotal = 0;
+    body.textContent = '';
+    for (const model of data.models) {
+      const usage = month[model] || {prompt: 0, generation: 0};
+      const est = estimate(usage.prompt, usage.generation, pricing, hit);
+      sumPrompt += usage.prompt; sumGen += usage.generation;
+      sumIn += est.inputCost; sumOut += est.outputCost; sumTotal += est.total;
+      const row = document.createElement('tr');
+      const head = document.createElement('th');
+      head.scope = 'row';
+      head.textContent = model;
+      row.appendChild(head);
+      for (const value of [tokens(usage.prompt), tokens(usage.generation),
+                           usd(est.inputCost), usd(est.outputCost), usd(est.total)]) {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.appendChild(cell);
+      }
+      body.appendChild(row);
+    }
+    totals.prompt.textContent = tokens(sumPrompt);
+    totals.gen.textContent = tokens(sumGen);
+    totals.in.textContent = usd(sumIn);
+    totals.out.textContent = usd(sumOut);
+    totals.total.textContent = usd(sumTotal);
+    const est = estimate(sumPrompt, sumGen, pricing, hit);
+    note.textContent = pricing.note + ' · effective ' + perM(est.effInPerM) +
+      ' input at ' + Math.round(hit * 100) + '% cache-hit';
+  }
+  monthSelect.addEventListener('change', render);
+  priceSelect.addEventListener('change', render);
+  hitInput.addEventListener('input', render);
+  render();
+})();
+"""
 
 
 def number(value, default=0.0):
@@ -174,6 +311,58 @@ def aggregate(rows, today=None):
         if any(row["generation_rate"] is not None for row in latest_rows) else None,
         "latest_ts": latest_ts,
     }
+
+
+def month_key(ts):
+    return dt.date.fromtimestamp(ts).strftime("%Y-%m")
+
+
+def latest_full_month(today):
+    """The most recent complete calendar month, e.g. August while it is September."""
+    first = today.replace(day=1)
+    return (first - dt.timedelta(days=1)).strftime("%Y-%m")
+
+
+def cost_usage(rows, models):
+    """Per-model token totals bucketed by calendar month, plus an All time roll-up."""
+    by_month = defaultdict(lambda: defaultdict(lambda: {"prompt": 0.0, "generation": 0.0}))
+    for row in rows:
+        entry = by_month[month_key(row["ts"])][row["model"]]
+        entry["prompt"] += row["prompt"]
+        entry["generation"] += row["generation"]
+    months = {
+        month: {model: per_model.get(model, {"prompt": 0.0, "generation": 0.0}) for model in models}
+        for month, per_model in sorted(by_month.items())
+    }
+    all_time = {
+        model: {
+            "prompt": sum(months[month][model]["prompt"] for month in months),
+            "generation": sum(months[month][model]["generation"] for month in months),
+        }
+        for model in models
+    }
+    return {"months": {**months, "__all__": all_time}, "models": list(models)}
+
+
+def cost_estimate(prompt_tokens, generation_tokens, pricing, cache_hit):
+    """Pure: counterfactual USD cost for a token volume under one hosted price."""
+    effective_input = (1 - cache_hit) * pricing["input"] + cache_hit * pricing["cache_read"]
+    input_cost = prompt_tokens * effective_input
+    output_cost = generation_tokens * pricing["output"]
+    return {
+        "input_cost": input_cost,
+        "output_cost": output_cost,
+        "total": input_cost + output_cost,
+        "effective_input_per_m": effective_input * 1e6,
+    }
+
+
+def fmt_usd(value):
+    if value >= 100:
+        return f"${value:,.0f}"
+    if value >= 1:
+        return f"${value:,.2f}"
+    return f"${value:.4f}"
 
 
 def legend(cell, step):
@@ -357,6 +546,62 @@ def comparison_table(rows, models):
     )
 
 
+def month_option(key, default_month):
+    label = "All time" if key == "__all__" else f"{MONTHS[int(key[5:7]) - 1]} {key[:4]}"
+    selected = " selected" if key == default_month else ""
+    return f'<option value="{key}"{selected}>{label}</option>'
+
+
+def cost_section(cost_blob, default_month):
+    """Server-rendered default state; JS re-renders from the embedded blob on input."""
+    pricing = PRICING[0]
+    month_data = cost_blob["months"][default_month]
+    rows_html = []
+    totals = {"prompt": 0.0, "generation": 0.0, "in": 0.0, "out": 0.0, "total": 0.0}
+    for model in cost_blob["models"]:
+        usage = month_data[model]
+        estimate = cost_estimate(usage["prompt"], usage["generation"], pricing, DEFAULT_CACHE_HIT)
+        totals["prompt"] += usage["prompt"]
+        totals["generation"] += usage["generation"]
+        totals["in"] += estimate["input_cost"]
+        totals["out"] += estimate["output_cost"]
+        totals["total"] += estimate["total"]
+        rows_html.append(
+            '<tr><th scope="row">' + html.escape(model) + '</th>'
+            f'<td>{fmt(usage["prompt"])}</td><td>{fmt(usage["generation"])}</td>'
+            f'<td>{fmt_usd(estimate["input_cost"])}</td><td>{fmt_usd(estimate["output_cost"])}</td>'
+            f'<td>{fmt_usd(estimate["total"])}</td></tr>'
+        )
+    eff_per_m = cost_estimate(1_000_000, 0, pricing, DEFAULT_CACHE_HIT)["effective_input_per_m"]
+    eff_text = f"${eff_per_m:.2f}" if eff_per_m >= 1 else f"${eff_per_m:.3f}"
+    note = (
+        f"{pricing['note']} · effective {eff_text}/M input at {DEFAULT_CACHE_HIT:.0%} cache-hit"
+    )
+    real_months = sorted(key for key in cost_blob["months"] if key != "__all__")
+    month_options = "".join(month_option(key, default_month) for key in [*real_months, "__all__"])
+    pricing_options = "".join(
+        f'<option value="{entry["id"]}"{" selected" if entry is pricing else ""}>'
+        f'{html.escape(entry["label"])}</option>'
+        for entry in PRICING
+    )
+    return f'''
+<section class="cost">
+  <h2>Cloud cost counterfactual</h2>
+  <p>What the recorded usage — self-hosted at $0 in API fees — would have billed through a hosted API. Engine prompt counters include prefix-cache re-reads, so cached prefixes bill at the cache-read rate; the cache-hit slider states that assumption. Prices: {PRICING_SOURCE}, as of {PRICING_AS_OF}.</p>
+  <div class="cost-controls">
+    <label>Month <select id="cost-month">{month_options}</select></label>
+    <label>Priced as <select id="cost-pricing">{pricing_options}</select></label>
+    <label>Cache-hit <input type="range" id="cost-hit" min="0" max="100" step="5" value="{int(DEFAULT_CACHE_HIT * 100)}"><output id="cost-hit-label">{DEFAULT_CACHE_HIT:.0%}</output></label>
+    <span class="pricing-note" id="cost-pricing-note">{html.escape(note)}</span>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Model</th><th>Prompt</th><th>Generated</th><th>Input cost</th><th>Output cost</th><th>Est. bill</th></tr></thead>
+    <tbody id="cost-body">{"".join(rows_html)}</tbody>
+    <tfoot><tr><th scope="row">Total</th><td id="cost-total-prompt">{fmt(totals["prompt"])}</td><td id="cost-total-gen">{fmt(totals["generation"])}</td><td id="cost-total-in">{fmt_usd(totals["in"])}</td><td id="cost-total-out">{fmt_usd(totals["out"])}</td><td id="cost-total">{fmt_usd(totals["total"])}</td></tr></tfoot>
+  </table></div>
+</section>'''
+
+
 def model_panel(rows, model, panel_id, hidden, today, end_ts):
     selected = select_rows(rows, model)
     summary = aggregate(selected, today)
@@ -407,6 +652,36 @@ def render(rows, out_path):
     )
     all_summary = aggregate(rows, today)
     started = dt.date.fromtimestamp(min(row["ts"] for row in rows)).strftime("%d %b %Y")
+    cost_blob = cost_usage(rows, models)
+    default_month = latest_full_month(today)
+    if default_month not in cost_blob["months"]:
+        fallback = [key for key in cost_blob["months"] if key != "__all__"]
+        default_month = max(fallback) if fallback else None
+    cost_html = ""
+    cost_total = 0.0
+    if default_month:
+        cost_html = cost_section(cost_blob, default_month)
+        month_data = cost_blob["months"][default_month]
+        cost_total = cost_estimate(
+            sum(month_data[model]["prompt"] for model in cost_blob["models"]),
+            sum(month_data[model]["generation"] for model in cost_blob["models"]),
+            PRICING[0],
+            DEFAULT_CACHE_HIT,
+        )["total"]
+    cost_json = json.dumps(
+        {
+            "months": cost_blob["months"],
+            "models": cost_blob["models"],
+            "pricing": PRICING,
+            "pricingSource": PRICING_SOURCE,
+            "pricingAsOf": PRICING_AS_OF,
+        },
+        ensure_ascii=False,
+    ).replace("<", "\\u003c").replace(">", "\\u003e")
+    cost_scripts = (
+        f'<script type="application/json" id="cost-data">{cost_json}</script>\n'
+        f'<script>\n{COST_JS}</script>'
+    )
 
     page = f'''<!doctype html>
 <html lang="en">
@@ -506,6 +781,7 @@ def render(rows, out_path):
     .bar-row {{ grid-template-columns:80px minmax(60px,1fr) 52px; gap:7px; }}
     .bar-date {{ font-size:11px; }}
   }}
+  {COST_CSS}
   @media (prefers-reduced-motion:reduce) {{ * {{ scroll-behavior:auto !important; transition:none !important; }} }}
 </style>
 </head>
@@ -522,6 +798,7 @@ def render(rows, out_path):
     <p>Lifetime totals and rates from each model's latest complete observation interval.</p>
     {comparison_table(rows, models)}
   </section>
+  {cost_html}
   <section class="explain">
     <h2>How to read this page</h2>
     <p><strong>Durable totals:</strong> engine counters reset whenever a container restarts or the runtime changes. This ledger records counter deltas to disk and continues across vLLM, SGLang, restarts, and engine switches.</p>
@@ -557,6 +834,7 @@ def render(rows, out_path):
   }});
 }})();
 </script>
+{cost_scripts}
 </body>
 </html>
 '''
@@ -579,6 +857,9 @@ def render(rows, out_path):
         "last7": int(all_summary["last7"]),
         "last30": int(all_summary["last30"]),
         "models": models,
+        "cost_month": default_month or "",
+        "cost_label": PRICING[0]["label"],
+        "cost_total": int(round(cost_total)),
     }
 
 
@@ -598,6 +879,11 @@ def main():
     )
     print(f"prompt tokens: {fmt(summary['total_prompt'])} lifetime | requests: {fmt(summary['total_req'])}")
     print(f"models: {', '.join(summary['models'])}")
+    if summary["cost_month"]:
+        print(
+            f"cloud counterfactual: {summary['cost_label']} · {summary['cost_month']} · "
+            f"{fmt_usd(summary['cost_total'])}"
+        )
     if args.write:
         print(f"stats page written to {output}", file=sys.stderr)
     return 0

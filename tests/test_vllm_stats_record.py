@@ -517,6 +517,63 @@ class HeatmapTest(unittest.TestCase):
             self.assertEqual(summary["total_gen"], 1550)
             self.assertEqual(summary["models"][-1], heatmap.LEGACY_MODEL)
 
+    def test_cost_estimate_prices_tokens_with_cache_awareness(self):
+        pricing = {"input": 4.0e-6, "output": 2.0e-5, "cache_read": 4.0e-7}
+        uncached = heatmap.cost_estimate(1_000_000, 100_000, pricing, 0.0)
+        self.assertEqual(uncached["input_cost"], 4.0)
+        self.assertEqual(uncached["output_cost"], 2.0)
+        self.assertEqual(uncached["total"], 6.0)
+        cached = heatmap.cost_estimate(1_000_000, 100_000, pricing, 0.80)
+        self.assertAlmostEqual(cached["input_cost"], 1.12)
+        self.assertAlmostEqual(cached["effective_input_per_m"], 1.12)
+        self.assertEqual(cached["output_cost"], 2.0)
+        # Total is linear in token volume: pricing the sum equals summing the parts.
+        combined = heatmap.cost_estimate(2_000_000, 200_000, pricing, 0.80)
+        self.assertAlmostEqual(cached["total"] * 2, combined["total"])
+
+    def test_cost_usage_buckets_months_and_all_time(self):
+        august = int(time.mktime((2026, 8, 16, 3, 30, 0, 0, 0, -1)))
+        september = int(time.mktime((2026, 9, 1, 12, 0, 0, 0, 0, -1)))
+        rows = [
+            {"ts": august, "when": "2026-08-16 03:30:00", "model": "qwen3.8-27b",
+             "engine": "sglang", "endpoint": "local", "prompt": 9000.0,
+             "generation": 900.0, "requests": 4.0, "interval": 900.0,
+             "prompt_rate": 10.0, "generation_rate": 1.0},
+            {"ts": september, "when": "2026-09-01 12:00:00", "model": "qwen3.8-27b",
+             "engine": "sglang", "endpoint": "local", "prompt": 1000.0,
+             "generation": 100.0, "requests": 1.0, "interval": 900.0,
+             "prompt_rate": 1.0, "generation_rate": 0.1},
+            {"ts": august, "when": "2026-08-16 03:30:00", "model": heatmap.LEGACY_MODEL,
+             "engine": "legacy", "endpoint": "legacy", "prompt": 500.0,
+             "generation": 50.0, "requests": 1.0, "interval": None,
+             "prompt_rate": None, "generation_rate": None},
+        ]
+        usage = heatmap.cost_usage(rows, ["qwen3.8-27b", heatmap.LEGACY_MODEL])
+        self.assertEqual(usage["months"]["2026-08"]["qwen3.8-27b"]["prompt"], 9000)
+        self.assertEqual(usage["months"]["2026-09"]["qwen3.8-27b"]["prompt"], 1000)
+        self.assertEqual(usage["months"]["__all__"]["qwen3.8-27b"]["prompt"], 10000)
+        self.assertEqual(usage["months"]["2026-09"][heatmap.LEGACY_MODEL]["prompt"], 0)
+
+    def test_page_renders_cloud_cost_counterfactual(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "heatmap" / "index.html"
+            summary = heatmap.render(self.sample_rows(), str(output))
+            page = output.read_text()
+            self.assertIn("Cloud cost counterfactual", page)
+            self.assertIn('id="cost-data"', page)
+            self.assertIn('id="cost-month"', page)
+            self.assertIn('id="cost-pricing"', page)
+            self.assertIn('id="cost-hit"', page)
+            self.assertIn("GPT-5.6 Sol · OpenAI", page)
+            # Ledger model labels stay HTML-escaped in both the markup and the JSON blob.
+            self.assertIn("unsafe&lt;script&gt;", page)
+            self.assertNotIn("unsafe<script>", page)
+            self.assertIn("unsafe\\u003cscript", page)
+            # Default month = latest complete calendar month, falling back to the
+            # latest month present when only the current (incomplete) month has data.
+            expected_month = max(heatmap.month_key(row["ts"]) for row in self.sample_rows())
+            self.assertEqual(summary["cost_month"], expected_month)
+
 
 if __name__ == "__main__":
     unittest.main()
