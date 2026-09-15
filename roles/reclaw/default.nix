@@ -67,11 +67,15 @@ in
       openssl
     ];
 
-    # Redis instance for reclaw on port 6380
+    # Redis instance for reclaw on port 6381. Dedicated port, not 6380: fugue's
+    # hand-rolled dev redis convention (redis-server --daemonize yes, started to
+    # dodge the busy 6379) grabbed 6380 on 2026-09-15 and reclaw — whose redis
+    # runs unauthenticated — was shut down with it and crash-looped for 4h on
+    # NOAUTH. Production gets a port no dev workflow contests.
     services.redis.package = reclawRedis;
     services.redis.servers.reclaw = {
       enable = true;
-      port = 6380;
+      port = 6381;
       settings = {
         appendonly = "yes";
         appendfsync = "everysec";
@@ -107,7 +111,7 @@ in
         HOME = "/home/peterstorm";
         PATH = lib.mkForce "/home/peterstorm/.nix-profile/bin:/nix/profile/bin:/home/peterstorm/.local/state/nix/profile/bin:/etc/profiles/per-user/peterstorm/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin:/run/wrappers/bin";
         REDIS_HOST = "127.0.0.1";
-        REDIS_PORT = "6380";
+        REDIS_PORT = "6381";
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
@@ -118,10 +122,12 @@ in
         # 2026-09-15: routed onto local GLM v13 (desktop vLLM, the served glm-v13
         # profile) — grammar-hardened (the structured-output + MTP3 crash that
         # killed v11.1), vision-capable for Telegram photo attachments, free
-        # (self-hosted). No thinking suffix: pi honours the model's
-        # defaultThinkingLevel (max).
+        # (self-hosted). :low thinking suffix: the model's defaultThinkingLevel
+        # is max — a plain pin means ~44s Telegram replies (observed
+        # 2026-09-15); pi's parseModelPattern honours the :low suffix
+        # (thinkingLevelMap maps low → low) for responsive replies.
         RECLAW_PI_PROVIDER = "desktop-vllm";
-        RECLAW_PI_MODEL = "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13";
+        RECLAW_PI_MODEL = "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
