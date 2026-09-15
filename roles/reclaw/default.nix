@@ -115,12 +115,13 @@ in
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json, whose default can drift silently — the pin
         # makes the inference target load-bearing instead of incidental.
-        # 2026-09-11: routed onto GitHub Copilot's claude-opus-4.8 — the model
-        # this dotfiles session is actively running, vision-capable for
-        # Telegram photo attachments. No thinking suffix: pi honours the
-        # model's defaultThinkingLevel.
-        RECLAW_PI_PROVIDER = "github-copilot";
-        RECLAW_PI_MODEL = "claude-opus-4.8";
+        # 2026-09-15: routed onto local GLM v13 (desktop vLLM, the served glm-v13
+        # profile) — grammar-hardened (the structured-output + MTP3 crash that
+        # killed v11.1), vision-capable for Telegram photo attachments, free
+        # (self-hosted). No thinking suffix: pi honours the model's
+        # defaultThinkingLevel (max).
+        RECLAW_PI_PROVIDER = "desktop-vllm";
+        RECLAW_PI_MODEL = "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
