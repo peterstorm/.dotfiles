@@ -450,7 +450,6 @@ myStartupHook = do
           spawnOnce "nitrogen --restore &"
           spawnOnce "picom &"
           spawnOnce "nm-applet &"
-          spawnOnce "volumeicon &"
           -- spawnOnce "kak -d -s mysession &"
           setWMName "LG3D"
 
@@ -781,20 +780,23 @@ myKeys =
         , ("M-M1-w", spawn (myTerminal ++ " -e wopr report.xml"))
         , ("M-M1-y", spawn (myTerminal ++ " -e youtube-viewer"))
 
-    -- Multimedia Keys
-        , ("<XF86AudioPlay>", spawn "cmus toggle")
-        , ("<XF86AudioPrev>", spawn "cmus prev")
-        , ("<XF86AudioNext>", spawn "cmus next")
-        -- , ("<XF86AudioMute>",   spawn "amixer set Master toggle")  -- Bug prevents it from toggling correctly in 12.04.
-        , ("<XF86AudioLowerVolume>", spawn "amixer set Master 5%- unmute")
-        , ("<XF86AudioRaiseVolume>", spawn "amixer set Master 5%+ unmute")
+    -- Multimedia Keys (PipeWire stack: pamixer for volume/mute, brightnessctl
+    -- for backlight via logind, playerctl for MPRIS media. All three are
+    -- installed by the xmonad role, see roles/home-manager/window-manager/xmonad)
+        , ("<XF86AudioPlay>", spawn "playerctl play-pause")
+        , ("<XF86AudioPrev>", spawn "playerctl previous")
+        , ("<XF86AudioNext>", spawn "playerctl next")
+        , ("<XF86AudioMute>", spawn "pamixer -t")
+        , ("<XF86AudioLowerVolume>", spawn "pamixer -d 5 && pamixer -u")
+        , ("<XF86AudioRaiseVolume>", spawn "pamixer -i 5 && pamixer -u")
+        , ("<XF86MicMute>", spawn "pamixer --default-source -t")
         , ("<XF86HomePage>", spawn "firefox")
         , ("<XF86Search>", safeSpawn "firefox" ["https://www.google.com/"])
         , ("<XF86Mail>", runOrRaise "geary" (resource =? "thunderbird"))
         , ("<XF86Calculator>", runOrRaise "gcalctool" (resource =? "gcalctool"))
         , ("<XF86Eject>", spawn "toggleeject")
-        , ("<XF86MonBrightnessUp>", spawn "light -U 10")
-        , ("<XF86MonBrightnessDown>", spawn "light -A 10")
+        , ("<XF86MonBrightnessUp>", spawn "brightnessctl set 10%+")
+        , ("<XF86MonBrightnessDown>", spawn "brightnessctl set 10%-")
         , ("<Print>", spawn "scrotd 0")
         ]
         -- Appending search engine prompts to keybindings list.
