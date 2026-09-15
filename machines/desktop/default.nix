@@ -436,28 +436,28 @@ in
   # Replaced 2026-09 by this daemon: the 20 s loop re-applies duties fast
   # enough to ride out the chip's register re-asserts without a timer unit.
   #
-  # Curves (PECI temp → duty 0-255) — retuned 2026-09-14 after live A/Bs
-  # with the Arctic AIO (duty 150 → 125 → 110 probes under full GPU load):
-  #   * Cooler (pwm2/fan2, CPU_OPT): FLAT duty 110 (~1550 RPM incl. pump).
-  #     Tctl barely responds to fan speed in this load band — 90.0 °C at
-  #     150/255, 90.6 °C at 110 — so the curve is flat at zero thermal cost
-  #     and the emergency valve does all the thermal work (255 reads
-  #     2631-2872 RPM, ~5 °C cooler).
-  #   * Case fan (pwm6/fan6): 105 (41 %) @ 25 °C, rising with PECI, hard-
-  #     ceilinged at duty 175 (~1430 RPM live-verified; at 255 it reads
-  #     ~2080). Slowing 208 → 175 cost ~3 °C Tctl.
+  # Curves (PECI temp → duty 0-255) — retuned 2026-09-15: base duties raised
+  # across the board so PECI sits under the release trigger and the emergency
+  # valve fires rarely instead of cycling quiet ↔ full tilt (the 2026-09-14
+  # A/Bs live-verified the thermal cost of each step under full GPU load):
+  #   * Cooler (pwm2/fan2, CPU_OPT): FLAT duty 150 (~1700 RPM incl. pump;
+  #     110 → ~1550 RPM / Tctl 90.6, 150 → ~1700 RPM / Tctl 90.0 — the
+  #     extra 40 duty is mostly a noise knob at near-zero thermal cost).
+  #   * Case fan (pwm6/fan6): 125 (49 %) @ 25 °C, rising with PECI, hard-
+  #     ceilinged at duty 205 (~1700 RPM; 175 → ~1430 live-verified, at 255
+  #     it reads ~2080).
   #   * Case fan (pwm3/fan3, CHA_FAN1): user-rewired during the swap; same
-  #     curve, hard-ceilinged at duty 205 (~1310 RPM; duty 167 → 1125).
+  #     curve, hard-ceilinged at duty 235 (~1500 RPM; duty 167 → 1125).
   #
   # Case-fan ceiling rationale (live-verified 2026-09): with the stock 255
-  # ceiling the case fans ramp to ~2080 RPM under load; capped at 208 they
-  # hold ~1700 flat through the entire realistic load band (PECI 52-85 °C,
-  # Tctl up to Tjmax with the CPU fan at 100 % compensating — sustained-load
-  # probe held PECI 83-84 °C for 75 s+ with the cap flat). A thermal
-  # guardrail with hysteresis releases the cap only in genuine extremes:
-  # released at PECI >= 85 °C (Tctl ~93+, throttle territory), re-clamped
-  # below 80 °C; the 80-85 band holds the current state so the load's
-  # 77-84 °C bouncing cannot flap the fans between 1700 and 2080 RPM.
+  # ceiling the case fans ramp to ~2080 RPM under load; the caps hold a
+  # flat, quiet speed through the entire realistic load band (PECI 52-85 °C,
+  # Tctl up to Tjmax — sustained-load probe held PECI 83-84 °C for 75 s+
+  # with the cap flat). A thermal guardrail with hysteresis releases the
+  # caps only in genuine extremes: released at PECI >= 82 °C (Tctl ~93.5,
+  # just before throttle — 85 °C fires past Tjmax), re-clamped below 76 °C;
+  # the 76-82 band holds the current state so the load's temp bouncing
+  # cannot flap the fans.
   #
   # 2026-09-14 hardware change, ear-verified A/B: the air cooler was swapped
   # for an Arctic AIO whose pump + rad fans ride one unified cable plugged
@@ -471,7 +471,8 @@ in
   # overpowered, so this curve is mostly a noise control. Follow-up probes
   # the same day: duty 125 → ~1700 RPM / Tctl 90.0, duty 110 → ~1550 RPM /
   # Tctl 90.6 — fan speed is almost purely a noise knob here, so the curve
-  # is flat at 110. fan3 (CHA_FAN1) gained a tach in the rewire (user moved
+  # ran flat at 110 until the 2026-09-15 retune. fan3 (CHA_FAN1) gained a
+  # tach in the rewire (user moved
   # a case fan onto it) and joins the daemon; PWM channels 1 (empty) and
   # 4/5/7 (no tach) stay on BIOS/EC defaults; the remaining case fans share
   # fan6's tach or are wired without tach feedback.
@@ -538,35 +539,35 @@ in
             fi
 
             # Cooler (fan2/CPU_OPT): Arctic AIO pump + rad fans on one cable,
-            # flat duty 110 (~1550 RPM) — live-verified: Tctl 90.6 °C at 110
-            # vs 90.0 °C at 150/255 under full GPU load, so the flat curve
-            # is quiet at zero thermal cost; the emergency valve does the
-            # rest.
-            d2=110
+            # flat duty 150 (~1700 RPM) — live-verified: Tctl 90.6 °C at 110
+            # vs 90.0 °C at 150/255 under full GPU load; the extra airflow
+            # keeps PECI under the release trigger so the emergency valve
+            # does the rest, rarely.
+            d2=150
             if [ "$released" -eq 1 ]; then
               d2=255
             fi
             ed pwm2_enable 1
             ed pwm2 "$d2"
 
-            # Case fan (fan6): 105 (41 %) @ 25 °C, hard-ceilinged at duty
-            # 175 (~1430 RPM); guardrail releases at PECI >= 82 °C.
-            d6=$(interp "$peci" 25000 105 65000 255)
+            # Case fan (fan6): 125 (49 %) @ 25 °C, hard-ceilinged at duty
+            # 205 (~1700 RPM); guardrail releases at PECI >= 82 °C.
+            d6=$(interp "$peci" 25000 125 65000 255)
             if [ "$released" -eq 1 ]; then
               d6=255
-            elif [ "$d6" -gt 175 ]; then
-              d6=175
+            elif [ "$d6" -gt 205 ]; then
+              d6=205
             fi
             ed pwm6_enable 1
             ed pwm6 "$d6"
 
             # Case fan (fan3/CHA_FAN1): user-rewired during the swap, same
-            # curve, hard-ceilinged at duty 205 (~1310 RPM).
-            d3=$(interp "$peci" 25000 105 65000 255)
+            # curve, hard-ceilinged at duty 235 (~1500 RPM).
+            d3=$(interp "$peci" 25000 125 65000 255)
             if [ "$released" -eq 1 ]; then
               d3=255
-            elif [ "$d3" -gt 205 ]; then
-              d3=205
+            elif [ "$d3" -gt 235 ]; then
+              d3=235
             fi
             ed pwm3_enable 1
             ed pwm3 "$d3"
