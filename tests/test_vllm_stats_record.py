@@ -568,11 +568,55 @@ class HeatmapTest(unittest.TestCase):
             # Ledger model labels stay HTML-escaped in both the markup and the JSON blob.
             self.assertIn("unsafe&lt;script&gt;", page)
             self.assertNotIn("unsafe<script>", page)
-            self.assertIn("unsafe\\u003cscript", page)
             # Default month = latest complete calendar month, falling back to the
             # latest month present when only the current (incomplete) month has data.
+            self.assertIn("unsafe\\u003cscript", page)
             expected_month = max(heatmap.month_key(row["ts"]) for row in self.sample_rows())
             self.assertEqual(summary["cost_month"], expected_month)
+
+    def test_active_window_stats_excludes_idle_and_gaps(self):
+        base = int(time.mktime((2026, 9, 10, 12, 0, 0, 0, 0, -1)))
+        rows = [
+            {"ts": base, "model": "qwen3.8-27b", "prompt": 28_000.0,
+             "generation": 200_000.0, "interval": 900.0},
+            {"ts": base + 900, "model": "qwen3.8-27b", "prompt": 0.0,
+             "generation": 0.0, "interval": 900.0},
+            {"ts": base + 1800, "model": "qwen3.8-27b", "prompt": 1_000.0,
+             "generation": 50_000.0, "interval": 3600 * 30},
+        ]
+        stats = heatmap.active_window_stats(rows, days=7)
+        # Idle windows and gap-spanning rows are excluded from the rate; both
+        # generating rows still count as active.
+        self.assertAlmostEqual(stats["genPerH"], 200_000 / 900 * 3600)
+        self.assertAlmostEqual(stats["promptPerH"], 28_000 / 900 * 3600)
+        self.assertEqual(stats["genMedian"], 200_000 / 900 * 3600)
+        self.assertEqual(stats["activeWindows"], 2)
+        self.assertEqual(stats["totalWindows"], 3)
+        self.assertEqual(stats["periodHours"], 168)
+
+    def test_active_window_stats_returns_none_without_clean_windows(self):
+        base = int(time.mktime((2026, 9, 10, 12, 0, 0, 0, 0, -1)))
+        rows = [
+            {"ts": base, "model": "qwen3.8-27b", "prompt": 0.0,
+             "generation": 0.0, "interval": 900.0},
+        ]
+        self.assertIsNone(heatmap.active_window_stats(rows, days=7))
+
+    def test_page_renders_active_hour_rate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "heatmap" / "index.html"
+            summary = heatmap.render(self.sample_rows(), str(output))
+            page = output.read_text()
+            self.assertIn("Active-hour rate", page)
+            self.assertIn('id="rate-window"', page)
+            self.assertIn('id="rate-watts"', page)
+            self.assertIn('id="rate-tariff"', page)
+            self.assertIn('id="rate-body"', page)
+            self.assertIn('"rates"', page)
+            self.assertIn("Electricity (whole box)", page)
+            self.assertIn("DeepSeek V4.1 Flash · peak", page)
+            self.assertEqual(summary["rate_window"], "7")
+            self.assertGreater(summary["rate_gen_per_h"], 0)
 
 
 if __name__ == "__main__":

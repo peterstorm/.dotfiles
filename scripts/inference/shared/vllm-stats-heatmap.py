@@ -6,6 +6,7 @@ import datetime as dt
 import html
 import json
 import os
+import statistics
 import sys
 from collections import defaultdict
 
@@ -24,6 +25,14 @@ MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", 
 PRICING_SOURCE = "LiteLLM model DB"
 PRICING_AS_OF = "15 Sep 2026"
 DEFAULT_CACHE_HIT = 0.80
+
+# Measured serving draw (2026-09-15): 2× ~400 W GPUs at 96–97% util — vLLM
+# busy-polls keep them near this between requests — plus ~150 W CPU/rest.
+POWER_DRAW_WATTS = 950
+DEFAULT_TARIFF = 0.30
+# Intervals longer than this span downtime inside the observation gap; they
+# deflate the rate and are excluded from the active-hour computation.
+ACTIVE_WINDOW_MAX_SECS = 1200
 
 PRICING = [
     {
@@ -73,6 +82,21 @@ COST_CSS = """\
   tfoot tr { border-top:1px solid var(--border); background:var(--surface-2); }
   tfoot th, tfoot td { border-bottom:0; }
   tfoot th { color:var(--text); font-weight:600; }
+"""
+
+RATE_CSS = """\
+  .rate-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+  .rate-card { min-width:0; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:14px; }
+  .rate-card strong { display:block; font-size:18px; line-height:1.2; font-variant-numeric:tabular-nums; }
+  .rate-card span { display:block; margin-top:4px; color:var(--muted); font-size:10px;
+    text-transform:uppercase; letter-spacing:.055em; }
+  .rate-card .sub { text-transform:none; letter-spacing:0; font-size:11px; color:var(--muted); }
+  .rate-card .sub span { display:inline; margin-top:0; font-size:11px; text-transform:none;
+    letter-spacing:0; font-variant-numeric:tabular-nums; }
+  input[type="number"] { background:var(--surface-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:6px 9px; font:inherit; width:90px; }
+  @media (max-width:860px) { .rate-grid { grid-template-columns:repeat(2,1fr); } }
 """
 
 COST_JS = """\
@@ -150,6 +174,88 @@ COST_JS = """\
   monthSelect.addEventListener('change', render);
   priceSelect.addEventListener('change', render);
   hitInput.addEventListener('input', render);
+  render();
+})();
+"""
+
+RATE_JS = """\
+(() => {
+  const data = JSON.parse(document.getElementById('cost-data').textContent);
+  const windowSelect = document.getElementById('rate-window');
+  const tariffInput = document.getElementById('rate-tariff');
+  const wattsInput = document.getElementById('rate-watts');
+  const note = document.getElementById('rate-note');
+  const body = document.getElementById('rate-body');
+  if (!windowSelect || !data.rates) return;
+  const cards = {
+    gen: document.getElementById('rate-gen-h'),
+    median: document.getElementById('rate-gen-median'),
+    p90: document.getElementById('rate-gen-p90'),
+    max: document.getElementById('rate-gen-max'),
+    prompt: document.getElementById('rate-prompt-h'),
+    windows: document.getElementById('rate-active-windows'),
+    hours: document.getElementById('rate-active-hours'),
+  };
+  const deepseek = data.pricing.find(entry => entry.id === 'deepseek-v4.1-flash-official') || data.pricing[0];
+  const sol = data.pricing.find(entry => entry.id === 'gpt-5.6-sol') || data.pricing[0];
+  const cacheHit = data.defaultCacheHit;
+
+  function usd(value) {
+    if (value >= 100) return '$' + value.toLocaleString('en-US', {maximumFractionDigits: 0});
+    if (value >= 1) return '$' + value.toFixed(2);
+    return '$' + value.toFixed(3);
+  }
+  function num(value) { return Math.round(value).toLocaleString('en-US'); }
+
+  function render() {
+    const keys = Object.keys(data.rates);
+    const rates = data.rates[windowSelect.value] || data.rates[keys[0]];
+    const tariff = Number(tariffInput.value) || 0;
+    const watts = Number(wattsInput.value) || 0;
+    const electricity = watts / 1000 * tariff;
+    cards.gen.textContent = num(rates.genPerH);
+    cards.median.textContent = num(rates.genMedian);
+    cards.p90.textContent = num(rates.genP90);
+    cards.max.textContent = num(rates.genMax);
+    cards.prompt.textContent = num(rates.promptPerH);
+    cards.windows.textContent = rates.activeWindows.toLocaleString('en-US') + ' / ' +
+      rates.totalWindows.toLocaleString('en-US') +
+      ' (' + Math.round(rates.activeWindows / rates.totalWindows * 100) + '%)';
+    cards.hours.textContent = rates.activeHours + ' of ' + Math.round(rates.periodHours) + ' h';
+    const rows = [
+      ['DeepSeek V4.1 Flash · peak', rates.promptPerH * deepseek.input + rates.genPerH * deepseek.output],
+      ['DeepSeek V4.1 Flash · off-peak', rates.promptPerH * deepseek.input / 2 + rates.genPerH * deepseek.output / 2],
+      ['DeepSeek V4.1 Flash · ' + Math.round(cacheHit * 100) + '% cache-hit',
+       rates.promptPerH * ((1 - cacheHit) * deepseek.input + cacheHit * deepseek.cache_read) +
+       rates.genPerH * deepseek.output],
+      ['GPT-5.6 Sol · ' + Math.round(cacheHit * 100) + '% cache-hit',
+       rates.promptPerH * ((1 - cacheHit) * sol.input + cacheHit * sol.cache_read) +
+       rates.genPerH * sol.output],
+      ['Electricity (whole box)', electricity],
+    ];
+    body.textContent = '';
+    for (const [label, perHour] of rows) {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.scope = 'row';
+      th.textContent = label;
+      tr.appendChild(th);
+      const price = document.createElement('td');
+      price.textContent = usd(perHour);
+      tr.appendChild(price);
+      const advantage = document.createElement('td');
+      advantage.textContent = label.startsWith('Electricity')
+        ? '×1'
+        : '×' + (perHour / electricity >= 10 ? Math.round(perHour / electricity) : (perHour / electricity).toFixed(1));
+      tr.appendChild(advantage);
+      body.appendChild(tr);
+    }
+    note.textContent = num(rates.genPerH) + ' gen/h · ' + num(rates.promptPerH) +
+      ' prompt/h · ' + rates.activeWindows + ' active windows · draw ' + watts + ' W · tariff ' + tariff + '/kWh';
+  }
+  windowSelect.addEventListener('change', render);
+  tariffInput.addEventListener('input', render);
+  wattsInput.addEventListener('input', render);
   render();
 })();
 """
@@ -354,6 +460,34 @@ def cost_estimate(prompt_tokens, generation_tokens, pricing, cache_hit):
         "output_cost": output_cost,
         "total": input_cost + output_cost,
         "effective_input_per_m": effective_input * 1e6,
+    }
+
+
+def active_window_stats(rows, days=None):
+    """Hourly token rates over clean active windows, excluding idle windows and
+    gap-spanning rows; days=None means all time. Returns None when the window
+    has no clean active windows."""
+    end_ts = max(r["ts"] for r in rows)
+    cutoff = None if days is None else end_ts - days * 86400
+    subset = rows if cutoff is None else [r for r in rows if r["ts"] >= cutoff]
+    active = [r for r in subset if r["generation"] > 0]
+    clean = [r for r in active if r["interval"] and r["interval"] <= ACTIVE_WINDOW_MAX_SECS]
+    if not clean:
+        return None
+    per_window = sorted(r["generation"] / r["interval"] * 3600 for r in clean)
+    total_gen = sum(r["generation"] for r in clean)
+    total_prompt = sum(r["prompt"] for r in clean)
+    total_secs = sum(r["interval"] for r in clean)
+    return {
+        "genPerH": total_gen / total_secs * 3600,
+        "genMedian": statistics.median(per_window),
+        "genP90": per_window[int(len(per_window) * 0.9)],
+        "genMax": per_window[-1],
+        "promptPerH": total_prompt / total_secs * 3600,
+        "activeWindows": len(active),
+        "totalWindows": len(subset),
+        "activeHours": len({dt.datetime.fromtimestamp(r["ts"]).strftime("%Y-%m-%d %H") for r in active}),
+        "periodHours": days * 24 if days is not None else (end_ts - min(r["ts"] for r in rows)) / 3600,
     }
 
 
@@ -602,6 +736,72 @@ def cost_section(cost_blob, default_month):
 </section>'''
 
 
+def rate_window_option(key, default):
+    labels = {"7": "Last 7 days", "14": "Last 14 days", "30": "Last 30 days", "__all__": "All time"}
+    selected = " selected" if key == default else ""
+    return f'<option value="{key}"{selected}>{labels[key]}</option>'
+
+
+def rate_section(rates_blob):
+    """Server-rendered default state; JS re-renders from the embedded blob on input."""
+    if not rates_blob:
+        return ""
+    order = ["7", "14", "30", "__all__"]
+    available = [key for key in order if key in rates_blob]
+    default = available[0]
+    rates = rates_blob[default]
+    official = next(entry for entry in PRICING if entry["id"] == "deepseek-v4.1-flash-official")
+    sol = next(entry for entry in PRICING if entry["id"] == "gpt-5.6-sol")
+    electricity = POWER_DRAW_WATTS / 1000 * DEFAULT_TARIFF
+    rows = [
+        ("DeepSeek V4.1 Flash · peak",
+         rates["promptPerH"] * official["input"] + rates["genPerH"] * official["output"]),
+        ("DeepSeek V4.1 Flash · off-peak",
+         rates["promptPerH"] * official["input"] / 2 + rates["genPerH"] * official["output"] / 2),
+        ("DeepSeek V4.1 Flash · 80% cache-hit",
+         cost_estimate(rates["promptPerH"], rates["genPerH"], official, DEFAULT_CACHE_HIT)["total"]),
+        ("GPT-5.6 Sol · 80% cache-hit",
+         cost_estimate(rates["promptPerH"], rates["genPerH"], sol, DEFAULT_CACHE_HIT)["total"]),
+        ("Electricity (whole box)", electricity),
+    ]
+    body = []
+    for label, per_hour in rows:
+        ratio = per_hour / electricity if electricity > 0 else 1
+        advantage = "×1" if label.startswith("Electricity") else (
+            f"×{ratio:.0f}" if ratio >= 10 else f"×{ratio:.1f}"
+        )
+        body.append(
+            '<tr><th scope="row">' + html.escape(label) + '</th>'
+            f'<td>{fmt_usd(per_hour)}</td><td>{advantage}</td></tr>'
+        )
+    window_options = "".join(rate_window_option(key, default) for key in available)
+    note = (
+        f"{rates['genPerH']:,.0f} gen/h · {rates['promptPerH']:,.0f} prompt/h · "
+        f"{rates['activeWindows']} active windows · draw {POWER_DRAW_WATTS} W · tariff {DEFAULT_TARIFF}/kWh"
+    )
+    return f'''
+<section class="rates-section">
+  <h2>Active-hour rate &amp; electricity</h2>
+  <p>Tokens per hour over clean active windows only — idle windows and gap-spanning rows (downtime inside an interval) are excluded, so this is the serving rate, not wall-clock throughput. Electricity prices the measured serving draw against your tariff; the box draws it continuously while up (vLLM busy-polls keep the GPUs loaded between requests).</p>
+  <div class="cost-controls">
+    <label>Window <select id="rate-window">{window_options}</select></label>
+    <label>Draw <input type="number" id="rate-watts" min="0" step="10" value="{POWER_DRAW_WATTS}"> W</label>
+    <label>Tariff <input type="number" id="rate-tariff" min="0" step="0.01" value="{DEFAULT_TARIFF}"> /kWh</label>
+    <span class="pricing-note" id="rate-note">{html.escape(note)}</span>
+  </div>
+  <div class="rate-grid">
+    <div class="rate-card"><strong id="rate-gen-h">{rates['genPerH']:,.0f}</strong><span>Generated · per active hour</span><span class="sub">median <span id="rate-gen-median">{rates['genMedian']:,.0f}</span> · p90 <span id="rate-gen-p90">{rates['genP90']:,.0f}</span> · max <span id="rate-gen-max">{rates['genMax']:,.0f}</span></span></div>
+    <div class="rate-card"><strong id="rate-prompt-h">{rates['promptPerH']:,.0f}</strong><span>Prompt · per active hour</span></div>
+    <div class="rate-card"><strong id="rate-active-windows">{rates['activeWindows']} / {rates['totalWindows']}</strong><span>Active windows</span></div>
+    <div class="rate-card"><strong id="rate-active-hours">{rates['activeHours']} of {rates['periodHours']:.0f} h</strong><span>Active clock-hours</span></div>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Per active hour</th><th>$/h</th><th>Box advantage</th></tr></thead>
+    <tbody id="rate-body">{"".join(body)}</tbody>
+  </table></div>
+</section>'''
+
+
 def model_panel(rows, model, panel_id, hidden, today, end_ts):
     selected = select_rows(rows, model)
     summary = aggregate(selected, today)
@@ -668,6 +868,11 @@ def render(rows, out_path):
             PRICING[0],
             DEFAULT_CACHE_HIT,
         )["total"]
+    rates_blob = {
+        ("__all__" if days is None else str(days)): stats
+        for days in (7, 14, 30, None)
+        if (stats := active_window_stats(rows, days)) is not None
+    }
     cost_json = json.dumps(
         {
             "months": cost_blob["months"],
@@ -675,13 +880,20 @@ def render(rows, out_path):
             "pricing": PRICING,
             "pricingSource": PRICING_SOURCE,
             "pricingAsOf": PRICING_AS_OF,
+            "rates": rates_blob,
+            "powerWatts": POWER_DRAW_WATTS,
+            "defaultTariff": DEFAULT_TARIFF,
+            "defaultCacheHit": DEFAULT_CACHE_HIT,
         },
         ensure_ascii=False,
     ).replace("<", "\\u003c").replace(">", "\\u003e")
     cost_scripts = (
         f'<script type="application/json" id="cost-data">{cost_json}</script>\n'
-        f'<script>\n{COST_JS}</script>'
+        f'<script>\n{COST_JS}\n{RATE_JS}</script>'
     )
+    rate_html = rate_section(rates_blob) if rates_blob else ""
+    default_rate_key = next((key for key in ("7", "14", "30", "__all__") if key in rates_blob), "")
+    default_rate = rates_blob.get(default_rate_key, {}).get("genPerH", 0.0)
 
     page = f'''<!doctype html>
 <html lang="en">
@@ -781,7 +993,7 @@ def render(rows, out_path):
     .bar-row {{ grid-template-columns:80px minmax(60px,1fr) 52px; gap:7px; }}
     .bar-date {{ font-size:11px; }}
   }}
-  {COST_CSS}
+  {COST_CSS}{RATE_CSS}
   @media (prefers-reduced-motion:reduce) {{ * {{ scroll-behavior:auto !important; transition:none !important; }} }}
 </style>
 </head>
@@ -799,6 +1011,7 @@ def render(rows, out_path):
     {comparison_table(rows, models)}
   </section>
   {cost_html}
+  {rate_html}
   <section class="explain">
     <h2>How to read this page</h2>
     <p><strong>Durable totals:</strong> engine counters reset whenever a container restarts or the runtime changes. This ledger records counter deltas to disk and continues across vLLM, SGLang, restarts, and engine switches.</p>
@@ -860,6 +1073,8 @@ def render(rows, out_path):
         "cost_month": default_month or "",
         "cost_label": PRICING[0]["label"],
         "cost_total": int(round(cost_total)),
+        "rate_gen_per_h": int(round(default_rate)),
+        "rate_window": default_rate_key,
     }
 
 
@@ -883,6 +1098,11 @@ def main():
         print(
             f"cloud counterfactual: {summary['cost_label']} · {summary['cost_month']} · "
             f"{fmt_usd(summary['cost_total'])}"
+        )
+    if summary["rate_window"]:
+        print(
+            f"active-hour rate: {summary['rate_gen_per_h']:,} gen/h · "
+            f"clean active windows, {summary['rate_window']}d"
         )
     if args.write:
         print(f"stats page written to {output}", file=sys.stderr)

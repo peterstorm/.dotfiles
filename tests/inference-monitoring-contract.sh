@@ -122,6 +122,7 @@ for marker in \
   'Served throughput · 24 hours' \
   'Filter statistics by model' \
   'Cloud cost counterfactual' \
+  'Active-hour rate' \
   'including idle time'; do
   grep -Fq -- "$marker" "$HEATMAP" || fail "stats page missing: $marker"
 done
