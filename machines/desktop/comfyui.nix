@@ -1397,6 +1397,9 @@ let
         class _StubInstance:
             routes = _StubRoutes()
 
+            def add_on_prompt_handler(self, _handler):
+                pass
+
         PromptServer.instance = _StubInstance()
         spec = importlib.util.spec_from_file_location(
             "impact_pack_contract",
