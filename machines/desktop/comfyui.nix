@@ -1454,8 +1454,12 @@ let
         spec.loader.exec_module(module)
         if "MuseModelLoader" not in module.NODE_CLASS_MAPPINGS:
             raise RuntimeError("Muse Model Loader contract: did not register")
-        for name in ("PROFILES", "ORDER", "PINNED_CHOICES", "CLIP_TYPES"):
-            if not hasattr(module, name):
+        loader_module = sys.modules["muse_model_loader_contract.muse_model_loader"]
+        for name in ("CLIP_TYPES", "PINNED_CHOICES"):
+            if not hasattr(loader_module, name):
+                raise RuntimeError(f"Muse Model Loader contract: {name} missing")
+        for name in ("PROFILES", "ORDER"):
+            if not hasattr(loader_module.MuseModelLoader, name):
                 raise RuntimeError(f"Muse Model Loader contract: {name} missing")
         PY
         chmod -R a-w "$out"
