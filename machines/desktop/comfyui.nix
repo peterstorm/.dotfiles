@@ -1276,7 +1276,7 @@ let
 
         rmbg = module.NODE_CLASS_MAPPINGS["RMBG"]
         parameters = list(inspect.signature(rmbg.process_image).parameters)
-        if parameters != ["self", "images", "model_name", "params"]:
+        if parameters != ["self", "image", "model", "params"]:
             raise RuntimeError(
                 f"RMBG trim contract: unexpected process_image signature {parameters}"
             )
