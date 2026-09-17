@@ -1275,9 +1275,14 @@ let
         import inspect
 
         rmbg = module.NODE_CLASS_MAPPINGS["RMBG"]
-        parameters = inspect.signature(rmbg.process_image).parameters
-        for name in ("image", "model", "sensitivity", "process_res", "background"):
-            if name not in parameters:
+        parameters = list(inspect.signature(rmbg.process_image).parameters)
+        if parameters != ["self", "images", "model_name", "params"]:
+            raise RuntimeError(
+                f"RMBG trim contract: unexpected process_image signature {parameters}"
+            )
+        required = rmbg.INPUT_TYPES()["required"]
+        for name in ("process_res", "sensitivity", "background"):
+            if name not in required:
                 raise RuntimeError(
                     f"RMBG trim contract: process_image lost the muse call "
                     f"parameter {name}"
