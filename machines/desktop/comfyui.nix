@@ -1280,9 +1280,9 @@ let
             raise RuntimeError(
                 f"RMBG trim contract: unexpected process_image signature {parameters}"
             )
-        required = rmbg.INPUT_TYPES()["required"]
+        optional = rmbg.INPUT_TYPES()["optional"]
         for name in ("process_res", "sensitivity", "background"):
-            if name not in required:
+            if name not in optional:
                 raise RuntimeError(
                     f"RMBG trim contract: process_image lost the muse call "
                     f"parameter {name}"
