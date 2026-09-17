@@ -619,18 +619,6 @@ let
     rev = "0b9ffee7f2f6f4203a644b99f8d81ad1a9e3fc7e";
     hash = "sha256-T+JDVMcRhJOqsW/CtCZl8/V1UT7RYUt3CQb+/TaZjM0=";
   };
-
-  # LBH-123-AI's 3D latent upscaler: the resize workflow's post-upscale pass
-  # runs MinimaxH3LatentUpscaler3D from this pack (aux_id pinned in the
-  # example workflow). The HF repo ships only the conv_v1 weights; the BF16
-  # file is the highest-quant checkpoint available (fp16 and fp32.pth are
-  # deliberately not part of this profile).
-  h3LatentUpscaler3DSource = pkgs.fetchFromGitHub {
-    owner = "LBH-123-AI";
-    repo = "Comfyui_Minimax_h3_latent_Upscaler";
-    rev = "6a4b191e8af583b7c097f564690325f91d18c2e2";
-    hash = "sha256-fBY38Ul53OJHo2vseaD7u9wswdlCRXZrsh78SnUSFkI=";
-  };
   # PixelEasel publishes these examples without an explicit redistribution
   # license. Fixed-output fetches keep them private to the local Development
   # build and make source drift fail closed.
@@ -697,40 +685,6 @@ let
         spec.loader.exec_module(module)
         if "MiniMaxH3MotionContextResize" not in module.NODE_CLASS_MAPPINGS:
             raise RuntimeError("H3 Motion Context Resize contract: did not register")
-        PY
-        chmod -R a-w "$out"
-      '';
-
-  h3LatentUpscaler3DNode =
-    pkgs.runCommand "comfyui-h3-latent-upscaler-3d-6a4b191-tested"
-      {
-        nativeBuildInputs = [ comfyPythonEnv ];
-      }
-      ''
-        cp -R ${h3LatentUpscaler3DSource}/. "$out"
-        chmod -R u+w "$out"
-        export PYTHONPATH=${comfyui}/share/comfyui
-        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
-        import importlib.util
-        import pathlib
-        import sys
-
-        package_root = pathlib.Path(sys.argv[1])
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
-        spec = importlib.util.spec_from_file_location(
-            "h3_latent_upscaler_3d_contract",
-            package_root / "__init__.py",
-            submodule_search_locations=[str(package_root)],
-        )
-        if spec is None or spec.loader is None:
-            raise RuntimeError("could not load Minimax h3 latent Upscaler")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        if "MinimaxH3LatentUpscaler3D" not in module.NODE_CLASS_MAPPINGS:
-            raise RuntimeError("h3 latent Upscaler 3D contract: did not register")
         PY
         chmod -R a-w "$out"
       '';
@@ -1726,7 +1680,6 @@ let
     ln -s ${museCharacterSheetKleinNode} "$out/muse-character-sheet-klein"
     ln -s ${museCharacterSheetNode} "$out/muse-character-sheet"
     ln -s ${h3MotionContextResizeNode} "$out/ComfyUI-H3MotionContextResize"
-    ln -s ${h3LatentUpscaler3DNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";

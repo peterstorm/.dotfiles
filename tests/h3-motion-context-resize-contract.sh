@@ -32,23 +32,27 @@ done
 bash -n "$DOWNLOADER"
 nix-instantiate --parse "$MODULE" >/dev/null
 
-# --- Nix module wiring: pinned sources ---
+# --- Nix module wiring: the new resize source ---
 contains "$MODULE" 'h3MotionContextResizeSource = pkgs.fetchFromGitHub'
 contains "$MODULE" 'rev = "0b9ffee7f2f6f4203a644b99f8d81ad1a9e3fc7e";'
 contains "$MODULE" 'hash = "sha256-T+JDVMcRhJOqsW/CtCZl8/V1UT7RYUt3CQb+/TaZjM0=";'
-contains "$MODULE" 'h3LatentUpscaler3DSource = pkgs.fetchFromGitHub'
-contains "$MODULE" 'rev = "6a4b191e8af583b7c097f564690325f91d18c2e2";'
-contains "$MODULE" 'hash = "sha256-fBY38Ul53OJHo2vseaD7u9wswdlCRXZrsh78SnUSFkI=";'
 
-# Node derivations with the args-parsing import contract
+# The 3D latent upscaler is already pinned as minimaxH3LatentUpscalerNode at
+# the latest upstream rev (d7c01b90, which includes the rev the workflow's
+# aux_id names); the module must not carry a duplicate pin.
+contains "$MODULE" 'minimaxH3LatentUpscalerNode = pkgs.fetchFromGitHub'
+contains "$MODULE" 'owner = "LBH-123-AI";'
+contains "$MODULE" 'rev = "d7c01b9011f2e8439493f6c02c29995a27df276f";'
+absent "$MODULE" 'h3LatentUpscaler3DSource'
+absent "$MODULE" 'h3LatentUpscaler3DNode'
+absent "$MODULE" 'rev = "6a4b191e8af583b7c097f564690325f91d18c2e2";'
+
+# Node derivation with the args-parsing import contract
 contains "$MODULE" 'h3MotionContextResizeNode ='
 contains "$MODULE" 'comfyui-h3-motion-context-resize-0b9ffee-tested'
-contains "$MODULE" 'h3LatentUpscaler3DNode ='
-contains "$MODULE" 'comfyui-h3-latent-upscaler-3d-6a4b191-tested'
 contains "$MODULE" 'if "MiniMaxH3MotionContextResize" not in module.NODE_CLASS_MAPPINGS:'
-contains "$MODULE" 'if "MinimaxH3LatentUpscaler3D" not in module.NODE_CLASS_MAPPINGS:'
 contains "$MODULE" 'ln -s ${h3MotionContextResizeNode} "$out/ComfyUI-H3MotionContextResize"'
-contains "$MODULE" 'ln -s ${h3LatentUpscaler3DNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"'
+contains "$MODULE" 'ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"'
 
 # The upscaler's custom model folder must map through the paths config.
 contains "$MODULE" '"latent_upscale_models"'
