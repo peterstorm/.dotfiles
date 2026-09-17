@@ -1376,6 +1376,28 @@ let
         sys.argv = ["comfyui", "--cpu"]
         import comfy.options
         comfy.options.enable_args_parsing()
+        # Impact-Pack's impact_server registers aiohttp routes at module load
+        # via @PromptServer.instance.routes.post; the sandbox has no live
+        # server, so a stub instance with no-op decorators owns the seam.
+        from server import PromptServer
+
+        class _StubRoutes:
+            def post(self, _path):
+                def decorator(fn):
+                    return fn
+
+                return decorator
+
+            def get(self, _path):
+                def decorator(fn):
+                    return fn
+
+                return decorator
+
+        class _StubInstance:
+            routes = _StubRoutes()
+
+        PromptServer.instance = _StubInstance()
         spec = importlib.util.spec_from_file_location(
             "impact_pack_contract",
             package_root / "__init__.py",
