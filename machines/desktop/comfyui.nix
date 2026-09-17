@@ -224,7 +224,7 @@ let
       omegaconf
       opencv4
       peft
-      piexif
+      segment-anything
       pillow
       psutil
       pydantic
@@ -236,6 +236,7 @@ let
       safetensors
       scenedetect
       scikit-image
+      segment-anything
       scipy
       sentencepiece
       simpleeval
