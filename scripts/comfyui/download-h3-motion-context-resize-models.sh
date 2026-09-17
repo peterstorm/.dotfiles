@@ -132,10 +132,11 @@ main() {
   rm -rf "$STAGING"
   echo "H3_MOTION_CONTEXT_RESIZE_MODELS_READY: $PROFILE_REV"
   echo "model root: $MODELS_ROOT"
-  echo "the 3D latent upscaler ships without a declared license - the"
-  echo "Development-only note travels with the model."
-}
+  echo "the 3D latent upscaler ships without a declared license (see"
+  echo "$UPSCALER_LICENSE_URL) - the Development-only note travels with"
+  echo "the model."
 
+}
 verification_manifest() {
   awk 'NF == 6 { print $1, $2, $6 }' <<<"$HF_MANIFEST"
 }
