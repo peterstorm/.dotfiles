@@ -1186,9 +1186,6 @@ let
         import pathlib
         import sys
 
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
         package_root = pathlib.Path(sys.argv[1])
         spec = importlib.util.spec_from_file_location(
             "krea2_nag_contract",
@@ -1253,9 +1250,6 @@ let
         import pathlib
         import sys
 
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
         package_root = pathlib.Path(sys.argv[1])
         spec = importlib.util.spec_from_file_location(
             "rmbg_contract",
@@ -1311,9 +1305,6 @@ let
         import pathlib
         import sys
 
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
         package_root = pathlib.Path(sys.argv[1])
         spec = importlib.util.spec_from_file_location(
             "memory_cleanup_contract",
@@ -1366,9 +1357,6 @@ let
         import pathlib
         import sys
 
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
         package_root = pathlib.Path(sys.argv[1])
         spec = importlib.util.spec_from_file_location(
             "impact_pack_contract",
@@ -1466,9 +1454,6 @@ let
         import pathlib
         import sys
 
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
         package_root = pathlib.Path(sys.argv[1])
         spec = importlib.util.spec_from_file_location(
             "muse_character_sheet_klein_contract",
@@ -1501,9 +1486,6 @@ let
         import pathlib
         import sys
 
-        sys.argv = ["comfyui", "--cpu"]
-        import comfy.options
-        comfy.options.enable_args_parsing()
         package_root = pathlib.Path(sys.argv[1])
         spec = importlib.util.spec_from_file_location(
             "muse_character_sheet_contract",
