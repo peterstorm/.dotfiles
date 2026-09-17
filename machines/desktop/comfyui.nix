@@ -112,6 +112,30 @@ let
           hash = "sha256-8GRxNWVrizsmTjxKDJn3gV4OyLZ6DPzk90o9EFMlDd0=";
         };
       };
+      # Meta's segment-anything: Impact-Pack imports sam_model_registry at
+      # module load. Nixpkgs' python package set has no segment-anything
+      # expression; the PyPI 1.0 sdist installs directly and its runtime
+      # torch/torchvision resolve to the pinned binary wheels.
+      segment-anything = prev.buildPythonPackage {
+        pname = "segment-anything";
+        version = "1.0";
+        format = "setuptools";
+        doCheck = false;
+        src = pkgs.fetchurl {
+          url = "https://files.pythonhosted.org/packages/4f/88/7725f418f2bb4a7ac2e5e8295fbbca2900c70c8fe5ba48b3aff5788af9a2/segment_anything-1.0.tar.gz";
+          hash = "sha256-7Qyfb7B7vvnGI4pwKKE8gnLxumtjBcpz4+BkJmUDc2s=";
+        };
+        propagatedBuildInputs = [
+          final.torch
+          final.torchvision
+        ];
+      };
+      # Ultralytics pulls the full pytest/onnx/onnxruntime check surface for a
+      # test phase the import contract makes redundant; skip it and let the
+      # runtime Face Detail pass own the load.
+      ultralytics = prev.ultralytics.overridePythonAttrs (_old: {
+        doCheck = false;
+      });
       cuda-bindings = prev.cuda-bindings.override {
         cudaPackages = binaryCudaPackages;
       };
@@ -185,6 +209,7 @@ let
       comfyui-workflow-templates
       color-matcher
       diffusers
+      dill
       einops
       faster-whisper
       filelock
@@ -199,6 +224,7 @@ let
       omegaconf
       opencv4
       peft
+      piexif
       pillow
       psutil
       pydantic
@@ -209,6 +235,7 @@ let
       rotary-embedding-torch
       safetensors
       scenedetect
+      scikit-image
       scipy
       sentencepiece
       simpleeval
@@ -222,6 +249,7 @@ let
       torchvision
       tqdm
       transformers
+      ultralytics
       yarl
     ]
   );
@@ -295,6 +323,7 @@ let
     "upscale_models"
     "SEEDVR2"
     "audio_encoders"
+    "ultralytics"
   ];
   modelPathEntries = builtins.listToAttrs (
     map (directory: {
@@ -429,6 +458,16 @@ let
       modelTools
     ];
     text = builtins.readFile ../../scripts/comfyui/download-sam3d-body-models.sh;
+  };
+  downloadMuseCharacterSheetModels = pkgs.writeShellApplication {
+    name = "download-muse-character-sheet-models";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-muse-character-sheet-models.sh;
   };
 
   krea2EditNode = pkgs.fetchFromGitHub {
@@ -1099,6 +1138,411 @@ let
     hash = "sha256-VgrNS/EfmJ94MFQCHDtke7JUr2jCtUgbHPYccKCh2mI=";
   };
 
+  # The two Muse Character Sheet nodes from Machine Delusions' 2CQwma8ZKNQ
+  # video: single-node 5-pose character-sheet generators (Klein single-reference
+  # edit + Krea2 two-reference edit) with confirm/re-roll session-state
+  # architecture. Upstream does not declare a code license. These immutable
+  # pins are authorized only for private local Development evaluation; they
+  # are not a Production or redistribution grant.
+  museCharacterSheetKleinSource = pkgs.fetchFromGitHub {
+    owner = "muse-collective-26";
+    repo = "muse-character-sheet-klein";
+    rev = "6892eeabd98bf4fa15b04d910d8b88c5b2cceabc";
+    hash = "sha256-TOaD2E4CB5vVrcYl2GH7iIFhALjbwLH+5dcko3MwH/0=";
+  };
+
+  museCharacterSheetSource = pkgs.fetchFromGitHub {
+    owner = "muse-collective-26";
+    repo = "muse-character-sheet";
+    rev = "29fd5aa4889c4ea024d6bfa34daef421746fe9fb";
+    hash = "sha256-+T/E1dqnwb/SKbUrXb9RLtbLeGBTa2Qiaaxiq2hW85U=";
+  };
+
+  # The generic hardware-aware loader both workflows feed their sheet nodes
+  # through; the shipped workflow's aux_id pins this exact revision. Upstream
+  # does not declare a code license; the immutable pin is authorized only for
+  # private local Development evaluation.
+  museModelLoaderSource = pkgs.fetchFromGitHub {
+    owner = "muse-collective-26";
+    repo = "muse-model-loader";
+    rev = "02fb218a0ae57221f4fada4975eac680ef657ca7";
+    hash = "sha256-Cv34NKxMS5ekIFeFdMvdCWjWEkcFTy8A0O8IK6V58F8=";
+  };
+
+  krea2NagNode =
+    pkgs.runCommand "comfyui-krea2-nag-0afb38d-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${krea2NagSource}/. "$out"
+        chmod -R u+w "$out"
+        cd "$out"
+        ${comfyPythonEnv}/bin/python tests/test_nag_math.py
+        ${comfyPythonEnv}/bin/python tests/test_krea2edit_integration.py
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "krea2_nag_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load ComfyUI-Krea2-NAG")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "Krea2EditNormalizedAttentionGuidance" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError("Krea2-NAG contract: did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  # Normalized Attention Guidance for Krea2Edit (MIT, zero Python
+  # dependencies) - required unconditionally by the Krea2 sheet node. Its own
+  # nag-math and integration test suites are pure Python (no comfy import),
+  # so both run in the sandbox; the NODE_CLASS_MAPPINGS import is the
+  # load-bearing contract that the node pack loads against the pinned
+  # ComfyUI source.
+  krea2NagSource = pkgs.fetchFromGitHub {
+    owner = "iljung1106";
+    repo = "ComfyUI-Krea2-NAG";
+    rev = "0afb38dfc4ae4040d621ac5a46e1761b83fa2a43";
+    hash = "sha256-wMZVVCFMGGK1MIt/Dg++rcImgAPGk0g9fZG1WMsqCVg=";
+  };
+
+  # ComfyUI-RMBG v3.1.0 (GPL-3.0) - the white-background cleanup run on every
+  # pose of both sheet nodes. The pack eagerly exec_modules every py/*.py at
+  # load; each wrapped in try/except, so missing-dependency modules print
+  # startup errors without registering. Only the RMBG-2.0 family the sheet
+  # nodes call is needed on this workstation, so the trimmed pack deploys
+  # exactly AILab_RMBG.py + AILab_utils.py (+ the web assets) - clean startup,
+  # no missing-dependency error spam, and none of the onnxruntime/
+  # groundingdino/decord/transparent-background stack for model families this
+  # workflow never calls.
+  rmbgSource = pkgs.fetchFromGitHub {
+    owner = "1038lab";
+    repo = "ComfyUI-RMBG";
+    rev = "58f1947a11567a9f8b707223185570850e773856";
+    hash = "sha256-8aQWZlVCx4b1Za72LqApAxodUA68LzkPa/sRDFLZewI=";
+  };
+
+  rmbgNode =
+    pkgs.runCommand "comfyui-rmbg-3.1.0-rmbg2-family-only"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        mkdir -p "$out/py"
+        cp -R ${rmbgSource}/web "$out/web"
+        install -m 0444 ${rmbgSource}/__init__.py "$out/__init__.py"
+        install -m 0444 ${rmbgSource}/py/AILab_RMBG.py "$out/py/AILab_RMBG.py"
+        install -m 0444 ${rmbgSource}/py/AILab_utils.py "$out/py/AILab_utils.py"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "rmbg_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load ComfyUI-RMBG")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if list(module.NODE_CLASS_MAPPINGS) != ["RMBG"]:
+            raise RuntimeError(
+                f"RMBG trim contract: expected only the RMBG node, got "
+                f"{sorted(module.NODE_CLASS_MAPPINGS)}"
+            )
+        import inspect
+
+        rmbg = module.NODE_CLASS_MAPPINGS["RMBG"]
+        parameters = inspect.signature(rmbg.process_image).parameters
+        for name in ("image", "model", "sensitivity", "process_res", "background"):
+            if name not in parameters:
+                raise RuntimeError(
+                    f"RMBG trim contract: process_image lost the muse call "
+                    f"parameter {name}"
+                )
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  # Comfyui-Memory_Cleanup v1.1.3 (LAOGOU-666): the RAMCleanup/VRAMCleanup
+  # sinks both Muse Character Sheet graphs wire. Upstream does not declare a
+  # code license; the immutable pin is authorized only for private local
+  # Development evaluation. psutil is the only Python dependency.
+  memoryCleanupSource = pkgs.fetchFromGitHub {
+    owner = "LAOGOU-666";
+    repo = "Comfyui-Memory_Cleanup";
+    rev = "58de13a6090e04408e343501ff8902c034d9f518";
+    hash = "sha256-/rZ31XHev15YttuxM0HRMf2gcUvp9iEVi1YGhDs8jb8=";
+  };
+
+  memoryCleanupNode =
+    pkgs.runCommand "comfyui-memory-cleanup-1.1.3-import-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${memoryCleanupSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "memory_cleanup_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load Comfyui-Memory_Cleanup")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        for name in ("VRAMCleanup", "RAMCleanup"):
+            if name not in module.NODE_CLASS_MAPPINGS:
+                raise RuntimeError(f"Memory_Cleanup contract: {name} did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  # ComfyUI-Impact-Pack v8.28.3 (GPL-3.0) + ComfyUI-Impact-Subpack v1.3.5
+  # (AGPL-3.0): FaceDetailer and UltralyticsDetectorProvider behind the sheet
+  # nodes' Face Detail pass (off in both shipped graphs, works out of the box
+  # when enabled). segment-anything/piexif/scikit-image/ultralytics/dill are
+  # the import-level dependency surface; the detector models are owned by the
+  # checksum-verified local downloader.
+  impactPackSource = pkgs.fetchFromGitHub {
+    owner = "ltdrdata";
+    repo = "ComfyUI-Impact-Pack";
+    rev = "429d0159ad429e64d2b3916e6e7be9c22d025c3c";
+    hash = "sha256-Zom2ugLAnxDhjDxIGO5jpc2oACFD7S8TUkj9rRXN3xI=";
+  };
+
+  impactSubpackSource = pkgs.fetchFromGitHub {
+    owner = "ltdrdata";
+    repo = "ComfyUI-Impact-Subpack";
+    rev = "50c7b71a6a224734cc9b21963c6d1926816a97f1";
+    hash = "sha256-+qYmGdHjrWYfJ+uqGURWk1y8kVR0pBc+ObjUyM0A7UA=";
+  };
+
+  impactPackNode =
+    pkgs.runCommand "comfyui-impact-pack-8.28.3-import-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${impactPackSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "impact_pack_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load ComfyUI-Impact-Pack")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "FaceDetailer" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError("Impact-Pack contract: FaceDetailer did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  impactSubpackNode =
+    pkgs.runCommand "comfyui-impact-subpack-1.3.5-import-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${impactSubpackSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "impact_subpack_contract",
+            pathlib.Path(sys.argv[1]) / "__init__.py",
+            submodule_search_locations=[str(pathlib.Path(sys.argv[1]))],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load ComfyUI-Impact-Subpack")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "UltralyticsDetectorProvider" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError(
+                "Impact-Subpack contract: UltralyticsDetectorProvider did not register"
+            )
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  museModelLoaderNode =
+    pkgs.runCommand "comfyui-muse-model-loader-02fb218-import-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${museModelLoaderSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "muse_model_loader_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load Muse Model Loader")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "MuseModelLoader" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError("Muse Model Loader contract: did not register")
+        for name in ("PROFILES", "ORDER", "PINNED_CHOICES", "CLIP_TYPES"):
+            if not hasattr(module, name):
+                raise RuntimeError(f"Muse Model Loader contract: {name} missing")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  museCharacterSheetKleinNode =
+    pkgs.runCommand "comfyui-muse-character-sheet-klein-6892eea-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${museCharacterSheetKleinSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "muse_character_sheet_klein_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load Muse Character Sheet Klein")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        for name in ("MuseCharacterSheetKlein", "MuseSheetAlignFigure"):
+            if name not in module.NODE_CLASS_MAPPINGS:
+                raise RuntimeError(f"Klein contract: {name} did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  museCharacterSheetNode =
+    pkgs.runCommand "comfyui-muse-character-sheet-29fd5a-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${museCharacterSheetSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        package_root = pathlib.Path(sys.argv[1])
+        spec = importlib.util.spec_from_file_location(
+            "muse_character_sheet_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load Muse Character Sheet")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        for name in ("MuseCharacterSheetDirector", "MuseSheetAlignFigure"):
+            if name not in module.NODE_CLASS_MAPPINGS:
+                raise RuntimeError(f"Krea2 sheet contract: {name} did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  # The two workstation BF16 adaptations of the video's Muse Character Sheet
+  # workflows. See docs/runbooks/muse-character-sheet-workflows.md.
+  museCharacterSheetWorkflows =
+    pkgs.runCommand "muse-character-sheet-maximum-quality-bf16-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-muse-character-sheet-workflows.sh} \
+          --klein-source \
+            "${museCharacterSheetKleinSource}/workflows/Muse Character Sheet Klein.json" \
+          --director-source \
+            "${museCharacterSheetSource}/workflows/Muse Character Sheet.json" \
+          --output-dir "$out/workflows"
+      '';
+
   declarativeNodes = pkgs.runCommand "comfyui-declarative-custom-nodes" { } ''
     mkdir -p "$out"
     ln -s ${musePromptNode}/muse_glimmer_prompt "$out/muse_glimmer_prompt"
@@ -1128,6 +1572,14 @@ let
     ln -s ${vdnH3Node} "$out/ComfyUI-VDN-H3"
     ln -s ${solAttnNode} "$out/ComfyUI-sol-attn"
     ln -s ${rebalancePackNode} "$out/Rebalance-Pack"
+    ln -s ${krea2NagNode} "$out/ComfyUI-Krea2-NAG"
+    ln -s ${rmbgNode} "$out/ComfyUI-RMBG"
+    ln -s ${memoryCleanupNode} "$out/Comfyui-Memory_Cleanup"
+    ln -s ${impactPackNode} "$out/ComfyUI-Impact-Pack"
+    ln -s ${impactSubpackNode} "$out/ComfyUI-Impact-Subpack"
+    ln -s ${museModelLoaderNode} "$out/muse-model-loader"
+    ln -s ${museCharacterSheetKleinNode} "$out/muse-character-sheet-klein"
+    ln -s ${museCharacterSheetNode} "$out/muse-character-sheet"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -3235,6 +3687,8 @@ let
     elite_dir="$user_workflows/creative-suite"
     balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
     sam3d_dir="$user_workflows/sam3d-body-bf16-v1.0"
+    muse_sheet_klein_dir="$user_workflows/muse-character-sheet-klein-bf16"
+    muse_sheet_krea2_dir="$user_workflows/muse-character-sheet-krea2-bf16"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
     ep30_staging="$user_workflows/.pixaroma-ep30.new"
@@ -3258,6 +3712,8 @@ let
     elite_staging="$user_workflows/.creative-suite.new"
     balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
     sam3d_staging="$user_workflows/.sam3d-body-bf16-v1.0.new"
+    muse_sheet_klein_staging="$user_workflows/.muse-character-sheet-klein-bf16.new"
+    muse_sheet_krea2_staging="$user_workflows/.muse-character-sheet-krea2-bf16.new"
     input_dir=/var/lib/comfyui/input
     blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
@@ -3267,7 +3723,8 @@ let
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
-      "$balanced_staging" "$sam3d_staging"
+      "$balanced_staging" "$sam3d_staging" \
+      "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
@@ -3276,6 +3733,7 @@ let
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
+      "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
       "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
@@ -3346,6 +3804,12 @@ let
     for source in ${sam3dBodyWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$sam3d_staging/$(basename "$source")"
     done
+    for source in ${museCharacterSheetWorkflows}/workflows/01*.json; do
+      install -m 0600 "$source" "$muse_sheet_klein_staging/$(basename "$source")"
+    done
+    for source in ${museCharacterSheetWorkflows}/workflows/02*.json; do
+      install -m 0600 "$source" "$muse_sheet_krea2_staging/$(basename "$source")"
+    done
     install -m 0600 ${sam3dBodyInputAsset} "$input_dir/woman_holding_water_glass.mp4"
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
@@ -3390,6 +3854,10 @@ let
     mv "$h3_vdn_realism_staging" "$h3_vdn_realism_dir"
     mv "$elite_staging" "$elite_dir"
     mv "$balanced_staging" "$balanced_dir"
+    verify_versioned_workflow_install "$muse_sheet_klein_staging" "$muse_sheet_klein_dir"
+    verify_versioned_workflow_install "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
+    mv "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
+    mv "$muse_sheet_klein_staging" "$muse_sheet_klein_dir"
   '';
 
   extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {
@@ -3414,6 +3882,7 @@ in
     downloadMuseWhisperMedium
     downloadMinimaxH3LatentUpscaler
     downloadSam3dBodyModels
+    downloadMuseCharacterSheetModels
     modelTools
     pkgs.ffmpeg-full
   ];
