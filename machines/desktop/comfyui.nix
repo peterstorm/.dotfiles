@@ -325,6 +325,7 @@ let
     "SEEDVR2"
     "audio_encoders"
     "ultralytics"
+    "latent_upscale_models"
   ];
   modelPathEntries = builtins.listToAttrs (
     map (directory: {
@@ -470,6 +471,16 @@ let
     ];
     text = builtins.readFile ../../scripts/comfyui/download-muse-character-sheet-models.sh;
   };
+  downloadH3MotionContextResizeModels = pkgs.writeShellApplication {
+    name = "download-h3-motion-context-resize-models";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-h3-motion-context-resize-models.sh;
+  };
 
   krea2EditNode = pkgs.fetchFromGitHub {
     owner = "lbouaraba";
@@ -595,6 +606,31 @@ let
     hash = "sha256-tu5Q7keXuZTUN8y4qSeGJqInDNm8WWwB3UQmmGWc4ek=";
   };
 
+
+  # True Visuals' Motion Context Resize v1.1 video (2026/09/16) fixes the
+  # post-upscale part of the 2-phase upscale workflow: H3MotionContextResize
+  # resizes only the video stream of the AV latent format the Motion Context
+  # pack reads and writes, so a saved context can chain-test continuity at a
+  # different resolution without regenerating the previous clip. Kept as a
+  # separate pack (not a patch) so a `git pull` there never conflicts.
+  h3MotionContextResizeSource = pkgs.fetchFromGitHub {
+    owner = "shisa84";
+    repo = "ComfyUI-H3MotionContextResize";
+    rev = "0b9ffee7f2f6f4203a644b99f8d81ad1a9e3fc7e";
+    hash = "sha256-T+JDVMcRhJOqsW/CtCZl8/V1UT7RYUt3CQb+/TaZjM0=";
+  };
+
+  # LBH-123-AI's 3D latent upscaler: the resize workflow's post-upscale pass
+  # runs MinimaxH3LatentUpscaler3D from this pack (aux_id pinned in the
+  # example workflow). The HF repo ships only the conv_v1 weights; the BF16
+  # file is the highest-quant checkpoint available (fp16 and fp32.pth are
+  # deliberately not part of this profile).
+  h3LatentUpscaler3DSource = pkgs.fetchFromGitHub {
+    owner = "LBH-123-AI";
+    repo = "Comfyui_Minimax_h3_latent_Upscaler";
+    rev = "6a4b191e8af583b7c097f564690325f91d18c2e2";
+    hash = "sha256-fBY38Ul53OJHo2vseaD7u9wswdlCRXZrsh78SnUSFkI=";
+  };
   # PixelEasel publishes these examples without an explicit redistribution
   # license. Fixed-output fetches keep them private to the local Development
   # build and make source drift fail closed.
@@ -627,6 +663,77 @@ let
     rev = "22a7ec38c4d16a76a8dea53b6e0faa0356f4f220";
     hash = "sha256-UIKCkqMIbWeacsycqh1ZJ0R7szuioOwyigjOKMKamYs=";
   };
+
+  # The resize node's nodes.py imports comfy.model_management, so the import
+  # contract parses args (before --cpu) after package_root is read from the
+  # real argv[1] — the ordering every import-tested pack in this module uses.
+  h3MotionContextResizeNode =
+    pkgs.runCommand "comfyui-h3-motion-context-resize-0b9ffee-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${h3MotionContextResizeSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        spec = importlib.util.spec_from_file_location(
+            "h3_motion_context_resize_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load ComfyUI-H3MotionContextResize")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "MiniMaxH3MotionContextResize" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError("H3 Motion Context Resize contract: did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
+
+  h3LatentUpscaler3DNode =
+    pkgs.runCommand "comfyui-h3-latent-upscaler-3d-6a4b191-tested"
+      {
+        nativeBuildInputs = [ comfyPythonEnv ];
+      }
+      ''
+        cp -R ${h3LatentUpscaler3DSource}/. "$out"
+        chmod -R u+w "$out"
+        export PYTHONPATH=${comfyui}/share/comfyui
+        ${comfyPythonEnv}/bin/python - "$out" <<'PY'
+        import importlib.util
+        import pathlib
+        import sys
+
+        package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
+        spec = importlib.util.spec_from_file_location(
+            "h3_latent_upscaler_3d_contract",
+            package_root / "__init__.py",
+            submodule_search_locations=[str(package_root)],
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load Minimax h3 latent Upscaler")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        if "MinimaxH3LatentUpscaler3D" not in module.NODE_CLASS_MAPPINGS:
+            raise RuntimeError("h3 latent Upscaler 3D contract: did not register")
+        PY
+        chmod -R a-w "$out"
+      '';
 
   h3FunControlNode =
     pkgs.runCommand "comfyui-h3-fun-control-22a7ec3-tested"
@@ -1618,6 +1725,8 @@ let
     ln -s ${museModelLoaderNode} "$out/muse-model-loader"
     ln -s ${museCharacterSheetKleinNode} "$out/muse-character-sheet-klein"
     ln -s ${museCharacterSheetNode} "$out/muse-character-sheet"
+    ln -s ${h3MotionContextResizeNode} "$out/ComfyUI-H3MotionContextResize"
+    ln -s ${h3LatentUpscaler3DNode} "$out/Comfyui_Minimax_h3_latent_Upscaler"
   '';
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
@@ -3726,6 +3835,7 @@ let
     balanced_dir="$user_workflows/minimax-h3-balanced-supercc-bf16"
     sam3d_dir="$user_workflows/sam3d-body-bf16-v1.0"
     muse_sheet_klein_dir="$user_workflows/muse-character-sheet-klein-bf16"
+    h3_motion_context_resize_dir="$user_workflows/minimax-h3-motion-context-resize-v1.1"
     muse_sheet_krea2_dir="$user_workflows/muse-character-sheet-krea2-bf16"
     ep24_staging="$user_workflows/.pixaroma-ep24-krea2-bf16.new"
     ep29_staging="$user_workflows/.pixaroma-ep29-h3-bf16.new"
@@ -3751,6 +3861,7 @@ let
     balanced_staging="$user_workflows/.minimax-h3-balanced-supercc-bf16.new"
     sam3d_staging="$user_workflows/.sam3d-body-bf16-v1.0.new"
     muse_sheet_klein_staging="$user_workflows/.muse-character-sheet-klein-bf16.new"
+    h3_motion_context_resize_staging="$user_workflows/.minimax-h3-motion-context-resize-v1.1.new"
     muse_sheet_krea2_staging="$user_workflows/.muse-character-sheet-krea2-bf16.new"
     input_dir=/var/lib/comfyui/input
     blender_input_dir="$input_dir/h3-blender-previz"
@@ -3762,7 +3873,8 @@ let
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
-      "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging"
+      "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
+      "$h3_motion_context_resize_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
       "$character_staging" "$krea_max_staging" "$contest_staging" \
@@ -3772,6 +3884,7 @@ let
       "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
       "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
+      "$h3_motion_context_resize_staging" \
       "$input_dir" "$blender_input_dir"
     for source in ${pixaromaEp24}/workflows/*.json; do
       install -m 0600 "$source" "$ep24_staging/$(basename "$source")"
@@ -3848,6 +3961,9 @@ let
     for source in ${museCharacterSheetWorkflows}/workflows/02*.json; do
       install -m 0600 "$source" "$muse_sheet_krea2_staging/$(basename "$source")"
     done
+    for source in ${h3MotionContextResizeNode}/example_workflows/*.json; do
+      install -m 0600 "$source" "$h3_motion_context_resize_staging/$(basename "$source")"
+    done
     install -m 0600 ${sam3dBodyInputAsset} "$input_dir/woman_holding_water_glass.mp4"
     for category in ${eliteWorkflows}/*; do
       destination="$elite_staging/$(basename "$category")"
@@ -3896,6 +4012,8 @@ let
     verify_versioned_workflow_install "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
     mv "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
     mv "$muse_sheet_klein_staging" "$muse_sheet_klein_dir"
+    verify_versioned_workflow_install "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"
+    mv "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"
   '';
 
   extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {
@@ -3921,6 +4039,7 @@ in
     downloadMinimaxH3LatentUpscaler
     downloadSam3dBodyModels
     downloadMuseCharacterSheetModels
+    downloadH3MotionContextResizeModels
     modelTools
     pkgs.ffmpeg-full
   ];
