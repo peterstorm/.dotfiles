@@ -1187,6 +1187,9 @@ let
         import sys
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "krea2_nag_contract",
             package_root / "__init__.py",
@@ -1251,6 +1254,9 @@ let
         import sys
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "rmbg_contract",
             package_root / "__init__.py",
@@ -1306,6 +1312,9 @@ let
         import sys
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "memory_cleanup_contract",
             package_root / "__init__.py",
@@ -1358,6 +1367,9 @@ let
         import sys
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "impact_pack_contract",
             package_root / "__init__.py",
@@ -1421,6 +1433,9 @@ let
         import sys
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "muse_model_loader_contract",
             package_root / "__init__.py",
@@ -1487,6 +1502,9 @@ let
         import sys
 
         package_root = pathlib.Path(sys.argv[1])
+        sys.argv = ["comfyui", "--cpu"]
+        import comfy.options
+        comfy.options.enable_args_parsing()
         spec = importlib.util.spec_from_file_location(
             "muse_character_sheet_contract",
             package_root / "__init__.py",
