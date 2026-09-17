@@ -224,7 +224,7 @@ let
       omegaconf
       opencv4
       peft
-      segment-anything
+      piexif
       pillow
       psutil
       pydantic
