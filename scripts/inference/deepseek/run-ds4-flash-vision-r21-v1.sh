@@ -106,6 +106,29 @@ if systemctl is-active --quiet comfyui.service 2>/dev/null; then
   echo "error: comfyui.service is active; stop it before reserving both GPUs" >&2
   exit 1
 fi
+# The expected wattage is the declarative pin (gpuPowerLimitWatts in
+# machines/desktop/default.nix), not a hardcoded constant: the fan/thermal
+# retunes retune it in one place and this gate follows. The dotfiles root is
+# walked up from this script, anchored on the config itself, so relocation
+# cannot drift the path; missing or unpinned config fails closed.
+NIX_GPU_CONFIG=''
+WALK_ROOT="$SCRIPT_DIR"
+while [[ -z "$NIX_GPU_CONFIG" && "$WALK_ROOT" != "/" ]]; do
+  if [[ -f "$WALK_ROOT/machines/desktop/default.nix" ]]; then
+    NIX_GPU_CONFIG="$WALK_ROOT/machines/desktop/default.nix"
+  else
+    WALK_ROOT="$(dirname "$WALK_ROOT")"
+  fi
+done
+[[ -n "$NIX_GPU_CONFIG" ]] || {
+  echo "error: no machines/desktop/default.nix found above $SCRIPT_DIR" >&2
+  exit 1
+}
+DECLARED_GPU_WATTS="$(sed -nE 's/^[[:space:]]*gpuPowerLimitWatts = ([0-9]+);$/\1/p' "$NIX_GPU_CONFIG" | tail -1)"
+[[ -n "$DECLARED_GPU_WATTS" ]] || {
+  echo "error: gpuPowerLimitWatts is not pinned to an integer in $NIX_GPU_CONFIG" >&2
+  exit 1
+}
 mapfile -t gpu_rows < <(nvidia-smi \
   --query-gpu=index,name,memory.total,memory.used,power.limit \
   --format=csv,noheader,nounits)
@@ -128,8 +151,9 @@ for row in "${gpu_rows[@]}"; do
     echo "error: GPU $index memory is ${memory_used}/${memory_total} MiB" >&2
     exit 1
   }
-  awk -v value="$power_limit" 'BEGIN { exit !(value >= 449.9 && value <= 450.1) }' \
-    || { echo "error: GPU $index power limit is $power_limit W" >&2; exit 1; }
+  awk -v value="$power_limit" -v declared="$DECLARED_GPU_WATTS" \
+    'BEGIN { exit !(value >= declared - 0.5 && value <= declared + 0.5) }' \
+    || { echo "error: GPU $index power limit is $power_limit W; declarative config pins $DECLARED_GPU_WATTS W" >&2; exit 1; }
 done
 
 inference_remove_container_if_present "$NAME"

@@ -57,8 +57,13 @@ contains "$RUN" '--default-chat-template-kwargs.reasoning_effort=max'
 contains "$RUN" '--restart no'
 contains "$RUN" '--env-file "$ENVFILE"'
 contains "$RUN" 'inference_write_private_file "$ENVFILE" <<EOF'
+contains "$RUN" 'machines/desktop/default.nix'
+contains "$RUN" 'gpuPowerLimitWatts = ([0-9]+);'
 if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
   fail "launcher leaks VLLM_API_KEY through argv"
+fi
+if grep -Fq '449.9' "$RUN"; then
+  fail "launcher hardcodes a drifted 450 W power band instead of the declarative pin"
 fi
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$SWITCH" 'any(. == "MODE=dspark") and any(. == "DSPARK_TOKENS=6")'

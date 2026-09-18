@@ -25,7 +25,7 @@ driver (VRAM, power limit). See
 | PCIe topology | **confirmed** | **x8/x8, both from the CPU root complex** — P2P measured at **28.6 GB/s** (Gen5 x8 line rate) | whether GPU↔GPU P2P works at all |
 | GPUs | **confirmed** | 2× RTX PRO 6000 Blackwell **Workstation Edition** `[10de:2bb1]`, ~96 GB each | `GPU_MEMORY_UTILIZATION=0.975` assumes 96 GB |
 | GPU slots | **confirmed** | `PCIEX16(G5)_1` + `_2` → buses `01:00.0` / `03:00.0`, CPU root ports `00:01.1` / `00:01.3` | direct-attach P2P path |
-| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals; `gpuPowerLimitWatts = 450` (350 W during the 2026-08-16 Xid 79 diagnostic, raised 2026-08-18 after a clean sustained-load window) — see [crash triage](gpu-inference-crash-triage.md) |
+| GPU variant | **confirmed** | **Workstation Edition, 600 W** | PSU, thermals; `gpuPowerLimitWatts = 400` (350 W during the 2026-08-16 Xid 79 diagnostic; 450 W restored 2026-08-18 after a clean sustained-load window; retuned to 400 W 2026-09-14 after the cooler swap + fan retune — 450 W is the proven fallback if Xid 79 recurs) — see [crash triage](gpu-inference-crash-triage.md) |
 | PSU | **confirmed** | **Seasonic 1600 W Platinum** | ample at the 2×450 W operational cap (2×350 W during the Xid 79 diagnostic); per-card behavior stays under the triage runbook |
 | WiFi | **confirmed** | **MediaTek MT7927** (Filogic 380) `[14c3:7927]`, driver `mt7925e` — out-of-tree, needs `iommu=pt` | see [WiFi (MT7927)](#wifi-mt7927) |
 | NICs | **confirmed** | `wlp10s0` (WiFi), `enp11s0` + `enp12s0` (2.5 Gb + 10 Gb) — flake `NICs` value is cosmetic (NetworkManager owns them) | non-blocking |

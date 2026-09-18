@@ -131,15 +131,18 @@ in
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json, whose default can drift silently — the pin
         # makes the inference target load-bearing instead of incidental.
-        # 2026-09-15: routed onto local GLM v13 (desktop vLLM, the served glm-v13
-        # profile) — grammar-hardened (the structured-output + MTP3 crash that
-        # killed v11.1), vision-capable for Telegram photo attachments, free
-        # (self-hosted). :low thinking suffix: the model's defaultThinkingLevel
-        # is max — a plain pin means ~44s Telegram replies (observed
-        # 2026-09-15); pi's parseModelPattern honours the :low suffix
-        # (thinkingLevelMap maps low → low) for responsive replies.
+        # 2026-09-18: routed onto DS4F Vision (desktop vLLM, container
+        # ds4-flash-vision-infernal-invocation-cu133-r21-v1, profile
+        # ds4-flash-vision-r21-v1) — DeepSeek V4 Flash Vision r21 with DSpark K6
+        # (fixed depth 6), vision-capable for Telegram photo attachments, free
+        # (self-hosted). Replaces the GLM v13 pin: DS4F Vision is now the
+        # desktop's serving profile and matches the model-routing
+        # ds4-vision-r21 target (max thinking for subagents).
+        # :low thinking suffix: the model's defaultThinkingLevel is max — a
+        # plain pin means long Telegram replies; pi's parseModelPattern honours
+        # the :low suffix (thinkingLevelMap maps low → low) for responsive replies.
         RECLAW_PI_PROVIDER = "desktop-vllm";
-        RECLAW_PI_MODEL = "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13:low";
+        RECLAW_PI_MODEL = "deepseek-v4-flash-vision:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
