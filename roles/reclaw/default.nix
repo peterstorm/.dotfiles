@@ -85,6 +85,12 @@ in
     # Linger so user services run without active login
     users.users.peterstorm.linger = true;
 
+    # Headless box: a short power-key press must not take the whole homelab
+    # down (2026-09-18 hard reset). Graceful reboots happen via ssh/systemctl.
+    services.logind.settings.Login = {
+      HandlePowerKey = "ignore";
+    };
+
     # Reclaw user service — restartable without sudo/polkit
     systemd.user.services.reclaw = {
       description = "Reclaw Telegram AI Agent";
@@ -99,6 +105,12 @@ in
 
       serviceConfig = {
         Type = "simple";
+        # Cap the reclaw cgroup: memory.peak includes page cache charged when
+        # reclaw-hosted sessions read big files (13.2G peak 2026-09-18 was
+        # mostly reclaimable cache). MemoryHigh throttles before pressure;
+        # MemoryMax=6G is a hard ceiling well under real anon needs (~0.4G).
+        MemoryHigh = "4G";
+        MemoryMax = "6G";
         WorkingDirectory = "/home/peterstorm/dev/claude-plugins/reclaw";
         EnvironmentFile = config.sops.templates."reclaw-env".path;
         ExecStart = "${pkgs.bun}/bin/bun run src/main.ts";
