@@ -15,7 +15,13 @@ final: prev:
     # Upstream 0.83.0 only has a global thinking default. Add a model-local
     # default that initializes/switches session state without mutating the global
     # setting; explicit --thinking and scoped model levels still take precedence.
-    patches = [ ./patches/pi-model-default-thinking.patch ];
+    patches = [
+      ./patches/pi-model-default-thinking.patch
+      # Auto-compaction used to end the agent turn (waiting for input) unless
+      # the user had queued a message. autoContinue resumes the turn from the
+      # compaction boundary; disable with {"compaction": {"autoContinue": false}}.
+      ./patches/pi-autocontinue-after-compact.patch
+    ];
 
     postPatch = ''
       substituteInPlace npm-shrinkwrap.json \

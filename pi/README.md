@@ -195,6 +195,14 @@ scoped `model:level` values win, and resumed sessions preserve their recorded le
 pi --model desktop-vllm/deepseek-v4-flash:max
 ```
 
+A second pinned-Pi patch, `pi-autocontinue-after-compact.patch`, resumes the
+agent turn automatically after auto-compaction instead of stalling for input.
+Upstream ends the turn after a threshold compaction unless the user queued a
+message; with the patch the turn continues from the compaction boundary.
+Disable per-session with `{"compaction": {"autoContinue": false}}` in
+`~/.pi/agent/settings.json`; `enabled`, `reserveTokens`, and
+`keepRecentTokens` are unchanged.
+
 The server may be offline while editing or selecting the catalog, but it must be running
 before sending a prompt. Verify discovery without contacting the server:
 

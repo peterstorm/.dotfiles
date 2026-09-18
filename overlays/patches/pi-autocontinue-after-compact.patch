@@ -1,0 +1,84 @@
+diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
+--- a/dist/core/agent-session.js	2026-09-19 01:34:00.398524503 +0200
++++ b/dist/core/agent-session.js	2026-09-19 01:34:00.433762744 +0200
+@@ -1724,8 +1724,11 @@
+                 return true;
+             }
+             // Auto-compaction can complete while follow-up/steering/custom messages are waiting.
+-            // Continue once so queued messages are delivered.
+-            return this.agent.hasQueuedMessages();
++            // Continue once so queued messages are delivered — and, unless
++            // compaction.autoContinue is disabled, always continue so the
++            // turn resumes from the compaction boundary instead of stalling
++            // for input after every threshold autocompaction.
++            return this.settingsManager.getCompactionSettings().autoContinue || this.agent.hasQueuedMessages();
+         }
+         catch (error) {
+             const errorMessage = error instanceof Error ? error.message : "compaction failed";
+diff -ruN a/dist/core/compaction/compaction.d.ts b/dist/core/compaction/compaction.d.ts
+--- a/dist/core/compaction/compaction.d.ts	2026-09-19 01:34:00.349746127 +0200
++++ b/dist/core/compaction/compaction.d.ts	2026-09-19 01:34:00.430762591 +0200
+@@ -29,6 +29,8 @@
+     enabled: boolean;
+     reserveTokens: number;
+     keepRecentTokens: number;
++    /** Resume the agent turn automatically after auto-compaction (default true). */
++    autoContinue: boolean;
+ }
+ export declare const DEFAULT_COMPACTION_SETTINGS: CompactionSettings;
+ /**
+diff -ruN a/dist/core/compaction/compaction.js b/dist/core/compaction/compaction.js
+--- a/dist/core/compaction/compaction.js	2026-09-19 01:34:00.373105232 +0200
++++ b/dist/core/compaction/compaction.js	2026-09-19 01:34:00.431762642 +0200
+@@ -75,6 +75,7 @@
+     enabled: true,
+     reserveTokens: 16384,
+     keepRecentTokens: 20000,
++    autoContinue: true,
+ };
+ // ============================================================================
+ // Token calculation
+diff -ruN a/dist/core/settings-manager.d.ts b/dist/core/settings-manager.d.ts
+--- a/dist/core/settings-manager.d.ts	2026-09-19 01:34:00.361245473 +0200
++++ b/dist/core/settings-manager.d.ts	2026-09-19 01:34:00.431762642 +0200
+@@ -4,6 +4,8 @@
+     enabled?: boolean;
+     reserveTokens?: number;
+     keepRecentTokens?: number;
++    /** Resume the agent turn automatically after auto-compaction (default true). */
++    autoContinue?: boolean;
+ }
+ export interface BranchSummarySettings {
+     reserveTokens?: number;
+@@ -198,10 +200,12 @@
+     setCompactionEnabled(enabled: boolean): void;
+     getCompactionReserveTokens(): number;
+     getCompactionKeepRecentTokens(): number;
++    getCompactionAutoContinue(): boolean;
+     getCompactionSettings(): {
+         enabled: boolean;
+         reserveTokens: number;
+         keepRecentTokens: number;
++        autoContinue: boolean;
+     };
+     getBranchSummarySettings(): {
+         reserveTokens: number;
+diff -ruN a/dist/core/settings-manager.js b/dist/core/settings-manager.js
+--- a/dist/core/settings-manager.js	2026-09-19 01:34:00.385920050 +0200
++++ b/dist/core/settings-manager.js	2026-09-19 01:34:00.432762693 +0200
+@@ -523,11 +523,15 @@
+     getCompactionKeepRecentTokens() {
+         return this.settings.compaction?.keepRecentTokens ?? 20000;
+     }
++    getCompactionAutoContinue() {
++        return this.settings.compaction?.autoContinue ?? true;
++    }
+     getCompactionSettings() {
+         return {
+             enabled: this.getCompactionEnabled(),
+             reserveTokens: this.getCompactionReserveTokens(),
+             keepRecentTokens: this.getCompactionKeepRecentTokens(),
++            autoContinue: this.getCompactionAutoContinue(),
+         };
+     }
+     getBranchSummarySettings() {

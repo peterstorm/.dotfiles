@@ -336,6 +336,19 @@ export async function runSingleAgent(
 		}
 	};
 
+	const markAborted = (message: string): void => {
+		currentResult.exitCode = 1;
+		currentResult.stopReason = "aborted";
+		// The abort is the primary cause of a killed child; appendDiagnostic's
+		// signal detail remains in stderr for diagnosis.
+		currentResult.errorMessage = message;
+	};
+
+	if (signal?.aborted) {
+		markAborted("Subagent was aborted before it started");
+		return currentResult;
+	}
+
 	try {
 		if (agent.systemPrompt.trim()) {
 			const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
@@ -355,6 +368,13 @@ export async function runSingleAgent(
 				stdio: ["ignore", "pipe", "pipe"],
 			});
 			let buffer = "";
+			let settled = false;
+
+			const settle = (code: number) => {
+				if (settled) return;
+				settled = true;
+				resolve(code);
+			};
 
 			const recordProtocolError = (line: string) => {
 				currentResult.protocolErrors ??= [];
@@ -419,23 +439,25 @@ export async function runSingleAgent(
 				if (buffer.trim()) processLine(buffer);
 				if (childSignal) {
 					appendDiagnostic(currentResult, `Subagent process terminated by signal ${childSignal}`);
-					resolve(1);
+					settle(1);
 					return;
 				}
-				resolve(code ?? 1);
+				settle(code ?? 1);
 			});
 
 			proc.on("error", (error) => {
+				if (settled) return;
 				appendDiagnostic(currentResult, `Failed to spawn subagent process: ${error.message}`);
-				resolve(1);
+				settle(1);
 			});
 
 			if (signal) {
 				const killProc = () => {
+					if (settled) return; // already done — never mis-mark a completed agent as aborted
 					wasAborted = true;
 					proc.kill("SIGTERM");
 					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
+						if (!settled) proc.kill("SIGKILL");
 					}, 5000);
 				};
 				if (signal.aborted) killProc();
@@ -444,7 +466,14 @@ export async function runSingleAgent(
 		});
 
 		currentResult.exitCode = exitCode;
-		if (wasAborted) throw new Error("Subagent was aborted");
+		if (wasAborted && exitCode !== 0) {
+			// Salvage, don't throw: the caller keeps this result (and every other
+			// completed result in the batch) so an aborted batch is not reused as
+			// "all work lost" — pi records the tool result and the agent can
+			// proceed from what clearly finished.
+			markAborted("Subagent was aborted");
+			return currentResult;
+		}
 		if ((currentResult.protocolErrors?.length ?? 0) > 0) {
 			currentResult.exitCode = 1;
 			appendDiagnostic(
@@ -704,17 +733,21 @@ export default function (pi: ExtensionAPI) {
 				});
 
 				const failed = results.filter(resultFailed);
+				const aborted = results.filter((r) => r.stopReason === "aborted").length;
 				const successCount = results.length - failed.length;
 				const sections = results.map((r) => {
 					const output = getFinalOutput(r.messages);
 					const status = resultFailed(r) ? "failed" : "completed";
 					return `## [${r.agent}] ${status}\n\n${output || "(no output)"}`;
 				});
+				const summaryLine = aborted > 0
+					? `Aborted: ${results.length - aborted}/${results.length} completed before abort`
+					: `Parallel: ${successCount}/${results.length} succeeded`;
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Parallel: ${successCount}/${results.length} succeeded\n\n${sections.join("\n\n---\n\n")}`,
+							text: `${summaryLine}\n\n${sections.join("\n\n---\n\n")}`,
 						},
 					],
 					details: makeDetails("parallel")(results),

@@ -146,6 +146,54 @@ describe("subagent execution shell", () => {
 		}
 	});
 
+	it("returns an aborted result (no throw) when the signal fires mid-run", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "pi-child-abort-"));
+		scratch.push(dir);
+		const child = join(dir, "fake-pi");
+		// exec sleep: SIGTERM terminates the process itself, so the close handler
+		// sees childSignal=SIGTERM exactly like a real killed child.
+		writeFileSync(child, "#!/usr/bin/env bash\nexec sleep 30\n");
+		chmodSync(child, 0o755);
+		const previousExecPath = process.execPath;
+		Object.defineProperty(process, "execPath", { value: child, configurable: true });
+		const controller = new AbortController();
+		try {
+			const promise = runSingleAgent(
+				dir, [agent], agent.name, "task", undefined, undefined, controller.signal, undefined,
+				(results) => ({ mode: "single", agentScope: "user", projectAgentsDir: null, results }), snapshot(),
+			);
+			setTimeout(() => controller.abort(), 150);
+			const result = await promise;
+			expect(result.exitCode).toBe(1);
+			expect(result.stopReason).toBe("aborted");
+			expect(result.errorMessage).toMatch(/aborted/i);
+		} finally {
+			Object.defineProperty(process, "execPath", { value: previousExecPath, configurable: true });
+		}
+	});
+
+	it("returns an aborted result immediately when the signal is already aborted", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "pi-child-preabort-"));
+		scratch.push(dir);
+		const child = join(dir, "fake-pi");
+		writeFileSync(child, "#!/usr/bin/env bash\nprintf '%s\\n' '{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"should not run\"}]}}'\n");
+		chmodSync(child, 0o755);
+		const previousExecPath = process.execPath;
+		Object.defineProperty(process, "execPath", { value: child, configurable: true });
+		const controller = new AbortController();
+		controller.abort();
+		try {
+			const result = await runSingleAgent(
+				dir, [agent], agent.name, "task", undefined, undefined, controller.signal, undefined,
+				(results) => ({ mode: "single", agentScope: "user", projectAgentsDir: null, results }), snapshot(),
+			);
+			expect(result.stopReason).toBe("aborted");
+			expect(result.messages).toEqual([]);
+		} finally {
+			Object.defineProperty(process, "execPath", { value: previousExecPath, configurable: true });
+		}
+	});
+
 	it("surfaces temporary prompt cleanup failures", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-child-cleanup-"));
 		scratch.push(dir);
