@@ -39,7 +39,7 @@ verify_checkpoint() {
     echo "error: marker is '$marker', expected '$REPO $REV'" >&2
     return 1
   }
-  snapshot_dir="$CACHE_HOST/hub/models--$(printf '%s' "$REPO" | tr '/' '--')/snapshots/$REV"
+  snapshot_dir="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
   [ -f "$snapshot_dir/config.json" ] || {
     echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
     return 1

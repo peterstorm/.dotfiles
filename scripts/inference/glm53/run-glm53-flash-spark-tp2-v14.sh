@@ -153,7 +153,7 @@ checkpoint_marker="$(<"$HF_CACHE_HOST/.download-complete")"
   echo "error: checkpoint marker is '$checkpoint_marker', expected '$CHECKPOINT $MODEL_REVISION'" >&2
   exit 1
 }
-snapshot_dir="$HF_CACHE_HOST/hub/models--$(printf '%s' "$CHECKPOINT" | tr '/' '--')/snapshots/$MODEL_REVISION"
+snapshot_dir="$HF_CACHE_HOST/hub/models--${CHECKPOINT%%/*}--${CHECKPOINT##*/}/snapshots/$MODEL_REVISION"
 [ -f "$snapshot_dir/config.json" ] || {
   echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
   exit 1
