@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# Safely start/stop the promoted GLM-5.3 v14 upstream spark-preset profile.
+# v14 is the stock Karmic Kraken beta image with PRESET=glm53-spark-tp2; the
+# rollback target is whatever profile set was running before — GLM v13 (or
+# DS4 Vision r21) stays untouched until this switch is used deliberately.
+# Launch remains transactional at restart=no; only a fully accepted boot is
+# promoted to restart=unless-stopped.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/inference/shared/inference-api-key.sh
+source "$SCRIPT_DIR/../shared/inference-api-key.sh"
+# shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
+source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
+
+TARGET="glm53-flash-spark-tp2-v14"
+EXPECTED_MODEL="glm-5.3-flash-spark-tp2-v14"
+RUN="$SCRIPT_DIR/run-glm53-flash-spark-tp2-v14.sh"
+PRESET="glm53-spark-tp2"
+# First boot downloads the Spark checkpoint into the HF volume and does kernel
+# preparation plus graph capture; the default gives the download generous room.
+STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-5400}"
+BOOT_RECEIPT="${BOOT_RECEIPT:-$HOME/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt}"
+MODE="${1:-status}"
+
+if ! [[ "$STARTUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: STARTUP_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
+
+running_profiles() {
+  local container status
+  for container in "${INFERENCE_PROFILE_CONTAINERS[@]}"; do
+    status=0
+    inference_container_running "$container" || status=$?
+    case "$status" in
+      0) printf '%s\n' "$container" ;;
+      1) ;;
+      *) return "$status" ;;
+    esac
+  done
+}
+
+authenticated_models() {
+  local key="$1" escaped_key
+  escaped_key="${key//\\/\\\\}"
+  escaped_key="${escaped_key//\"/\\\"}"
+  {
+    printf 'url = "http://127.0.0.1:8000/v1/models"\n'
+    printf 'header = "Authorization: Bearer %s"\n' "$escaped_key"
+    printf 'connect-timeout = 2\nmax-time = 10\nfail\n'
+  } | curl --silent --show-error --config -
+}
+
+require_idle_endpoint() {
+  local delay metrics active
+  for delay in 0 3 3; do
+    sleep "$delay"
+    metrics="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/metrics)" || {
+      echo "error: active profile metrics are unavailable; refusing cutover" >&2
+      return 1
+    }
+    active="$(awk '/vllm:num_requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$metrics")"
+    if [ "$active" != 0 ]; then
+      echo "error: $active request(s) are running or waiting; refusing cutover" >&2
+      return 1
+    fi
+  done
+  echo "IDLE GATE: no running or waiting requests across three samples"
+}
+
+wait_for_target() {
+  local deadline status key models_json
+  deadline=$((SECONDS + STARTUP_TIMEOUT_SECONDS))
+  while ((SECONDS < deadline)); do
+    status=0
+    inference_container_running "$TARGET" || status=$?
+    case "$status" in
+      0) ;;
+      1) echo "error: $TARGET exited during startup" >&2; return 1 ;;
+      *) return "$status" ;;
+    esac
+    if curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+      inference_resolve_client_keyfile || {
+        echo "error: no synchronized API key exists after launch" >&2
+        return 1
+      }
+      key="$(<"$INFERENCE_CLIENT_KEYFILE")"
+      models_json="$(authenticated_models "$key" 2>/dev/null)" || models_json=''
+      if jq -e --arg expected "$EXPECTED_MODEL" '
+        .data | type == "array" and length == 1 and .[0].id == $expected
+      ' <<<"$models_json" >/dev/null 2>&1; then
+        echo "HEALTHY + AUTHENTICATED + EXACT MODEL: $TARGET ($EXPECTED_MODEL)"
+        return 0
+      fi
+    fi
+    sleep 5
+  done
+  echo "error: $TARGET did not serve authenticated model $EXPECTED_MODEL within ${STARTUP_TIMEOUT_SECONDS}s" >&2
+  return 1
+}
+
+report_boot_receipt() {
+  local logs image_id started_at receipt_dir receipt_tmp capacity_lines cache_mode
+  logs="$(docker logs "$TARGET" 2>&1)" || return 1
+  image_id="$(docker inspect "$TARGET" --format '{{.Image}}')" || return 1
+  started_at="$(docker inspect "$TARGET" --format '{{.State.StartedAt}}')" || return 1
+  cache_mode="$(docker inspect "$TARGET" --format '{{index .Config.Labels "ai.peterstorm.inference.cache-mode"}}')" || return 1
+  # The preset resolves max-model-len from memory at boot; upstream reports the
+  # exact limit ("~983k GPU-only, 924k with LMCache"). Capture every line that
+  # reports capacity so the receipt can be audited and models.json aligned.
+  capacity_lines="$(grep -iE 'max.?model.?len|kv cache size|context (length|limit|capacity)|capacity' <<<"$logs" | tail -n 12)"
+  receipt_dir="$(dirname "$BOOT_RECEIPT")"
+  install -d -m 700 "$receipt_dir"
+  receipt_tmp="$(mktemp "$receipt_dir/.v14-boot-receipt.XXXXXX")"
+  {
+    printf 'container=%s\nmodel=%s\npreset=%s\nstarted_at=%s\nimage=%s\ncache_mode=%s\n' \
+      "$TARGET" "$EXPECTED_MODEL" "$PRESET" "$started_at" "$image_id" "$cache_mode"
+    printf '%s\n' '--- capacity lines ---'
+    if [ -n "$capacity_lines" ]; then
+      printf '%s\n' "$capacity_lines"
+    else
+      printf '%s\n' '<none captured>'
+    fi
+  } >"$receipt_tmp"
+  chmod 600 "$receipt_tmp"
+  mv -f "$receipt_tmp" "$BOOT_RECEIPT"
+  printf 'BOOT RECEIPT: %s (model=%s, image=%s, cache_mode=%s)\n' \
+    "$BOOT_RECEIPT" "$EXPECTED_MODEL" "$image_id" "$cache_mode"
+  if [ -z "$capacity_lines" ]; then
+    echo "WARNING: no capacity line was captured; inspect docker logs $TARGET and re-check the recorded limit" >&2
+  fi
+}
+
+promote_restart_policy() {
+  docker update --restart=unless-stopped "$TARGET" >/dev/null || {
+    echo "error: could not promote $TARGET to restart=unless-stopped" >&2
+    return 1
+  }
+  echo "PROMOTED: restart=unless-stopped"
+}
+
+restore_profiles() {
+  local container failed=0
+  for container in "$@"; do
+    if ! docker start "$container" >/dev/null; then
+      echo "error: rollback could not restart $container" >&2
+      failed=1
+    else
+      echo "rollback restarted: $container"
+    fi
+  done
+  return "$failed"
+}
+
+case "$MODE" in
+  status)
+    active_output="$(running_profiles)" || exit $?
+    active=()
+    [ -z "$active_output" ] || mapfile -t active <<<"$active_output"
+    if [ "${#active[@]}" -eq 0 ]; then
+      echo "No repository-owned inference profile is running."
+    else
+      printf 'running: %s\n' "${active[@]}"
+    fi
+    ;;
+  stop)
+    inference_stop_container_if_present "$TARGET"
+    echo "Stopped $TARGET if it was present."
+    ;;
+  start)
+    "$RUN" --preflight
+    previous_output="$(running_profiles)" || exit $?
+    previous=()
+    [ -z "$previous_output" ] || mapfile -t previous <<<"$previous_output"
+    for container in "${previous[@]}"; do
+      if [ "$container" = "$TARGET" ]; then
+        wait_for_target
+        report_boot_receipt
+        promote_restart_policy
+        exit 0
+      fi
+    done
+    if [ "${#previous[@]}" -gt 0 ]; then
+      require_idle_endpoint
+    fi
+    stopped=()
+    for container in "${previous[@]}"; do
+      if ! inference_stop_container_if_present "$container"; then
+        echo "error: profile quiesce failed; restoring already stopped profiles" >&2
+        restore_profiles "${stopped[@]}" || true
+        exit 1
+      fi
+      stopped+=("$container")
+    done
+    if ! "$RUN" --launch; then
+      echo "error: upstream spark v14 launch failed; restoring previous profile set" >&2
+      restore_profiles "${previous[@]}" || true
+      exit 1
+    fi
+    if ! wait_for_target || ! report_boot_receipt || ! promote_restart_policy; then
+      docker logs --tail 200 "$TARGET" >&2 || true
+      inference_quiesce_failed_container "$TARGET" || true
+      echo "error: upstream spark v14 acceptance failed; restoring previous profile set" >&2
+      restore_profiles "${previous[@]}" || true
+      exit 1
+    fi
+    ;;
+  *) echo "usage: ${0##*/} {status|start|stop}" >&2; exit 2 ;;
+esac

@@ -150,7 +150,7 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers one OpenAI-compatible provider on the `desktop` workstation
-with nine selectable models:
+with eleven selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/deepseek-v4-flash-vision`
@@ -158,7 +158,8 @@ with nine selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11` (upstream-core-port r2: native FP8 KV, vision, thinking-disable honoured)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1` (upstream-core-port r2.1: v11 plus the admission deadlock fix — r2 wedges once a long session heads the waiting queue)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v12` (upstream-core-port r2.1 + Spark TP2 port: SM120 disjoint-batch BMM, Mamba null-gap cleanup, graph-memory double-count fix, cublas 4 MiB workspace)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13` (upstream-core-port r2.1 + Spark TP2 port + grammar redesign: PR #52477 fixed-width stride fixes the structured-output + MTP3 crash, upstream #53046/#55455 hardening — **currently served**; v11.1 is the rollback target)
+- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13` (upstream-core-port r2.1 + Spark TP2 port + grammar redesign: PR #52477 fixed-width stride fixes the structured-output + MTP3 crash, upstream #53046/#55455 hardening — **GLM rollback target**; the workstation currently serves the DS4F Vision r21 profile, and v11.1 is v13's rollback target)
+- `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision, memory-resolved ~983K context — **registered candidate**; first boot downloads the Spark checkpoint, and the switcher receipt records the exact resolved limit)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
@@ -254,7 +255,34 @@ pi --list-models glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max
 pi --list-models glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max
+pi --list-models glm-5.3-flash-spark-tp2-v14
+pi --model desktop-vllm/glm-5.3-flash-spark-tp2-v14:max
 ```
+
+### GLM-5.3 Flash Spark TP2 (v14)
+
+v14 is a **stock upstream deployment**, not a derived image: the Karmic Kraken
+beta channel image (digest-pinned by the pull script) serves
+`local-inference-lab/GLM-5.3-Flash-NVFP4-Spark` through `PRESET=glm53-spark-tp2`
+(TP2/DCP2, MTP3, four slots, 3072-token prefill budget, 3996 MiB/GPU fixed FP8
+KV, vision, and a memory-resolved context that reports roughly 983K tokens
+GPU-only or 924K with the optional LMCache tier). The served model id is
+`glm-5.3-flash-spark-tp2-v14` — the repository sets `SERVED_MODEL_NAME`, which
+overrides the preset's generic `GLM-5.3-Flash` identifier, so Pi and the
+benchmark catalog can attest the exact runtime profile.
+
+The catalog registers **983,040** tokens as the context window: the upstream
+preset leaves max-model-len memory-resolved and reports the exact per-boot
+limit at startup, and the v14 switcher writes that resolved value into
+`~/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt`. Align
+`models.json` to the receipt if the first boot resolves a different number.
+Enabling the LMCache tier (RAM 16 GiB + 64 GiB disk, `CACHE_MODE=lmcache` on
+the run script) lowers the ceiling to roughly 924K without altering the
+registrar's GPU-only number, so the tier is off by default.
+
+v14 is unlaunchable until the pull script records the image id in the run
+script (same fail-closed shape as v13), and the switch script only promotes
+`restart=unless-stopped` after an accepted boot.
 
 ### Qwen3.8 27B
 
@@ -349,6 +377,10 @@ tracked policy publishes `qwen` and `glm` as named exact targets beside parent i
     },
     "glm-v13": {
       "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
+      "thinkingLevel": "max"
+    },
+    "glm-v14": {
+      "model": "desktop-vllm/glm-5.3-flash-spark-tp2-v14",
       "thinkingLevel": "max"
     }
   }

@@ -236,6 +236,39 @@
           }
         },
         {
+          "id": "glm-5.3-flash-spark-tp2-v14",
+          "name": "GLM-5.3 Flash Spark TP2 v14 (upstream karmic-kraken-beta, TP2/DCP2 MTP3, FP8 KV, ~983K, vision)",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 983040,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
           "id": "qwen3.8-27b",
           "name": "Qwen3.8 27B BF16 (local RTX workstation)",
           "reasoning": true,
