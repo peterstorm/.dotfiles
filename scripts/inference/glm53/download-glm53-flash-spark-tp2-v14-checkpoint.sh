@@ -21,13 +21,47 @@ IMAGE_CONFIG="sha256:7b5c335cc647b203aacd09e7513f19266846a8efeabdcaa8724524e51e0
 CACHE_HOST="${CACHE_HOST:-/models/hf-cache/glm53-flash-spark-tp2-v14}"
 NAME="glm53-flash-spark-tp2-v14-dl"
 RECEIPT="${RECEIPT:-$HOME/.local/state/glm53/flash-spark-tp2-v14-checkpoint.txt}"
+MODE="${1:---detach}"
 
-for command in docker; do
-  command -v "$command" >/dev/null 2>&1 || {
-    echo "error: $command is required to download the checkpoint" >&2
-    exit 1
+case "$MODE" in
+  --detach | --wait | --verify) ;;
+  *) echo "usage: ${0##*/} [--detach|--wait|--verify]" >&2; exit 2 ;;
+esac
+
+verify_checkpoint() {
+  local marker snapshot_dir files bytes
+  if [ ! -r "$CACHE_HOST/.download-complete" ]; then
+    echo "error: $CACHE_HOST/.download-complete is missing; the download has not completed" >&2
+    return 1
+  fi
+  marker="$(<"$CACHE_HOST/.download-complete")"
+  [ "$marker" = "$REPO $REV" ] || {
+    echo "error: marker is '$marker', expected '$REPO $REV'" >&2
+    return 1
   }
-done
+  snapshot_dir="$CACHE_HOST/hub/models--$(printf '%s' "$REPO" | tr '/' '--')/snapshots/$REV"
+  [ -f "$snapshot_dir/config.json" ] || {
+    echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
+    return 1
+  }
+  files="$(find "$CACHE_HOST" -type f -not -path '*/.locks/*' | wc -l)"
+  bytes="$(du -sb "$CACHE_HOST" 2>/dev/null | cut -f1)"
+  install -d -m 700 "$(dirname "$RECEIPT")"
+  receipt_tmp="$(mktemp "$(dirname "$RECEIPT")/.v14-checkpoint.XXXXXX")"
+  {
+    printf 'repo=%s\nrevision=%s\nsnapshot=%s\nfiles=%s\nbytes=%s\n' \
+      "$REPO" "$REV" "$snapshot_dir" "$files" "$bytes"
+  } >"$receipt_tmp"
+  chmod 600 "$receipt_tmp"
+  mv -f "$receipt_tmp" "$RECEIPT"
+  printf 'CHECKPOINT OK: %s@%s (%s files, %s bytes) — receipt %s\n' \
+    "$REPO" "$REV" "$files" "$bytes" "$RECEIPT"
+}
+
+if [ "$MODE" = --verify ]; then
+  verify_checkpoint
+  exit $?
+fi
 if ! actual_image_id="$(docker image inspect "$IMAGE_CONFIG" --format '{{.Id}}' 2>/dev/null)"; then
   echo "error: pinned GLM v14 image is absent; run scripts/inference/glm53/pull-glm53-flash-spark-tp2-v14-image.sh" >&2
   exit 1
@@ -77,14 +111,27 @@ printf '%s %s\n' "$REPO" "$REV" > /root/.cache/huggingface/.download-complete
 echo DOWNLOAD_COMPLETE
 EOF
 
-docker rm -f "$NAME" 2>/dev/null || true
-docker run -d --name "$NAME" --network host \
-  --init --restart on-failure:5 \
-  -v "$CACHE_HOST:/root/.cache/huggingface" \
-  -v /tmp/glm53-spark-tp2-dl.sh:/dl.sh:ro \
-  ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
-  --entrypoint bash "$IMAGE_CONFIG" /dl.sh
-
-echo "Downloading in container '$NAME' into $CACHE_HOST"
+if running="$(docker inspect --format '{{.State.Running}}' "$NAME" 2>/dev/null)" \
+  && [ "$running" = true ]; then
+  echo "Download container '$NAME' is already running; attaching to it."
+else
+  docker rm -f "$NAME" 2>/dev/null || true
+  docker run -d --name "$NAME" --network host \
+    --init --restart on-failure:5 \
+    -v "$CACHE_HOST:/root/.cache/huggingface" \
+    -v /tmp/glm53-spark-tp2-dl.sh:/dl.sh:ro \
+    ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
+    --entrypoint bash "$IMAGE_CONFIG" /dl.sh
+  echo "Downloading in container '$NAME' into $CACHE_HOST"
+fi
 echo "Follow with:  docker logs -f $NAME"
-echo "On completion the marker .download-complete is written and the receipt records the facts."
+echo "On completion the marker .download-complete is written; --wait verifies and writes the receipt."
+
+if [ "$MODE" = --wait ]; then
+  if docker wait "$NAME"; then
+    verify_checkpoint
+  else
+    echo "error: download container exited non-zero; inspect: docker logs $NAME" >&2
+    exit 1
+  fi
+fi
