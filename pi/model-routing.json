@@ -8,106 +8,12 @@
     ]
   },
   "targets": {
-    "ds4-vision-r21": {
-      "model": "desktop-vllm/deepseek-v4-flash-vision",
-      "thinkingLevel": "max"
-    },
-    "qwen": {
-      "model": "desktop-vllm/qwen3.8-27b",
-      "thinkingLevel": "xhigh"
-    },
-    "qwen-flash-next-v2": {
-      "model": "desktop-vllm/qwen3.8-flash-next-fp8",
-      "thinkingLevel": "xhigh"
-    },
-    "glm-v10-dcp2": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
-      "thinkingLevel": "max"
-    },
-    "glm-v13": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
-      "thinkingLevel": "max"
-    },
-    "glm-v14": {
-      "model": "desktop-vllm/glm-5.3-flash-spark-tp2-v14",
-      "thinkingLevel": "max"
-    },
-    "glm-v13-verify": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
-      "thinkingLevel": "low"
-    },
     "sol": {
       "model": "openai-codex/gpt-5.6-sol",
       "thinkingLevel": "high"
     }
   },
   "rules": [
-    {
-      "id": "ds4-vision-r21-subagents-use-max",
-      "when": {
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/deepseek-v4-flash-vision"
-      },
-      "use": {
-        "kind": "named",
-        "target": "ds4-vision-r21"
-      }
-    },
-    {
-      "id": "qwen-flash-next-v2-subagents-use-xhigh",
-      "when": {
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/qwen3.8-flash-next-fp8"
-      },
-      "use": {
-        "kind": "named",
-        "target": "qwen-flash-next-v2"
-      }
-    },
-    {
-      "id": "glm-v10-dcp2-subagents-use-max",
-      "when": {
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10"
-      },
-      "use": {
-        "kind": "named",
-        "target": "glm-v10-dcp2"
-      }
-    },
-    {
-      "id": "glm-v13-subagents-use-max",
-      "when": {
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13"
-      },
-      "use": {
-        "kind": "named",
-        "target": "glm-v13"
-      }
-    },
-    {
-      "id": "glm-v14-subagents-use-max",
-      "when": {
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/glm-5.3-flash-spark-tp2-v14"
-      },
-      "use": {
-        "kind": "named",
-        "target": "glm-v14"
-      }
-    },
-    {
-      "id": "engine-review-verifiers-local-low",
-      "when": {
-        "profile": "refutation",
-        "parentClass": "local",
-        "parentModel": "desktop-vllm/*"
-      },
-      "use": {
-        "kind": "parent"
-      }
-    },
     {
       "id": "sol-subagents-use-high",
       "when": {
