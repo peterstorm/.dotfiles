@@ -2,11 +2,23 @@
 
 ## Status
 
-**Registered candidate, not yet served.** The workstation currently serves the
-**DS4 Flash Vision r21** profile; the GLM rollback target is **v13**. v14 does
-not run until its switch script is deliberately started (which quiesces the
-serving profile transactionally). Until the pull script records the image id
-in `run-glm53-flash-spark-tp2-v14.sh`, v14 is unlaunchable by construction.
+**Serving since 2026-09-19 11:12 UTC** (accepted on the first completed swap).
+The acceptance chain ran end-to-end: preflight (static) → idle gate → r21
+quiesced → CUDA runtime probe (cuBLAS + cuDNN + two-GPU NCCL allreduce) →
+launch → `HEALTHY + AUTHENTICATED + EXACT MODEL` → boot receipt →
+`restart=unless-stopped` promotion. Boot evidence: the preset resolved
+`max_model_len` to **983,040** tokens (KV cache 986,295 tokens; 1.00×
+concurrency for full-context requests) — exactly the registered catalog
+value, so no `pi/models.json` alignment was needed. The smoke completion
+returned the exact requested string with a reasoning stream. Rollback target
+remains **v13**; the DS4 Vision r21 profile is stopped but restartable via
+its own switcher.
+
+The first swap attempt failed closed at the launch CUDA probe — the probe's
+assertions were tautological (two independently-sampled tensors compared for
+inequality) and always errored; r21 was restored automatically. The probe
+now verifies real math (finite matmul/conv, deterministic cross-rank NCCL
+sum) and the second swap accepted first try.
 
 ## Immutable identities
 

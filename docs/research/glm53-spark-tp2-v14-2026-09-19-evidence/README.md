@@ -46,7 +46,20 @@ any serving container starts. The remaining unproven layer (B12X kernels,
 full model load, graph capture) is covered by the switch's boot acceptance
 (health + authenticated exact `/v1/models`) and the runbook's smoke step.
 
-Repository deviations (all deliberate, documented in the v14 runbook and
+## Boot acceptance evidence (2026-09-19 11:12 UTC)
+
+- `HEALTHY + AUTHENTICATED + EXACT MODEL` on the first completed swap
+- Resolved `max_model_len`: **983,040** (auto-fit from 1,048,576 to fit the
+  3.99 GiB/GPU KV budget) — identical to the registered catalog value
+- GPU KV cache: 986,295 tokens; concurrency for full-context requests: 1.00×
+- Serving config from the boot log matches the preset table above line-for-line
+  (TP2/DCP2, fp8 KV, block 256, cudagraphs 1/2/4/8/12/16, MTP3, glm45/glm47
+  parsers, revision pin)
+- Smoke completion returned the exact requested string with a reasoning
+  stream through the authenticated endpoint
+- Boot receipt: `~/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt`
+
+## Repository deviations (all deliberate, documented in the v14 runbook and
 scripts):
 
 1. **Served model id** — `SERVED_MODEL_NAME=glm-5.3-flash-spark-tp2-v14`

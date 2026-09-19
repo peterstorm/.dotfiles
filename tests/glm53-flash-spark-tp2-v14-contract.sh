@@ -233,6 +233,7 @@ contains "$RUNBOOK" "$PULL_REF"
 contains "$RUNBOOK" 'karmic-kraken-beta'
 contains "$RUNBOOK" '4190109696'
 contains "$RUNBOOK" 'flash-spark-tp2-v14-boot-receipt.txt'
-contains "$RUNBOOK" 'Registered candidate, not yet served'
+contains "$RUNBOOK" 'Serving since 2026-09-19'
+contains "$RUNBOOK" '983,040'
 
 echo "GLM-5.3 v14 upstream spark-preset contract: PASS"
