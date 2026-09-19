@@ -297,10 +297,10 @@ import torch.distributed as dist
 def worker(rank, world=2):
     torch.cuda.set_device(rank)
     dist.init_process_group("nccl", init_method="tcp://127.0.0.1:29555", rank=rank, world_size=world)
-    x = torch.randn(8 * 1024 * 1024, device="cuda")
-    expected = x.clone() * world
+    x = torch.ones(8 * 1024 * 1024, device="cuda") * (rank + 1)
     dist.all_reduce(x)
-    assert torch.allclose(x, expected), "allreduce did not exchange data"
+    expected = float(world * (world + 1) / 2)
+    assert torch.allclose(x, torch.full_like(x, expected)), "allreduce did not exchange data"
     dist.destroy_process_group()
 
 
