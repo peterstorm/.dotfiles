@@ -196,7 +196,7 @@ jq -e --arg id "$SERVED_MODEL" '
 }
 jq -e --arg id "$SERVED_MODEL" '
   (.providers["desktop-vllm"].models[] | select(.id == $id)) as $m
-  | ($m.contextWindow == 983040)
+  | ($m.contextWindow == 350000)
   and ($m.input | index("image") != null)
   and ($m.input | index("text") != null)
   and ($m.reasoning == true)
@@ -225,6 +225,7 @@ jq -e '
 }
 contains "$PI_README" "$SERVED_MODEL"
 contains "$PI_README" '983,040'
+contains "$PI_README" '350,000'
 contains "$PI_README" 'glm-v14'
 
 # --- runbook stays coherent ---------------------------------------------------

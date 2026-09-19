@@ -159,7 +159,7 @@ with eleven selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1` (upstream-core-port r2.1: v11 plus the admission deadlock fix — r2 wedges once a long session heads the waiting queue)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v12` (upstream-core-port r2.1 + Spark TP2 port: SM120 disjoint-batch BMM, Mamba null-gap cleanup, graph-memory double-count fix, cublas 4 MiB workspace)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13` (upstream-core-port r2.1 + Spark TP2 port + grammar redesign: PR #52477 fixed-width stride fixes the structured-output + MTP3 crash, upstream #53046/#55455 hardening — **GLM rollback target**; v14 is the currently served profile, and v11.1 is v13's rollback target)
-- `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision, memory-resolved ~983K context — **currently served**; the boot resolved exactly 983,040 tokens, KV cache 986,295 tokens, and the checkpoint is the pinned revision served offline)
+- `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — **currently served**; the server resolves 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
@@ -274,14 +274,20 @@ pre-downloaded at the pinned revision (`a6082410…`) into a host hub cache and
 served offline (`HF_HUB_OFFLINE=1`, `MODEL_REVISION`), so the engine cannot
 fetch a different revision.
 
-The catalog registers **983,040** tokens as the context window: the upstream
-preset leaves max-model-len memory-resolved and reports the exact per-boot
-limit at startup, and the v14 switcher writes that resolved value into
-`~/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt`. Align
-`models.json` to the receipt if the first boot resolves a different number.
+The catalog registers **350,000** tokens as the per-session context window by
+ deliberate choice, not the boot-resolved ceiling: the preset auto-fit
+`max_model_len` to **983,040** (KV cache 986,295 tokens) with **1.00×**
+concurrency for full-context requests — a single session growing toward 980k
+would starve every parallel subagent slot. At 350,000 tokens per session the
+shared KV budget still admits ~2.8 concurrent slots, which is what Loom's
+parallel children need. The exact server-resolved limit is recorded in
+`~/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt`; benchmarks or
+curl clients that deliberately want >350k context address the server directly
+(it still serves up to 983,040 tokens per request).
+
 Enabling the LMCache tier (RAM 16 GiB + 64 GiB disk, `CACHE_MODE=lmcache` on
-the run script) lowers the ceiling to roughly 924K without altering the
-registrar's GPU-only number, so the tier is off by default.
+the run script) lowers the server ceiling to roughly 924K; the 350k session
+cap and the tier are independent choices, and the tier stays off by default.
 
 v14 is unlaunchable until the pull script records the image id in the run
 script (same fail-closed shape as v13) and the checkpoint download script

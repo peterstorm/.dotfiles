@@ -58,6 +58,9 @@ full model load, graph capture) is covered by the switch's boot acceptance
 - Smoke completion returned the exact requested string with a reasoning
   stream through the authenticated endpoint
 - Boot receipt: `~/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt`
+- Catalog decision: `pi/models.json` caps **sessions** at 350,000 tokens —
+  986,295 KV / 350,000 ≈ 2.8 concurrent slots for Loom's parallel children;
+  the server still accepts up to 983,040 per request for benchmarks/curl
 
 ## Repository deviations (all deliberate, documented in the v14 runbook and
 scripts):

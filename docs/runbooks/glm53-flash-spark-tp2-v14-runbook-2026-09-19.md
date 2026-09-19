@@ -187,8 +187,11 @@ pi --model desktop-vllm/glm-5.3-flash-spark-tp2-v14:max
 ```
 
 `model-routing.json` publishes `glm-v14` as a named target with a
-subagents-use-max rule; the catalog registers 983,040 tokens (see
-`pi/README.md` for the receipt-alignment note).
+subagents-use-max rule; the catalog caps **sessions** at 350,000 tokens
+(983,040 resolved at boot ÷ the shared 986,295-token KV budget leaves ~2.8
+concurrent slots for parallel children); benchmarks and curl clients that
+deliberately want more address the server directly. See `pi/README.md` for
+the concurrency math.
 
 ## Notes and deviations
 
