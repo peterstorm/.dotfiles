@@ -17,8 +17,12 @@ in `run-glm53-flash-spark-tp2-v14.sh`, v14 is unlaunchable by construction.
   (recorded as `IMAGE_CONFIG` in the run script; repo digest
   `ghcr.io/local-inference-lab/vllm@sha256:495b340eede3bbb348fd6c9662d1535e0d2f27e47c08cc71802fea6bc68caf40`,
   30.2 GB)
-- Checkpoint: `local-inference-lab/GLM-5.3-Flash-NVFP4-Spark` (public;
-  downloaded into the `lil-huggingface` volume on first boot)
+- Checkpoint: `local-inference-lab/GLM-5.3-Flash-NVFP4-Spark` @
+  `a608241037e4c2565356bff7ca293f2133888f88` (public; ~174 GB, pre-downloaded
+  by `download-glm53-flash-spark-tp2-v14-checkpoint.sh` into
+  `/models/hf-cache/glm53-flash-spark-tp2-v14`, the same cache layout the
+  doc's named volume would hold, but host-resident and verifiable; serving is
+  offline-pinned to that revision)
 - Preset: `glm53-spark-tp2` (deployment preset in the image, hardware
   `rtx-pro-6000-pcie`)
 - Served model: `glm-5.3-flash-spark-tp2-v14` (repository id; overrides the
@@ -79,6 +83,17 @@ honoured, and writes `~/.local/state/glm53/flash-spark-tp2-v14-image.identity`.
 Record the printed image id as `IMAGE_CONFIG` in the run script (the pull
 script ends by saying so; the run script fails closed while unrecorded).
 
+Pre-download the checkpoint (separate from the current GLM deployment's EXL3
+K4 checkpoint — different model and quantization):
+
+```bash
+bash scripts/inference/glm53/download-glm53-flash-spark-tp2-v14-checkpoint.sh
+```
+
+~174 GiB; resumable (`--restart on-failure:5`); writes `.download-complete`
+(`$REPO $REV`) into the cache root after a local-only snapshot proof, and the
+run script refuses to serve while that marker or revision is missing.
+
 ## Preflight
 
 ```bash
@@ -89,7 +104,8 @@ Checks (all machine-side, on `desktop`): exactly two RTX PRO 6000 Blackwell
 cards ≥ 96 GB, memory idle, power limit equal to the declarative
 `gpuPowerLimitWatts` pin in `machines/desktop/default.nix`, comfyui stopped,
 port 8000 free, pinned image present and still resolving from the Karmic
-Kraken channel, CPU-only `--print-config` proof, and (with `CACHE_MODE=lmcache`)
+Kraken channel, CPU-only `--print-config` proof, complete offline checkpoint
+marker for the pinned revision, and (with `CACHE_MODE=lmcache`)
 the sidecar ports free plus `/dev/shm` and RAM headroom for the pinned arena.
 
 ## Transactional swap (start)
@@ -103,10 +119,10 @@ The switcher records the running profile set, waits for an idle endpoint
 (three samples, zero running/waiting requests), stops the previous profile,
 launches v14, and accepts only when `/health` is up **and** `/v1/models`
 authenticates exactly one model: `glm-5.3-flash-spark-tp2-v14`. First boot
-downloads the Spark checkpoint into the HF volume and does kernel prep + graph
-capture; `STARTUP_TIMEOUT_SECONDS` defaults to 5400 and can be raised. On any
-failure the previous profile set is restored and the failed container is
-quiesced. Acceptance writes
+does kernel preparation and graph capture on the pre-downloaded checkpoint
+(no network fetch; `HF_HUB_OFFLINE=1`); `STARTUP_TIMEOUT_SECONDS` defaults to
+5400 and can be raised. On any failure the previous profile set is restored
+and the failed container is quiesced. Acceptance writes
 `~/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt` (container, model,
 image, cache mode, and every log line that reports capacity) and only then
 promotes `restart=unless-stopped`.
@@ -155,9 +171,13 @@ subagents-use-max rule; the catalog registers 983,040 tokens (see
   the switcher's rollback).
 - The upstream doc's `GLM-5.3-Flash` API name is replaced by the repository
   per-profile id (attestation; documented above).
-- No `HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE`: the checkpoint downloads on
-  first boot. A local HF token (private, in the env file) is passed through if
-  present.
+- The upstream doc mounts a named volume (`lil-huggingface`) for the
+  checkpoint and downloads it on first boot; v14 pre-downloads the pinned
+  revision into a host hub cache (`/models/hf-cache/glm53-flash-spark-tp2-v14`)
+  and serves with `HF_HUB_OFFLINE=1` plus `MODEL_REVISION` — the same cache
+  path the volume would provide, but verifiable from the host and pinned.
+- No `TRANSFORMERS_OFFLINE`: the engine loads through huggingface_hub, and the
+  offline gate is `HF_HUB_OFFLINE=1` only.
 - The old EXL3 K4 switch set (`VLLM_B12X_*`, `VLLM_DCP_GLOBAL_TOPK`, TRELLIS,
   ROUTE128, PCIE_ALLREDUCE, `GLM_NOPE_*`) must not be carried; the run script
   fails closed on any of them.

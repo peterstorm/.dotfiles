@@ -14,7 +14,7 @@ interface, not by reading the doc):
 | Setting | Upstream doc | Preset value pinned by v14 |
 |---|---|---|
 | Image | `ghcr.io/local-inference-lab/vllm:karmic-kraken-beta` | resolved to one image id by the pull script |
-| Checkpoint | `GLM-5.3-Flash-NVFP4-Spark` | `local-inference-lab/GLM-5.3-Flash-NVFP4-Spark` |
+| Checkpoint | `GLM-5.3-Flash-NVFP4-Spark` | `local-inference-lab/GLM-5.3-Flash-NVFP4-Spark` @ `a608241037e4c2565356bff7ca293f2133888f88` (pre-downloaded, offline-pinned) |
 | Parallelism | TP2 / DCP2 | `tensor-parallel-size: 2`, `decode-context-parallel-size: 2` |
 | Speculation | MTP3 | `mode: mtp`, `draft-tokens: 3` |
 | Request slots | 4 | `max-num-seqs: 4` |
@@ -36,6 +36,13 @@ scripts):
 2. **Restart policy** — launch with `--restart no`, promote to
    `--restart=unless-stopped` only after an accepted boot (repository
    transactional pattern; the doc's unless-stopped is the promoted end state).
-3. **API key** — `VLLM_API_KEY` is passed through the repository's synchronized
+3. **Checkpoint** — the doc downloads
+   `local-inference-lab/GLM-5.3-Flash-NVFP4-Spark` into a named volume on
+   first boot; v14 pre-downloads the pinned revision
+   (`a608241037e4c2565356bff7ca293f2133888f88`) into
+   `/models/hf-cache/glm53-flash-spark-tp2-v14` and serves with
+   `HF_HUB_OFFLINE=1` + `MODEL_REVISION` (the engine can never fetch a
+   different revision, and the cache stays verifiable from the host).
+4. **API key** — `VLLM_API_KEY` is passed through the repository's synchronized
    credential contract (the doc leaves the API on a trusted network or asks
    for authentication; this deployment authenticates).

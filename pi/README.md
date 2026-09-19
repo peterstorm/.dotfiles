@@ -269,7 +269,10 @@ KV, vision, and a memory-resolved context that reports roughly 983K tokens
 GPU-only or 924K with the optional LMCache tier). The served model id is
 `glm-5.3-flash-spark-tp2-v14` — the repository sets `SERVED_MODEL_NAME`, which
 overrides the preset's generic `GLM-5.3-Flash` identifier, so Pi and the
-benchmark catalog can attest the exact runtime profile.
+benchmark catalog can attest the exact runtime profile. The checkpoint is
+pre-downloaded at the pinned revision (`a6082410…`) into a host hub cache and
+served offline (`HF_HUB_OFFLINE=1`, `MODEL_REVISION`), so the engine cannot
+fetch a different revision.
 
 The catalog registers **983,040** tokens as the context window: the upstream
 preset leaves max-model-len memory-resolved and reports the exact per-boot
@@ -281,7 +284,8 @@ the run script) lowers the ceiling to roughly 924K without altering the
 registrar's GPU-only number, so the tier is off by default.
 
 v14 is unlaunchable until the pull script records the image id in the run
-script (same fail-closed shape as v13), and the switch script only promotes
+script (same fail-closed shape as v13) and the checkpoint download script
+writes the pinned-revision marker; the switch script only promotes
 `restart=unless-stopped` after an accepted boot.
 
 ### Qwen3.8 27B

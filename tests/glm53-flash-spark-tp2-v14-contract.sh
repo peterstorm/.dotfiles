@@ -16,6 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GLM="$ROOT/scripts/inference/glm53"
 PULL="$GLM/pull-glm53-flash-spark-tp2-v14-image.sh"
+DL="$GLM/download-glm53-flash-spark-tp2-v14-checkpoint.sh"
 RUN="$GLM/run-glm53-flash-spark-tp2-v14.sh"
 SWITCH="$GLM/switch-glm53-spark-tp2-v14.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
@@ -48,7 +49,7 @@ digest_is() {
   [ "$actual" = "$expected" ] || { echo "FAIL: $file digest is $actual, expected $expected" >&2; exit 1; }
 }
 
-for file in "$PULL" "$RUN" "$SWITCH"; do
+for file in "$PULL" "$DL" "$RUN" "$SWITCH"; do
   [ -x "$file" ] || { echo "FAIL: not executable: $file" >&2; exit 1; }
   bash -n "$file"
 done
@@ -89,16 +90,33 @@ contains "$PULL" 'upstream_doc='
 # The proof must stay CPU-only: no GPUs, no model load.
 lacks "$PULL" '--gpus'
 
+# --- download script pins the exact checkpoint revision -----------------------
+contains "$DL" 'REPO="local-inference-lab/GLM-5.3-Flash-NVFP4-Spark"'
+contains "$DL" 'REV="a608241037e4c2565356bff7ca293f2133888f88"'
+contains "$DL" 'CACHE_HOST="${CACHE_HOST:-/models/hf-cache/glm53-flash-spark-tp2-v14}"'
+contains "$DL" 'hf download "$REPO" --revision "$REV"'
+contains "$DL" 'local_files_only=True'
+contains "$DL" '.download-complete'
+contains "$DL" 'flash-spark-tp2-v14-checkpoint.txt'
+contains "$DL" 'IMAGE_CONFIG="sha256:7b5c335cc647b203aacd09e7513f19266846a8efeabdcaa8724524e51e04ff7a"'
+contains "$DL" 'HF_XET_HIGH_PERFORMANCE=1'
+lacks "$DL" '--gpus'
+
 # --- run script serves exactly the pinned profile in the doc's container shape
 contains "$RUN" "IMAGE_CONFIG=\"sha256:7b5c335cc647b203aacd09e7513f19266846a8efeabdcaa8724524e51e04ff7a\""
 contains "$RUN" "PULL_REF=\"$PULL_REF\""
 contains "$RUN" "PRESET=\"$PRESET\""
 contains "$RUN" "NAME=\"$CONTAINER\""
 contains "$RUN" "SERVED_MODEL=\"$SERVED_MODEL\""
-contains "$RUN" 'HF_VOLUME="${HF_VOLUME:-lil-huggingface}"'
+contains "$RUN" 'HF_CACHE_HOST="${HF_CACHE_HOST:-/models/hf-cache/glm53-flash-spark-tp2-v14}"'
 contains "$RUN" 'CACHE_HOST="${CACHE_HOST:-/models/vllm-cache/glm53-flash-spark-tp2-v14}"'
 contains "$RUN" 'GPU_ORDER="${GPU_ORDER:-0,1}"'
-contains "$RUN" '-v "$HF_VOLUME:/root/.cache/huggingface"'
+contains "$RUN" 'MODEL_REVISION="a608241037e4c2565356bff7ca293f2133888f88"'
+contains "$RUN" '-v "$HF_CACHE_HOST:/root/.cache/huggingface"'
+contains "$RUN" '-e MODEL_REVISION="$MODEL_REVISION"'
+contains "$RUN" '-e HF_HUB_OFFLINE=1'
+contains "$RUN" '.download-complete'
+contains "$RUN" 'snapshots/$MODEL_REVISION'
 contains "$RUN" '-v "$CACHE_HOST:/cache"'
 contains "$RUN" '-e PRESET="$PRESET"'
 contains "$RUN" '-e PORT=8000'
@@ -111,7 +129,6 @@ contains "$RUN" '--shm-size 32g'
 contains "$RUN" '--ulimit memlock=-1'
 contains "$RUN" '--ulimit stack=67108864:67108864'
 contains "$RUN" '--security-opt seccomp=unconfined'
-contains "$RUN" 'docker volume create "$HF_VOLUME"'
 contains "$RUN" 'machines/desktop/default.nix'
 contains "$RUN" 'gpuPowerLimitWatts = ([0-9]+);'
 contains "$RUN" '--print-config'
@@ -135,8 +152,8 @@ lacks "$RUN" '--kv-cache-memory-bytes'
 lacks "$RUN" '--tensor-parallel-size'
 lacks "$RUN" '--max-num-seqs'
 lacks "$RUN" '--max-num-batched-tokens'
-# The checkpoint downloads on first boot; offline flags would break it.
-lacks "$RUN" 'HF_HUB_OFFLINE'
+# The checkpoint is pre-downloaded and pinned: offline serving is the design.
+lacks "$RUN" 'HF_HUB_OFFLINE=0'
 lacks "$RUN" 'TRANSFORMERS_OFFLINE'
 # The retired EXL3 K4 switch set must not be carried into the upstream image.
 # The run script rejects every retired variable name at launch; that rejection

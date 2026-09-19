@@ -4,9 +4,11 @@
 # fixed KV, memory-resolved ~983K context, vision, FP8 target KV / FP32
 # recurrent state, BF16 target head + private NVFP4 MTP draft head).
 #
-# v14 is a stock upstream deployment — no custom overlay, no local checkpoint:
-# the image downloads local-inference-lab/GLM-5.3-Flash-NVFP4-Spark into the
-# Hugging Face volume on first boot. What the repository still owns:
+# v14 is a stock upstream deployment — no custom overlay; the checkpoint is
+# pre-downloaded by download-glm53-flash-spark-tp2-v14-checkpoint.sh into the
+# host hub cache (/models/hf-cache/glm53-flash-spark-tp2-v14, the same cache
+# the doc's named volume would hold) and serving is offline-pinned to that
+# revision. What the repository still owns:
 #   - the exact image id (IMAGE_CONFIG from the pull script) and the exact
 #     served model id (SERVED_MODEL_NAME overrides the preset's GLM-5.3-Flash);
 #   - the workstation gates: exactly two RTX PRO 6000 Blackwell cards at the
@@ -42,9 +44,12 @@ PRESET="glm53-spark-tp2"
 CHECKPOINT="local-inference-lab/GLM-5.3-Flash-NVFP4-Spark"
 NAME="glm53-flash-spark-tp2-v14"
 SERVED_MODEL="glm-5.3-flash-spark-tp2-v14"
-HF_VOLUME="${HF_VOLUME:-lil-huggingface}"
+HF_CACHE_HOST="${HF_CACHE_HOST:-/models/hf-cache/glm53-flash-spark-tp2-v14}"
 CACHE_HOST="${CACHE_HOST:-/models/vllm-cache/glm53-flash-spark-tp2-v14}"
 GPU_ORDER="${GPU_ORDER:-0,1}"
+# Pinned by download-glm53-flash-spark-tp2-v14-checkpoint.sh on the serving
+# host; the offline gate refuses to serve anything else.
+MODEL_REVISION="a608241037e4c2565356bff7ca293f2133888f88"
 CACHE_MODE="${CACHE_MODE:-vram}"
 LMCACHE_L1_GB="${LMCACHE_L1_GB:-16}"
 LMCACHE_L1_INIT_GB="${LMCACHE_L1_INIT_GB:-2}"
@@ -196,6 +201,24 @@ for row in "${gpu_rows[@]}"; do
     }
 done
 
+# Offline checkpoint gate: the run script serves only the pre-downloaded
+# revision. The marker is written by the download script after
+# snapshot_download(local_files_only=True) succeeds.
+if [ ! -r "$HF_CACHE_HOST/.download-complete" ]; then
+  echo "error: checkpoint cache is absent at $HF_CACHE_HOST; run scripts/inference/glm53/download-glm53-flash-spark-tp2-v14-checkpoint.sh" >&2
+  exit 1
+fi
+checkpoint_marker="$(<"$HF_CACHE_HOST/.download-complete")"
+[ "$checkpoint_marker" = "$CHECKPOINT $MODEL_REVISION" ] || {
+  echo "error: checkpoint marker is '$checkpoint_marker', expected '$CHECKPOINT $MODEL_REVISION'" >&2
+  exit 1
+}
+snapshot_dir="$HF_CACHE_HOST/hub/models--$(printf '%s' "$CHECKPOINT" | tr '/' '--')/snapshots/$MODEL_REVISION"
+[ -f "$snapshot_dir/config.json" ] || {
+  echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
+  exit 1
+}
+
 inference_remove_container_if_present "$NAME"
 if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
   echo "error: host port 8000 is already listening; use the v14 switcher when ready to replace the active profile" >&2
@@ -239,7 +262,6 @@ if [ -r "$INFERENCE_OPERATOR_HOME/.cache/huggingface/token" ]; then
   printf 'HF_TOKEN=%s\n' "$(<"$INFERENCE_OPERATOR_HOME/.cache/huggingface/token")" >>"$ENVFILE"
 fi
 
-docker volume create "$HF_VOLUME" >/dev/null
 if ! mkdir -p "$CACHE_HOST" 2>/dev/null || [ ! -w "$CACHE_HOST" ]; then
   sudo mkdir -p "$CACHE_HOST"
 fi
@@ -271,7 +293,8 @@ docker run -d --init \
   --name "$NAME" \
   --label ai.peterstorm.inference.profile=glm53-flash-spark-tp2-v14 \
   --label ai.peterstorm.inference.image-config="$IMAGE_CONFIG" \
-  --label ai.peterstorm.inference.checkpoint="$CHECKPOINT" \
+  --label ai.peterstorm.inference.checkpoint="$CHECKPOINT@$MODEL_REVISION" \
+  --label ai.peterstorm.inference.checkpoint-cache=host-offline-pinned \
   --label ai.peterstorm.inference.preset="$PRESET" \
   --label ai.peterstorm.inference.hardware-profile=rtx-pro-6000-pcie \
   --label ai.peterstorm.inference.speculation=mtp3 \
@@ -287,16 +310,18 @@ docker run -d --init \
   --ulimit stack=67108864:67108864 \
   --security-opt seccomp=unconfined \
   --env-file "$ENVFILE" \
-  -v "$HF_VOLUME:/root/.cache/huggingface" \
+  -v "$HF_CACHE_HOST:/root/.cache/huggingface" \
   -v "$CACHE_HOST:/cache" \
   -e PRESET="$PRESET" \
   -e PORT=8000 \
   -e SERVED_MODEL_NAME="$SERVED_MODEL" \
+  -e MODEL_REVISION="$MODEL_REVISION" \
+  -e HF_HUB_OFFLINE=1 \
   "${cache_env[@]}" \
   "$IMAGE_CONFIG"
 
 printf "Started upstream karmic-kraken GLM Spark TP2 profile '%s'. Follow: docker logs -f %s\n" "$NAME" "$NAME"
 printf "API key: %s (send as 'Authorization: Bearer <key>')\n" "$KEYFILE"
-printf '%s\n' 'v14 is a stock upstream deployment: the image downloads local-inference-lab/GLM-5.3-Flash-NVFP4-Spark into the HF volume on first boot, so the first acceptance may take minutes for download + kernel prep + graph capture.'
+printf '%s\n' 'v14 serves the pre-downloaded checkpoint offline: '"$CHECKPOINT@$MODEL_REVISION"' from the host hub cache; the engine cannot fetch anything else.'
 printf '%s\n' 'Served model id: '"$SERVED_MODEL"'. The preset resolves ~983k text tokens (GPU-only) or ~924k (LMCache); the switcher records the exact boot limit.'
 printf '%s\n' 'Keep PRESET, KV, slots and prefill unchanged: the memory contract was validated upstream against those exact values.'

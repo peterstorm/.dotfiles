@@ -17,8 +17,8 @@ TARGET="glm53-flash-spark-tp2-v14"
 EXPECTED_MODEL="glm-5.3-flash-spark-tp2-v14"
 RUN="$SCRIPT_DIR/run-glm53-flash-spark-tp2-v14.sh"
 PRESET="glm53-spark-tp2"
-# First boot downloads the Spark checkpoint into the HF volume and does kernel
-# preparation plus graph capture; the default gives the download generous room.
+# First boot does kernel preparation and graph capture on the pre-downloaded
+# checkpoint (HF_HUB_OFFLINE=1); the download is not part of startup.
 STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-5400}"
 BOOT_RECEIPT="${BOOT_RECEIPT:-$HOME/.local/state/glm53/flash-spark-tp2-v14-boot-receipt.txt}"
 MODE="${1:-status}"
