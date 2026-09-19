@@ -132,6 +132,10 @@ contains "$RUN" '--security-opt seccomp=unconfined'
 contains "$RUN" 'machines/desktop/default.nix'
 contains "$RUN" 'gpuPowerLimitWatts = ([0-9]+);'
 contains "$RUN" '--print-config'
+contains "$RUN" 'cuda_runtime_probe()'
+contains "$RUN" 'CUDA RUNTIME PROBE: PASS'
+contains "$RUN" '615.71.09'
+contains "$RUN" '--preflight'
 if grep -Eq '^[[:space:]]*-e VLLM_API_KEY=' "$RUN"; then
   echo 'FAIL: launcher leaks VLLM_API_KEY through argv' >&2
   exit 1

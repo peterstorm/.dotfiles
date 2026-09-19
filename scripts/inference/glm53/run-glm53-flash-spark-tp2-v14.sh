@@ -140,6 +140,35 @@ if ! jq -e --arg model "$SERVED_MODEL" '
   exit 1
 fi
 
+# Offline checkpoint gate: the run script serves only the pre-downloaded
+# revision. The marker is written by the download script after
+# snapshot_download(local_files_only=True) succeeds. Static by design: both
+# preflight and launch require it.
+if [ ! -r "$HF_CACHE_HOST/.download-complete" ]; then
+  echo "error: checkpoint cache is absent at $HF_CACHE_HOST; run scripts/inference/glm53/download-glm53-flash-spark-tp2-v14-checkpoint.sh" >&2
+  exit 1
+fi
+checkpoint_marker="$(<"$HF_CACHE_HOST/.download-complete")"
+[ "$checkpoint_marker" = "$CHECKPOINT $MODEL_REVISION" ] || {
+  echo "error: checkpoint marker is '$checkpoint_marker', expected '$CHECKPOINT $MODEL_REVISION'" >&2
+  exit 1
+}
+snapshot_dir="$HF_CACHE_HOST/hub/models--$(printf '%s' "$CHECKPOINT" | tr '/' '--')/snapshots/$MODEL_REVISION"
+[ -f "$snapshot_dir/config.json" ] || {
+  echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
+  exit 1
+}
+
+# Preflight is static-only by design: the transactional switcher runs it while
+# the previous profile is still serving, so no GPU/port gates belong here.
+if [ "$MODE" = --preflight ]; then
+  driver_version="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n 1)"
+  echo "GLM-5.3 v14 upstream spark-preset preflight: PASS (image pin, launch plan, checkpoint cache)"
+  echo "Host NVIDIA driver: ${driver_version:-<unknown>} (upstream tests 615.71.09; a CUDA-runtime probe at launch proves compatibility)"
+  echo "Capacity is intentionally not predicted: the preset resolves max-model-len from memory (upstream reports ~983k GPU-only; 924k with LMCache). The switcher records the exact boot value."
+  exit 0
+fi
+
 # The expected wattage is the declarative pin (gpuPowerLimitWatts in
 # machines/desktop/default.nix), not a hardcoded constant: the fan/thermal
 # retunes retune it in one place and this gate follows. The dotfiles root is
@@ -201,24 +230,6 @@ for row in "${gpu_rows[@]}"; do
     }
 done
 
-# Offline checkpoint gate: the run script serves only the pre-downloaded
-# revision. The marker is written by the download script after
-# snapshot_download(local_files_only=True) succeeds.
-if [ ! -r "$HF_CACHE_HOST/.download-complete" ]; then
-  echo "error: checkpoint cache is absent at $HF_CACHE_HOST; run scripts/inference/glm53/download-glm53-flash-spark-tp2-v14-checkpoint.sh" >&2
-  exit 1
-fi
-checkpoint_marker="$(<"$HF_CACHE_HOST/.download-complete")"
-[ "$checkpoint_marker" = "$CHECKPOINT $MODEL_REVISION" ] || {
-  echo "error: checkpoint marker is '$checkpoint_marker', expected '$CHECKPOINT $MODEL_REVISION'" >&2
-  exit 1
-}
-snapshot_dir="$HF_CACHE_HOST/hub/models--$(printf '%s' "$CHECKPOINT" | tr '/' '--')/snapshots/$MODEL_REVISION"
-[ -f "$snapshot_dir/config.json" ] || {
-  echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
-  exit 1
-}
-
 inference_remove_container_if_present "$NAME"
 if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
   echo "error: host port 8000 is already listening; use the v14 switcher when ready to replace the active profile" >&2
@@ -267,11 +278,30 @@ if ! mkdir -p "$CACHE_HOST" 2>/dev/null || [ ! -w "$CACHE_HOST" ]; then
 fi
 inference_require_cache_access "$CACHE_HOST"
 
-if [ "$MODE" = --preflight ]; then
-  echo "GLM-5.3 v14 upstream spark-preset preflight: PASS"
-  echo "Capacity is intentionally not predicted: the preset resolves max-model-len from memory (upstream reports ~983k GPU-only; 924k with LMCache). The switcher records the exact boot value."
-  exit 0
-fi
+# CUDA runtime probe: one-shot, on the first configured GPU, now that every
+# GPU gate passed (GPUs idle, image pinned, ports free). The upstream doc notes
+# the CUDA 13.4.1 image needs a compatible driver (615.71.09 tested); this
+# probe exercises cuBLAS + cuDNN so an older-but-compatible driver (CUDA minor
+# version compatibility) is accepted and an incompatible one fails closed
+# before the serving container starts.
+cuda_runtime_probe() {
+  local first_gpu="${GPU_ORDER%%,*}"
+  if ! docker run --rm --gpus "device=$first_gpu" --entrypoint /opt/venv/bin/python \
+    "$IMAGE_CONFIG" -c '
+import torch
+import torch.nn.functional as F
+x = torch.randn(1024, 1024, device="cuda")
+assert (x @ x).sum().item() == (x @ x).sum().item()
+w = torch.randn(16, 8, 3, 3, device="cuda")
+assert F.conv2d(torch.randn(1, 8, 64, 64, device="cuda"), w).sum().item() == \
+       F.conv2d(torch.randn(1, 8, 64, 64, device="cuda"), w).sum().item()
+' >/dev/null 2>&1; then
+    echo "error: CUDA runtime probe failed on the pinned image; the host driver cannot run this CUDA 13.4 image" >&2
+    return 1
+  fi
+  echo "CUDA RUNTIME PROBE: PASS (matmul + conv on device $first_gpu)"
+}
+cuda_runtime_probe
 
 cache_env=()
 if [ "$CACHE_MODE" = vram ]; then

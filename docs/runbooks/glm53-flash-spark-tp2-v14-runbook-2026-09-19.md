@@ -100,13 +100,25 @@ run script refuses to serve while that marker or revision is missing.
 bash scripts/inference/glm53/run-glm53-flash-spark-tp2-v14.sh --preflight
 ```
 
-Checks (all machine-side, on `desktop`): exactly two RTX PRO 6000 Blackwell
-cards ≥ 96 GB, memory idle, power limit equal to the declarative
-`gpuPowerLimitWatts` pin in `machines/desktop/default.nix`, comfyui stopped,
-port 8000 free, pinned image present and still resolving from the Karmic
-Kraken channel, CPU-only `--print-config` proof, complete offline checkpoint
-marker for the pinned revision, and (with `CACHE_MODE=lmcache`)
-the sidecar ports free plus `/dev/shm` and RAM headroom for the pinned arena.
+**Static-only by design** — runnable while another profile is still serving:
+image pin (tag binding + id), CPU-only `--print-config` launch-plan proof,
+and the offline checkpoint marker/snapshot for the pinned revision. It also
+prints the host NVIDIA driver version.
+
+`--launch` adds the machine-side gates (after the switcher quiesced the
+previous profile): exactly two RTX PRO 6000 Blackwell cards ≥ 96 GB, memory
+idle, power limit equal to the declarative `gpuPowerLimitWatts` pin in
+`machines/desktop/default.nix`, comfyui stopped, port 8000 free, and (with
+`CACHE_MODE=lmcache`) the sidecar ports free plus `/dev/shm` and RAM headroom
+for the pinned arena. Then a **CUDA runtime probe** (one-shot container,
+matmul + conv on the first GPU) fails closed before the serving container
+starts if the host driver cannot run the image's CUDA 13.4 runtime.
+
+Driver note: the desktop runs **595.91.07** (CUDA 13.2 line) while upstream
+tests **615.71.09**; the probe on 2026-09-19 passed (torch 2.14/cu13.4
+matmul, cuDNN 9.25 conv, NCCL 2.30.7 import) — CUDA minor-version
+compatibility is sufficient, and the launcher's probe keeps that verified at
+every launch instead of trusting the version table.
 
 ## Transactional swap (start)
 
