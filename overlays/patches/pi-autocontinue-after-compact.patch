@@ -1,25 +1,52 @@
 diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
---- a/dist/core/agent-session.js	2026-09-19 01:40:59.798160673 +0200
-+++ b/dist/core/agent-session.js	2026-09-19 01:40:59.830608295 +0200
-@@ -1724,8 +1724,13 @@
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -1724,8 +1724,40 @@
                  return true;
              }
              // Auto-compaction can complete while follow-up/steering/custom messages are waiting.
 -            // Continue once so queued messages are delivered.
 -            return this.agent.hasQueuedMessages();
 +            // Continue once so queued messages are delivered — and, for threshold
-+            // compaction with compaction.autoContinue (default true), always continue
-+            // so the turn resumes from the compaction boundary instead of stalling
-+            // for input. Overflow with a completed answer is NOT auto-continued:
-+            // that response already finished and must not be retried.
++            // compaction with compaction.autoContinue (default true), resume the
++            // turn from the compaction boundary instead of stalling for input.
++            // Overflow with a completed answer is NOT auto-continued: that
++            // response already finished and must not be retried.
 +            const continueAfterCompaction = reason === "threshold" && this.settingsManager.getCompactionSettings().autoContinue;
-+            return continueAfterCompaction || this.agent.hasQueuedMessages();
++            // Pre-prompt compaction (a fresh user prompt is about to be sent)
++            // must not resume anything: the new prompt drives the next turn.
++            if (!continueAfterCompaction || !this._isAgentRunActive) {
++                return this.agent.hasQueuedMessages();
++            }
++            // The rebuilt context keeps the recent tail, which ends with the
++            // just-finished turn's final assistant message, and agent.continue()
++            // rejects an assistant-tailed transcript ("Cannot continue from
++            // message role: assistant"). Shape the tail before resuming:
++            const messages = this.agent.state.messages;
++            const lastMsg = messages[messages.length - 1];
++            if (lastMsg?.role === "assistant") {
++                if (lastMsg.stopReason === "error") {
++                    // Interrupted turn: drop the failed assistant message (it
++                    // stays in session history) so the loop resumes from the
++                    // preceding tool result or user message.
++                    this.agent.state.messages = messages.slice(0, -1);
++                    return true;
++                }
++                if (!this.agent.hasQueuedMessages()) {
++                    // Completed turn with nothing queued: the loop cannot
++                    // continue from its own answer, so queue a minimal
++                    // continuation prompt; agent.continue() drains the
++                    // follow-up queue and delivers it as a normal prompt.
++                    await this._queueFollowUp("[auto-compacted] Continue from where you left off.");
++                }
++            }
++            return true;
          }
          catch (error) {
              const errorMessage = error instanceof Error ? error.message : "compaction failed";
 diff -ruN a/dist/core/compaction/compaction.d.ts b/dist/core/compaction/compaction.d.ts
---- a/dist/core/compaction/compaction.d.ts	2026-09-19 01:40:59.750741935 +0200
-+++ b/dist/core/compaction/compaction.d.ts	2026-09-19 01:40:59.829608242 +0200
+--- a/dist/core/compaction/compaction.d.ts
++++ b/dist/core/compaction/compaction.d.ts
 @@ -29,6 +29,8 @@
      enabled: boolean;
      reserveTokens: number;
@@ -30,8 +57,8 @@ diff -ruN a/dist/core/compaction/compaction.d.ts b/dist/core/compaction/compacti
  export declare const DEFAULT_COMPACTION_SETTINGS: CompactionSettings;
  /**
 diff -ruN a/dist/core/compaction/compaction.js b/dist/core/compaction/compaction.js
---- a/dist/core/compaction/compaction.js	2026-09-19 01:40:59.774131508 +0200
-+++ b/dist/core/compaction/compaction.js	2026-09-19 01:40:59.829608242 +0200
+--- a/dist/core/compaction/compaction.js
++++ b/dist/core/compaction/compaction.js
 @@ -75,6 +75,7 @@
      enabled: true,
      reserveTokens: 16384,
@@ -41,8 +68,8 @@ diff -ruN a/dist/core/compaction/compaction.js b/dist/core/compaction/compaction
  // ============================================================================
  // Token calculation
 diff -ruN a/dist/core/settings-manager.d.ts b/dist/core/settings-manager.d.ts
---- a/dist/core/settings-manager.d.ts	2026-09-19 01:40:59.763070373 +0200
-+++ b/dist/core/settings-manager.d.ts	2026-09-19 01:40:59.829608242 +0200
+--- a/dist/core/settings-manager.d.ts
++++ b/dist/core/settings-manager.d.ts
 @@ -4,6 +4,8 @@
      enabled?: boolean;
      reserveTokens?: number;
@@ -66,8 +93,8 @@ diff -ruN a/dist/core/settings-manager.d.ts b/dist/core/settings-manager.d.ts
      getBranchSummarySettings(): {
          reserveTokens: number;
 diff -ruN a/dist/core/settings-manager.js b/dist/core/settings-manager.js
---- a/dist/core/settings-manager.js	2026-09-19 01:40:59.786042140 +0200
-+++ b/dist/core/settings-manager.js	2026-09-19 01:40:59.829608242 +0200
+--- a/dist/core/settings-manager.js
++++ b/dist/core/settings-manager.js
 @@ -523,11 +523,15 @@
      getCompactionKeepRecentTokens() {
          return this.settings.compaction?.keepRecentTokens ?? 20000;
