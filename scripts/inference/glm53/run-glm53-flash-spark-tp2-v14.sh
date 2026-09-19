@@ -298,8 +298,9 @@ def worker(rank, world=2):
     torch.cuda.set_device(rank)
     dist.init_process_group("nccl", init_method="tcp://127.0.0.1:29555", rank=rank, world_size=world)
     x = torch.randn(8 * 1024 * 1024, device="cuda")
+    expected = x.clone() * world
     dist.all_reduce(x)
-    assert x.abs().mean().item() > 0, "allreduce produced no data"
+    assert torch.allclose(x, expected), "allreduce did not exchange data"
     dist.destroy_process_group()
 
 
@@ -311,10 +312,10 @@ PY
 import torch
 import torch.nn.functional as F
 x = torch.randn(1024, 1024, device="cuda")
-assert (x @ x).sum().item() == (x @ x).sum().item()
+assert torch.isfinite(x @ x).all()
 w = torch.randn(16, 8, 3, 3, device="cuda")
-assert F.conv2d(torch.randn(1, 8, 64, 64, device="cuda"), w).sum().item() == \
-       F.conv2d(torch.randn(1, 8, 64, 64, device="cuda"), w).sum().item()
+img = torch.randn(1, 8, 64, 64, device="cuda")
+assert torch.isfinite(F.conv2d(img, w)).all()
 ' >/dev/null 2>&1; then
     echo "error: CUDA runtime probe failed (cuBLAS/cuDNN) on the pinned image; the host driver cannot run this CUDA 13.4 image" >&2
     return 1
