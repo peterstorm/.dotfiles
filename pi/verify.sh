@@ -37,6 +37,7 @@ if [ "${1:-}" = "--tests" ]; then
   }
   trap cleanup EXIT
   bash "$here/../tests/blender-mcp-contract.sh"
+  bash "$here/../tests/pi-compaction-autocontinue-contract.sh"
   bun test \
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \
