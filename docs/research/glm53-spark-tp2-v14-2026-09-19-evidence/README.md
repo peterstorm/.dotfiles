@@ -26,6 +26,26 @@ interface, not by reading the doc):
 | Hardware profile | RTX PRO 6000 Workstation | `rtx-pro-6000-pcie` |
 | CUDA graphs | 1/2/4/8/12/16 rows | preset default (kept) |
 
+## Driver / CUDA compatibility evidence (2026-09-19)
+
+How we know the host driver runs this image — probes, not version tables:
+
+| Component | Host / image | Evidence |
+|---|---|---|
+| Host driver | **595.91.07** (nvidia-smi; flake pin; supports CUDA 13.2) | nvidia-smi query |
+| Image runtime | torch 2.14.0a0 built for **CUDA 13.4** | inside-image import |
+| cuBLAS | image build | 1 matmul + 1 assertion on device 0 — ✅ |
+| cuDNN | 9.25.0 | 1 conv on device 0 — ✅ |
+| NCCL | 2.30.7 | real two-GPU allreduce (8 MiB tensor × 2 ranks, `torch.distributed`) — ✅ |
+| Upstream tested driver | 615.71.09 | doc reference only; not required for runtime (CUDA minor-version compatibility) |
+
+The launcher re-runs all three probes fail-closed at every `--launch` (cuBLAS
++ cuDNN on the first GPU, NCCL allreduce across both), so a driver regression
+or a rebuilt image failing to load fails the switch with a clear error before
+any serving container starts. The remaining unproven layer (B12X kernels,
+full model load, graph capture) is covered by the switch's boot acceptance
+(health + authenticated exact `/v1/models`) and the runbook's smoke step.
+
 Repository deviations (all deliberate, documented in the v14 runbook and
 scripts):
 

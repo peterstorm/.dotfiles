@@ -110,15 +110,18 @@ previous profile): exactly two RTX PRO 6000 Blackwell cards ≥ 96 GB, memory
 idle, power limit equal to the declarative `gpuPowerLimitWatts` pin in
 `machines/desktop/default.nix`, comfyui stopped, port 8000 free, and (with
 `CACHE_MODE=lmcache`) the sidecar ports free plus `/dev/shm` and RAM headroom
-for the pinned arena. Then a **CUDA runtime probe** (one-shot container,
-matmul + conv on the first GPU) fails closed before the serving container
-starts if the host driver cannot run the image's CUDA 13.4 runtime.
+for the pinned arena. Then a **CUDA runtime probe** (one-shot instance,
+cuBLAS matmul + cuDNN conv on the first GPU, then a two-GPU NCCL 2.30.7
+allreduce) fails closed before the serving container starts if the host
+driver cannot run the image's CUDA 13.4 runtime.
 
 Driver note: the desktop runs **595.91.07** (CUDA 13.2 line) while upstream
-tests **615.71.09**; the probe on 2026-09-19 passed (torch 2.14/cu13.4
-matmul, cuDNN 9.25 conv, NCCL 2.30.7 import) — CUDA minor-version
-compatibility is sufficient, and the launcher's probe keeps that verified at
-every launch instead of trusting the version table.
+tests **615.71.09**; the runtime probes on 2026-09-19 all passed — torch
+2.14/cu13.4 matmul (cuBLAS), cuDNN 9.25 conv, and a real two-GPU NCCL
+2.30.7 allreduce — so CUDA minor-version compatibility is sufficient. The
+launcher re-probes all three at every launch instead of trusting a version
+table; the ultimate proof is the boot acceptance + a smoke completion after
+promotion (see [First-boot acceptance gate](#first-boot-acceptance-gate)).
 
 ## Transactional swap (start)
 

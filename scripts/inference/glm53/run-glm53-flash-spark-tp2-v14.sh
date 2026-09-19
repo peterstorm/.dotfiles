@@ -278,14 +278,34 @@ if ! mkdir -p "$CACHE_HOST" 2>/dev/null || [ ! -w "$CACHE_HOST" ]; then
 fi
 inference_require_cache_access "$CACHE_HOST"
 
-# CUDA runtime probe: one-shot, on the first configured GPU, now that every
-# GPU gate passed (GPUs idle, image pinned, ports free). The upstream doc notes
-# the CUDA 13.4.1 image needs a compatible driver (615.71.09 tested); this
-# probe exercises cuBLAS + cuDNN so an older-but-compatible driver (CUDA minor
-# version compatibility) is accepted and an incompatible one fails closed
-# before the serving container starts.
+# CUDA runtime probe: one-shot, now that every GPU gate passed (GPUs idle,
+# image pinned, ports free). The upstream doc notes the CUDA 13.4.1 image
+# needs a compatible driver (615.71.09 tested); this probe exercises the
+# components vLLM's TP2/DCP2 path actually links — cuBLAS + cuDNN on the first
+# GPU, then a real two-GPU NCCL allreduce — so an older-but-compatible driver
+# (CUDA minor version compatibility) is accepted and an incompatible one fails
+# closed before the serving container starts.
 cuda_runtime_probe() {
-  local first_gpu="${GPU_ORDER%%,*}"
+  local first_gpu="${GPU_ORDER%%,*}" probe_dir
+  probe_dir="$(mktemp -d)"
+  trap 'rm -rf "$probe_dir"' RETURN
+  cat >"$probe_dir/nccl_probe.py" <<'PY'
+import torch
+import torch.distributed as dist
+
+
+def worker(rank, world=2):
+    torch.cuda.set_device(rank)
+    dist.init_process_group("nccl", init_method="tcp://127.0.0.1:29555", rank=rank, world_size=world)
+    x = torch.randn(8 * 1024 * 1024, device="cuda")
+    dist.all_reduce(x)
+    assert x.abs().mean().item() > 0, "allreduce produced no data"
+    dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    torch.multiprocessing.spawn(worker, nprocs=2, join=True)
+PY
   if ! docker run --rm --gpus "device=$first_gpu" --entrypoint /opt/venv/bin/python \
     "$IMAGE_CONFIG" -c '
 import torch
@@ -296,10 +316,18 @@ w = torch.randn(16, 8, 3, 3, device="cuda")
 assert F.conv2d(torch.randn(1, 8, 64, 64, device="cuda"), w).sum().item() == \
        F.conv2d(torch.randn(1, 8, 64, 64, device="cuda"), w).sum().item()
 ' >/dev/null 2>&1; then
-    echo "error: CUDA runtime probe failed on the pinned image; the host driver cannot run this CUDA 13.4 image" >&2
+    echo "error: CUDA runtime probe failed (cuBLAS/cuDNN) on the pinned image; the host driver cannot run this CUDA 13.4 image" >&2
     return 1
   fi
-  echo "CUDA RUNTIME PROBE: PASS (matmul + conv on device $first_gpu)"
+  if ! docker run --rm --gpus all --ipc host \
+    -e CUDA_VISIBLE_DEVICES="$GPU_ORDER" \
+    -v "$probe_dir/nccl_probe.py:/probe.py:ro" \
+    --entrypoint /opt/venv/bin/python \
+    "$IMAGE_CONFIG" /probe.py >/dev/null 2>&1; then
+    echo "error: NCCL allreduce probe failed on the pinned image; the host driver or P2P path cannot run this CUDA 13.4 image" >&2
+    return 1
+  fi
+  echo "CUDA RUNTIME PROBE: PASS (cuBLAS + cuDNN on device $first_gpu, NCCL allreduce across $GPU_ORDER)"
 }
 cuda_runtime_probe
 
