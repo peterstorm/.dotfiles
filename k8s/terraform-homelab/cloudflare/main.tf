@@ -33,6 +33,16 @@ resource "cloudflare_dns_record" "echo_server" {
   ttl     = 1
 }
 
+# SemIf browser demo via Cloudflare tunnel (external access)
+resource "cloudflare_dns_record" "semif" {
+  zone_id = var.cloudflare_zone_id
+  name    = "semif"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
 # dotslash.dev via Cloudflare tunnel (external access)
 resource "cloudflare_dns_record" "dotslash_dev" {
   zone_id = var.cloudflare_dotslash_zone_id
