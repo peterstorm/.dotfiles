@@ -3999,10 +3999,10 @@ let
     mv "$balanced_staging" "$balanced_dir"
     verify_versioned_workflow_install "$muse_sheet_klein_staging" "$muse_sheet_klein_dir"
     verify_versioned_workflow_install "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
-    mv "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
-    mv "$muse_sheet_klein_staging" "$muse_sheet_klein_dir"
+    install_versioned_workflow_dir "$muse_sheet_krea2_staging" "$muse_sheet_krea2_dir"
+    install_versioned_workflow_dir "$muse_sheet_klein_staging" "$muse_sheet_klein_dir"
     verify_versioned_workflow_install "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"
-    mv "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"
+    install_versioned_workflow_dir "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"
   '';
 
   extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {

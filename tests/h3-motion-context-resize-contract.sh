@@ -57,13 +57,14 @@ contains "$MODULE" 'ln -s ${minimaxH3LatentUpscalerNode} "$out/Comfyui_Minimax_h
 # The upscaler's custom model folder must map through the paths config.
 contains "$MODULE" '"latent_upscale_models"'
 
-# Workflow install: versioned dir, staging, loop, verify, mv
+# Workflow install: versioned dir, staging, loop, verify, idempotent install
 contains "$MODULE" 'h3_motion_context_resize_dir="$user_workflows/minimax-h3-motion-context-resize-v1.1"'
 contains "$MODULE" 'h3_motion_context_resize_staging="$user_workflows/.minimax-h3-motion-context-resize-v1.1.new"'
 contains "$MODULE" 'for source in ${h3MotionContextResizeNode}/example_workflows'
 contains "$MODULE" 'install -m 0600 "$source" "$h3_motion_context_resize_staging/$(basename "$source")"'
 contains "$MODULE" 'verify_versioned_workflow_install "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"'
-contains "$MODULE" 'mv "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"'
+contains "$MODULE" 'install_versioned_workflow_dir "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"'
+absent "$MODULE" 'mv "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"'
 
 # Downloader wiring
 contains "$MODULE" 'downloadH3MotionContextResizeModels = pkgs.writeShellApplication'
