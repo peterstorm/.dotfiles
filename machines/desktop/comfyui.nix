@@ -379,6 +379,16 @@ let
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-fun-controlnet.sh;
   };
 
+  downloadMinimaxH3SingularityModels = pkgs.writeShellApplication {
+    name = "download-minimax-h3-singularity-models";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-singularity-models.sh;
+  };
+
   downloadMinimaxH3VdnStage = pkgs.writeShellApplication {
     name = "download-minimax-h3-vdn-stage";
     runtimeInputs = [
@@ -3249,6 +3259,23 @@ let
           --output-dir "$out/workflows"
       '';
 
+  minimaxH3SingularityWorkflows =
+    pkgs.runCommand "minimax-h3-singularity-v1-3-action-development-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-singularity-workflows.sh} \
+          --source-workflow \
+            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+          --output-dir "$out/workflows"
+      '';
+
   minimaxH3BlenderRef2vaWorkflows =
     pkgs.runCommand "minimax-h3-blender-ref2va-local-development-workflows"
       {
@@ -3780,6 +3807,7 @@ let
     h3_derope_dir="$user_workflows/minimax-h3-derope-development-v1.0"
     h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.1"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
+    h3_singularity_dir="$user_workflows/minimax-h3-singularity-v1.3-action-development"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     h3_vdn_dir="$user_workflows/minimax-h3-vdn-h3"
@@ -3806,6 +3834,7 @@ let
     h3_derope_staging="$user_workflows/.minimax-h3-derope-development-v1.0.new"
     h3_derope_turbo_staging="$user_workflows/.minimax-h3-derope-turbo-development-v1.1.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
+    h3_singularity_staging="$user_workflows/.minimax-h3-singularity-v1.3-action-development.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     h3_vdn_staging="$user_workflows/.minimax-h3-vdn-h3.new"
@@ -3824,7 +3853,8 @@ let
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
+      "$h3_singularity_staging" "$h3_blender_staging" "$h3_motion_context_staging" \
+      "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
       "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
       "$h3_motion_context_resize_staging"
@@ -3834,7 +3864,8 @@ let
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
-      "$h3_blender_staging" "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
+      "$h3_singularity_staging" "$h3_blender_staging" "$h3_motion_context_staging" \
+      "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
       "$balanced_staging" "$sam3d_staging" \
       "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
       "$h3_motion_context_resize_staging" \
@@ -3893,6 +3924,9 @@ let
     for source in ${minimaxH3TurboLoraWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_turbo_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3SingularityWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_singularity_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3BlenderRef2vaWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_blender_staging/$(basename "$source")"
     done
@@ -3931,6 +3965,7 @@ let
     verify_versioned_workflow_install "$director_v12_staging" "$director_v12_dir"
     verify_versioned_workflow_install "$h3_derope_staging" "$h3_derope_dir"
     verify_versioned_workflow_install "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
+    verify_versioned_workflow_install "$h3_singularity_staging" "$h3_singularity_dir"
     verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
@@ -3955,6 +3990,7 @@ let
     install_versioned_workflow_dir "$h3_derope_staging" "$h3_derope_dir"
     install_versioned_workflow_dir "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
+    install_versioned_workflow_dir "$h3_singularity_staging" "$h3_singularity_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$h3_vdn_staging" "$h3_vdn_dir"
@@ -3984,6 +4020,7 @@ in
     h3ModelPhase
     downloadImageUpscalerModels
     downloadMinimaxH3FunControlnet
+    downloadMinimaxH3SingularityModels
     downloadMinimaxH3VdnStage
     downloadMinimaxH3RealismPeopleLora
     downloadMinimaxH3Tae

@@ -55,7 +55,8 @@ ComfyUI remains loopback-only and systemd-confined.
 | Episode 30 workflows + six inputs | Pixaroma ZIP, installed under `/var/lib/comfyui/` | URL + exact SHA-256; 7/7 JSON gate |
 | Curated creative suite | 54 workflows under six task folders: 53 official adaptations plus one pinned Krea realism derivation | pinned template package; exact file manifest + model-aware adaptation + JSON gate |
 | MiniMax Music 3 workflow | Official Comfy workflow adapted to the full-quality selectors | workflow-templates commit + exact file hash + JSON/model gate |
-| Full Template Library | official workflow browser library | Comfy package 0.11.48 in the Nix closure |
+| MiniMax H3 Singularity action candidate | Public v1.3 checkpoint plus deterministic Ref2VA graph adaptations | exact HF revisions, sizes, SHA-256 values, role-aware graph validation, and fixed-seed A/B control |
+| Full Template Library | official Comfy workflow browser library | Comfy package 0.11.48 in the Nix closure |
 | Krea/edit/prompt model files | `/models/comfyui/` | HF revision + exact size + SHA-256 manifest |
 | FLUX.2 Klein 9B BF16, encoder, VAE, and two Krea LoRAs | `/models/comfyui/` | HF revisions/Civitai model versions + exact size + SHA-256 manifest |
 | Gokay Krea 2 Realism LoRA | `/models/comfyui/loras/krea2_realism_lora.safetensors` | HF revision `32f0436...` + exact 469,288,512-byte size + SHA-256 |
@@ -200,6 +201,8 @@ The switch installs:
 - two image-led maximum-quality H3 production workflows—FL2VA and REF2VA kept
   in separate graphs—under
   `/var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16/`;
+- three role-aware MiniMax H3 Singularity action-candidate workflows under
+  `/var/lib/comfyui/user/default/workflows/minimax-h3-singularity-v1.3-action-development/`;
 - one full-quality MiniMax Music 3 workflow under
   `/var/lib/comfyui/user/default/workflows/minimax-music3-full-quality/`;
 - the idle-queue-only `creative-model-phase` command for exclusive Krea,
@@ -231,8 +234,8 @@ transactional profile switch. After activation, acceptance requires:
 - exactly twelve BF16-adapted Episode 24, eight Episode 29, seven Episode 30,
   one Krea/FLUX Klein workflow, two Turbo character workflows, four RAW
   maximum-quality Krea workflows, 21 contest-production workflows, two
-  maximum-quality H3 production workflows, and one full-quality Music 3
-  workflow are installed;
+  maximum-quality H3 production workflows, three Singularity Development
+  workflows, and one full-quality Music 3 workflow are installed;
 - Torch reports CUDA and the RTX PRO 6000 when a workflow starts;
 - no firewall rule exposes 8188;
 - ComfyUI-Manager is absent.
@@ -989,6 +992,96 @@ T2VA checkpoint. The six graphs are qualification tools, not Production
 profiles. Preserve compiled requests and histories externally; their Nix
 installation never promotes an output.
 
+### MiniMax H3 Singularity v1.3 action candidate
+
+The source video is [MiniMax H3 Singularity vs Official: Fight Test + Updated
+Workflow](https://www.youtube.com/watch?v=dTYyI5TbmdM). Its transcript reaches a
+clear but bounded conclusion: with the same seed and graph, the tested
+Singularity checkpoint produced sharper texture, better distant faces and
+reflections, stronger fast combat, and more convincing impact than the official
+INT8 Ref2VA checkpoint. The author calls it the best action/fight H3 model they
+had tested and replaced their old checkpoint. A four-step single-sampler run
+retained strong action but showed mild noise; adding a second sampler and
+upscale looked almost as good as eight steps. **A same-seed comparison is
+evidence, not a universal model ranking**: the video does not qualify our exact
+hardware, BF16 official baseline, prompts, or reference corpus.
+
+The useful workflow practices are broader than the checkpoint:
+
+- use the full 34,004,507,622-byte v1.3 INT8 checkpoint on this 96 GiB card,
+  rather than the smaller pruned alternatives intended for constrained VRAM;
+- use role-separated references instead of one crowded sheet: a complete
+  full-look, face/hair detail, hand/grip detail, and hero prop;
+- state each reference's role in `subject_definitions` and
+  `retention_analysis`; none is automatically a first frame;
+- describe one causal action beat as setup → trigger → acceleration/path → one
+  contact or near-contact → visible reaction → recovery;
+- bind one concrete camera move and physical/VFX consequences to that action;
+- compare fixed prompt, references, dimensions, seed, sampler, shifts, and LoRA
+  before changing creative variables.
+
+Install the already documented base H3 BF16 profile first; it supplies the
+shared BF16 Qwen3-VL-32B encoder, VAEs, official control, and four-step Ref2V
+LoRA. Then install the Singularity checkpoint and eight-step Ref2V LoRA:
+
+```bash
+MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
+  download-minimax-h3-singularity-models
+```
+
+The downloader pins:
+
+- `WarmBloodAban/Minimax-h3_Singularity@af671d9214a6e41ab8c2f43e9f871ea56246115f`,
+  `Minimax-h3_Singularity_ref2va_v1.3_int8.safetensors`, renamed locally to
+  `minimax_h3_singularity_ref2va_v1.3_int8.safetensors`, 34,004,507,622 bytes,
+  SHA-256 `551915097b8727537a82f3a2c5acec965165ec84e780b3e9a5f28ce867fddf08`;
+- `lightx2v/Minimax-h3-Turbo@3ec17a324ced54151364f24f8b5fb6bf7e26414f`,
+  the task-matched 768p Ref2V eight-step ComfyUI BF16 LoRA, 1,956,193,000
+  bytes, SHA-256
+  `6a56f41ab4229c9dd845b9501bbd475ee57e112d846cf2e819d534a1ae928c5a`.
+
+The fine-tune repository labels itself Apache-2.0, but it derives from MiniMax
+H3. The downloader therefore does not infer broader rights: the existing
+MiniMax community-license acceptance and separate territorial-authorization
+gates remain mandatory.
+
+Open **User workflows →
+`minimax-h3-singularity-v1.3-action-development`**:
+
+1. `00 ... Singularity ... 8-Step - Action Quality` — primary quality candidate,
+   Euler/simple, shifts 12/3, native 1344×768, ten seconds, fixed seed;
+2. `01 ... Singularity ... 4-Step - Fast Iterate` — same role-aware graph at
+   the already qualified 960×544 Ref2VA fast-profile resolution with the
+   existing task-matched four-step LoRA; expect and inspect the mild noise
+   reported by the transcript;
+3. `02 ... Official BF16 ... 8-Step - Fixed-Seed A-B Control` — same prompt,
+   references, dimensions, seed, scheduler, shifts, and eight-step LoRA; only
+   the diffusion checkpoint changes.
+
+Before queueing any of them:
+
+```bash
+creative-model-phase prepare h3-ref2va
+```
+
+Start with `00`, replace every placeholder, and keep one physical beat. Run
+`02` unchanged for the A/B. Use `01` only after the quality graph establishes
+what the shot should look like. Preserve graph, prompt, ordered references,
+seed, runtime, output, and model hashes; inspect identity, anatomy, grip, prop
+topology, contact, motion smear, lighting, and audio frame-by-frame.
+
+Two video details are deliberately **not** adopted. The community Ref2VA
+motion-enhancer repository says to disable the vanilla LightX2V LoRA, so the
+workstation never stacks those incompatible accelerators. The Patreon
+attachment names an LBH latent-upscale path, but that learned latent upscaler's
+code has no declared license and remains excluded from live workflows. Use the
+separate `minimax-h3-upscaler-local-safe` finishing profiles after accepting the
+native clip; an upscaler cannot repair broken mechanics.
+
+This is private local Development only. Technical success does not promote an
+asset or replace the 50-step official BF16 production baseline without human
+qualification across the project's actual shot corpus.
+
 ### Blender REF2VA video-carrier suite
 
 Nix installs six Development graphs under **User workflows →
@@ -1007,11 +1100,12 @@ contracts.
 
 There are three distinct workflow inventories; do not conflate them:
 
-- **144 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
+- **147 user workflows:** twelve BF16-adapted Pixaroma Episode 24 graphs, one
   Krea/FLUX Klein BF16 graph, two Turbo character graphs, four RAW BF16
   maximum-quality graphs, 21 guided contest-production graphs, two image-led
   maximum-quality H3 production graphs, two H3 Director Development graphs, six
-  H3 acceleration qualification graphs, six Blender REF2VA video-carrier graphs,
+  H3 acceleration qualification graphs, three Singularity action-candidate
+  graphs, six Blender REF2VA video-carrier graphs,
   seven H3 motion-context/keyframe graphs, one full-quality Music 3 graph, seven
   still/video upscaler qualification graphs, four tested H3-output finishing
   graphs, eight Episode 29 graphs, seven pinned Episode 30 graphs, and 54 curated
@@ -1847,6 +1941,7 @@ The starting surface is:
 | First-frame local H3 scene | `Minimax H3 - Image to video FF (First Frame)` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker and accepted Krea keyframe |
 | First+last or last-only local H3 scene | `Minimax H3 - Image to video FFLF` or `Minimax H3 - Image to video LF (Last Frame)` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker and matching-ratio keyframes |
 | Character/reference-led local H3 scene | `Minimax H3 - Reference Two Images` or `Minimax H3 - Reference Three Images` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker; BF16 REF2VA graph is already adapted |
+| Fast action/combat candidate | `00` quality, `01` fast, or `02` official A/B control | User workflows → `minimax-h3-singularity-v1.3-action-development` | Base H3 marker plus Singularity v1.3 marker; prepare `h3-ref2va`; four role-separated references; Development only |
 | Audio-led performance | `Minimax H3 - Reference Image + Audio Sync - SPEAK` or `... - SING` | User workflows → `pixaroma-ep29-h3-bf16` | Local H3 marker; consented ≤15-second audio and one identity image |
 | Hosted H3 scene | `api_minimax_h3_t2v`, `api_minimax_h3_flf2v`, or `api_minimax_h3_r2v` | User workflows → `creative-suite/cloud` | Comfy account, credits, and acceptance of remote upload |
 
@@ -1876,6 +1971,8 @@ test "$(find /var/lib/comfyui/user/default/workflows/contest-production-bf16 \
   -type f -name '*.json' | wc -l)" -eq 21
 test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-production-bf16 \
   -type f -name '*.json' | wc -l)" -eq 2
+test "$(find /var/lib/comfyui/user/default/workflows/minimax-h3-singularity-v1.3-action-development \
+  -type f -name '*.json' | wc -l)" -eq 3
 test "$(find /var/lib/comfyui/user/default/workflows/creative-suite \
   -type f -name '*.json' | wc -l)" -eq 54
 ```
@@ -1887,6 +1984,7 @@ test -f /models/comfyui/.krea2-production-complete
 test -f /models/comfyui/.krea2-flux2-klein9b-bf16-v1.complete
 test -f /models/comfyui/.krea2-realism-lora-32f0436-v1.complete
 test -f /models/comfyui/.minimax-h3-bf16-complete
+test -f /models/comfyui/.minimax-h3-singularity-v1.3-complete
 
 grep -Fxq 'Blackfrost-AI/Qwen3.8-27B-ABLITERATED-BF16@9d85770e5eb602322b4bceef55beda357e0bd0ca' \
   /models/Qwen3.8-27B-Blackfrost-Abliterated-BF16/.download-complete
@@ -2383,6 +2481,14 @@ Do not call the stack qualified until:
       ComfyUI restart clears its model/cache state.
 - [ ] H3 BF16 REF2VA then completes with one matched-size image at 768p/124
       frames, without either DiT co-residing, host swapping, or a GPU OOM.
+- [ ] Singularity `00` and official BF16 control `02` complete with identical
+      role-separated references, prompt, dimensions, seed, scheduler, shifts,
+      and eight-step LoRA; identity, distant faces, hand/grip anatomy, prop
+      topology, contact, smear, lighting, audio, runtime, and peak memory are
+      reviewed before any per-shot preference is recorded.
+- [ ] Singularity fast profile `01` is compared against `00`; visible noise or
+      lost contact/identity detail prevents using the four-step result as a
+      final master.
 - [ ] Standard Blackfrost Qwen→Krea BF16 1K and 2K images complete.
 - [ ] The Gokay realism workflow completes with only
       `krea2_realism_lora.safetensors` active at 1.0; compare the native output
@@ -2483,6 +2589,9 @@ Sources accessed 2026-08-21–22:
 - [MiniMax H3 license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
 - [MiniMax H3 license Q&A](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/QA-about-License.md)
 - [MiniMax H3 prompt-writing skill](https://github.com/MiniMax-AI/MiniMax-H3/tree/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing)
+- [MiniMax H3 Singularity comparison video](https://www.youtube.com/watch?v=dTYyI5TbmdM)
+- [MiniMax H3 Singularity v1.3 checkpoint](https://huggingface.co/WarmBloodAban/Minimax-h3_Singularity/tree/af671d9214a6e41ab8c2f43e9f871ea56246115f)
+- [LightX2V MiniMax H3 Turbo adapters](https://huggingface.co/lightx2v/Minimax-h3-Turbo/tree/3ec17a324ced54151364f24f8b5fb6bf7e26414f)
 - [Krea API Zero Data Retention](https://www.krea.ai/docs/developers/zdr)
 
 For full-fidelity H3 architecture, memory, and licensing analysis, also read
