@@ -101,8 +101,20 @@ fi
 
 # Disk gate: ~170 GiB of payload on /models; fail closed before downloading
 # rather than filling the dataset mid-flight. Never deletes anything itself.
-available_kb="$(df -Pk "$CACHE_HOST" 2>/dev/null | awk 'NR==2 {print $4}')"
-[ -n "$available_kb" ] || available_kb="$(df -Pk /models | awk 'NR==2 {print $4}')"
+if ! mkdir -p "$CACHE_HOST" 2>/dev/null || [ ! -w "$CACHE_HOST" ]; then
+  sudo mkdir -p "$CACHE_HOST"
+  sudo chown "$USER:users" "$CACHE_HOST"
+fi
+models_df="$(df -Pk "$CACHE_HOST" 2>/dev/null || true)"
+available_kb="$(awk 'NR==2 {print $4}' <<<"$models_df")"
+if [ -z "$available_kb" ]; then
+  models_df="$(df -Pk /models 2>/dev/null || true)"
+  available_kb="$(awk 'NR==2 {print $4}' <<<"$models_df")"
+fi
+[ -n "$available_kb" ] || {
+  echo "error: could not determine free space on the checkpoint filesystem" >&2
+  exit 1
+}
 if [ "$available_kb" -lt $((180 * 1024 * 1024)) ]; then
   echo "error: only $((available_kb / 1024 / 1024)) GiB free on the checkpoint filesystem; the pinned" >&2
   echo "       download needs ~170 GiB plus transient xet staging. Free space first" >&2
@@ -120,11 +132,6 @@ if [[ -f "$TOKEN_FILE" ]]; then
   EXTRA_VOLS+=(-v "$TOKEN_FILE:/root/.cache/huggingface/token:ro")
 else
   echo "note: no HF token at $TOKEN_FILE - downloading unauthenticated (public repo)" >&2
-fi
-
-if ! mkdir -p "$CACHE_HOST" 2>/dev/null || [ ! -w "$CACHE_HOST" ]; then
-  sudo mkdir -p "$CACHE_HOST"
-  sudo chown "$USER:users" "$CACHE_HOST"
 fi
 
 # hf download (huggingface_hub 1.31 with hf_xet high-performance transport)
