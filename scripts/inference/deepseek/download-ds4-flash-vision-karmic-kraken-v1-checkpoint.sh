@@ -168,6 +168,13 @@ if [ "$MODE" = --hydrate-from ]; then
   #    as real files (or symlinked when the flat copy is already identical).
   SNAPSHOT_DIR="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
   rm -rf "$SNAPSHOT_DIR" 2>/dev/null || sudo rm -rf "$SNAPSHOT_DIR"
+  # The download container runs as root and may leave root-owned hub parents
+  # behind; the hydrate writes as the operator, so reclaim the tree when the
+  # snapshot dir cannot be created directly.
+  mkdir -p "$SNAPSHOT_DIR" 2>/dev/null || {
+    sudo mkdir -p "$SNAPSHOT_DIR"
+    sudo chown -R "$USER:$(id -gn)" "$CACHE_HOST/hub"
+  }
   fetched_real=()
   for path in "${PINNED_ONLY_FILES[@]}"; do
     tmp="$(mktemp "/tmp/.ds4v-hydrate-${path##*/}.XXXXXX")"
