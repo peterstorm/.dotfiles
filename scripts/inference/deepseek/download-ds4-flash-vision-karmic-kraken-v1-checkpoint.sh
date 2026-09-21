@@ -147,7 +147,8 @@ if [ "$MODE" = --hydrate-from ]; then
       [ -f "$f" ] || { echo "hydrate: missing in flat copy: $3 (looked for $f)" >&2; exit 1; }
       s="$(stat -c %s "$f")"
       [ "$s" = "$2" ] || { echo "hydrate: size mismatch: $3 ($s != $2)" >&2; exit 1; }
-      h="$(sha256sum "$f" | cut -d' ' -f1)"
+      h="$(sha256sum "$f")"
+      h="${h%% *}"
       [ "$h" = "$1" ] || { echo "hydrate: sha256 mismatch: $3" >&2; exit 1; }
     ' _
   echo "Hydrate: shards verified."
