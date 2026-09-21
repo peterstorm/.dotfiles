@@ -167,7 +167,7 @@ if [ "$MODE" = --hydrate-from ]; then
   #    pinned-only files are fetched from the pinned revision and installed
   #    as real files (or symlinked when the flat copy is already identical).
   SNAPSHOT_DIR="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
-  rm -rf "$SNAPSHOT_DIR"
+  rm -rf "$SNAPSHOT_DIR" 2>/dev/null || sudo rm -rf "$SNAPSHOT_DIR"
   fetched_real=()
   for path in "${PINNED_ONLY_FILES[@]}"; do
     tmp="$(mktemp "/tmp/.ds4v-hydrate-${path##*/}.XXXXXX")"
