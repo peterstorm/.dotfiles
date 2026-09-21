@@ -70,7 +70,7 @@ if [[ "$derived_id" != "$EXPECTED_IMAGE_ID" ]]; then
   exit 1
 fi
 repo_digests="$(docker image inspect "$TAG" --format '{{json .RepoDigests}}')"
-if ! jq -e --arg digest "$DOC_DIGEST" 'map(select(. == $digest)) | length == 1' <<<"$repo_digests" >/dev/null; then
+if ! jq -e --arg digest "$DOC_DIGEST" 'map(select(endswith("@" + $digest))) | length == 1' <<<"$repo_digests" >/dev/null; then
   echo "error: tag repo digests $repo_digests do not contain the documented $DOC_DIGEST" >&2
   echo "       falling back to a by-digest pull and requiring identical image ids" >&2
   docker pull "ghcr.io/local-inference-lab/vllm@$DOC_DIGEST" >/dev/null
@@ -100,7 +100,8 @@ jq -e . "$base_proof" >/dev/null || {
 }
 proof_assert() {
   local description="$1" filter="$2"
-  if ! jq -e "$filter" "$base_proof" >/dev/null 2>&1; then
+  shift 2
+  if ! jq -e "$filter" "$@" "$base_proof" >/dev/null 2>&1; then
     echo "error: stock profile proof failed: $description" >&2
     rm -rf "$WORKDIR"
     exit 1
