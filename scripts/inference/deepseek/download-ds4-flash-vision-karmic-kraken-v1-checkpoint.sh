@@ -138,22 +138,28 @@ if [ "$MODE" = --hydrate-from ]; then
   # 1. Content-verify the flat copy against the vendored manifest: every
   #    content line (48 shards + 4 metadata files) is re-hashed locally.
   #    Shards hash in parallel; a single mismatch fails the whole hydration.
-  export HYDRATE_FLAT="$FLAT_DIR"
-  verify_line() {
-    local sha="$1" size="$2" path="$3" f="$HYDRATE_FLAT/$path" s h
-    if [ ! -f "$f" ]; then echo "hydrate: missing in flat copy: $path" >&2; return 1; fi
-    s="$(stat -c %s "$f")"
-    if [ "$s" != "$size" ]; then echo "hydrate: size mismatch: $path ($s != $size)" >&2; return 1; fi
-    h="$(sha256sum "$f" | cut -d' ' -f1)"
-    if [ "$h" != "$sha" ]; then echo "hydrate: sha256 mismatch: $path" >&2; return 1; fi
-  }
-  export -f verify_line
+  #    The flat dir is substituted literally into the child script so the
+  #    check does not depend on any environment handoff.
   echo "Hydrate: verifying 48 shards against the Karmic Kraken evidence (parallel sha256)..."
   awk '!/^#/ && $1 != "-" && $3 ~ /model-000[0-9][0-9]-of-00048\.safetensors$/ {print}' "$MANIFEST" \
-    | xargs -P 8 -L 1 bash -c 'verify_line "$@"' _
+    | xargs -P 8 -L 1 bash -c '
+      f="'$FLAT_DIR'/$3"
+      [ -f "$f" ] || { echo "hydrate: missing in flat copy: $3 (looked for $f)" >&2; exit 1; }
+      s="$(stat -c %s "$f")"
+      [ "$s" = "$2" ] || { echo "hydrate: size mismatch: $3 ($s != $2)" >&2; exit 1; }
+      h="$(sha256sum "$f" | cut -d' ' -f1)"
+      [ "$h" = "$1" ] || { echo "hydrate: sha256 mismatch: $3" >&2; exit 1; }
+    ' _
   echo "Hydrate: shards verified."
   awk '!/^#/ && $1 != "-" && $3 !~ /model-000[0-9][0-9]-of-00048\.safetensors$/ {print}' "$MANIFEST" \
-    | while read -r sha size path; do verify_line "$sha" "$size" "$path"; done
+    | while read -r sha size path; do
+        f="$FLAT_DIR/$path"
+        [ -f "$f" ] || { echo "hydrate: missing in flat copy: $path (looked for $f)" >&2; exit 1; }
+        s="$(stat -c %s "$f")"
+        [ "$s" = "$size" ] || { echo "hydrate: size mismatch: $path ($s != $size)" >&2; exit 1; }
+        h="$(sha256sum "$f" | cut -d' ' -f1)"
+        [ "$h" = "$sha" ] || { echo "hydrate: sha256 mismatch: $path" >&2; exit 1; }
+      done
   echo "Hydrate: manifest content verification passed (52 content entries)."
 
   # 2. Build the snapshot layout. Symlinks point at the flat copy; the
