@@ -191,8 +191,9 @@ plan_assert 'served model id is the repository id' \
 plan_assert 'revision is the offline-pinned benchmark revision' \
   '.settings.revision.value == $rev and .settings.revision.source == "environment:MODEL_REVISION" and .settings["speculative-config"].value.revision == $rev and .settings["speculative-config"].value.num_speculative_tokens == 3' \
   --arg rev "$MODEL_REVISION"
-plan_assert 'benchmark-arm context/slots/budget/utilization resolve' \
-  '.settings["max-model-len"].value == 1048576 and .settings["max-num-seqs"].value == 4 and .settings["max-num-batched-tokens"].value == 4096 and .settings["cache-object-tokens"].value == 4096 and .settings["gpu-memory-utilization"].value == 0.975'
+plan_assert 'benchmark-arm context/slots/budget/utilization resolve from the environment' \
+  '.settings["max-model-len"].value == ($mml | tonumber) and .settings["max-model-len"].source == "environment:MAX_MODEL_LEN" and .settings["max-num-seqs"].value == ($mns | tonumber) and .settings["max-num-seqs"].source == "environment:MAX_NUM_SEQS" and .settings["max-num-batched-tokens"].value == ($mnbt | tonumber) and .settings["max-num-batched-tokens"].source == "environment:MAX_NUM_BATCHED_TOKENS" and .settings["cache-object-tokens"].value == ($mnbt | tonumber) and (.settings["gpu-memory-utilization"].value | tostring) == $gmu and .settings["gpu-memory-utilization"].source == "environment:GPU_MEMORY_UTILIZATION"' \
+  --arg mml "$MAX_MODEL_LEN" --arg mns "$MAX_NUM_SEQS" --arg mnbt "$MAX_NUM_BATCHED_TOKENS" --arg gmu "$GPU_MEMORY_UTILIZATION"
 plan_assert 'TP2/DCP1 and GPU-only cache mode resolve' \
   '.settings["tensor-parallel-size"].value == 2 and .settings["decode-context-parallel-size"].value == 1 and .settings["cache-mode"].value == $cache_mode' \
   --arg cache_mode "$CACHE_MODE"
