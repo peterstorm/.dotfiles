@@ -92,8 +92,8 @@ verify_checkpoint() {
       return 1
     }
   done
-  files="$(find "$CACHE_HOST" -type f -not -path '*/.locks/*' | wc -l)"
-  bytes="$(du -sbL "$CACHE_HOST" 2>/dev/null | tail -1 | cut -f1)"
+  files="$(find "$CACHE_HOST" -type f -not -path '*/.locks/*' -not -name '.hydrate-provenance' -not -name '.download-complete' | wc -l)"
+  bytes="$(du -sbL --exclude=.hydrate-provenance "$CACHE_HOST" 2>/dev/null | tail -1 | cut -f1)"
   install -d -m 700 "$(dirname "$RECEIPT")"
   local receipt_tmp
   receipt_tmp="$(mktemp "$(dirname "$RECEIPT")/.ds4v-kk-v1-checkpoint.XXXXXX")"
@@ -101,12 +101,12 @@ verify_checkpoint() {
     printf 'repo=%s\nrevision=%s\nsnapshot=%s\nfiles=%s\nbytes=%s\n' \
       "$REPO" "$REV" "$snapshot_dir" "$files" "$bytes"
     printf 'metadata_sha256_verified=%s\n' "$(printf '%s\n' "${METADATA_SHA256[@]}" | cut -d: -f1 | tr '\n' ',' | sed 's/,$//')"
-    if [ -r "$CACHE_HOST/.hydrate-provenance" ]; then
-      cat "$CACHE_HOST/.hydrate-provenance" >>"$RECEIPT"
-    fi
   } >"$receipt_tmp"
   chmod 600 "$receipt_tmp"
   mv -f "$receipt_tmp" "$RECEIPT"
+  if [ -r "$CACHE_HOST/.hydrate-provenance" ]; then
+    cat "$CACHE_HOST/.hydrate-provenance" >>"$RECEIPT"
+  fi
   printf 'CHECKPOINT OK: %s@%s (%s files, %s bytes) — receipt %s\n' \
     "$REPO" "$REV" "$files" "$bytes" "$RECEIPT"
 }
