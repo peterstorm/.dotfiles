@@ -92,12 +92,19 @@ How we know the host driver can run this image — probes, not version tables
    proven by `--print-config` in the pull script). The exact runtime profile
    is attested through container labels + the boot receipt instead.
 3. **Checkpoint** — the docs resolve the checkpoint from Hugging Face into a
-   named volume; v1 pre-downloads the pinned revision into
-   `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1` and serves with
+   named volume; v1 serves revision `6821d6ad…` offline from
+   `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1` with
    `HF_HUB_OFFLINE=1` + `MODEL_REVISION` (the engine can never fetch a
    different revision, and the cache stays verifiable from the host — the four
-   metadata hashes the benchmark evidence records are verified at download and
-   re-verified at every preflight/launch).
+   metadata hashes the benchmark evidence records are verified at hydration
+   and re-verified at every preflight/launch). The snapshot was **hydrated
+   from the existing r21-era local copy** (`~/models/DeepSeek-V4-Flash-Vision-Exp`,
+   revision `86f746b3`): all 48 weight shards are byte-identical (HF LFS oids
+   == `kk.checkpoint.shards` blobs; every shard re-hashed locally against the
+   vendored manifest), the per-file git-oid diff shows only README.md differs
+   (fetched, 6.6 KiB), and the snapshot symlinks depend on the flat copy
+   staying in place. A plain full download remains available via the same
+   script's `--detach` mode.
 4. **Sampling** — the benchmark arm's top-p 1.0 native override is kept as the
    default (`GEN_OVERRIDES`); clearing it serves the profile's top-p 0.95
    default. Both paths are `--print-config`-proven.
@@ -116,6 +123,8 @@ How we know the host driver can run this image — probes, not version tables
 
 ## Ready state (2026-09-21)
 
-Built and pinned; **not booted** (operator instruction: "don't boot it up,
-just ready it"). GLM v14 remains the serving profile. Remaining steps live in
-the runbook: checkpoint download → preflight → transactional switch.
+Built, pinned, checkpoint hydrated (48/48 shards sha256-verified against the
+Karmic Kraken evidence, 6.6 KiB fetched), preflight **PASS** — and **not
+booted** (operator instruction: "don't boot it up, just ready it"). GLM v14
+remains the serving profile. The only remaining step is the transactional
+switch, documented in the runbook.

@@ -101,8 +101,8 @@ verify_checkpoint() {
     printf 'repo=%s\nrevision=%s\nsnapshot=%s\nfiles=%s\nbytes=%s\n' \
       "$REPO" "$REV" "$snapshot_dir" "$files" "$bytes"
     printf 'metadata_sha256_verified=%s\n' "$(printf '%s\n' "${METADATA_SHA256[@]}" | cut -d: -f1 | tr '\n' ',' | sed 's/,$//')"
-    if [ -n "${HYDRATE_EXTRA:-}" ]; then
-      printf '%s\n' "$HYDRATE_EXTRA"
+    if [ -r "$CACHE_HOST/.hydrate-provenance" ]; then
+      cat "$CACHE_HOST/.hydrate-provenance" >>"$RECEIPT"
     fi
   } >"$receipt_tmp"
   chmod 600 "$receipt_tmp"
@@ -191,6 +191,7 @@ if [ "$MODE" = --hydrate-from ]; then
       rm -f "$tmp"
     else
       mv "$tmp" "$SNAPSHOT_DIR/$path"
+      chmod 644 "$SNAPSHOT_DIR/$path"
       fetched_real+=("$path")
     fi
   done
@@ -201,13 +202,10 @@ if [ "$MODE" = --hydrate-from ]; then
         ln -sfn "$FLAT_DIR/$path" "$SNAPSHOT_DIR/$path"
       done
 
-  # 3. Marker + full verification + receipt.
+  # 3. Marker + provenance sidecar + full verification + receipt.
   printf '%s %s\n' "$REPO" "$REV" >"$CACHE_HOST/.download-complete"
-  HYDRATE_EXTRA="hydrate_source=$FLAT_DIR
-hydrate_shards_verified=48
-hydrate_fetched_real=${fetched_real[*]:-none}
-hydrate_dependency=$FLAT_DIR (deleting it invalidates the cache)"
-  export HYDRATE_EXTRA
+  printf 'hydrate_source=%s\nhydrate_shards_verified=48\nhydrate_fetched_real=%s\nhydrate_dependency=%s (deleting it invalidates the cache)\n' \
+    "$FLAT_DIR" "${fetched_real[*]:-none}" "$FLAT_DIR" >"$CACHE_HOST/.hydrate-provenance"
   verify_checkpoint
   echo "Hydrate complete: snapshot at $SNAPSHOT_DIR (48 shards sha256-verified against Karmic Kraken evidence)."
   exit 0

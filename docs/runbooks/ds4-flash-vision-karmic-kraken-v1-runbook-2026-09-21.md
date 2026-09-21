@@ -8,8 +8,8 @@ it"). GLM v14 (`glm53-flash-spark-tp2-v14`) remains the serving profile.
 Done:
 - Upstream contracts vendored + pinned (see
   `docs/research/ds4-vision-karmic-kraken-v1-2026-09-21-evidence/README.md`).
-- Release set written: pull/prove, checkpoint download, run, probe, switch
-  under `scripts/inference/deepseek/`, catalog entry added.
+- Release set written: pull/prove, checkpoint hydrate/download, run, probe,
+  switch under `scripts/inference/deepseek/`, catalog entry added.
 - Image pulled and pinned on the desktop: the **versioned** release tag
   `karmic-kraken-beta-20260920-443d9f815c57d23b` resolves to image id
   `sha256:83f00757ff18f3c3c12de291319b1a3a5496056a3873834d0994160828a3c6ee`
@@ -22,17 +22,23 @@ Done:
   util, fp8 KV/block 256, revision `6821d6ad…` profile-derived, GPU-only
   cache) and the benchmark-arm override pass (env aliases + native top-p 1
   override) all resolve with the expected sources. Status `implemented`.
+- Checkpoint **hydrated, not downloaded**: the pinned revision
+  `6821d6ad…` is content-identical to the existing r21-era local copy at
+  `~/models/DeepSeek-V4-Flash-Vision-Exp` (`86f746b3`) except README.md —
+  all 48 weight shards are byte-identical (HF LFS oids == the Karmic Kraken
+  evidence `kk.checkpoint.shards` blobs, each shard re-hashed locally against
+  the vendored manifest). Snapshot built at
+  `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1/hub/.../snapshots/6821d6ad…`
+  (83 symlinks + README.md fetched, 6.6 KiB of new content). Receipt:
+  `~/.local/state/ds4-vision/karmic-kraken-v1-checkpoint.txt`.
+- **Preflight: PASS** (rc=0, 2026-09-21): image pin, launch plan, checkpoint
+  marker + Karmic Kraken metadata hashes; recorded in
+  `~/.local/state/ds4-vision/karmic-kraken-v1-ready.txt`.
 
-Remaining (in order):
-1. Checkpoint download (~170 GiB) — started detached; verify with
-   `ds4-flash-vision-karmic-kraken-v1-checkpoint.sh --verify` once
-   `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1/.download-complete`
-   appears.
-2. `run-ds4-flash-vision-karmic-kraken-v1.sh --preflight` (static-only; safe
-   while v14 serves).
-3. `switch-ds4-flash-vision-karmic-kraken-v1.sh start` — the deliberate
-   cutover (idle gate → stops v14 → CUDA probe → launch → accept → promote →
-   probe; rollback restarts v14 on any failure). **Not executed.**
+Remaining (the deliberate cutover, **not executed**):
+1. `switch-ds4-flash-vision-karmic-kraken-v1.sh start` — idle gate → stops
+   v14 → CUDA probe → launch → accept → promote → probe; rollback restarts
+   v14 on any failure.
 
 ## Immutable identities
 
@@ -92,10 +98,15 @@ numbers, same geometry. Re-measure at acceptance if the numbers matter
 # 1. Pull + prove (idempotent; re-runnable any time)
 scripts/inference/deepseek/pull-ds4-flash-vision-karmic-kraken-v1-image.sh
 
-# 2. Download the pinned checkpoint (~170 GiB; resumable)
-scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh --detach
-docker logs -f ds4-flash-vision-karmic-kraken-v1-dl
-# ... when the marker appears:
+# 2. Checkpoint: prefer hydrating from an existing content-identical local
+#    copy (proven per-file; no re-download):
+scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh \
+  --hydrate-from ~/models/DeepSeek-V4-Flash-Vision-Exp
+#    ...or, when no verified-identical copy exists, the plain ~170 GiB
+#    download (resumable):
+#      scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh --detach
+#      docker logs -f ds4-flash-vision-karmic-kraken-v1-dl
+#    Either way, verify afterwards:
 scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh --verify
 
 # 3. Static preflight (safe while v14 serves: no GPU/port gates)
