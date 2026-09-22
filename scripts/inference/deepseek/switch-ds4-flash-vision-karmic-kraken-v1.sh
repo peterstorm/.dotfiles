@@ -183,10 +183,11 @@ case "$MODE" in
     [ -z "$previous_output" ] || mapfile -t previous <<<"$previous_output"
     for container in "${previous[@]}"; do
       if [ "$container" = "$TARGET" ]; then
-        wait_for_target
-        report_boot_receipt
-        promote_restart_policy
-        "$PROBE"
+        if ! wait_for_target || ! report_boot_receipt || ! "$PROBE" || ! promote_restart_policy; then
+          inference_quiesce_failed_container "$TARGET" || true
+          echo "error: running DS4 Vision Karmic Kraken v1 failed re-acceptance and was quiesced" >&2
+          exit 1
+        fi
         exit 0
       fi
     done
@@ -202,15 +203,15 @@ case "$MODE" in
       fi
       stopped+=("$container")
     done
-    if ! "$RUN" --launch || ! wait_for_target || ! report_boot_receipt || ! "$PROBE"; then
+    if ! "$RUN" --launch || ! wait_for_target || ! report_boot_receipt \
+      || ! "$PROBE" || ! promote_restart_policy; then
       docker logs --tail 300 "$TARGET" >&2 2>/dev/null || true
       inference_quiesce_failed_container "$TARGET" || true
       echo "error: DS4 Vision Karmic Kraken v1 acceptance failed; restoring previous profiles" >&2
       restore_profiles "${previous[@]}" || true
       exit 1
     fi
-    promote_restart_policy
-    echo "DS4 Vision Karmic Kraken v1 remains restart=unless-stopped after target, receipt and probe acceptance."
+    echo "DS4 Vision Karmic Kraken v1 remains restart=unless-stopped after target, receipt, probe and restart-policy acceptance."
     ;;
   *) echo "usage: ${0##*/} {status|start|stop}" >&2; exit 2 ;;
 esac

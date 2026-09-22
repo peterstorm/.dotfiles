@@ -59,6 +59,9 @@ CHECKPOINT="deepseek-ai/DeepSeek-V4-Flash-Vision-Exp"
 NAME="ds4-flash-vision-karmic-kraken-v1"
 SERVED_MODEL="deepseek-v4-flash-vision"
 HF_CACHE_HOST="${HF_CACHE_HOST:-/models/hf-cache/ds4-flash-vision-karmic-kraken-v1}"
+CHECKPOINT_VERIFY="$SCRIPT_DIR/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh"
+CHECKPOINT_MANIFEST="$SCRIPT_DIR/ds4-vision-karmic-kraken-v1.manifest"
+HYDRATE_SOURCE_FILE="$HF_CACHE_HOST/.hydrate-source"
 CACHE_HOST="${CACHE_HOST:-/models/vllm-cache/ds4-flash-vision-karmic-kraken-v1}"
 GPU_ORDER="${GPU_ORDER:-0,1}"
 # The revision the Karmic Kraken benchmark ran; pinned by the checkpoint
@@ -207,38 +210,54 @@ else
 fi
 plan_assert 'plan status is implemented' '.status == "implemented"'
 
-# Offline checkpoint gate: the run script serves only the pre-downloaded
-# revision. The marker is written by the download script after
-# snapshot_download(local_files_only=True) and metadata-hash verification
-# succeed. Static by design: both preflight and launch require it.
-if [ ! -r "$HF_CACHE_HOST/.download-complete" ]; then
-  echo "error: checkpoint cache is absent at $HF_CACHE_HOST; run scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh" >&2
-  exit 1
-fi
-checkpoint_marker="$(<"$HF_CACHE_HOST/.download-complete")"
-[ "$checkpoint_marker" = "$CHECKPOINT $MODEL_REVISION" ] || {
-  echo "error: checkpoint marker is '$checkpoint_marker', expected '$CHECKPOINT $MODEL_REVISION'" >&2
-  exit 1
-}
-snapshot_dir="$HF_CACHE_HOST/hub/models--${CHECKPOINT%%/*}--${CHECKPOINT##*/}/snapshots/$MODEL_REVISION"
-[ -f "$snapshot_dir/config.json" ] || {
-  echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
-  exit 1
-}
-for record in \
-  "config.json:6cd841bdd6702f5e2ac34671bc78047ed80817102465525ae2a41c502abbcd75" \
-  "generation_config.json:5fccff80f55a4d455bbe516bdd552edf3e9623df95e99fbf2a3c3389fdf91af0" \
-  "tokenizer_config.json:6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547" \
-  "model.safetensors.index.json:507977e3d3818865264e68c0fdab139aa7f3929d0d0cf693dacc47428da56395"; do
-  metadata_file="${record%%:*}"
-  metadata_digest="${record#*:}"
-  actual_digest="$(sha256sum "$snapshot_dir/$metadata_file" | cut -d' ' -f1)"
-  [ "$actual_digest" = "$metadata_digest" ] || {
-    echo "error: $metadata_file sha256 is $actual_digest, Karmic Kraken evidence pins $metadata_digest" >&2
+# Offline checkpoint gate. The verifier hashes all 84 pinned-revision files;
+# for hydrated snapshots the source is then mounted read-only at the same
+# absolute path used by the snapshot symlinks. A network-disabled container
+# checks all 84 paths from the serving container's namespace, preventing a
+# host-valid/container-dangling snapshot from passing preflight.
+CACHE_HOST="$HF_CACHE_HOST" "$CHECKPOINT_VERIFY" --verify
+checkpoint_mounts=(-v "$HF_CACHE_HOST:/root/.cache/huggingface:ro")
+if [ -e "$HYDRATE_SOURCE_FILE" ]; then
+  [ -f "$HYDRATE_SOURCE_FILE" ] && [ -r "$HYDRATE_SOURCE_FILE" ] || {
+    echo "error: hydrate source marker is not a readable regular file: $HYDRATE_SOURCE_FILE" >&2
     exit 1
   }
-done
-printf 'PASS: checkpoint marker + Karmic Kraken metadata hashes\n'
+  hydrate_source="$(<"$HYDRATE_SOURCE_FILE")"
+  [ -n "$hydrate_source" ] && [ "$hydrate_source" = "$(realpath -e -- "$hydrate_source")" ] || {
+    echo "error: hydrate source marker is empty, missing or non-canonical: $HYDRATE_SOURCE_FILE" >&2
+    exit 1
+  }
+  case "$hydrate_source" in
+    /*) ;;
+    *) echo "error: hydrate source must be absolute: $hydrate_source" >&2; exit 1 ;;
+  esac
+  case "$hydrate_source" in
+    *:*) echo "error: hydrate source cannot contain ':': $hydrate_source" >&2; exit 1 ;;
+  esac
+  checkpoint_mounts+=(-v "$hydrate_source:$hydrate_source:ro")
+fi
+snapshot_container="/root/.cache/huggingface/hub/models--${CHECKPOINT%%/*}--${CHECKPOINT##*/}/snapshots/$MODEL_REVISION"
+docker run --rm --runtime runc --network none \
+  "${checkpoint_mounts[@]}" \
+  -v "$CHECKPOINT_MANIFEST:/checkpoint.manifest:ro" \
+  -e SNAPSHOT_CONTAINER="$snapshot_container" \
+  --entrypoint bash "$IMAGE_CONFIG" -c '
+    set -euo pipefail
+    count=0
+    while read -r sha size path extra; do
+      case "$sha" in ""|\#*) continue ;; esac
+      [ -z "${extra:-}" ] || { echo "error: invalid manifest row for $path" >&2; exit 1; }
+      file="$SNAPSHOT_CONTAINER/$path"
+      [ -f "$file" ] || { echo "error: checkpoint is unreadable inside serving container: $path" >&2; exit 1; }
+      [ "$(stat -Lc %s "$file")" = "$size" ] || {
+        echo "error: checkpoint size differs inside serving container: $path" >&2
+        exit 1
+      }
+      count=$((count + 1))
+    done </checkpoint.manifest
+    [ "$count" = 84 ] || { echo "error: container checkpoint proof saw $count/84 files" >&2; exit 1; }
+  '
+printf 'PASS: checkpoint marker + 84-file sha256 manifest + serving-container visibility\n'
 
 # Preflight is static-only by design: the transactional switcher runs it while
 # the previous profile is still serving, so no GPU/port gates belong here.
@@ -353,11 +372,8 @@ ENVFILE="$INFERENCE_OPERATOR_HOME/.config/ds4-flash/karmic-kraken-v1.env"
 inference_write_private_file "$ENVFILE" <<EOF
 VLLM_API_KEY=$VLLM_API_KEY
 EOF
-# The checkpoint is public, but a saved local token removes any rate/gating
-# surprise on the first download; it stays out of the environment otherwise.
-if [ -r "$INFERENCE_OPERATOR_HOME/.cache/huggingface/token" ]; then
-  printf 'HF_TOKEN=%s\n' "$(<"$INFERENCE_OPERATOR_HOME/.cache/huggingface/token")" >>"$ENVFILE"
-fi
+# The checkpoint cache is complete and HF_HUB_OFFLINE=1; do not expose an HF
+# credential to the serving container. Authentication is download-only.
 
 # CUDA runtime probe: one-shot, now that every GPU gate passed (GPUs idle,
 # image pinned, ports free). The upstream benchmark ran driver 615.65.02 on a
@@ -460,7 +476,7 @@ docker run -d --init \
   --ulimit stack=67108864:67108864 \
   --security-opt seccomp=unconfined \
   --env-file "$ENVFILE" \
-  -v "$HF_CACHE_HOST:/root/.cache/huggingface" \
+  "${checkpoint_mounts[@]}" \
   -v "$CACHE_HOST:/cache" \
   -e PROFILE="$PROFILE" \
   -e HARDWARE_PROFILE=rtx-pro-6000-pcie \

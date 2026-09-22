@@ -21,14 +21,15 @@
 # already exists on the host (the r21-era local download at
 # ~/models/DeepSeek-V4-Flash-Vision-Exp), build the hub-cache snapshot layout
 # from it instead of re-downloading ~170 GiB. The pinned revision
-# (6821d6ad...) differs from the r21 revision (86f746b3...) only in README.md
-# and two .eval_results files (proven per-file via HF tree-API git blob oids);
-# all 48 weight shards are byte-identical (HF LFS oids == Karmic Kraken
-# evidence kk.checkpoint.shards blobs, cross-checked 2026-09-21). Every shard
-# is re-hashed locally against the vendored manifest before any symlink is
-# created, the differing small files are fetched from the pinned revision and
-# installed as real files, and the snapshot symlinks point at the flat copy
-# (deleting the flat copy invalidates the cache).
+# (6821d6ad...) changes README.md and adds two .eval_results files relative
+# to the r21 revision (86f746b3...); all 48 weight shards are byte-identical
+# (HF LFS oids == Karmic Kraken evidence kk.checkpoint.shards blobs,
+# cross-checked 2026-09-21). Every one of the pinned revision's 84 files is
+# size- and sha256-verified against the vendored manifest before any symlink
+# is created. The three changed/added files are fetched from the pinned
+# revision (and reused from the flat copy only when their content matches).
+# Snapshot symlinks point at the flat copy, so serving must mount that source
+# at the same absolute path; deleting it invalidates the cache.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,12 +39,15 @@ REV="6821d6ad3681a4b137b066b76094fa82ebd0a380"
 IMAGE_CONFIG="sha256:83f00757ff18f3c3c12de291319b1a3a5496056a3873834d0994160828a3c6ee"
 CACHE_HOST="${CACHE_HOST:-/models/hf-cache/ds4-flash-vision-karmic-kraken-v1}"
 NAME="ds4-flash-vision-karmic-kraken-v1-dl"
-RECEIPT="${RECEIPT:-$HOME/.local/state/ds4-vision/karmic-kraken-v1-checkpoint.txt}"
+STATE_DIR="$HOME/.local/state/ds4-vision"
+RECEIPT="${RECEIPT:-$STATE_DIR/karmic-kraken-v1-checkpoint.txt}"
+DL_SCRIPT="$STATE_DIR/karmic-kraken-v1-download-entrypoint.sh"
 MODE="${1:---detach}"
 FLAT_DIR="${2:-}"
 MANIFEST="$SCRIPT_DIR/ds4-vision-karmic-kraken-v1.manifest"
-# The only files whose content differs between the r21 revision (86f746b3)
-# and the pinned revision (6821d6ad): HF tree API git blob oids, 2026-09-21.
+HYDRATE_SOURCE_FILE="$CACHE_HOST/.hydrate-source"
+# Files changed or added between the r21 revision (86f746b3) and the pinned
+# revision (6821d6ad): HF tree API git blob oids, 2026-09-21.
 PINNED_ONLY_FILES=("README.md" ".eval_results/deep-swe.yaml" ".eval_results/terminal-bench-2.1.yaml")
 
 # Checkpoint metadata sha256s recorded in the Karmic Kraken benchmark evidence
@@ -63,8 +67,86 @@ case "$MODE" in
   *) echo "usage: ${0##*/} [--detach|--wait|--verify|--hydrate-from <flat-checkpoint-dir>]" >&2; exit 2 ;;
 esac
 
+verify_manifest_directory() {
+  local directory="$1" label="$2" skip_pinned="${3:-0}" expected records
+  records="$(awk '
+    /^#/ || NF == 0 { next }
+    NF != 3 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/ ||
+      $2 !~ /^[1-9][0-9]*$/ || $3 ~ /^\// || $3 == ".." ||
+      $3 ~ /^\.\.\// || $3 ~ /\/\.\.\// || $3 ~ /\/\.\.$/ { exit 2 }
+    { count++ }
+    END { if (count != 84) exit 3; print count }
+  ' "$MANIFEST")" || {
+    echo "error: invalid checkpoint manifest: $MANIFEST (expected 84 safe sha256 records)" >&2
+    return 1
+  }
+  expected=84
+  [ "$skip_pinned" = 0 ] || expected=81
+  awk -v skip="$skip_pinned" '
+      /^#/ || NF == 0 { next }
+      skip == 1 && ($3 == "README.md" || $3 == ".eval_results/deep-swe.yaml" ||
+        $3 == ".eval_results/terminal-bench-2.1.yaml") { next }
+      { print }
+    ' "$MANIFEST" \
+    | xargs -r -P 8 -n 3 bash -c '
+        root="$1"; label="$2"; sha="$3"; size="$4"; path="$5"
+        file="$root/$path"
+        [ -f "$file" ] || { echo "error: $label file is missing: $path" >&2; exit 1; }
+        actual_size="$(stat -Lc %s "$file")"
+        [ "$actual_size" = "$size" ] || {
+          echo "error: $label size mismatch: $path ($actual_size != $size)" >&2
+          exit 1
+        }
+        actual_sha="$(sha256sum "$file")"; actual_sha="${actual_sha%% *}"
+        [ "$actual_sha" = "$sha" ] || {
+          echo "error: $label sha256 mismatch: $path" >&2
+          exit 1
+        }
+      ' _ "$directory" "$label"
+  printf 'PASS: %s manifest (%s/%s selected files sha256-verified)\n' \
+    "$label" "$expected" "$records"
+}
+
+verify_snapshot() {
+  local snapshot_dir="$1" file digest actual
+  [ -f "$snapshot_dir/config.json" ] || {
+    echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
+    return 1
+  }
+  verify_manifest_directory "$snapshot_dir" "checkpoint snapshot"
+  for record in "${METADATA_SHA256[@]}"; do
+    file="${record%%:*}"
+    digest="${record#*:}"
+    actual="$(sha256sum "$snapshot_dir/$file")"; actual="${actual%% *}"
+    [ "$actual" = "$digest" ] || {
+      echo "error: $file sha256 is $actual, benchmark evidence pins $digest" >&2
+      return 1
+    }
+  done
+}
+
+write_receipt() {
+  local snapshot_dir="$1" files bytes receipt_tmp
+  files="$(awk '!/^#/ && NF {count++} END {print count}' "$MANIFEST")"
+  bytes="$(awk '!/^#/ && NF {sum += $2} END {printf "%.0f\n", sum}' "$MANIFEST")"
+  install -d -m 700 "$(dirname "$RECEIPT")"
+  receipt_tmp="$(mktemp "$(dirname "$RECEIPT")/.ds4v-kk-v1-checkpoint.XXXXXX")"
+  {
+    printf 'repo=%s\nrevision=%s\nsnapshot=%s\nfiles=%s\nbytes=%s\nmanifest_sha256_verified=84\n' \
+      "$REPO" "$REV" "$snapshot_dir" "$files" "$bytes"
+    printf 'metadata_sha256_verified=%s\n' "$(printf '%s\n' "${METADATA_SHA256[@]}" | cut -d: -f1 | tr '\n' ',' | sed 's/,$//')"
+  } >"$receipt_tmp"
+  chmod 600 "$receipt_tmp"
+  mv -f "$receipt_tmp" "$RECEIPT"
+  if [ -r "$CACHE_HOST/.hydrate-provenance" ]; then
+    cat "$CACHE_HOST/.hydrate-provenance" >>"$RECEIPT"
+  fi
+  printf 'CHECKPOINT OK: %s@%s (84 files sha256-verified; %s bytes) — receipt %s\n' \
+    "$REPO" "$REV" "$bytes" "$RECEIPT"
+}
+
 verify_checkpoint() {
-  local marker snapshot_dir file digest actual files bytes
+  local marker snapshot_dir
   if [ ! -r "$CACHE_HOST/.download-complete" ]; then
     echo "error: $CACHE_HOST/.download-complete is missing; the download has not completed" >&2
     return 1
@@ -75,40 +157,8 @@ verify_checkpoint() {
     return 1
   }
   snapshot_dir="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
-  [ -f "$snapshot_dir/config.json" ] || {
-    echo "error: pinned snapshot is incomplete at $snapshot_dir" >&2
-    return 1
-  }
-  for record in "${METADATA_SHA256[@]}"; do
-    file="${record%%:*}"
-    digest="${record#*:}"
-    [ -f "$snapshot_dir/$file" ] || {
-      echo "error: checkpoint metadata file is missing: $snapshot_dir/$file" >&2
-      return 1
-    }
-    actual="$(sha256sum "$snapshot_dir/$file" | cut -d' ' -f1)"
-    [ "$actual" = "$digest" ] || {
-      echo "error: $file sha256 is $actual, benchmark evidence pins $digest" >&2
-      return 1
-    }
-  done
-  files="$(find "$CACHE_HOST" -type f -not -path '*/.locks/*' -not -name '.hydrate-provenance' -not -name '.download-complete' | wc -l)"
-  bytes="$(du -sbL --exclude=.hydrate-provenance "$CACHE_HOST" 2>/dev/null | tail -1 | cut -f1)"
-  install -d -m 700 "$(dirname "$RECEIPT")"
-  local receipt_tmp
-  receipt_tmp="$(mktemp "$(dirname "$RECEIPT")/.ds4v-kk-v1-checkpoint.XXXXXX")"
-  {
-    printf 'repo=%s\nrevision=%s\nsnapshot=%s\nfiles=%s\nbytes=%s\n' \
-      "$REPO" "$REV" "$snapshot_dir" "$files" "$bytes"
-    printf 'metadata_sha256_verified=%s\n' "$(printf '%s\n' "${METADATA_SHA256[@]}" | cut -d: -f1 | tr '\n' ',' | sed 's/,$//')"
-  } >"$receipt_tmp"
-  chmod 600 "$receipt_tmp"
-  mv -f "$receipt_tmp" "$RECEIPT"
-  if [ -r "$CACHE_HOST/.hydrate-provenance" ]; then
-    cat "$CACHE_HOST/.hydrate-provenance" >>"$RECEIPT"
-  fi
-  printf 'CHECKPOINT OK: %s@%s (%s files, %s bytes) — receipt %s\n' \
-    "$REPO" "$REV" "$files" "$bytes" "$RECEIPT"
+  verify_snapshot "$snapshot_dir"
+  write_receipt "$snapshot_dir"
 }
 
 if [ "$MODE" = --verify ]; then
@@ -126,54 +176,44 @@ fi
 
 if [ "$MODE" = --hydrate-from ]; then
   [ -d "$FLAT_DIR" ] || { echo "error: flat checkpoint dir not found: $FLAT_DIR" >&2; exit 1; }
+  FLAT_DIR="$(realpath -e -- "$FLAT_DIR")"
+  case "$FLAT_DIR" in
+    /*) ;;
+    *) echo "error: hydrate source did not resolve to an absolute path: $FLAT_DIR" >&2; exit 1 ;;
+  esac
+  case "$FLAT_DIR" in
+    *:*) echo "error: hydrate source cannot contain ':' (required for the read-only Docker bind): $FLAT_DIR" >&2; exit 1 ;;
+  esac
   [ -f "$FLAT_DIR/config.json" ] || { echo "error: no config.json in $FLAT_DIR" >&2; exit 1; }
   [ -r "$MANIFEST" ] || { echo "error: manifest missing: $MANIFEST" >&2; exit 1; }
   if [ -r "$CACHE_HOST/.download-complete" ] \
     && [ "$(<"$CACHE_HOST/.download-complete")" = "$REPO $REV" ]; then
     echo "Marker already present; verifying existing snapshot."
-    verify_checkpoint
-    exit $?
+    if verify_checkpoint; then
+      printf '%s\n' "$FLAT_DIR" >"$HYDRATE_SOURCE_FILE"
+      exit 0
+    fi
+    echo "Existing snapshot failed verification; rebuilding it from the verified source." >&2
   fi
+  rm -f "$CACHE_HOST/.download-complete" "$HYDRATE_SOURCE_FILE" 2>/dev/null \
+    || sudo rm -f "$CACHE_HOST/.download-complete" "$HYDRATE_SOURCE_FILE"
 
-  # 1. Content-verify the flat copy against the vendored manifest: every
-  #    content line (48 shards + 4 metadata files) is re-hashed locally.
-  #    Shards hash in parallel; a single mismatch fails the whole hydration.
-  #    The flat dir is substituted literally into the child script so the
-  #    check does not depend on any environment handoff.
-  echo "Hydrate: verifying 48 shards against the Karmic Kraken evidence (parallel sha256)..."
-  awk '!/^#/ && $1 != "-" && $3 ~ /model-000[0-9][0-9]-of-00048\.safetensors$/ {print}' "$MANIFEST" \
-    | xargs -P 8 -L 1 bash -c '
-      f="'$FLAT_DIR'/$3"
-      [ -f "$f" ] || { echo "hydrate: missing in flat copy: $3 (looked for $f)" >&2; exit 1; }
-      s="$(stat -c %s "$f")"
-      [ "$s" = "$2" ] || { echo "hydrate: size mismatch: $3 ($s != $2)" >&2; exit 1; }
-      h="$(sha256sum "$f")"
-      h="${h%% *}"
-      [ "$h" = "$1" ] || { echo "hydrate: sha256 mismatch: $3" >&2; exit 1; }
-    ' _
-  echo "Hydrate: shards verified."
-  awk '!/^#/ && $1 != "-" && $3 !~ /model-000[0-9][0-9]-of-00048\.safetensors$/ {print}' "$MANIFEST" \
-    | while read -r sha size path; do
-        f="$FLAT_DIR/$path"
-        [ -f "$f" ] || { echo "hydrate: missing in flat copy: $path (looked for $f)" >&2; exit 1; }
-        s="$(stat -c %s "$f")"
-        [ "$s" = "$size" ] || { echo "hydrate: size mismatch: $path ($s != $size)" >&2; exit 1; }
-        h="$(sha256sum "$f" | cut -d' ' -f1)"
-        [ "$h" = "$sha" ] || { echo "hydrate: sha256 mismatch: $path" >&2; exit 1; }
-      done
-  echo "Hydrate: manifest content verification passed (52 content entries)."
+  # 1. Content-verify every reusable flat-copy file. The three revision-only
+  #    paths are fetched below; parallel sha256 covers the other 81 files,
+  #    including all 48 shards, tokenizer and executable code assets.
+  echo "Hydrate: verifying 81 reusable files (parallel sha256)..."
+  verify_manifest_directory "$FLAT_DIR" "hydrate source" 1
 
   # 2. Build the snapshot layout. Symlinks point at the flat copy; the
   #    pinned-only files are fetched from the pinned revision and installed
   #    as real files (or symlinked when the flat copy is already identical).
   SNAPSHOT_DIR="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
   rm -rf "$SNAPSHOT_DIR" 2>/dev/null || sudo rm -rf "$SNAPSHOT_DIR"
-  # The download container runs as root and may leave root-owned hub parents
-  # behind; the hydrate writes as the operator, so reclaim the tree when the
-  # snapshot dir cannot be created directly.
+  # The download container may leave root-owned hub parents. Reclaim only the
+  # new, empty snapshot directory—not the whole hub tree or symlink targets.
   mkdir -p "$SNAPSHOT_DIR" 2>/dev/null || {
     sudo mkdir -p "$SNAPSHOT_DIR"
-    sudo chown -R "$USER:$(id -gn)" "$CACHE_HOST/hub"
+    sudo chown "$USER:$(id -gn)" "$SNAPSHOT_DIR"
   }
   fetched_real=()
   for path in "${PINNED_ONLY_FILES[@]}"; do
@@ -202,12 +242,18 @@ if [ "$MODE" = --hydrate-from ]; then
         ln -sfn "$FLAT_DIR/$path" "$SNAPSHOT_DIR/$path"
       done
 
-  # 3. Marker + provenance sidecar + full verification + receipt.
-  printf '%s %s\n' "$REPO" "$REV" >"$CACHE_HOST/.download-complete"
-  printf 'hydrate_source=%s\nhydrate_shards_verified=48\nhydrate_fetched_real=%s\nhydrate_dependency=%s (deleting it invalidates the cache)\n' \
+  # 3. Verify the completed snapshot before committing readiness markers.
+  #    .hydrate-source is machine-readable launch state; provenance is the
+  #    human receipt. Both are written only after all 84 paths verify.
+  verify_snapshot "$SNAPSHOT_DIR"
+  printf '%s\n' "$FLAT_DIR" >"$HYDRATE_SOURCE_FILE"
+  printf 'hydrate_source=%s\nhydrate_manifest_sha256_verified=84\nhydrate_fetched_real=%s\nhydrate_dependency=%s (deleting it invalidates the cache)\n' \
     "$FLAT_DIR" "${fetched_real[*]:-none}" "$FLAT_DIR" >"$CACHE_HOST/.hydrate-provenance"
-  verify_checkpoint
-  echo "Hydrate complete: snapshot at $SNAPSHOT_DIR (48 shards sha256-verified against Karmic Kraken evidence)."
+  marker_tmp="$(mktemp "$CACHE_HOST/.download-complete.XXXXXX")"
+  printf '%s %s\n' "$REPO" "$REV" >"$marker_tmp"
+  mv -f "$marker_tmp" "$CACHE_HOST/.download-complete"
+  write_receipt "$SNAPSHOT_DIR"
+  echo "Hydrate complete: snapshot at $SNAPSHOT_DIR (84/84 files sha256-verified)."
   exit 0
 fi
 
@@ -241,7 +287,7 @@ fi
 TOKEN_FILE="$HOME/.config/hf/token"
 EXTRA_VOLS=()
 if [[ -f "$TOKEN_FILE" ]]; then
-  EXTRA_VOLS+=(-v "$TOKEN_FILE:/root/.cache/huggingface/token:ro")
+  EXTRA_VOLS+=(-v "$TOKEN_FILE:/run/secrets/hf-token:ro" -e HF_TOKEN_PATH=/run/secrets/hf-token)
 else
   echo "note: no HF token at $TOKEN_FILE - downloading unauthenticated (public repo)" >&2
 fi
@@ -251,7 +297,9 @@ fi
 # download, snapshot_download(local_files_only=True) proves the pinned
 # revision resolves from the cache alone; the metadata hashes are verified by
 # this script's verify_checkpoint (host-side) before the receipt is written.
-cat >/tmp/ds4v-karmic-kraken-v1-dl.sh <<EOF
+install -d -m 700 "$STATE_DIR"
+dl_tmp="$(mktemp "$STATE_DIR/.karmic-kraken-v1-download-entrypoint.XXXXXX")"
+cat >"$dl_tmp" <<EOF
 set -euo pipefail
 export HF_XET_HIGH_PERFORMANCE=1
 export HF_HUB_DISABLE_PROGRESS_BARS=1
@@ -269,6 +317,8 @@ PY
 printf '%s %s\n' "$REPO" "$REV" > /root/.cache/huggingface/.download-complete
 echo DOWNLOAD_COMPLETE
 EOF
+chmod 600 "$dl_tmp"
+mv -f "$dl_tmp" "$DL_SCRIPT"
 
 if running="$(docker inspect --format '{{.State.Running}}' "$NAME" 2>/dev/null)" \
   && [ "$running" = true ]; then
@@ -278,7 +328,7 @@ else
   docker run -d --name "$NAME" --network host \
     --init --restart on-failure:5 \
     -v "$CACHE_HOST:/root/.cache/huggingface" \
-    -v /tmp/ds4v-karmic-kraken-v1-dl.sh:/dl.sh:ro \
+    -v "$DL_SCRIPT:/dl.sh:ro" \
     ${EXTRA_VOLS[@]+"${EXTRA_VOLS[@]}"} \
     --entrypoint bash "$IMAGE_CONFIG" /dl.sh
   echo "Downloading in container '$NAME' into $CACHE_HOST"

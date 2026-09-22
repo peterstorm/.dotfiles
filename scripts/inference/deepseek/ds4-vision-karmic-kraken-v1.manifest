@@ -1,9 +1,9 @@
 # DS4 Vision Karmic Kraken v1 checkpoint manifest
 # revision: 6821d6ad3681a4b137b066b76094fa82ebd0a380 (deepseek-ai/DeepSeek-V4-Flash-Vision-Exp)
-# sha256 values: HF LFS content oids for weights (identical across revisions 86f746b3 (r21) and
-# 6821d6ad per HF tree API), and rtx6kpro karmic-kraken-serving-samples.json kk.checkpoint
-# metadata_sha256 for the four config files. Generated 2026-09-21.
-# Format: <sha256> <size> <path>  (content-verified)  |  - - <path>  (presence-only)
+# 48 shard sha256 values are HF LFS content oids, identical across revisions 86f746b3
+# and 6821d6ad and equal to the Karmic Kraken kk.checkpoint.shards evidence.
+# The remaining 36 files were matched to the pinned revision's HF tree git/LFS oids,
+# then sha256-hashed locally on 2026-09-21. Format: <sha256> <size> <path>.
 367c971dc3cd6a042a9bec1caff508e77eabfaef1df2de3a827397ef8bbc6af3 1991876272 model-00001-of-00048.safetensors
 b7bca4e9f4ad1cbd7ae204ba8f452450473efe780ba5e539f9b478a7746ee913 3566323424 model-00002-of-00048.safetensors
 533065ef725b1b85ea6bea54a4b791caa7ea37ca8bf40edb892f1df53d922852 3566323424 model-00003-of-00048.safetensors
@@ -56,35 +56,35 @@ bea63f7aa197a021d271179ef1008dd96c968de13662e6c2949c5766fc789bd2 3590027464 mode
 5fccff80f55a4d455bbe516bdd552edf3e9623df95e99fbf2a3c3389fdf91af0 170 generation_config.json
 507977e3d3818865264e68c0fdab139aa7f3929d0d0cf693dacc47428da56395 5625861 model.safetensors.index.json
 6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547 801 tokenizer_config.json
-- - .eval_results/deep-swe.yaml
-- - .eval_results/terminal-bench-2.1.yaml
-- - .gitattributes
-- - .gitignore
-- - LICENSE
-- - README.md
-- - encoding/README.md
-- - encoding/encoding_dsv4.py
-- - encoding/test_encoding_dsv4.py
-- - encoding/tests/test_input_1.json
-- - encoding/tests/test_input_2.json
-- - encoding/tests/test_input_3.json
-- - encoding/tests/test_input_4.json
-- - encoding/tests/test_output_1.txt
-- - encoding/tests/test_output_2.txt
-- - encoding/tests/test_output_3.txt
-- - encoding/tests/test_output_4.txt
-- - inference/README.md
-- - inference/config.json
-- - inference/convert.py
-- - inference/examples/example_vl.txt
-- - inference/examples/example_vl_harmony.json
-- - inference/examples/images/carrots.jpeg
-- - inference/examples/images/corn.jpeg
-- - inference/generate.py
-- - inference/image_processor.py
-- - inference/kernel.py
-- - inference/model.py
-- - inference/requirements.txt
-- - inference/run.sh
-- - inference/vision.py
-- - tokenizer.json
+5bd7bef84ae1b57886b6190fb46dacb2f75d1e23b1c9584d36b027d1a537a7a7 178 .eval_results/deep-swe.yaml
+4ed5ad487bb11b9ee3406487ea56fd2af57aedb860d987272df7293bad24d377 203 .eval_results/terminal-bench-2.1.yaml
+ed873bb9e14080be645f511c16c90a303e6112d92f8a8b50d6bbc60eeae45453 1594 .gitattributes
+04eab6f6eca92634c2db9bb74cd65e740e4818d23a0ca25bcb80cae2d78a79ca 69 .gitignore
+f2c6c602815669d292889e5be8c802f2ed950653b77999b1584e8e6aed25d040 1084 LICENSE
+5e120ab94b1f4c1c4a9096b666b1256e96331142fd2dc649c2a0ae5fc8482606 6592 README.md
+c0de71597fcce00568dbc3eb678cee6203fd3969e21fba63e6a289f321b10676 2517 encoding/README.md
+b4bbb74bbb11a9c8ada04daa30cc7de7dba3abba08e9ade06d38b51a3d0d1701 36707 encoding/encoding_dsv4.py
+76403800e683be7706387dd30fcc1244b5c0796ce9985de08a2106e9cad3ad79 6577 encoding/test_encoding_dsv4.py
+10e0c074c977c3a80daab758af28219c6b1c2bd7f3f5cf2890c84b361cc32897 2748 encoding/tests/test_input_1.json
+c44ae0db20fafff38a6021e8068d7ed6e28605d76cafd20be80b03398509f447 526 encoding/tests/test_input_2.json
+37bf8ef95e0411ea5f411be0b02fbafec7363438b6ccefddca0c52ec9aeaf69a 4546 encoding/tests/test_input_3.json
+c45bbd0a1b7a2f75033d8db4ba74ee5b7653bd01114045a52f79d3b387663465 2730 encoding/tests/test_input_4.json
+9b366d9d2eac842a6e890594aac0b58648e5623717202b33497afadf03e26540 2390 encoding/tests/test_output_1.txt
+ca66b01a1ac3a204bb032c928fb607d4877171e998a50f7f89f39fa821b75665 342 encoding/tests/test_output_2.txt
+b3b1cd8748b7b90d3c6be6da3f786f12e4d70be073bd445ea162dfad4dc01a64 3313 encoding/tests/test_output_3.txt
+60e1643840ba9e4aeede450feb7b0498fa66ee24e4a939d48855ce04ec6fc375 2552 encoding/tests/test_output_4.txt
+17cdd3cfe7f40bfe74744bc783a34dd6f1e84d61e52843a5818a495ffa9491f3 1874 inference/README.md
+be1af50a0a8dc4e2e096362f9cc79d821846075a45863ded0b7d9bf4512075f6 1449 inference/config.json
+9410d1be5b9835b427cd5e5c74057b7174fc1d5aa9468b905c61737205d2d89e 7359 inference/convert.py
+33a8eaca52e7268c96b71918ae983df0b7b6e1af03f8d993e1091ac41a06f25d 234 inference/examples/example_vl.txt
+99881aab1aa9e42fdb5c932bb3880560128a0841cadfb21bf0274309dfc7b152 783 inference/examples/example_vl_harmony.json
+5df896a4a07e127281c60fc957f8b3d73f4735b3258a0bf762b4383557f8fa9a 212495 inference/examples/images/carrots.jpeg
+251fe7ad58f44db139a6af5ed489e027eca93ae60878b83f3e709c7d6f0112a1 56122 inference/examples/images/corn.jpeg
+0f0fa16440668875fa6c61d030f04ecd38151638ee8d02fe5f22d192486bdd3c 8809 inference/generate.py
+cac2ff6af15207ce53d0319dc52c6ed1fa5f4fed21f75795fe0fc014632e9086 7696 inference/image_processor.py
+b9e91e297c26e586a3fcdc8af304436d7d7c13159a876dc7e6fa2e76a8055a78 22191 inference/kernel.py
+ae8de79223d53c16edc7fa67af124ddd0212f27bddd3207bdd4cb05b48a0a1a7 49541 inference/model.py
+39f09b1aba34d63d27383b36071b9bbc273b1b6596fb3be6127e33ea8244f99a 106 inference/requirements.txt
+a60e7437a5cbbd246e2ab9b7c1f7b01d3b52be61be6c1c1fa9f31b422422704b 382 inference/run.sh
+a4f089069310398d42ca17fd4496cec82da64cbbfde9b0230679ce1537cc0bb1 4460 inference/vision.py
+c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b 6367257 tokenizer.json

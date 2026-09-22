@@ -16,9 +16,8 @@
 #
 # What this script owns (mirrors the v14 pull pattern):
 #   - digest pinning: the versioned tag must resolve to the doc-recorded
-#     registry digest and to the recorded image id; a mismatch fails closed
-#     (with a by-digest fallback that additionally requires the tag id and
-#     digest id to be the same image);
+#     registry digest and to the recorded image id; either mismatch fails
+#     closed, even if a republished manifest happens to share an image id;
 #   - a CPU-only `--print-config` base proof (no GPU, no model load, no cache
 #     services) that the pinned image's stock ds4-vision profile IS the contract:
 #     DeepSeek-V4-Flash-Vision-Exp, TP2/DCP1, DSpark K3, four slots, 4096-token
@@ -72,13 +71,8 @@ fi
 repo_digests="$(docker image inspect "$TAG" --format '{{json .RepoDigests}}')"
 if ! jq -e --arg digest "$DOC_DIGEST" 'map(select(endswith("@" + $digest))) | length == 1' <<<"$repo_digests" >/dev/null; then
   echo "error: tag repo digests $repo_digests do not contain the documented $DOC_DIGEST" >&2
-  echo "       falling back to a by-digest pull and requiring identical image ids" >&2
-  docker pull "ghcr.io/local-inference-lab/vllm@$DOC_DIGEST" >/dev/null
-  digest_id="$(docker image inspect "ghcr.io/local-inference-lab/vllm@$DOC_DIGEST" --format '{{.Id}}')"
-  [[ "$digest_id" == "$derived_id" ]] || {
-    echo "error: digest $DOC_DIGEST resolves to $digest_id, tag resolves to $derived_id" >&2
-    exit 1
-  }
+  echo "       the versioned tag's registry identity changed; re-qualify before serving" >&2
+  exit 1
 fi
 
 # Base profile proof: the pinned image's stock PROFILE=ds4-vision launch plan
