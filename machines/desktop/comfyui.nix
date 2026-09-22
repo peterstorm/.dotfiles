@@ -409,6 +409,16 @@ let
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-realism-people-lora.sh;
   };
 
+  downloadMinimaxH3DualSamplingModels = pkgs.writeShellApplication {
+    name = "download-minimax-h3-dual-sampling-models";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      modelTools
+    ];
+    text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-dual-sampling-models.sh;
+  };
+
   # Preview/upscale model tools associated with the Muse Director stack:
   # Kijai's active H3 TAE (MiniMax-H3 Community License gate), the optional
   # video-linked OzzyGT LTX2.3 fallback (Apache-2.0; inactive in V1.7), and the
@@ -3276,6 +3286,27 @@ let
           --output-dir "$out/workflows"
       '';
 
+  # The AI Brief HJteqahyEKM Dual Sampling topology, reconstructed from the
+  # public video/transcript and adapted to this workstation: BF16 is the
+  # default; Singularity's unpruned INT8 is retained only because no BF16
+  # Singularity release exists. Convenience packs are replaced by core nodes.
+  minimaxH3DualSamplingWorkflows =
+    pkgs.runCommand "minimax-h3-dual-sampling-v1-workflows"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.jq
+        ];
+      }
+      ''
+        ${pkgs.bash}/bin/bash \
+          ${../../scripts/comfyui/build-minimax-h3-dual-sampling-workflows.sh} \
+          --source-workflow \
+            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+          --output-dir "$out/workflows"
+      '';
+
   minimaxH3BlenderRef2vaWorkflows =
     pkgs.runCommand "minimax-h3-blender-ref2va-local-development-workflows"
       {
@@ -3808,6 +3839,7 @@ let
     h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.1"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_singularity_dir="$user_workflows/minimax-h3-singularity-v1.3-action-development"
+    h3_dual_dir="$user_workflows/minimax-h3-dual-sampling-v1.0"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     h3_vdn_dir="$user_workflows/minimax-h3-vdn-h3"
@@ -3835,6 +3867,7 @@ let
     h3_derope_turbo_staging="$user_workflows/.minimax-h3-derope-turbo-development-v1.1.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_singularity_staging="$user_workflows/.minimax-h3-singularity-v1.3-action-development.new"
+    h3_dual_staging="$user_workflows/.minimax-h3-dual-sampling-v1.0.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     h3_vdn_staging="$user_workflows/.minimax-h3-vdn-h3.new"
@@ -3853,9 +3886,9 @@ let
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
-      "$h3_singularity_staging" "$h3_blender_staging" "$h3_motion_context_staging" \
-      "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
-      "$balanced_staging" "$sam3d_staging" \
+      "$h3_singularity_staging" "$h3_dual_staging" "$h3_blender_staging" \
+      "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" \
+      "$elite_staging" "$balanced_staging" "$sam3d_staging" \
       "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
       "$h3_motion_context_resize_staging"
     install -d -m 0700 \
@@ -3864,9 +3897,9 @@ let
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
-      "$h3_singularity_staging" "$h3_blender_staging" "$h3_motion_context_staging" \
-      "$h3_vdn_staging" "$h3_vdn_realism_staging" "$elite_staging" \
-      "$balanced_staging" "$sam3d_staging" \
+      "$h3_singularity_staging" "$h3_dual_staging" "$h3_blender_staging" \
+      "$h3_motion_context_staging" "$h3_vdn_staging" "$h3_vdn_realism_staging" \
+      "$elite_staging" "$balanced_staging" "$sam3d_staging" \
       "$muse_sheet_klein_staging" "$muse_sheet_krea2_staging" \
       "$h3_motion_context_resize_staging" \
       "$input_dir" "$blender_input_dir"
@@ -3927,6 +3960,9 @@ let
     for source in ${minimaxH3SingularityWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_singularity_staging/$(basename "$source")"
     done
+    for source in ${minimaxH3DualSamplingWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$h3_dual_staging/$(basename "$source")"
+    done
     for source in ${minimaxH3BlenderRef2vaWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$h3_blender_staging/$(basename "$source")"
     done
@@ -3966,6 +4002,7 @@ let
     verify_versioned_workflow_install "$h3_derope_staging" "$h3_derope_dir"
     verify_versioned_workflow_install "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     verify_versioned_workflow_install "$h3_singularity_staging" "$h3_singularity_dir"
+    verify_versioned_workflow_install "$h3_dual_staging" "$h3_dual_dir"
     verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
@@ -3991,6 +4028,7 @@ let
     install_versioned_workflow_dir "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     install_versioned_workflow_dir "$h3_singularity_staging" "$h3_singularity_dir"
+    install_versioned_workflow_dir "$h3_dual_staging" "$h3_dual_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$h3_vdn_staging" "$h3_vdn_dir"
@@ -4023,6 +4061,7 @@ in
     downloadMinimaxH3SingularityModels
     downloadMinimaxH3VdnStage
     downloadMinimaxH3RealismPeopleLora
+    downloadMinimaxH3DualSamplingModels
     downloadMinimaxH3Tae
     downloadTinyPreviewVae
     downloadMuseWhisperMedium
