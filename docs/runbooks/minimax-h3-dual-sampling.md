@@ -2,68 +2,98 @@
 
 Source video: [The AI Brief — “This is how Minimax H3 on Steroids Looks like”](https://youtu.be/HJteqahyEKM)
 
+## Source provenance
+
+The original downloaded workflow was recovered from homelab and is preserved
+byte-for-byte at:
+
+`comfyui/workflows/minimax-h3-singularity-dual-sampling-i2v.json`
+
+- Original filename: `MiniMax_H3_Singularity_DualSampling_The_AI_Brief_EN.json`
+- Author metadata: `The AI Brief`
+- Nodes / links: `87 / 88`
+- SHA-256: `69b3373cf4b9784d50886c0ae65a516e34f0b9cf65dc29d9d216bd286dab4778`
+
+The builder refuses any source with a different digest or structural identity.
+This supersedes the earlier public-video reconstruction.
+
 ## Installed workflows
 
-After applying the desktop configuration, open **User workflows →
-`minimax-h3-dual-sampling-v1.0`**:
+Open **User workflows → `minimax-h3-dual-sampling-v1.1-source-exact`**:
 
-1. **`00 MiniMax H3 BF16 Dual Sampling - Maximum Precision`** — default.
+1. **`00 MiniMax H3 BF16 Dual Sampling - Source Exact Topology`** — default.
    Uses the official unpruned BF16 Ref2VA checkpoint and BF16 Qwen3-VL-32B
-   encoder. This is the highest-precision published H3 model stack.
-2. **`01 MiniMax H3 Singularity v1.3 Dual Sampling - Best Published Quant`** —
-   video-faithful comparison. Singularity v1.3 publishes no BF16 checkpoint;
-   its 34 GB unpruned INT8 model is its best available artifact. The pruned
-   INT8 and W4A8 variants are deliberately excluded.
+   encoder: the highest-precision published H3 model stack.
+2. **`01 MiniMax H3 Singularity v1.3 Dual Sampling - Source Exact Topology`** —
+   source-model comparison. Singularity v1.3 publishes no BF16 checkpoint; its
+   34 GB unpruned INT8 model is its best available artifact. Pruned INT8 and
+   W4A8 alternatives are excluded.
 
-The Gumroad JSON is checkout-gated. This package does **not** claim byte-for-byte
-identity with it. It reconstructs the topology and settings visible in the
-public video and transcript, then removes unnecessary convenience-node
-requirements for the pinned workstation closure.
+The obsolete `minimax-h3-dual-sampling-v1.0` reconstruction is removed only
+after the source-exact v1.1 directory has verified and installed.
 
-## Reconstructed topology
+## Exact source topology
 
-The public graph and narration show:
+The downloaded graph uses:
 
-1. Four-step Ref2V Turbo primary sampling at 0.5 MP.
-2. Split the generated AV latent.
-3. Preserve the primary audio latent unchanged.
-4. Upscale only the video latent by 1.25× with the MiniMax H3 3D latent
-   upscaler in BF16, aligned to 32 pixels with temporal chunking.
-5. Apply LMS at 0.5 and Realism People at 1.0 (`r34l1sm`) to the refinement
-   model.
-6. Run the high-sigma half of a no-fresh-noise video refinement pass.
-7. Rejoin the preserved audio latent.
-8. Run the low-sigma final AV pass, then decode video and audio once.
+1. A six-step `simple` schedule.
+2. `ExtendIntermediateSigmas`: two linear intermediate sigmas from 1 to 0.
+3. A split at step 2: the primary Turbo sampler runs the high-sigma segment.
+4. Primary AV separation: preserve primary audio and upscale only the denoised
+   video latent.
+5. BF16 3D latent upscale at 1.25×, aligned to 32 with temporal chunking.
+6. The source’s second split at step 0. This gives its middle sampler zero
+   sampling intervals and is intentionally retained as an optional no-op seam.
+7. Rejoin the upscaled video with the preserved primary audio.
+8. A no-fresh-noise final low-sigma AV pass using LMS 0.5 and Realism People
+   1.0 (`r34l1sm`), followed by video/audio decoding.
 
-The graph uses core `LoraLoaderModelOnly`, `ResolutionSelector`,
-`SplitSigmas`, `DisableNoise`, `SamplerCustomAdvanced`,
-`LTXVSeparateAVLatent`, and `LTXVConcatAVLatent` nodes. It does not require
-rgthree, Fearworks, or ComfyUI-Manager. The sole non-core execution node is the
-already pinned `MinimaxH3LatentUpscaler3D`.
+This differs materially from the initial reconstruction: the primary sampler
+runs only the high-sigma segment, while the LMS/Realism guider owns the final
+low-sigma pass.
+
+## Workstation compatibility adaptations
+
+The build-time adapter preserves sampling and AV-link semantics while making
+the graph deterministic on the pinned desktop closure:
+
+- rgthree Set/Get virtual wires become direct links between the same loaders
+  and H3 reference inputs.
+- The one-active-LoRA rgthree stack becomes core `LoraLoaderModelOnly`.
+- The unsupported `easy float` scale node becomes a fixed 1.25 upscaler value.
+- Stale cloud previews, Windows paths, and mutable model URLs are removed.
+- The retired upscaler selector/schema becomes the current pinned BF16 3D-conv
+  model with explicit `force_unload`.
+- The source’s `BlockSparseAttention` is omitted. Pinned ComfyUI 0.34 does not
+  contain that newer node, and upstream has reported MiniMax H3 Turbo artifacts
+  when sparse attention is enabled. The exact-quality Comfy Kitchen backend,
+  source Sage patch, and chunked feed-forward path remain.
+
+No ComfyUI Manager, runtime download, rgthree, or Easy-Use dependency remains.
+The raw source is retained separately for audit and future core upgrades.
 
 ## Pinned model profile
 
 | Role | Selector | Precision / rationale |
 |---|---|---|
-| Default diffusion | `minimax_h3_ref2va_bf16.safetensors` | Unpruned BF16; preferred |
-| Video comparison | `minimax_h3_singularity_ref2va_v1.3_int8.safetensors` | Best published Singularity artifact; no BF16 exists |
-| Text encoder | `qwen3vl_32b_minimax_h3_bf16.safetensors` | BF16; lower INT8/NVFP4 encoders excluded |
+| Default diffusion | `minimax_h3_ref2va_bf16.safetensors` | Official unpruned BF16; preferred |
+| Source-model comparison | `minimax_h3_singularity_ref2va_v1.3_int8.safetensors` | Best published Singularity artifact; no BF16 exists |
+| Text encoder | `qwen3vl_32b_minimax_h3_bf16.safetensors` | BF16; source INT8 encoder upgraded |
 | Video VAE | `minimax_h3_video_vae_fp16.safetensors` | Highest official video-VAE precision |
 | Audio VAE | `minimax_h3_audio_vae_fp32.safetensors` | FP32 |
-| Primary accelerator | `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` | BF16 |
-| Detail refinement | `minimax_h3_lms_v1.0_r64.safetensors` | Pinned LMS rank-64 LoRA, strength 0.5 |
-| Skin realism | `h3-realism-people-t2v-i2v-r2v.safetensors` | Pinned Realism People LoRA, strength 1.0 |
-| Latent upscale | `minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors` | Current BF16 3D-conv model; retired FP16 selector excluded |
+| Primary accelerator | `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` | BF16, strength 1.0 |
+| Detail refinement | `minimax_h3_lms_v1.0_r64.safetensors` | Rank-64, strength 0.5 |
+| Skin realism | `h3-realism-people-t2v-i2v-r2v.safetensors` | Strength 1.0, trigger `r34l1sm` |
+| Latent upscale | `minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors` | Current BF16 3D-conv model |
 
-The new LMS artifact is pinned to
+The LMS artifact is pinned to
 `Alissonerdx/Minimax-H3-ComfyUI@0ff489e781c274d17b2e3a30cd6f9a8d40ca49ff`,
 size `1,239,664,536`, SHA-256
 `16f3195bc6bffa431c0598dc2031e520ba058b4fcbc9f104db9e3fdfdeacf60c`.
 
 ## Prepare models
 
-The main BF16 stack, Singularity, Realism People, Turbo, VAEs, and BF16 latent
-upscaler are already installed on the workstation. Install/verify the LMS LoRA:
+The complete model closure is installed on desktop. Idempotently verify LMS:
 
 ```bash
 MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
@@ -71,30 +101,28 @@ MINIMAX_H3_ACCEPT_LICENSE=yes MINIMAX_H3_AUTHORIZED=yes \
 ```
 
 MiniMax H3 base/derivative use remains governed by the MiniMax-H3 Community
-License and the workstation’s separate territorial-authorization gate. The LMS
-repository declares Apache-2.0. The latent-upscaler repository declares no
-code or model license, so this workflow remains private local Development-only;
-it carries no Production, commercial-use, redistribution, or public-display
-authority.
+License and territorial-authorization gate. LMS declares Apache-2.0. The latent
+upscaler declares no code or model license, so this remains private local
+Development-only: no Production, commercial-use, redistribution, or public-
+display authority is inferred.
 
 ## Operation
 
 The workflow is installed while ComfyUI is inactive. The running GLM inference
-container is not stopped or restarted. When a deliberate creative-session
-cutover is wanted, use the existing transactional creative-stack activation;
-do not start ComfyUI beside the two-GPU GLM deployment.
+container is not stopped or restarted. Do not start ComfyUI beside the two-GPU
+GLM deployment; use the existing transactional creative-stack activation only
+when an explicit workload cutover is wanted.
 
 Before the first expensive render:
 
-1. Replace `dual-sampling/face_identity.png` and
-   `dual-sampling/character_sheet.png` in the two Load Image nodes.
-2. Run a short 5-second fixed-seed qualification before restoring the video’s
-   15-second setting.
-3. Compare the BF16 default against the Singularity profile with identical
-   prompt, references, seed, and dimensions.
-4. Inspect skin texture in motion—not a single frame—for crawling pores,
-   oversharpening, identity drift, waxy smoothing, and audio discontinuity.
-5. Preserve the primary/native output alongside every refined derivative.
+1. Select local files in Picture 1, Picture 2, and optional Picture 4. The
+   original JSON referenced images that were not included in the upload.
+2. Run a 5-second fixed-seed qualification before restoring 15 seconds.
+3. Compare BF16 and Singularity with identical prompt, references, seed, and
+   dimensions.
+4. Inspect skin in motion for crawling pores, oversharpening, identity drift,
+   waxy smoothing, and audio discontinuity.
+5. Preserve the primary preview beside the final refined output.
 
-The public video is evidence for a useful candidate topology, not proof of
-general identity retention, arbitrary prompts, or production fitness.
+The downloaded workflow is authoritative for topology and settings, not proof
+of general identity retention, arbitrary prompts, or production fitness.

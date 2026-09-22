@@ -3286,12 +3286,12 @@ let
           --output-dir "$out/workflows"
       '';
 
-  # The AI Brief HJteqahyEKM Dual Sampling topology, reconstructed from the
-  # public video/transcript and adapted to this workstation: BF16 is the
-  # default; Singularity's unpruned INT8 is retained only because no BF16
-  # Singularity release exists. Convenience packs are replaced by core nodes.
+  # The AI Brief HJteqahyEKM Dual Sampling topology, built from the exact
+  # downloaded workflow (SHA-256 asserted by the builder) and adapted to the
+  # pinned workstation closure. BF16 is the default; Singularity's unpruned
+  # INT8 is retained only because no BF16 Singularity release exists.
   minimaxH3DualSamplingWorkflows =
-    pkgs.runCommand "minimax-h3-dual-sampling-v1-workflows"
+    pkgs.runCommand "minimax-h3-dual-sampling-v1-1-source-exact-workflows"
       {
         nativeBuildInputs = [
           pkgs.coreutils
@@ -3303,7 +3303,7 @@ let
         ${pkgs.bash}/bin/bash \
           ${../../scripts/comfyui/build-minimax-h3-dual-sampling-workflows.sh} \
           --source-workflow \
-            ${minimaxH3TurboWorkflowSource}/example_workflows/video_minimax_h3_ref2v_lightx2v_turbo.json \
+            ${../../comfyui/workflows/minimax-h3-singularity-dual-sampling-i2v.json} \
           --output-dir "$out/workflows"
       '';
 
@@ -3839,7 +3839,8 @@ let
     h3_derope_turbo_dir="$user_workflows/minimax-h3-derope-turbo-development-v1.1"
     h3_turbo_dir="$user_workflows/minimax-h3-turbo-lora-qualification"
     h3_singularity_dir="$user_workflows/minimax-h3-singularity-v1.3-action-development"
-    h3_dual_dir="$user_workflows/minimax-h3-dual-sampling-v1.0"
+    h3_dual_dir="$user_workflows/minimax-h3-dual-sampling-v1.1-source-exact"
+    h3_dual_legacy_dir="$user_workflows/minimax-h3-dual-sampling-v1.0"
     h3_blender_dir="$user_workflows/minimax-h3-blender-ref2va-development"
     h3_motion_context_dir="$user_workflows/minimax-h3-motion-context-development"
     h3_vdn_dir="$user_workflows/minimax-h3-vdn-h3"
@@ -3867,7 +3868,7 @@ let
     h3_derope_turbo_staging="$user_workflows/.minimax-h3-derope-turbo-development-v1.1.new"
     h3_turbo_staging="$user_workflows/.minimax-h3-turbo-lora-qualification.new"
     h3_singularity_staging="$user_workflows/.minimax-h3-singularity-v1.3-action-development.new"
-    h3_dual_staging="$user_workflows/.minimax-h3-dual-sampling-v1.0.new"
+    h3_dual_staging="$user_workflows/.minimax-h3-dual-sampling-v1.1-source-exact.new"
     h3_blender_staging="$user_workflows/.minimax-h3-blender-ref2va-development.new"
     h3_motion_context_staging="$user_workflows/.minimax-h3-motion-context-development.new"
     h3_vdn_staging="$user_workflows/.minimax-h3-vdn-h3.new"
@@ -4029,6 +4030,9 @@ let
     mv "$h3_turbo_staging" "$h3_turbo_dir"
     install_versioned_workflow_dir "$h3_singularity_staging" "$h3_singularity_dir"
     install_versioned_workflow_dir "$h3_dual_staging" "$h3_dual_dir"
+    # v1.0 was a public-video reconstruction created before the exact source
+    # arrived from homelab. Retire it only after v1.1 verifies and installs.
+    rm -rf "$h3_dual_legacy_dir"
     mv "$h3_blender_staging" "$h3_blender_dir"
     mv "$h3_motion_context_staging" "$h3_motion_context_dir"
     mv "$h3_vdn_staging" "$h3_vdn_dir"
