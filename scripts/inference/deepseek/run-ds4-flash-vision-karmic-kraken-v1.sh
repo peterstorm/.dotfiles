@@ -195,9 +195,9 @@ plan_assert 'revision is the offline-pinned benchmark revision' \
   '.settings.revision.value == $rev and .settings.revision.source == "environment:MODEL_REVISION" and .settings["speculative-config"].value.revision == $rev and .settings["speculative-config"].value.num_speculative_tokens == 3' \
   --arg rev "$MODEL_REVISION"
 plan_assert 'benchmark-arm context/slots/budget/utilization resolve from the environment' \
-  '.settings["max-model-len"].value == ($mml | tonumber) and .settings["max-model-len"].source == "environment:MAX_MODEL_LEN" and .settings["max-num-seqs"].value == ($mns | tonumber) and .settings["max-num-seqs"].source == "environment:MAX_NUM_SEQS" and .settings["max-num-batched-tokens"].value == ($mnbt | tonumber) and .settings["max-num-batched-tokens"].source == "environment:MAX_NUM_BATCHED_TOKENS" and .settings["cache-object-tokens"].value == ($mnbt | tonumber) and (.settings["gpu-memory-utilization"].value | tostring) == $gmu and .settings["gpu-memory-utilization"].source == "environment:GPU_MEMORY_UTILIZATION"' \
+  '.settings["max-model-len"].value == ($mml | tonumber) and .settings["max-model-len"].source == "environment:MAX_MODEL_LEN" and .settings["max-num-seqs"].value == ($mns | tonumber) and .settings["max-num-seqs"].source == "environment:MAX_NUM_SEQS" and .settings["max-num-batched-tokens"].value == ($mnbt | tonumber) and .settings["max-num-batched-tokens"].source == "environment:MAX_NUM_BATCHED_TOKENS" and .settings["cache-object-tokens"].value == ($mnbt | tonumber) and .settings["gpu-memory-utilization"].value == ($gmu | tonumber) and .settings["gpu-memory-utilization"].source == "environment:GPU_MEMORY_UTILIZATION"' \
   --arg mml "$MAX_MODEL_LEN" --arg mns "$MAX_NUM_SEQS" --arg mnbt "$MAX_NUM_BATCHED_TOKENS" --arg gmu "$GPU_MEMORY_UTILIZATION"
-plan_assert 'TP2/DCP1 and GPU-only cache mode resolve' \
+plan_assert 'TP2/DCP1 and selected cache mode resolve' \
   '.settings["tensor-parallel-size"].value == 2 and .settings["decode-context-parallel-size"].value == 1 and .settings["cache-mode"].value == $cache_mode' \
   --arg cache_mode "$CACHE_MODE"
 if [ -n "$GEN_OVERRIDES" ]; then
@@ -280,7 +280,7 @@ printf 'PASS: checkpoint marker + 84-file sha256 manifest + offline serving-cont
 # the previous profile is still serving, so no GPU/port gates belong here.
 if [ "$MODE" = --preflight ]; then
   driver_version="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n 1)"
-  echo "DS4 Vision Karmic Kraken v1 preflight: PASS (image pin, launch plan, checkpoint cache + metadata hashes)"
+  echo "DS4 Vision Karmic Kraken v1 preflight: PASS (image pin, launch plan, 84-file checkpoint hash + offline container resolution)"
   echo "Host NVIDIA driver: ${driver_version:-<unknown>} (upstream tests 615.65.02; a CUDA-runtime probe at launch proves compatibility)"
   echo "Context is pinned to $MAX_MODEL_LEN (the benchmark arm); the Karmic Kraken Max-Q host measured 1,291,085 logical KV tokens. The switcher records the exact boot value."
   exit 0
@@ -462,8 +462,12 @@ else
 fi
 
 gen_native_args=()
+sampling_label=profile-default-temperature-1-top-p-0.95
 if [ -n "$GEN_OVERRIDES" ]; then
   gen_native_args=(--override-generation-config "$GEN_OVERRIDES")
+  sampling_label=custom-native-override
+  [ "$GEN_OVERRIDES" != '{"temperature":1.0,"top_p":1.0}' ] \
+    || sampling_label=benchmark-temperature-1-top-p-1
 fi
 
 docker run -d --init \
@@ -483,7 +487,7 @@ docker run -d --init \
   --label ai.peterstorm.inference.prefill-budget="$MAX_NUM_BATCHED_TOKENS" \
   --label ai.peterstorm.inference.gpu-memory-utilization="$GPU_MEMORY_UTILIZATION" \
   --label ai.peterstorm.inference.cache-mode="$CACHE_MODE" \
-  --label ai.peterstorm.inference.sampling=benchmark-temperature-1-top-p-1 \
+  --label ai.peterstorm.inference.sampling="$sampling_label" \
   --label ai.peterstorm.inference.source-benchmark=rtx6kpro/benchmarks/karmic-kraken-serving.md \
   --gpus "\"device=$GPU_ORDER\"" \
   --network host \

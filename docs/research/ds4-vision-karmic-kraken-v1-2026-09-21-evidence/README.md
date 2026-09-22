@@ -20,7 +20,7 @@ reading the docs:
 | Setting | Upstream doc / benchmark arm | Pinned by v1 |
 |---|---|---|
 | Image | published `karmic-kraken-beta-20260920-443d9f815c57d23b`, digest `sha256:55e477ad62ae15a77c9b869e8fb8e2d958f6edcc4d95e306adfa89dee9ed19df` | resolved to image id `sha256:83f00757ff18f3c3c12de291319b1a3a5496056a3873834d0994160828a3c6ee` (pull script proves tag↔digest↔id) |
-| Checkpoint | `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` @ `6821d6ad3681a4b137b066b76094fa82ebd0a380` (profile-derived; the revision the benchmark ran) | pre-downloaded, offline-pinned (`HF_HUB_OFFLINE=1` + `MODEL_REVISION`), metadata hashes verified against `kk.checkpoint.metadata_sha256` |
+| Checkpoint | `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` @ `6821d6ad3681a4b137b066b76094fa82ebd0a380` (profile-derived; the revision the benchmark ran) | offline-pinned (`HF_HUB_OFFLINE=1` + `MODEL_REVISION`); all 84 files sha256-verified and resolved by `snapshot_download(local_files_only=True)` inside the network-disabled serving-container namespace |
 | Parallelism | TP2 / DCP1 | `tensor-parallel-size: 2`, `decode-context-parallel-size: 1` |
 | Speculation | DSpark K3 | `mode: dspark`, `draft-tokens: 3`, speculative-config derived with the pinned revision |
 | Request slots | 4 | `max-num-seqs: 4` (benchmark arm env) |
@@ -95,16 +95,20 @@ How we know the host driver can run this image — probes, not version tables
    named volume; v1 serves revision `6821d6ad…` offline from
    `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1` with
    `HF_HUB_OFFLINE=1` + `MODEL_REVISION` (the engine can never fetch a
-   different revision, and the cache stays verifiable from the host — the four
-   metadata hashes the benchmark evidence records are verified at hydration
-   and re-verified at every preflight/launch). The snapshot was **hydrated
-   from the existing r21-era local copy** (`~/models/DeepSeek-V4-Flash-Vision-Exp`,
-   revision `86f746b3`): all 48 weight shards are byte-identical (HF LFS oids
-   == `kk.checkpoint.shards` blobs; every shard re-hashed locally against the
-   vendored manifest), the per-file git-oid diff shows only README.md differs
-   (fetched, 6.6 KiB), and the snapshot symlinks depend on the flat copy
-   staying in place. A plain full download remains available via the same
-   script's `--detach` mode.
+   different revision. The cache is verified by a complete 84-file sha256
+   manifest at every preflight/launch; the four benchmark metadata hashes are
+   additionally named in the receipt. A network-disabled container then runs
+   the real Hugging Face offline resolver against the exact read-only mounts.
+   The snapshot was **hydrated from the existing r21-era local copy**
+   (`~/models/DeepSeek-V4-Flash-Vision-Exp`, revision marker `86f746b3`): the
+   revision changed README.md and added two eval records, which the local
+   directory already contained. All 48 weight shards are byte-identical (HF
+   LFS oids == `kk.checkpoint.shards` blobs); all other files were matched to
+   the pinned HF tree git/LFS oids before local sha256 recording. The snapshot
+   contains 83 symlinks plus the fetched 6.6 KB README, and the serving
+   container mounts the flat source at the symlinks' same absolute path,
+   read-only. Deleting the flat source invalidates the cache and makes
+   preflight fail. A plain full download remains available via `--detach`.
 4. **Sampling** — the benchmark arm's top-p 1.0 native override is kept as the
    default (`GEN_OVERRIDES`); clearing it serves the profile's top-p 0.95
    default. Both paths are `--print-config`-proven.
@@ -123,8 +127,11 @@ How we know the host driver can run this image — probes, not version tables
 
 ## Ready state (2026-09-21)
 
-Built, pinned, checkpoint hydrated (48/48 shards sha256-verified against the
-Karmic Kraken evidence, 6.6 KiB fetched), preflight **PASS** — and **not
-booted** (operator instruction: "don't boot it up, just ready it"). GLM v14
-remains the serving profile. The only remaining step is the transactional
-switch, documented in the runbook.
+Built, pinned, checkpoint hydrated (84/84 files sha256-verified; 48 shard
+hashes anchored directly in the Karmic Kraken evidence; 6.6 KB fetched),
+read-only mount layout and offline Hugging Face resolution proven inside the
+network-disabled serving-container namespace, preflight **PASS** — and **not
+booted**. GLM v14 remains the serving profile. The re-audit found and repaired
+an original host-only preflight false positive: absolute host symlinks had not
+been mounted into the container. The only remaining step is the transactional
+switch documented in the runbook.

@@ -22,18 +22,23 @@ Done:
   util, fp8 KV/block 256, revision `6821d6ad…` profile-derived, GPU-only
   cache) and the benchmark-arm override pass (env aliases + native top-p 1
   override) all resolve with the expected sources. Status `implemented`.
-- Checkpoint **hydrated, not downloaded**: the pinned revision
-  `6821d6ad…` is content-identical to the existing r21-era local copy at
-  `~/models/DeepSeek-V4-Flash-Vision-Exp` (`86f746b3`) except README.md —
-  all 48 weight shards are byte-identical (HF LFS oids == the Karmic Kraken
-  evidence `kk.checkpoint.shards` blobs, each shard re-hashed locally against
-  the vendored manifest). Snapshot built at
+- Checkpoint **hydrated, not downloaded**: revision `6821d6ad…` changes
+  README.md and adds two eval records relative to `86f746b3`; the existing
+  local directory already contained the added eval records. All 48 weight
+  shards are byte-identical (HF LFS oids == the Karmic Kraken evidence
+  `kk.checkpoint.shards` blobs). The completed pinned snapshot's **84/84
+  files** were matched to the pinned HF tree identities and sha256-verified
+  against the vendored manifest. Snapshot built at
   `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1/hub/.../snapshots/6821d6ad…`
-  (83 symlinks + README.md fetched, 6.6 KiB of new content). Receipt:
+  (83 symlinks + README.md fetched, 6.6 KB of new content). The serving
+  container mounts both the hub cache and the flat source read-only; deleting
+  `~/models/DeepSeek-V4-Flash-Vision-Exp` invalidates the snapshot. Receipt:
   `~/.local/state/ds4-vision/karmic-kraken-v1-checkpoint.txt`.
-- **Preflight: PASS** (rc=0, 2026-09-21): image pin, launch plan, checkpoint
-  marker + Karmic Kraken metadata hashes; recorded in
-  `~/.local/state/ds4-vision/karmic-kraken-v1-ready.txt`.
+- **Preflight: PASS** (rc=0, re-audited 2026-09-21): image pin, launch plan,
+  84-file sha256 verification, read-only mount layout, and
+  `snapshot_download(..., local_files_only=True)` inside the network-disabled
+  serving-container namespace. This re-audit caught and repaired the original
+  host-only preflight's dangling-container-symlink false positive.
 
 Remaining (the deliberate cutover, **not executed**):
 1. `switch-ds4-flash-vision-karmic-kraken-v1.sh start` — idle gate → stops
@@ -50,9 +55,10 @@ Remaining (the deliberate cutover, **not executed**):
   (recorded as `IMAGE_CONFIG` in the run, download and probe scripts)
 - Checkpoint: `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` @
   `6821d6ad3681a4b137b066b76094fa82ebd0a380` (HF tip, lastModified
-  2026-09-01, 84 files, ~170 GiB; pre-downloaded into
-  `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1`; metadata hashes from
-  `kk.checkpoint.metadata_sha256` verified at download + every preflight)
+  2026-09-01, 84 files, 167,831,848,791 bytes / 156.3 GiB; hydrated into
+  `/models/hf-cache/ds4-flash-vision-karmic-kraken-v1`; all 84 sha256 hashes
+  plus the four `kk.checkpoint.metadata_sha256` values are verified at every
+  preflight, followed by offline resolution inside the serving container)
 - Profile: `ds4-vision` (deployment profile in the image, hardware
   `rtx-pro-6000-pcie`)
 - Served model: `deepseek-v4-flash-vision` (repository id, unchanged from
@@ -86,8 +92,9 @@ numbers, same geometry. Re-measure at acceptance if the numbers matter
 - Desktop host, both GPUs idle, `comfyui.service` stopped (the launch gates
   enforce all of this; the switcher quiesces other profiles itself).
 - `docker` + `jq` (both present).
-- Disk: the models pool had 193 GiB free before the download; the checkpoint
-  needs ~170 GiB (the download script fails closed below 180 GiB free).
+- Disk: a full download is 167.8 GB / 156.3 GiB plus transient xet staging;
+  the download script fails closed below 180 GiB free. Hydration reuses the
+  existing flat files and adds only the changed README.
   Cleanup candidates if tight: `/models/vllm-cache/ds4-vision-infernal-invocation-cu133-r21{,-v1}`
   (retired r21 runtime caches) — never deleted by these scripts.
 - HF token optional at `~/.config/hf/token` (public repo; buys rate headroom).
@@ -102,7 +109,7 @@ scripts/inference/deepseek/pull-ds4-flash-vision-karmic-kraken-v1-image.sh
 #    copy (proven per-file; no re-download):
 scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh \
   --hydrate-from ~/models/DeepSeek-V4-Flash-Vision-Exp
-#    ...or, when no verified-identical copy exists, the plain ~170 GiB
+#    ...or, when no verified-identical copy exists, the plain ~168 GB
 #    download (resumable):
 #      scripts/inference/deepseek/download-ds4-flash-vision-karmic-kraken-v1-checkpoint.sh --detach
 #      docker logs -f ds4-flash-vision-karmic-kraken-v1-dl
@@ -127,14 +134,16 @@ resolved capacity lines.
 
 ## Acceptance chain (what `switch … start` runs)
 
-preflight (static) → idle gate on the active profile → previous profiles
-quiesced (v14) → CUDA runtime probe (cuBLAS + cuDNN on GPU0, deterministic
-two-GPU NCCL allreduce) → launch (restart=no) → `HEALTHY +
+preflight (static: 84-file sha256 + network-disabled offline container
+resolution) → idle gate on the active profile → previous profiles quiesced
+(v14) → CUDA runtime probe (cuBLAS + cuDNN on GPU0, deterministic two-GPU
+NCCL allreduce) → launch (restart=no) → `HEALTHY +
 AUTHENTICATED + EXACT MODEL` (`/v1/models` must serve exactly
 `deepseek-v4-flash-vision` behind the bearer key) → profile/speculation/
 checkpoint label checks + zero restarts → boot receipt → vision+text probe →
-promote to `restart=unless-stopped`. Any failure: quiesce the failed
-container, restart the previous profile set, exit non-zero.
+promote to `restart=unless-stopped`. Promotion is part of the transactional
+acceptance condition; any failure quiesces the failed container, restarts the
+previous profile set, and exits non-zero.
 
 ## Rollback
 

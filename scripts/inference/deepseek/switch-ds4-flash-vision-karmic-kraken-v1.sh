@@ -60,7 +60,17 @@ require_idle_endpoint() {
       echo "error: active profile metrics are unavailable; refusing cutover" >&2
       return 1
     }
-    active="$(awk '/vllm:num_requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$metrics")"
+    if ! active="$(awk '
+      /vllm:num_requests_running\{/ { running_seen = 1; sum += $NF }
+      /vllm:num_requests_waiting\{/ { waiting_seen = 1; sum += $NF }
+      END {
+        if (!running_seen || !waiting_seen) exit 2
+        print sum + 0
+      }
+    ' <<<"$metrics")"; then
+      echo "error: active profile metrics omitted running/waiting request gauges; refusing cutover" >&2
+      return 1
+    fi
     if [ "$active" != 0 ]; then
       echo "error: $active request(s) are running or waiting; refusing cutover" >&2
       return 1

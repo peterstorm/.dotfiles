@@ -2,7 +2,7 @@
 # Download the DeepSeek-V4-Flash-Vision-Exp checkpoint pinned by the
 # Karmic Kraken beta ds4-vision profile.
 #
-# ~170 GiB (48 shards + configs), pinned to the exact revision the upstream
+# ~168 GB / 156.3 GiB (48 shards + configs), pinned to the exact revision the upstream
 # Karmic Kraken benchmark ran (benchmarks/karmic-kraken-serving.md samples
 # JSON, kk.checkpoint.revision) and the pinned image's profile derives. Writes
 # the native Hugging Face hub cache layout into
@@ -13,22 +13,22 @@
 # based on the pinned image because it already ships huggingface_hub + hf_xet;
 # the host has no python/hf CLI on purpose. Idempotent + resumable: re-run to
 # continue. On success writes .download-complete ($REPO $REV) into the cache
-# root and a receipt after verifying the four checkpoint metadata hashes the
-# benchmark evidence records; the run script refuses to launch without the
-# marker.
+# root and a receipt after verifying all 84 pinned files (including the four
+# checkpoint metadata hashes the benchmark evidence records); the run script
+# refuses to launch without the marker.
 #
 # --hydrate-from <flat-dir>: when a content-identical copy of the checkpoint
 # already exists on the host (the r21-era local download at
 # ~/models/DeepSeek-V4-Flash-Vision-Exp), build the hub-cache snapshot layout
-# from it instead of re-downloading ~170 GiB. The pinned revision
+# from it instead of re-downloading ~168 GB. The pinned revision
 # (6821d6ad...) changes README.md and adds two .eval_results files relative
 # to the r21 revision (86f746b3...); all 48 weight shards are byte-identical
 # (HF LFS oids == Karmic Kraken evidence kk.checkpoint.shards blobs,
-# cross-checked 2026-09-21). Every one of the pinned revision's 84 files is
-# size- and sha256-verified against the vendored manifest before any symlink
-# is created. The three changed/added files are fetched from the pinned
-# revision (and reused from the flat copy only when their content matches).
-# Snapshot symlinks point at the flat copy, so serving must mount that source
+# cross-checked 2026-09-21). The 81 reusable files are size- and sha256-
+# verified before any symlink is created; after the three changed/added files
+# are fetched from the pinned revision (or reused only when content matches),
+# all 84 snapshot files are verified before readiness is committed. Snapshot
+# symlinks point at the flat copy, so serving must mount that source
 # at the same absolute path; deleting it invalidates the cache.
 set -euo pipefail
 
@@ -145,6 +145,17 @@ write_receipt() {
     "$REPO" "$REV" "$bytes" "$RECEIPT"
 }
 
+write_hydrate_state() {
+  local source="$1" fetched="$2" source_tmp provenance_tmp
+  source_tmp="$(mktemp "$CACHE_HOST/.hydrate-source.XXXXXX")"
+  printf '%s\n' "$source" >"$source_tmp"
+  mv -f "$source_tmp" "$HYDRATE_SOURCE_FILE"
+  provenance_tmp="$(mktemp "$CACHE_HOST/.hydrate-provenance.XXXXXX")"
+  printf 'hydrate_source=%s\nhydrate_manifest_sha256_verified=84\nhydrate_fetched_real=%s\nhydrate_dependency=%s (deleting it invalidates the cache)\n' \
+    "$source" "$fetched" "$source" >"$provenance_tmp"
+  mv -f "$provenance_tmp" "$CACHE_HOST/.hydrate-provenance"
+}
+
 verify_checkpoint() {
   local marker snapshot_dir
   if [ ! -r "$CACHE_HOST/.download-complete" ]; then
@@ -190,7 +201,13 @@ if [ "$MODE" = --hydrate-from ]; then
     && [ "$(<"$CACHE_HOST/.download-complete")" = "$REPO $REV" ]; then
     echo "Marker already present; verifying existing snapshot."
     if verify_checkpoint; then
-      printf '%s\n' "$FLAT_DIR" >"$HYDRATE_SOURCE_FILE"
+      SNAPSHOT_DIR="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
+      existing_real=()
+      for path in "${PINNED_ONLY_FILES[@]}"; do
+        [ -L "$SNAPSHOT_DIR/$path" ] || existing_real+=("$path")
+      done
+      write_hydrate_state "$FLAT_DIR" "${existing_real[*]:-none}"
+      write_receipt "$SNAPSHOT_DIR"
       exit 0
     fi
     echo "Existing snapshot failed verification; rebuilding it from the verified source." >&2
@@ -246,9 +263,7 @@ if [ "$MODE" = --hydrate-from ]; then
   #    .hydrate-source is machine-readable launch state; provenance is the
   #    human receipt. Both are written only after all 84 paths verify.
   verify_snapshot "$SNAPSHOT_DIR"
-  printf '%s\n' "$FLAT_DIR" >"$HYDRATE_SOURCE_FILE"
-  printf 'hydrate_source=%s\nhydrate_manifest_sha256_verified=84\nhydrate_fetched_real=%s\nhydrate_dependency=%s (deleting it invalidates the cache)\n' \
-    "$FLAT_DIR" "${fetched_real[*]:-none}" "$FLAT_DIR" >"$CACHE_HOST/.hydrate-provenance"
+  write_hydrate_state "$FLAT_DIR" "${fetched_real[*]:-none}"
   marker_tmp="$(mktemp "$CACHE_HOST/.download-complete.XXXXXX")"
   printf '%s %s\n' "$REPO" "$REV" >"$marker_tmp"
   mv -f "$marker_tmp" "$CACHE_HOST/.download-complete"
@@ -257,7 +272,7 @@ if [ "$MODE" = --hydrate-from ]; then
   exit 0
 fi
 
-# Disk gate: ~170 GiB of payload on /models; fail closed before downloading
+# Disk gate: ~156.3 GiB payload plus xet staging on /models; fail closed before downloading
 # rather than filling the dataset mid-flight. Never deletes anything itself.
 if ! mkdir -p "$CACHE_HOST" 2>/dev/null || [ ! -w "$CACHE_HOST" ]; then
   sudo mkdir -p "$CACHE_HOST"
@@ -275,7 +290,7 @@ fi
 }
 if [ "$available_kb" -lt $((180 * 1024 * 1024)) ]; then
   echo "error: only $((available_kb / 1024 / 1024)) GiB free on the checkpoint filesystem; the pinned" >&2
-  echo "       download needs ~170 GiB plus transient xet staging. Free space first" >&2
+  echo "       download needs ~156.3 GiB payload plus transient xet staging. Free space first" >&2
   echo "       (candidates: /models/vllm-cache/ds4-vision-infernal-invocation-cu133-r21*)" >&2
   exit 1
 fi
@@ -295,8 +310,8 @@ fi
 # hf download (huggingface_hub 1.31 with hf_xet high-performance transport)
 # into the container's default hub cache, which is the host mount. After the
 # download, snapshot_download(local_files_only=True) proves the pinned
-# revision resolves from the cache alone; the metadata hashes are verified by
-# this script's verify_checkpoint (host-side) before the receipt is written.
+# revision resolves from the cache alone; all 84 manifest hashes are verified
+# by this script's verify_checkpoint (host-side) before the receipt is written.
 install -d -m 700 "$STATE_DIR"
 dl_tmp="$(mktemp "$STATE_DIR/.karmic-kraken-v1-download-entrypoint.XXXXXX")"
 cat >"$dl_tmp" <<EOF
