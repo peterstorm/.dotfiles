@@ -241,6 +241,8 @@ docker run --rm --runtime runc --network none \
   "${checkpoint_mounts[@]}" \
   -v "$CHECKPOINT_MANIFEST:/checkpoint.manifest:ro" \
   -e SNAPSHOT_CONTAINER="$snapshot_container" \
+  -e CHECKPOINT_REPO="$CHECKPOINT" -e MODEL_REVISION="$MODEL_REVISION" \
+  -e HF_HUB_OFFLINE=1 \
   --entrypoint bash "$IMAGE_CONFIG" -c '
     set -euo pipefail
     count=0
@@ -256,8 +258,23 @@ docker run --rm --runtime runc --network none \
       count=$((count + 1))
     done </checkpoint.manifest
     [ "$count" = 84 ] || { echo "error: container checkpoint proof saw $count/84 files" >&2; exit 1; }
+    resolved="$(/opt/venv/bin/python - <<PY
+import os
+from huggingface_hub import snapshot_download
+
+print(snapshot_download(
+    repo_id=os.environ["CHECKPOINT_REPO"],
+    revision=os.environ["MODEL_REVISION"],
+    local_files_only=True,
+))
+PY
+)"
+    [ "$resolved" = "$SNAPSHOT_CONTAINER" ] || {
+      echo "error: offline Hugging Face resolver returned $resolved, expected $SNAPSHOT_CONTAINER" >&2
+      exit 1
+    }
   '
-printf 'PASS: checkpoint marker + 84-file sha256 manifest + serving-container visibility\n'
+printf 'PASS: checkpoint marker + 84-file sha256 manifest + offline serving-container resolution\n'
 
 # Preflight is static-only by design: the transactional switcher runs it while
 # the previous profile is still serving, so no GPU/port gates belong here.
