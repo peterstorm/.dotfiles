@@ -200,8 +200,8 @@ if [ "$MODE" = --hydrate-from ]; then
   if [ -r "$CACHE_HOST/.download-complete" ] \
     && [ "$(<"$CACHE_HOST/.download-complete")" = "$REPO $REV" ]; then
     echo "Marker already present; verifying existing snapshot."
-    if verify_checkpoint; then
-      SNAPSHOT_DIR="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
+    SNAPSHOT_DIR="$CACHE_HOST/hub/models--${REPO%%/*}--${REPO##*/}/snapshots/$REV"
+    if verify_snapshot "$SNAPSHOT_DIR"; then
       existing_real=()
       for path in "${PINNED_ONLY_FILES[@]}"; do
         [ -L "$SNAPSHOT_DIR/$path" ] || existing_real+=("$path")
