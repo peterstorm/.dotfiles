@@ -47,9 +47,15 @@ let
           sha256 = "5cb287d82b618a17598ccae641dd56ade87ca5a44ddc854a77256dbde29ada43";
         };
       });
-      comfyui-workflow-templates = templateArtifact "comfyui-workflow-templates" "0.11.66"
-        "https://files.pythonhosted.org/packages/99/75/93a93180734d4d9b3c61d382df6ffbc7b2cb3d63dd38393877d22f284a45/comfyui_workflow_templates-0.11.66.tar.gz"
-        "3d84ef590d2eecc6af0fd94f1da132b7191d5cecb7e5ecdee79aa377e0fcb462";
+      comfyui-workflow-templates =
+        (templateArtifact "comfyui-workflow-templates" "0.11.66"
+          "https://files.pythonhosted.org/packages/99/75/93a93180734d4d9b3c61d382df6ffbc7b2cb3d63dd38393877d22f284a45/comfyui_workflow_templates-0.11.66.tar.gz"
+          "3d84ef590d2eecc6af0fd94f1da132b7191d5cecb7e5ecdee79aa377e0fcb462")
+        .overridePythonAttrs (old: {
+          propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [
+            final.comfyui-workflow-templates-media-assets-02
+          ];
+        });
       # Template media and JSON packages are version-coupled by exact
       # requires_dist constraints. Pin every member; don't bypass the checks.
       comfyui-workflow-templates-json = templateArtifact "comfyui-workflow-templates-json" "0.1.92"
