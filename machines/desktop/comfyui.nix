@@ -76,7 +76,8 @@ let
       comfyui-workflow-templates-media-assets-02 = prev.buildPythonPackage {
         pname = "comfyui-workflow-templates-media-assets-02";
         version = "0.1.3";
-        format = "setuptools";
+        pyproject = true;
+        build-system = [ final.setuptools ];
         doCheck = false;
         src = pkgs.fetchurl {
           url = "https://files.pythonhosted.org/packages/91/ce/5471b7fa1a29fa73b937c824700f737df9c85409913f97788c19fd074f76/comfyui_workflow_templates_media_assets_02-0.1.3.tar.gz";
