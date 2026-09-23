@@ -21,95 +21,93 @@ let
 
   binaryTorchPython = pkgs.python3.override {
     self = binaryTorchPython;
-    packageOverrides = final: prev: {
-      # ComfyUI 0.33.3's Music 3 text encoder uses APIs introduced in
-      # comfy-kitchen 0.2.31. Keep all exact runtime requirements aligned with
-      # the pinned ComfyUI source instead of relying on the older package set.
+    packageOverrides = final: prev:
+      let
+        templateArtifact = name: version: url: sha256:
+          prev.${name}.overridePythonAttrs (_: {
+            inherit version;
+            src = pkgs.fetchurl { inherit url sha256; };
+          });
+      in
+      {
+      # Keep ComfyUI 0.37.0's exact runtime closure aligned with its source.
       comfy-kitchen = prev.comfy-kitchen.overridePythonAttrs (_old: {
-        version = "0.2.31";
+        version = "0.2.35";
         src = pkgs.fetchFromGitHub {
           owner = "Comfy-Org";
           repo = "comfy-kitchen";
-          rev = "7c6ca3a5b63857d42c2d49777d6afb69de23f13f";
-          hash = "sha256-i7v8f+ZNhYkvheufOeJYyCZYwMj79LOt1ZNC+8tgefw=";
+          rev = "b2a2972ac68c395bbda8ad9030e8ae1089287815";
+          hash = "sha256-D/qNvkkYh0p8kaK2voOwEDXRy0wreyXMc8UZvLJOy8E=";
         };
       });
       comfyui-frontend-package = prev.comfyui-frontend-package.overridePythonAttrs (_old: {
-        version = "1.49.6";
+        version = "1.52.7";
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/b8/14/0d6d36fa852fe65c1a0ed983cda31fd173472a64bcdf344b73f3172cc882/comfyui_frontend_package-1.49.6.tar.gz";
-          hash = "sha256-CBChUGNYpF4PHwLAaPn4ISBXmC+A1/IFmuYU563mWNk=";
+          url = "https://files.pythonhosted.org/packages/54/6f/0ba90741f8abe08a5808f08d9c4c759fa65ea43bae5e8b8cbbba9fcd6e88/comfyui_frontend_package-1.52.7.tar.gz";
+          sha256 = "5cb287d82b618a17598ccae641dd56ade87ca5a44ddc854a77256dbde29ada43";
         };
       });
-      comfyui-workflow-templates = prev.comfyui-workflow-templates.overridePythonAttrs (_old: {
-        # ComfyUI 0.34.0 pins the workflow-templates browser package exactly
-        # (requirements.txt ==0.11.48). The sam3d template is NOT in the
-        # 0.11.48 package — the dedicated workflow pins the template directly
-        # from the workflow_templates repo at its own revision.
-        version = "0.11.48";
+      comfyui-workflow-templates = templateArtifact "comfyui-workflow-templates" "0.11.66"
+        "https://files.pythonhosted.org/packages/99/75/93a93180734d4d9b3c61d382df6ffbc7b2cb3d63dd38393877d22f284a45/comfyui_workflow_templates-0.11.66.tar.gz"
+        "3d84ef590d2eecc6af0fd94f1da132b7191d5cecb7e5ecdee79aa377e0fcb462";
+      # Template media and JSON packages are version-coupled by exact
+      # requires_dist constraints. Pin every member; don't bypass the checks.
+      comfyui-workflow-templates-json = templateArtifact "comfyui-workflow-templates-json" "0.1.92"
+        "https://files.pythonhosted.org/packages/35/3a/4cf6da6238b77a665a44484b173d388371bd2b21a25b79b9431e4785a308/comfyui_workflow_templates_json-0.1.92.tar.gz"
+        "3c7abe7792fb0dd405a4508bf21c69dced6a3a2cba3042c4de6aac9438794fe2";
+      comfyui-workflow-templates-core = templateArtifact "comfyui-workflow-templates-core" "0.3.357"
+        "https://files.pythonhosted.org/packages/4b/24/4da66229cf3f02a0439c15500809ee2ce6985c59377d31d3501d9c583c88/comfyui_workflow_templates_core-0.3.357.tar.gz"
+        "0c25b2902425261203bc1f9109a2efbe89a7d4e78a50eea751ba35e7f3beb9fe";
+      comfyui-workflow-templates-media-api = templateArtifact "comfyui-workflow-templates-media-api" "0.3.84"
+        "https://files.pythonhosted.org/packages/21/fe/f7f1e51b54348f9b79625760fbbda92d0238cda00f39b92f09da91d3439d/comfyui_workflow_templates_media_api-0.3.84.tar.gz"
+        "6bd5c496e368e5e40dd87dfe25f066e24d57f3602888ba3df80013a88d060259";
+      comfyui-workflow-templates-media-video = templateArtifact "comfyui-workflow-templates-media-video" "0.3.101"
+        "https://files.pythonhosted.org/packages/71/19/8b6c8e88a3bc895bd6d29972c717ac782be175e6bfc40ec75ec95629593e/comfyui_workflow_templates_media_video-0.3.101.tar.gz"
+        "7652ed99fb9bb00b39d8905919dc81509201e335dde23a9736ba138919908476";
+      comfyui-workflow-templates-media-image = templateArtifact "comfyui-workflow-templates-media-image" "0.3.160"
+        "https://files.pythonhosted.org/packages/9c/08/599004db573aa31c9c45ea6c679185143e84e4a69973af8e37ee2a55be72/comfyui_workflow_templates_media_image-0.3.160.tar.gz"
+        "88dcf749302c6a12f5b803dfb46724b4c8acc31d1117cecff51672d9bd85eb18";
+      comfyui-workflow-templates-media-other = templateArtifact "comfyui-workflow-templates-media-other" "0.3.229"
+        "https://files.pythonhosted.org/packages/0c/44/ea8dadf9a39a4e31a7a9064fd80e33a0af23cbfaede72a5189be7d419990/comfyui_workflow_templates_media_other-0.3.229.tar.gz"
+        "6e2db0752f2c7ce94f6a8b9d441a5f9dc78bbfa765745f0f9eacaeccbce69385";
+      comfyui-workflow-templates-media-assets-01 = templateArtifact "comfyui-workflow-templates-media-assets-01" "0.1.47"
+        "https://files.pythonhosted.org/packages/ac/ac/977efb58ed067855102ecc4a7395d0726c6e20f639ffd156dd7977883ac2/comfyui_workflow_templates_media_assets_01-0.1.47.tar.gz"
+        "47c0145057d138a8b0d63af66fe931c3091825d552e82b38f14096e7d0955052";
+      comfyui-workflow-templates-media-assets-02 = prev.buildPythonPackage {
+        pname = "comfyui-workflow-templates-media-assets-02";
+        version = "0.1.3";
+        format = "setuptools";
+        doCheck = false;
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/93/57/78e0b686ee1a806d99516ccf4c39c5dce222a6f9f182707d48b25698683e/comfyui_workflow_templates-0.11.48.tar.gz";
-          hash = "sha256-UQ/tuOOO9504uDc5kFfaJN6CnwbKCZUL6WxprxQlVD8=";
+          url = "https://files.pythonhosted.org/packages/91/ce/5471b7fa1a29fa73b937c824700f737df9c85409913f97788c19fd074f76/comfyui_workflow_templates_media_assets_02-0.1.3.tar.gz";
+          sha256 = "56a114b6c6d8168c92a2c5b0ed1c926b4f5a155900af7f81cdc7fd05fd5f9424";
         };
-      });
-      comfyui-workflow-templates-json = prev.comfyui-workflow-templates-json.overridePythonAttrs (_old: {
-        # Runtime-deps pins demanded by the workflow-templates 0.11.48
-        # metadata (pythonRuntimeDepsCheckHook enforces the == constraints).
-        # The production-curated suite stays on the audited 0.1.37 JSON corpus
-        # via qualifiedWorkflowTemplatesJsonSource — this bump changes only
-        # what the browser package's metadata demands.
-        version = "0.1.57";
-        src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/0a/a0/ec65132b0eea7d8b364b9a4f03c80bf4f987f20c0f221a5ec3c871829e5e/comfyui_workflow_templates_json-0.1.57.tar.gz";
-          hash = "sha256-IvtKBhnYRqreS2w8t7xJE65F97B3Aai9+MWYR+CdINw=";
-        };
-      });
-      comfyui-workflow-templates-core = prev.comfyui-workflow-templates-core.overridePythonAttrs (_old: {
-        # Demanded exactly by the workflow-templates 0.11.48 metadata.
-        version = "0.3.322";
-        src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/ce/16/7e56f6c6073321ccabb193d085e0434934eee8572613f65ea43310057ed9/comfyui_workflow_templates_core-0.3.322.tar.gz";
-          hash = "sha256-+odtVI5o5YP+u5P4T90NaWTSFlxtBm9XxYXyai8r0yk=";
-        };
-      });
-      comfyui-workflow-templates-media-assets-01 =
-        prev.comfyui-workflow-templates-media-assets-01.overridePythonAttrs (_old: {
-          # Demanded exactly by the workflow-templates 0.11.48 metadata.
-          version = "0.1.35";
-          src = pkgs.fetchurl {
-            url = "https://files.pythonhosted.org/packages/c5/4f/f3fb359bd9be8c12541595344d0baf97ff3df27be83414afb9ca77066527/comfyui_workflow_templates_media_assets_01-0.1.35.tar.gz";
-            hash = "sha256-xrzUGrvjhWyUhYxs4H2QNIf5PsbEBXTsu4OU3eEkk6M=";
-          };
-        });
-      # ComfyUI 0.34.0 tightens the embedded-docs and aimdo requirements
-      # (requirements.txt ==0.5.10 / ==0.4.15). Keep all exact runtime
-      # requirements aligned with the pinned ComfyUI source instead of relying
-      # on the older package set. comfy-aimdo ships only binary wheels on PyPI,
-      # so the pinned abi3 wheel is installed directly; cp39-abi3 is
-      # forward-compatible with the environment's cp314 interpreter.
+      };
+      # New ComfyUI exact runtime dependencies; aimdo ships binary-only
+      # abi3 wheels compatible with the environment's cp314 interpreter.
       comfyui-embedded-docs = prev.comfyui-embedded-docs.overridePythonAttrs (_old: {
-        version = "0.5.10";
+        version = "0.5.12";
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/df/f3/e44bee076777b0fd2b1748dffe6fa1859a8aea004f9c448f746e206188ba/comfyui_embedded_docs-0.5.10.tar.gz";
-          hash = "sha256-n+rSPl4vztj+Wz0oVbPNPGmvziYeHyh0fbEh03NaKuo=";
+          url = "https://files.pythonhosted.org/packages/df/74/79893a6cc0e47d1883617b4a3f53b1d3402f2854f73b712a83b61ab7c981/comfyui_embedded_docs-0.5.12.tar.gz";
+          sha256 = "40a6fb008be7cc5a9c0142252bd7bddebd4b0407335de9e779d96b163a1abb42";
         };
       });
       comfy-aimdo = prev.buildPythonPackage {
         # Fresh package rather than an overridePythonAttrs swap: overriding the
         # source-built base kept its stale 0.4.13 name and its postPatch
         # (chmod +x scripts/*.sh), which fails on the wheel's unpacked tree.
-        # ComfyUI 0.4.15 ships only binary wheels on PyPI; the pinned abi3
+        # comfy-aimdo ships only binary wheels on PyPI; the pinned abi3
         # wheel installs directly and cp39-abi3 is forward-compatible with the
         # environment's cp314 interpreter. The import check is the load-bearing
         # contract that the wheel actually works on cp314.
         pname = "comfy-aimdo";
-        version = "0.4.15";
+        version = "0.5.5";
         format = "wheel";
         doCheck = false;
         pythonImportsCheck = [ "comfy_aimdo" ];
         src = pkgs.fetchurl {
-          url = "https://files.pythonhosted.org/packages/44/b2/5b60dd92c1368ac07fe07b33ff14b6eb6940203b803f3051d78a6ad5c297/comfy_aimdo-0.4.15-cp39-abi3-manylinux2010_x86_64.manylinux2014_x86_64.manylinux_2_12_x86_64.manylinux_2_17_x86_64.whl";
-          hash = "sha256-8GRxNWVrizsmTjxKDJn3gV4OyLZ6DPzk90o9EFMlDd0=";
+          url = "https://files.pythonhosted.org/packages/5d/18/807dd84d80469c9620928429911b9ff04c699e8b47204423a8804ac3f09d/comfy_aimdo-0.5.5-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl";
+          sha256 = "7a4dc76831273a2f837f67cf49c9e507e778b19aff17e6ef8a34a6e9694fd86a";
         };
       };
       # Meta's segment-anything: Impact-Pack imports sam_model_registry at
@@ -207,6 +205,7 @@ let
       comfyui-embedded-docs
       comfyui-frontend-package
       comfyui-workflow-templates
+      comfyui-workflow-templates-media-assets-02
       color-matcher
       diffusers
       dill
@@ -255,23 +254,19 @@ let
     ]
   );
 
-  # Reuse Nixpkgs' writable-runtime patch and native wrapper tool while pinning
-  # the first stable ComfyUI release that contains native SAM 3D Body
-  # (v0.33.4 still lacks comfy_extras/nodes_sam3d_body.py; native MiniMax
-  # Music 3 landed in 0.33.3). The SAM 3D Body node is built on the V3 io API,
-  # so the bump also re-qualifies every pinned node-pack contract against the
-  # new source — they fail closed if any import-level contract breaks.
+  # Stable v0.37.0 introduces native Qwen Image 2.1 (TextEncodeQwenImage21
+  # and QwenImage21Cache). Keep the prior writable-runtime patch and qualify
+  # the existing SAM 3D Body + H3 node closure before activating the service.
   comfyui = pkgs.comfyui.overrideAttrs (old: {
-    version = "0.34.0";
+    version = "0.37.0";
     src = pkgs.fetchFromGitHub {
       owner = "Comfy-Org";
       repo = "ComfyUI";
-      rev = "12d5279438bfefc058a269eae805ceab6047777f";
-      hash = "sha256-pW02gtrtWkoPabYe6Q/gicNRM65JRYsc7vtaY1m6H1M=";
+      rev = "73c9bad4d21e7addbe1d13bc92eee0f1431b017d";
+      hash = "sha256-hfpoQsu8xzKHCy2Qqw2BMGsorwizJEuhKXWjUUJzTHs=";
     };
-    # Nixpkgs' patch targets an older cli_args.py. v0.34.0 resolves the
-    # effective user database path upstream, so only the writable XDG base and
-    # custom-node directory creation remain necessary.
+    # Nixpkgs' patch targets an older cli_args.py; the workstation patch
+    # supplies the writable XDG base and custom-node directory.
     patches = [ ./patches/comfyui-0.34.0-writable-runtime-paths.patch ];
     installPhase = ''
       runHook preInstall
@@ -291,6 +286,8 @@ let
       # Load-bearing: the SAM 3D Body workflow exists because this pin carries
       # the node; fail closed if the rev ever drifts below it.
       test -f "$out/share/comfyui/comfy_extras/nodes_sam3d_body.py"
+      grep -Rql 'TextEncodeQwenImage21' "$out/share/comfyui/comfy_extras"
+      grep -Rql 'QwenImage21Cache' "$out/share/comfyui/comfy_extras"
       runHook postInstallCheck
     '';
     passthru = old.passthru // {
@@ -298,7 +295,7 @@ let
       pythonEnv = comfyPythonEnv;
     };
     meta = old.meta // {
-      changelog = "https://github.com/Comfy-Org/ComfyUI/releases/tag/v0.34.0";
+      changelog = "https://github.com/Comfy-Org/ComfyUI/releases/tag/v0.37.0";
     };
   });
 
@@ -417,6 +414,14 @@ let
       modelTools
     ];
     text = builtins.readFile ../../scripts/comfyui/download-minimax-h3-dual-sampling-models.sh;
+  };
+
+  downloadQwenImage21Bf16 = pkgs.writeShellApplication {
+    name = "download-qwen-image-2.1-bf16";
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux modelTools ];
+    text = ''
+      export QWEN_IMAGE_21_MANIFEST=${../../scripts/comfyui/qwen-image-2.1-bf16.manifest}
+    '' + builtins.readFile ../../scripts/comfyui/download-qwen-image-2.1-bf16.sh;
   };
 
   # Preview/upscale model tools associated with the Muse Director stack:
@@ -3286,6 +3291,33 @@ let
           --output-dir "$out/workflows"
       '';
 
+  # Official Qwen Image 2.1 subgraphs provide the execution contract. Krea
+  # RAW/2K/identity graphs contribute only creative prompts; Krea-specific
+  # LoRAs, encoder, sampler and enhancer do not cross model-family seams.
+  qwenImage21KreaWorkflows =
+    pkgs.runCommand "qwen-image-2-1-bf16-krea-adaptations"
+      { nativeBuildInputs = [ pkgs.python3 pkgs.jq pkgs.coreutils ]; }
+      ''
+        python3 ${../../scripts/comfyui/build-qwen-image-2.1-krea-workflows.py} \
+          --t2i-template ${../../comfyui/workflows/qwen-image-2.1-official/image_qwen_image_2_1_t2i.json} \
+          --edit-template ${../../comfyui/workflows/qwen-image-2.1-official/image_qwen_image_2_1_image_edit.json} \
+          --krea-raw "${kreaMaxQualityWorkflows}/workflows/01 Krea 2 RAW BF16 - Maximum Quality Text to Image.json" \
+          --krea-2k "${pixaromaEp24}/workflows/2d. Krea 2 Text to Image - 2K.json" \
+          --krea-identity "${kreaMaxQualityWorkflows}/workflows/02 Krea 2 RAW BF16 - Maximum Quality Single-View Identity.json" \
+          --output-dir "$out/workflows"
+        test "$(find "$out/workflows" -name '*.json' | wc -l)" -eq 3
+        jq -s -e '
+          length == 3
+          and all(.[];
+            .extra.qwen_image_2_1_model_revision == "5dc5850eb514a3685f6a03a2641728a8f7549c69"
+            and ([.definitions.subgraphs[].nodes[] | select(.type == "UNETLoader") | .widgets_values[0]] == ["qwen_image_2.1_bf16.safetensors"])
+            and ([.definitions.subgraphs[].nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]] == ["qwen3vl_8b_bf16.safetensors"])
+            and ([.definitions.subgraphs[].nodes[] | select(.type == "VAELoader") | .widgets_values[0]] == ["qwen_image_2.1_vae_bf16.safetensors"])
+            and ([.definitions.subgraphs[].nodes[] | select(.type == "KSampler") | .widgets_values[2:6]] == [[50,1,"euler","simple"]])
+            and ([.nodes[] | select(.type == "ComfyUI-Krea2T-Enhancer" or .type == "PixaromaLoraLoader")] | length) == 0)
+        ' "$out"/workflows/*.json >/dev/null
+      '';
+
   # The AI Brief HJteqahyEKM Dual Sampling topology, built from the exact
   # downloaded workflow (SHA-256 asserted by the builder) and adapted to the
   # pinned workstation closure. BF16 is the default; Singularity's unpruned
@@ -3827,6 +3859,7 @@ let
     klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
     character_dir="$user_workflows/krea2-character-sheet-bf16"
     krea_max_dir="$user_workflows/krea2-max-quality-bf16"
+    qwen21_dir="$user_workflows/qwen-image-2.1-bf16-krea-adaptations"
     contest_dir="$user_workflows/contest-production-bf16"
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     music3_dir="$user_workflows/minimax-music3-full-quality"
@@ -3857,6 +3890,7 @@ let
     klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
     character_staging="$user_workflows/.krea2-character-sheet-bf16.new"
     krea_max_staging="$user_workflows/.krea2-max-quality-bf16.new"
+    qwen21_staging="$user_workflows/.qwen-image-2.1-bf16-krea-adaptations.new"
     contest_staging="$user_workflows/.contest-production-bf16.new"
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     music3_staging="$user_workflows/.minimax-music3-full-quality.new"
@@ -3883,7 +3917,7 @@ let
     blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$krea_max_staging" "$contest_staging" \
+      "$character_staging" "$krea_max_staging" "$qwen21_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
@@ -3894,7 +3928,7 @@ let
       "$h3_motion_context_resize_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$krea_max_staging" "$contest_staging" \
+      "$character_staging" "$krea_max_staging" "$qwen21_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
@@ -3927,6 +3961,9 @@ let
     done
     for source in ${kreaMaxQualityWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$krea_max_staging/$(basename "$source")"
+    done
+    for source in ${qwenImage21KreaWorkflows}/workflows/*.json; do
+      install -m 0600 "$source" "$qwen21_staging/$(basename "$source")"
     done
     for source in ${contestProductionWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$contest_staging/$(basename "$source")"
@@ -4004,6 +4041,7 @@ let
     verify_versioned_workflow_install "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     verify_versioned_workflow_install "$h3_singularity_staging" "$h3_singularity_dir"
     verify_versioned_workflow_install "$h3_dual_staging" "$h3_dual_dir"
+    verify_versioned_workflow_install "$qwen21_staging" "$qwen21_dir"
     verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
@@ -4018,6 +4056,7 @@ let
     mv "$klein_staging" "$klein_dir"
     mv "$character_staging" "$character_dir"
     mv "$krea_max_staging" "$krea_max_dir"
+    install_versioned_workflow_dir "$qwen21_staging" "$qwen21_dir"
     mv "$contest_staging" "$contest_dir"
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$music3_staging" "$music3_dir"
@@ -4066,6 +4105,7 @@ in
     downloadMinimaxH3VdnStage
     downloadMinimaxH3RealismPeopleLora
     downloadMinimaxH3DualSamplingModels
+    downloadQwenImage21Bf16
     downloadMinimaxH3Tae
     downloadTinyPreviewVae
     downloadMuseWhisperMedium
