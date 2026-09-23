@@ -4110,7 +4110,8 @@ let
   # /var/lib/comfyui/user/comfyui.db with the 0.37.0 process.
   installQwenImage21Workflows = pkgs.writeShellScript "install-qwen-image-21-workflows" ''
     set -euo pipefail
-    target=/var/lib/comfyui-qwen21/user/default/workflows/qwen-image-2.1-bf16-krea-adaptations
+    target=/var/lib/comfyui-qwen21/user/default/workflows/qwen-image-2.1-bf16-krea-adaptations-v1.1
+    legacy=/var/lib/comfyui-qwen21/user/default/workflows/qwen-image-2.1-bf16-krea-adaptations
     staging="$target.new"
     ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$target")"
     if [ -d "$target" ]; then
@@ -4120,6 +4121,7 @@ let
           exit 1
         }
       done
+      ${pkgs.coreutils}/bin/rm -rf "$legacy"
       exit 0
     fi
     ${pkgs.coreutils}/bin/rm -rf "$staging"
@@ -4128,6 +4130,7 @@ let
       ${pkgs.coreutils}/bin/install -m 0600 "$source" "$staging/$(basename "$source")"
     done
     ${pkgs.coreutils}/bin/mv "$staging" "$target"
+    ${pkgs.coreutils}/bin/rm -rf "$legacy"
   '';
 
   extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {

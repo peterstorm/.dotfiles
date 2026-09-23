@@ -30,7 +30,7 @@ class QwenImage21WorkflowsTest(unittest.TestCase):
             self.assertEqual(selectors, {"UNETLoader": module.MODEL,
                                          "CLIPLoader": module.ENCODER, "VAELoader": module.VAE})
             outer = module.node(graph, 459)["widgets_values"]
-            self.assertIn("Krea prompt", outer)
+            self.assertTrue(any("Krea prompt" in str(value) for value in outer))
             self.assertIn(module.MODEL, outer)
             self.assertIn(module.ENCODER, outer)
             self.assertNotIn("qwen3vl_8b_int8_convrot.safetensors", outer)
@@ -72,9 +72,15 @@ class QwenImage21WorkflowsTest(unittest.TestCase):
             graphs = [json.loads(path.read_text()) for path in files]
             for graph, prompt in zip(graphs, ("Krea RAW composition", "Krea 2K composition",
                                               "Krea identity edit")):
-                self.assertIn(prompt, module.node(graph, 459)["widgets_values"])
+                self.assertTrue(any(prompt in str(value) for value in
+                                    module.node(graph, 459)["widgets_values"]))
                 self.assertNotIn("ComfyUI-Krea2T-Enhancer", json.dumps(graph))
             self.assertEqual(module.node(graphs[1], 13)["widgets_values"][1], 4)
+            self.assertEqual([entry["id"] for entry in graphs[2]["nodes"]
+                              if entry["type"] == "LoadImage"], [470])
+            self.assertIsNone(next(entry["link"] for entry in module.node(graphs[2], 459)["inputs"]
+                                   if entry["name"] == "images.image_2"))
+            self.assertIn("<image1>", module.node(graphs[2], 459)["widgets_values"][1])
 
 
 if __name__ == "__main__":

@@ -33,7 +33,7 @@ completion receipt **last**. It does not load weights or allocate GPU memory.
 ## Workflows
 
 On the **isolated ComfyUI 0.37 instance** (loopback port `8189`), open
-`User workflows → qwen-image-2.1-bf16-krea-adaptations/`:
+`User workflows → qwen-image-2.1-bf16-krea-adaptations-v1.1/`:
 
 1. **Krea RAW composition** — copies the creative composition/prompt from the
    existing pinned Krea 2 RAW maximum-quality T2I profile; official Qwen 2.1
@@ -43,7 +43,8 @@ On the **isolated ComfyUI 0.37 instance** (loopback port `8189`), open
    This can be substantially more memory-intensive; qualify at 1 MP first.
 3. **Krea single-view identity edit** — copies the Krea RAW single-view
    preservation instruction into the official Qwen 2.1 image-edit subgraph.
-   Select your own reference images in LoadImage nodes before running. Krea's
+   The original second demo-image input is disconnected; select your **one**
+   local reference in the LoadImage node before running. Krea's
    identity-edit LoRA and grounded-encode nodes are **not** compatible with
    Qwen's model family and are deliberately omitted.
 

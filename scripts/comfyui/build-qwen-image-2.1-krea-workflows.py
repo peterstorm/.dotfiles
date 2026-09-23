@@ -61,7 +61,8 @@ def adapt(template, *, prompt, resolution, prefix, edit=False):
 
     outer = node(graph, 459)
     values = outer["widgets_values"]
-    values[0 if not edit else 1] = prompt
+    values[0 if not edit else 1] = ("Using <image1> as the only visual reference. " + prompt
+                                     if edit else prompt)
     # Model, encoder, and VAE are also exposed as subgraph widgets: changing
     # only the inner loader would leave the outer selection on the INT8 files.
     for filename, replacement in (("qwen_image_2.1_int8_convrot.safetensors", MODEL),
@@ -83,11 +84,17 @@ def adapt(template, *, prompt, resolution, prefix, edit=False):
                 "prohibits commercial use without a separate commercial license."
             ]
     if edit:
-        # Original template demo images were not shipped. Require explicit
-        # user-supplied files before execution instead of silently using demos.
-        for entry in graph["nodes"]:
-            if entry["type"] == "LoadImage":
-                entry["widgets_values"][0] = "qwen-image-2.1/select-local-reference.png"
+        # The Krea identity profile is single-reference: remove the second
+        # clothing-demo loader and its edge, not merely its filename. The
+        # official subgraph input is optional and stays unlinked.
+        graph["nodes"] = [entry for entry in graph["nodes"] if entry["id"] != 475]
+        graph["links"] = [edge for edge in graph["links"] if edge[0] != 728]
+        second = [entry for entry in node(graph, 459)["inputs"]
+                  if entry["name"] == "images.image_2"]
+        if len(second) != 1 or second[0]["link"] != 728:
+            raise ValueError("official edit image-2 link changed")
+        second[0]["link"] = None
+        node(graph, 470)["widgets_values"][0] = "qwen-image-2.1/select-local-reference.png"
     graph["extra"]["qwen_image_2_1_source_revision"] = TEMPLATE_REVISION
     graph["extra"]["qwen_image_2_1_model_revision"] = REVISION
     return graph
