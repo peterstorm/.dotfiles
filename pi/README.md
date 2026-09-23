@@ -11,7 +11,8 @@ pi/
 │   ├── creative-project-scope/ # Trusted ~/dev/creative subtree resources
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
-│   └── global-instructions.ts  # Standalone extension
+│   ├── global-instructions.ts  # Standalone extension
+│   └── reload-runtime.ts       # LLM-callable parent-session reload
 ├── prompts/          # Prompt templates (→ ~/.pi/agent/prompts/)
 ├── skills/           # Global skills this repo owns (→ linked per skill dir)
 │   └── impeccable/   # Impeccable design skill, pi-flavored v4.0.4 release
@@ -626,22 +627,17 @@ For a generic agent this repo owns:
 
 ## Adding a New Extension
 
-1. Create a directory: `pi/extensions/my-extension/`
-2. Add an `index.ts` that exports a default function:
-   ```typescript
-   import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-   export default function (pi: ExtensionAPI) {
-     // Register tools, hooks, commands
-   }
-   ```
-3. Run `home-manager switch` to symlink it
+Create `pi/extensions/my-extension.ts` or `pi/extensions/my-extension/index.ts`
+with a default `ExtensionAPI` factory. The Nix Home Manager module already
+symlinks the whole directory into `~/.pi/agent/extensions`, so adding or
+editing a file needs **no Home Manager rebuild**. Run `/reload` once in each
+active Pi session to load the new code; new sessions discover it at startup.
 
-## Editing Extensions
+`reload-runtime.ts` registers the LLM-callable `reload_runtime` tool. It queues
+`/reload-runtime` as a follow-up command, which calls Pi's `ctx.reload()` after
+the current turn settles. It reloads the **parent** Pi session, not a child
+subagent; the first `/reload` after installing the extension must be entered by
+the user to make the tool available.
 
-Files in `pi/extensions/` are real source files in your dotfiles repo. Edit directly:
-
-```bash
-$EDITOR ~/.dotfiles/pi/extensions/subagent/agents.ts
-```
-
-Changes take effect immediately — no rebuild needed.
+Run `./pi/verify.sh --tests` after extension changes (including the reload
+handoff test).

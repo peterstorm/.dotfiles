@@ -44,6 +44,7 @@ if [ "${1:-}" = "--tests" ]; then
     "$here/extensions/loom-rules-gate/shell.test.ts" \
     "$here/extensions/creative-project-scope/index.test.ts" \
     "$here/root-extensions.test.ts" \
+    "$here/tests/reload-runtime.test.ts" \
     "$here/creative-project-skills.test.ts" \
     "$@"
   exit $?
