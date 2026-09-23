@@ -306,6 +306,26 @@ let
     };
   });
 
+  # Qwen's 0.37.0 runtime must not migrate the existing 0.34.0 asset catalog:
+  # migration 0007 discards manual metadata from 5,552 existing assets.
+  legacyComfyui = comfyui.overrideAttrs (_old: {
+    version = "0.34.0";
+    src = pkgs.fetchFromGitHub {
+      owner = "Comfy-Org";
+      repo = "ComfyUI";
+      rev = "12d5279438bfefc058a269eae805ceab6047777f";
+      hash = "sha256-pW02gtrtWkoPabYe6Q/gicNRM65JRYsc7vtaY1m6H1M=";
+    };
+    installCheckPhase = ''
+      runHook preInstallCheck
+      "$out/bin/comfyui" --help
+      export XDG_DATA_HOME="$(mktemp -d)"
+      "$out/bin/comfyui" --cpu --quick-test-for-ci
+      test -f "$out/share/comfyui/comfy_extras/nodes_sam3d_body.py"
+      runHook postInstallCheck
+    '';
+  });
+
   modelTools = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.hf-xet
     pythonPackages.huggingface-hub
@@ -3866,7 +3886,6 @@ let
     klein_dir="$user_workflows/krea2-flux2-klein9b-bf16"
     character_dir="$user_workflows/krea2-character-sheet-bf16"
     krea_max_dir="$user_workflows/krea2-max-quality-bf16"
-    qwen21_dir="$user_workflows/qwen-image-2.1-bf16-krea-adaptations"
     contest_dir="$user_workflows/contest-production-bf16"
     h3_production_dir="$user_workflows/minimax-h3-production-bf16"
     music3_dir="$user_workflows/minimax-music3-full-quality"
@@ -3897,7 +3916,6 @@ let
     klein_staging="$user_workflows/.krea2-flux2-klein9b-bf16.new"
     character_staging="$user_workflows/.krea2-character-sheet-bf16.new"
     krea_max_staging="$user_workflows/.krea2-max-quality-bf16.new"
-    qwen21_staging="$user_workflows/.qwen-image-2.1-bf16-krea-adaptations.new"
     contest_staging="$user_workflows/.contest-production-bf16.new"
     h3_production_staging="$user_workflows/.minimax-h3-production-bf16.new"
     music3_staging="$user_workflows/.minimax-music3-full-quality.new"
@@ -3924,7 +3942,7 @@ let
     blender_input_dir="$input_dir/h3-blender-previz"
     rm -rf \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$krea_max_staging" "$qwen21_staging" "$contest_staging" \
+      "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
@@ -3935,7 +3953,7 @@ let
       "$h3_motion_context_resize_staging"
     install -d -m 0700 \
       "$ep24_staging" "$ep29_staging" "$ep30_staging" "$klein_staging" \
-      "$character_staging" "$krea_max_staging" "$qwen21_staging" "$contest_staging" \
+      "$character_staging" "$krea_max_staging" "$contest_staging" \
       "$h3_production_staging" "$music3_staging" "$upscaler_staging" \
       "$h3_safe_upscaler_staging" "$director_staging" "$director_v12_staging" \
       "$h3_derope_staging" "$h3_derope_turbo_staging" "$h3_turbo_staging" \
@@ -3968,9 +3986,6 @@ let
     done
     for source in ${kreaMaxQualityWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$krea_max_staging/$(basename "$source")"
-    done
-    for source in ${qwenImage21KreaWorkflows}/workflows/*.json; do
-      install -m 0600 "$source" "$qwen21_staging/$(basename "$source")"
     done
     for source in ${contestProductionWorkflows}/workflows/*.json; do
       install -m 0600 "$source" "$contest_staging/$(basename "$source")"
@@ -4048,7 +4063,6 @@ let
     verify_versioned_workflow_install "$h3_derope_turbo_staging" "$h3_derope_turbo_dir"
     verify_versioned_workflow_install "$h3_singularity_staging" "$h3_singularity_dir"
     verify_versioned_workflow_install "$h3_dual_staging" "$h3_dual_dir"
-    verify_versioned_workflow_install "$qwen21_staging" "$qwen21_dir"
     verify_versioned_workflow_install "$sam3d_staging" "$sam3d_dir"
     rm -rf \
       "$ep24_dir" "$ep29_dir" "$ep30_dir" "$klein_dir" "$character_dir" \
@@ -4063,7 +4077,6 @@ let
     mv "$klein_staging" "$klein_dir"
     mv "$character_staging" "$character_dir"
     mv "$krea_max_staging" "$krea_max_dir"
-    install_versioned_workflow_dir "$qwen21_staging" "$qwen21_dir"
     mv "$contest_staging" "$contest_dir"
     mv "$h3_production_staging" "$h3_production_dir"
     mv "$music3_staging" "$music3_dir"
@@ -4093,6 +4106,30 @@ let
     install_versioned_workflow_dir "$h3_motion_context_resize_staging" "$h3_motion_context_resize_dir"
   '';
 
+  # Install Qwen workflows in a separate state tree. Never open the existing
+  # /var/lib/comfyui/user/comfyui.db with the 0.37.0 process.
+  installQwenImage21Workflows = pkgs.writeShellScript "install-qwen-image-21-workflows" ''
+    set -euo pipefail
+    target=/var/lib/comfyui-qwen21/user/default/workflows/qwen-image-2.1-bf16-krea-adaptations
+    staging="$target.new"
+    ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$target")"
+    if [ -d "$target" ]; then
+      for source in ${qwenImage21KreaWorkflows}/workflows/*.json; do
+        ${pkgs.diffutils}/bin/cmp -s "$source" "$target/$(basename "$source")" || {
+          echo "Qwen workflow drift: $target/$(basename "$source")" >&2
+          exit 1
+        }
+      done
+      exit 0
+    fi
+    ${pkgs.coreutils}/bin/rm -rf "$staging"
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$staging"
+    for source in ${qwenImage21KreaWorkflows}/workflows/*.json; do
+      ${pkgs.coreutils}/bin/install -m 0600 "$source" "$staging/$(basename "$source")"
+    done
+    ${pkgs.coreutils}/bin/mv "$staging" "$target"
+  '';
+
   extraPaths = (pkgs.formats.yaml { }).generate "comfyui-workstation-paths.yaml" {
     workstation_models = {
       base_path = "/models/comfyui";
@@ -4103,7 +4140,7 @@ let
 in
 {
   environment.systemPackages = [
-    comfyui
+    legacyComfyui
     creativeModelPhase
     h3ModelPhase
     downloadImageUpscalerModels
@@ -4183,7 +4220,7 @@ in
         installCreativeWorkflows
       ];
       ExecStart = ''
-        ${comfyui}/bin/comfyui \
+        ${legacyComfyui}/bin/comfyui \
           --listen 127.0.0.1 \
           --port 8188 \
           --disable-auto-launch \
@@ -4227,7 +4264,75 @@ in
     };
   };
 
-  # Intentionally no firewall rule for 8188 and no ComfyUI-Manager package.
+  systemd.services.comfyui-qwen21 = {
+    description = "Isolated ComfyUI 0.37 Qwen Image 2.1 research workstation";
+    # Intentionally not boot-started. GLM owns both GPUs until an explicit
+    # workload cutover. The old 0.34 service and its DB remain untouched.
+    wants = [ "network-online.target" "nvidia-power-limit.service" ];
+    after = [ "network-online.target" "nvidia-persistenced.service" "nvidia-power-limit.service" ];
+    environment = {
+      HOME = "/home/peterstorm";
+      XDG_DATA_HOME = "/var/lib/comfyui-qwen21";
+      XDG_CACHE_HOME = "/var/cache/comfyui-qwen21";
+      HF_HOME = "/var/cache/comfyui-qwen21/huggingface";
+      CUDA_DEVICE_ORDER = "PCI_BUS_ID";
+      CUDA_VISIBLE_DEVICES = "1";
+      LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+      PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True";
+    };
+    serviceConfig = {
+      Type = "simple";
+      User = "peterstorm";
+      Group = "users";
+      SupplementaryGroups = [ "video" "render" ];
+      WorkingDirectory = "/var/lib/comfyui-qwen21";
+      StateDirectory = "comfyui-qwen21";
+      StateDirectoryMode = "0750";
+      CacheDirectory = "comfyui-qwen21";
+      CacheDirectoryMode = "0750";
+      UMask = "0077";
+      ExecStartPre = [
+        "${downloadQwenImage21Bf16}/bin/download-qwen-image-2.1-bf16 --verify-only"
+        installQwenImage21Workflows
+      ];
+      ExecStart = ''
+        ${comfyui}/bin/comfyui \
+          --listen 127.0.0.1 \
+          --port 8189 \
+          --disable-auto-launch \
+          --base-directory /var/lib/comfyui-qwen21 \
+          --database-url sqlite:////var/lib/comfyui-qwen21/user/comfyui.db \
+          --enable-assets \
+          --extra-model-paths-config ${extraPaths} \
+          --reserve-vram 8 \
+          --preview-method auto \
+          --max-upload-size 2048
+      '';
+      Restart = "on-failure";
+      RestartSec = "5s";
+      TimeoutStopSec = "30s";
+      KillSignal = "SIGINT";
+      NoNewPrivileges = true;
+      CapabilityBoundingSet = "";
+      LockPersonality = true;
+      PrivateTmp = true;
+      ProtectClock = true;
+      ProtectControlGroups = true;
+      ProtectHome = "read-only";
+      ProtectHostname = true;
+      ProtectKernelLogs = true;
+      ProtectKernelModules = true;
+      ProtectKernelTunables = true;
+      ProtectSystem = "strict";
+      ReadOnlyPaths = [ "/models/comfyui" ];
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      SystemCallArchitectures = "native";
+    };
+  };
+
+  # Intentionally no firewall rule for 8188 or 8189 and no ComfyUI-Manager package.
   # Core covers the native workflows; the three third-party Pixaroma packs
   # above are immutable source pins required by the imported Episode 29/30 graphs.
 }

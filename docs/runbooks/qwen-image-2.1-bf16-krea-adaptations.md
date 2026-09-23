@@ -32,6 +32,7 @@ completion receipt **last**. It does not load weights or allocate GPU memory.
 
 ## Workflows
 
+On the **isolated ComfyUI 0.37 instance** (loopback port `8189`), open
 `User workflows → qwen-image-2.1-bf16-krea-adaptations/`:
 
 1. **Krea RAW composition** — copies the creative composition/prompt from the
@@ -53,7 +54,17 @@ the Nix build. The source templates supply Qwen-specific conditioning, VAE,
 latent and sampling paths. Qwen's prompt enhancer artifacts are optional and
 only published in INT8; they are omitted rather than lowering this BF16 stack.
 
-The running `glm53-flash-spark-tp2-v14` deployment stays active. ComfyUI is not
-started and no image generation is run. Only execute after an explicit,
-transactional GPU workload switch, then inspect the first 1 MP/identity results
-before attempting the native-2K variant.
+**Database isolation is essential:** upstream ComfyUI 0.37 migration `0007`
+rebuilds the existing asset catalog and discards tags, custom metadata, and
+renames. The old `comfyui.service` stays pinned to 0.34 on loopback `8188` with
+its existing `/var/lib/comfyui/user/comfyui.db` intact. The new inactive
+`comfyui-qwen21.service` owns `/var/lib/comfyui-qwen21/user/comfyui.db` and
+port `8189`; it has no `wantedBy`. Its prestart verifies the full local BF16
+closure offline (no runtime model downloads) and installs only its own versioned
+workflows. Never point this service at the old database or start either ComfyUI
+service beside the GLM container.
+
+The running `glm53-flash-spark-tp2-v14` deployment stays active. Neither
+ComfyUI service is started and no image generation is run. Only execute after
+an explicit, transactional GPU workload switch, then inspect the first 1 MP
+results before attempting the native-2K variant.

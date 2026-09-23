@@ -31,6 +31,13 @@ verify_all() {
   done <"$manifest"
 }
 
+if [[ ${1:-} == --verify-only ]]; then
+  [[ $# == 1 && -f "$marker" ]] && grep -Fxq "$repo@$revision" "$marker" \
+    && verify_all "$root" || { echo 'Qwen 2.1 BF16 closure is not ready' >&2; exit 1; }
+  echo "QWEN_IMAGE_21_BF16_READY: $repo@$revision"
+  exit 0
+fi
+[[ $# == 0 ]] || { echo 'usage: download-qwen-image-2.1-bf16 [--verify-only]' >&2; exit 64; }
 mkdir -p "$root"
 exec 9>"$root/.qwen-image-2.1-bf16.lock"
 flock 9
