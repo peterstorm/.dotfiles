@@ -4292,6 +4292,16 @@ in
       CacheDirectoryMode = "0750";
       UMask = "0077";
       ExecStartPre = [
+        (pkgs.writeShellScript "guard-qwen21-gpu-ownership" ''
+          set -euo pipefail
+          containers=$(${pkgs.docker}/bin/docker ps --format '{{.Names}}')
+          if ${pkgs.coreutils}/bin/printf '%s\n' "$containers" \
+            | ${pkgs.gnugrep}/bin/grep -Eq '^(glm53-|deepseek-|qwen38-)' \
+            || ${pkgs.systemd}/bin/systemctl is-active --quiet comfyui.service; then
+            echo 'another GPU workload still owns the workstation; refuse ComfyUI start' >&2
+            exit 1
+          fi
+        '')
         "${downloadQwenImage21Bf16}/bin/download-qwen-image-2.1-bf16 --verify-only"
         installQwenImage21Workflows
       ];
