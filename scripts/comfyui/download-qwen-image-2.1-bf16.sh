@@ -32,8 +32,12 @@ verify_all() {
 }
 
 if [[ ${1:-} == --verify-only ]]; then
-  [[ $# == 1 && -f "$marker" ]] && grep -Fxq "$repo@$revision" "$marker" \
-    && verify_all "$root" || { echo 'Qwen 2.1 BF16 closure is not ready' >&2; exit 1; }
+  if [[ $# != 1 || ! -f "$marker" ]] \
+      || ! grep -Fxq "$repo@$revision" "$marker" \
+      || ! verify_all "$root"; then
+    echo 'Qwen 2.1 BF16 closure is not ready' >&2
+    exit 1
+  fi
   echo "QWEN_IMAGE_21_BF16_READY: $repo@$revision"
   exit 0
 fi
