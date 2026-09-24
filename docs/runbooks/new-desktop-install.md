@@ -2293,7 +2293,7 @@ headroom numbers (15.27 GiB for KV at 0.975) come from headless boxes.
 | Entry | Default unit | What you get |
 |---|---|---|
 | `NixOS` (default) | `multi-user.target` | Text login **on the attached monitor**, GPUs untouched |
-| `NixOS (graphical)` | `graphical.target` | Workstation — SDDM, XMonad, both monitors |
+| `NixOS (graphical)` | `graphical.target` | Workstation — SDDM, XMonad, both monitors, [gaming tools](gaming-desktop.md) |
 
 > "Headless" does not mean "no screen". `getty` still runs, so a monitor plugged into
 > either card shows a normal text login. It means *no X server holding the GPUs*. The
@@ -2303,9 +2303,11 @@ headroom numbers (15.27 GiB for KV at 0.975) come from headless boxes.
 (The graphical entry title comes from `systemd-boot-builder.py`, which formats
 specialisations as `"{distro} ({specialisation})"`.)
 
-Everything else is shared: same kernel, driver, ZFS pool, and generation. The base profile
-also disables NVIDIA DRM modesetting so the firmware framebuffer keeps the console on its
-original connector; the graphical specialisation turns it back on:
+The gaming tools (Steam, Proton GE, Lutris, LUG Helper) and Star Citizen's VM map
+limit live only in the graphical specialisation. Kernel, driver, ZFS pool, and
+generation are shared. The base profile also disables NVIDIA DRM modesetting
+so the firmware framebuffer keeps the console on its original connector; the
+graphical specialisation turns it back on:
 
 ```nix
 systemd.defaultUnit = lib.mkForce "multi-user.target";
@@ -2344,7 +2346,9 @@ Building and switching:
 
 `system-apply.sh` forwards its arguments to `nixos-rebuild`, and `nixos-rebuild` builds
 every specialisation on any switch. Selecting the graphical specialisation for a live
-switch does not change the next boot's default base entry.
+switch activates the gaming packages too; `systemctl isolate graphical.target` alone
+starts XMonad but does **not** switch packages or sysctls. A live switch does not change
+the next boot's default base entry.
 
 Switching specialisations live does not stop an already-running X server; it only changes
 the active closure and target defaults. To free the VRAM in the current session, use

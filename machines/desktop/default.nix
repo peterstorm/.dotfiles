@@ -189,6 +189,10 @@ in
   hardware.nvidia.modesetting.enable = lib.mkForce false;
 
   specialisation.graphical.configuration = {
+    # Gaming lives only in the graphical closure; the default inference profile
+    # and the homelab do not install Steam or its services.
+    imports = [ ../../roles/gaming ];
+
     # Specialisations inherit the base definitions, including their mkForce
     # priority (50). Priority 40 is intentionally stronger so this opt-in profile
     # can reverse both headless defaults without creating equal-priority conflicts.
