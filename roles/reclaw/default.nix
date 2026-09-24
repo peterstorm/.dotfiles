@@ -121,7 +121,12 @@ in
 
       environment = {
         HOME = "/home/peterstorm";
-        PATH = lib.mkForce "/home/peterstorm/.nix-profile/bin:/nix/profile/bin:/home/peterstorm/.local/state/nix/profile/bin:/etc/profiles/per-user/peterstorm/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin:/run/wrappers/bin";
+        # wrappers BEFORE current-system/sw: NixOS ships the raw (non-setuid)
+        # sudo binary in systemPackages (sudo.nix:319), so with the previous
+        # ordering `sudo` resolved to the store copy and failed with
+        # "must be owned by uid 0 and have the setuid bit set" in reclaw-hosted
+        # sessions. The setuid wrapper only lives in /run/wrappers/bin.
+        PATH = lib.mkForce "/home/peterstorm/.nix-profile/bin:/nix/profile/bin:/home/peterstorm/.local/state/nix/profile/bin:/etc/profiles/per-user/peterstorm/bin:/nix/var/nix/profiles/default/bin:/run/wrappers/bin:/run/current-system/sw/bin";
         REDIS_HOST = "127.0.0.1";
         REDIS_PORT = "6381";
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
