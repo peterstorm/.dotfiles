@@ -1,8 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-// Tools cannot access ExtensionCommandContext. Queue a command after the current
-// turn so reload runs in the parent session, never inside an active tool call.
+// Tools cannot access ExtensionCommandContext. The pinned Pi package's
+// executeCommandAfterIdle option waits for the parent turn to settle and
+// dispatches this extension command without sending slash text to the model.
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("reload-runtime", {
 		description: "Reload extensions, skills, prompts, themes, and context files",
@@ -18,7 +19,7 @@ export default function (pi: ExtensionAPI) {
 		description: "Reload extensions, skills, prompts, themes, and context files",
 		parameters: Type.Object({}),
 		async execute() {
-			pi.sendUserMessage("/reload-runtime", { deliverAs: "followUp" });
+			pi.sendUserMessage("/reload-runtime", { deliverAs: "followUp", executeCommandAfterIdle: true });
 			return {
 				content: [{ type: "text", text: "Queued /reload-runtime as a follow-up command." }],
 				details: {},

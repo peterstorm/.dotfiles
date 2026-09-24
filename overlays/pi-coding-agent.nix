@@ -21,6 +21,11 @@ final: prev:
       # the user had queued a message. autoContinue resumes the turn from the
       # compaction boundary; disable with {"compaction": {"autoContinue": false}}.
       ./patches/pi-autocontinue-after-compact.patch
+      # Pi 0.83 sendUserMessage intentionally bypasses extension commands; the
+      # documented reload tool otherwise feeds /reload-runtime to the model.
+      # Opt-in deferred command dispatch waits for the current agent run to
+      # settle, then invokes only a registered extension command.
+      ./patches/pi-extension-command-after-idle.patch
     ];
 
     postPatch = ''

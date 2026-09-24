@@ -1,0 +1,48 @@
+diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -1134,6 +1134,18 @@
+             if (images.length === 0)
+                 images = undefined;
+         }
++        // Extension tools have no command context. Let an opt-in caller dispatch
++        // exactly an extension command after the current agent run settles;
++        // never turn the slash text into a user/model message. Ordinary
++        // sendUserMessage semantics are unchanged.
++        if (options?.executeCommandAfterIdle === true) {
++            if (typeof content !== "string" || !text.startsWith("/") || options.deliverAs !== "followUp")
++                throw new Error("deferred extension command requires slash text and followUp delivery");
++            await this.waitForIdle();
++            if (!(await this._tryExecuteExtensionCommand(text)))
++                throw new Error(`unknown deferred extension command: ${text}`);
++            return;
++        }
+         // Use prompt() with expandPromptTemplates: false to skip command handling and template expansion
+         await this.prompt(text, {
+             expandPromptTemplates: false,
+diff -ruN a/dist/core/agent-session.d.ts b/dist/core/agent-session.d.ts
+--- a/dist/core/agent-session.d.ts
++++ b/dist/core/agent-session.d.ts
+@@ -441,5 +441,6 @@
+     sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
+         deliverAs?: "steer" | "followUp";
++        executeCommandAfterIdle?: boolean;
+     }): Promise<void>;
+     /**
+      * Clear all queued messages and return them.
+diff -ruN a/dist/core/extensions/types.d.ts b/dist/core/extensions/types.d.ts
+--- a/dist/core/extensions/types.d.ts
++++ b/dist/core/extensions/types.d.ts
+@@ -302,5 +302,6 @@
+     sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
+         deliverAs?: "steer" | "followUp";
++        executeCommandAfterIdle?: boolean;
+     }): Promise<void>;
+ }
+ /** Rendering options for tool results */
+@@ -919,5 +920,6 @@
+     sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
+         deliverAs?: "steer" | "followUp";
++        executeCommandAfterIdle?: boolean;
+     }): void;
+     /** Append a custom entry to the session for state persistence (not sent to LLM). */

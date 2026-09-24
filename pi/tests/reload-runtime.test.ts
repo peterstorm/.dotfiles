@@ -6,7 +6,7 @@ describe("reload runtime extension", () => {
 	it("queues the command as a follow-up, then reloads the parent session", async () => {
 		let command: Parameters<ExtensionAPI["registerCommand"]>[1] | undefined;
 		let tool: Parameters<ExtensionAPI["registerTool"]>[0] | undefined;
-		const messages: Array<{ text: string; deliverAs: string | undefined }> = [];
+		const messages: Array<{ text: string; deliverAs: string | undefined; executeCommandAfterIdle: boolean | undefined }> = [];
 		const api = {
 			registerCommand(name: string, definition: typeof command) {
 				expect(name).toBe("reload-runtime");
@@ -15,8 +15,8 @@ describe("reload runtime extension", () => {
 			registerTool(definition: typeof tool) {
 				tool = definition;
 			},
-			sendUserMessage(text: string, options: { deliverAs?: string }) {
-				messages.push({ text, deliverAs: options.deliverAs });
+			sendUserMessage(text: string, options: { deliverAs?: string; executeCommandAfterIdle?: boolean }) {
+				messages.push({ text, deliverAs: options.deliverAs, executeCommandAfterIdle: options.executeCommandAfterIdle });
 			},
 		} as unknown as ExtensionAPI;
 
@@ -26,7 +26,7 @@ describe("reload runtime extension", () => {
 
 		const outcome = await tool.execute("call-id", {}, undefined, undefined, {} as ExtensionContext);
 		expect(outcome.content[0]).toEqual({ type: "text", text: "Queued /reload-runtime as a follow-up command." });
-		expect(messages).toEqual([{ text: "/reload-runtime", deliverAs: "followUp" }]);
+		expect(messages).toEqual([{ text: "/reload-runtime", deliverAs: "followUp", executeCommandAfterIdle: true }]);
 
 		let reloads = 0;
 		await command.handler("", { reload: async () => { reloads++; } } as ExtensionCommandContext);

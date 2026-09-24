@@ -633,11 +633,16 @@ symlinks the whole directory into `~/.pi/agent/extensions`, so adding or
 editing a file needs **no Home Manager rebuild**. Run `/reload` once in each
 active Pi session to load the new code; new sessions discover it at startup.
 
-`reload-runtime.ts` registers the LLM-callable `reload_runtime` tool. It queues
-`/reload-runtime` as a follow-up command, which calls Pi's `ctx.reload()` after
-the current turn settles. It reloads the **parent** Pi session, not a child
-subagent; the first `/reload` after installing the extension must be entered by
-the user to make the tool available.
+`reload-runtime.ts` registers the LLM-callable `reload_runtime` tool. The pinned
+Pi 0.83.0 SDK normally treats `sendUserMessage("/reload-runtime")` as plain user
+text: it disables command expansion. The Nix overlay's
+`pi-extension-command-after-idle.patch` adds an explicit
+`executeCommandAfterIdle` opt-in. It waits for the agent run to settle, then
+dispatches *only* a registered extension command; unknown commands fail rather
+than reaching the model. The command calls Pi's real `ctx.reload()` on the
+**parent** session, not a child subagent. Apply the updated Nix package and
+**restart Pi completely** once: `/reload` reloads extensions but cannot replace
+the running Pi core binary. Later reloads can use the model-callable tool.
 
-Run `./pi/verify.sh --tests` after extension changes (including the reload
-handoff test).
+Run `./pi/verify.sh --tests` after extension changes (including the real SDK
+command-dispatch test).
