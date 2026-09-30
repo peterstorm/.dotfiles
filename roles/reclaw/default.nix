@@ -136,13 +136,12 @@ in
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json, whose default can drift silently — the pin
         # makes the inference target load-bearing instead of incidental.
-        # 2026-09-19: routed onto GLM v14 (upstream karmic-kraken-beta image,
-        # container glm53-flash-spark-tp2-v14, PRESET=glm53-spark-tp2) — the
-        # desktop's serving profile since the 2026-09-19 accepted swap;
-        # vision-capable for Telegram photo attachments, free (self-hosted).
-        # Replaces the DS4F Vision r21 pin and matches the model-routing
-        # glm-v14 target (subagents route to max thinking via the
-        # glm-v14-subagents-use-max rule).
+        # 2026-09-27: back on GLM v14 (upstream karmic-kraken-beta image,
+        # container glm53-flash-spark-tp2-v14, PRESET=glm53-spark-tp2) per user
+        # request after the one-day gpt-6-sol detour. The desktop's serving
+        # profile; vision-capable for Telegram photo attachments, free
+        # (self-hosted). The 2026-09-26 19:00–06:01 "Connection error." storm
+        # was the desktop vLLM host being unreachable, not the pin.
         # :low thinking suffix: the model's defaultThinkingLevel is max — a
         # plain pin means long Telegram replies; pi's parseModelPattern honours
         # the :low suffix (thinkingLevelMap maps low → low) for responsive replies.

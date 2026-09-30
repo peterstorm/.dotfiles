@@ -32,9 +32,23 @@ import { loadModelRoutingPolicy } from "../model-routing/config.js";
 import {
 	parentBinding,
 	resolveSubagentRoute,
+	type ResolvedSubagentRoute,
 	type RoutingAudit,
 	type SubagentRoutingSnapshot,
 } from "./model-routing.js";
+import {
+	advertiseSubagentLaunchPort,
+	LOOM_EMISSION_BINDING_ENV,
+	LOOM_EMISSION_DESCRIPTOR_MARKER,
+	LOOM_SUBAGENT_LAUNCH_CHANNEL,
+	type EffectiveModel,
+	type EmissionRpcDirective,
+	type SubagentLaunchEventBus,
+	type SubagentLaunchReply,
+	type SubagentLaunchResolveRequest,
+	type SubagentLaunchSlot,
+} from "./loom-launch-port.js";
+import { runRpcAgent } from "./rpc-launcher.js";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
@@ -151,6 +165,18 @@ interface UsageStats {
 	turns: number;
 }
 
+export type EmissionStartupRefusedLaunchOutcome = Readonly<{
+	kind: "emission-startup-refused";
+	sessionId: string;
+	toolCallId: string;
+	slot: SubagentLaunchSlot;
+	requestId: string;
+	contextDigest: string;
+	toolName: string;
+	phase: "before-task-prompt";
+	reason: string;
+}>;
+
 export interface SingleResult {
 	agent: string;
 	agentSource: "package" | "user" | "project" | "unknown";
@@ -164,6 +190,7 @@ export interface SingleResult {
 	stopReason?: string;
 	errorMessage?: string;
 	protocolErrors?: string[];
+	launchOutcome?: EmissionStartupRefusedLaunchOutcome;
 	step?: number;
 }
 
@@ -259,6 +286,222 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
 
+type LaunchContext = Readonly<{
+	events: SubagentLaunchEventBus;
+	sessionId: string;
+	toolCallId: string;
+	slot: SubagentLaunchSlot;
+	readinessTimeoutMs?: number;
+}>;
+
+type ParseResult<T> =
+	| Readonly<{ ok: true; value: T }>
+	| Readonly<{ ok: false; error: string }>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isReadinessVerifier = (value: unknown): value is EmissionRpcDirective["verifyReadiness"] =>
+	typeof value === "function";
+
+const MAX_LAUNCH_OUTCOME_REASON_BYTES = 1024;
+
+function boundedLaunchReason(reason: string): string {
+	if (Buffer.byteLength(reason) <= MAX_LAUNCH_OUTCOME_REASON_BYTES) return reason;
+	const characters: string[] = [];
+	let bytes = 0;
+	for (const character of reason) {
+		const characterBytes = Buffer.byteLength(character);
+		if (bytes + characterBytes > MAX_LAUNCH_OUTCOME_REASON_BYTES) break;
+		characters.push(character);
+		bytes += characterBytes;
+	}
+	return characters.join("");
+}
+
+const EMISSION_DESCRIPTOR_FIELDS = [
+	"toolName",
+	"kind",
+	"version",
+	"requestId",
+	"contextDigest",
+	"schemaDigest",
+] as const;
+
+type EmissionDescriptor = Readonly<Record<(typeof EMISSION_DESCRIPTOR_FIELDS)[number], string>>;
+
+function parseEmissionDescriptor(task: string): ParseResult<EmissionDescriptor | null> {
+	const descriptorLines = task
+		.split("\n")
+		.filter((line) => line.startsWith(LOOM_EMISSION_DESCRIPTOR_MARKER));
+	if (descriptorLines.length === 0) return { ok: true, value: null };
+	if (descriptorLines.length !== 1) return { ok: false, error: "Task contains multiple Loom emission descriptors" };
+
+	const prefix = `${LOOM_EMISSION_DESCRIPTOR_MARKER} `;
+	const line = descriptorLines[0];
+	if (!line.startsWith(prefix)) {
+		return { ok: false, error: "Loom emission descriptor must have one space after its marker" };
+	}
+	const fields = line.slice(prefix.length).split(" ");
+	if (
+		fields.length !== EMISSION_DESCRIPTOR_FIELDS.length ||
+		fields.some((field) => field.length === 0 || /\s/.test(field))
+	) {
+		return {
+			ok: false,
+			error: "Loom emission descriptor must contain exactly six whitespace-free fields",
+		};
+	}
+	const [toolName, kind, version, requestId, contextDigest, schemaDigest] = fields;
+	return {
+		ok: true,
+		value: Object.freeze({ toolName, kind, version, requestId, contextDigest, schemaDigest }),
+	};
+}
+
+function parseExactModelExpression(raw: string | undefined): EffectiveModel | undefined {
+	if (!raw) return undefined;
+	const withoutThinking = raw.replace(/:(?:off|minimal|low|medium|high|xhigh|max)$/, "");
+	const separator = withoutThinking.indexOf("/");
+	if (separator <= 0 || separator === withoutThinking.length - 1 || withoutThinking.includes("*")) return undefined;
+	return Object.freeze({ provider: withoutThinking.slice(0, separator), id: withoutThinking.slice(separator + 1) });
+}
+
+function effectiveModelForLaunch(
+	route: ResolvedSubagentRoute,
+	agent: AgentConfig,
+	snapshot: SubagentRoutingSnapshot,
+): EffectiveModel | undefined {
+	const routed = route.decision.effective?.model;
+	if (routed) return Object.freeze({ provider: routed.provider, id: routed.id });
+	return parseExactModelExpression(agent.model) ?? (snapshot.parent
+		? Object.freeze({ provider: snapshot.parent.model.provider, id: snapshot.parent.model.id })
+		: undefined);
+}
+
+function resolveLaunchReply(
+	launch: LaunchContext,
+	agent: string,
+	task: string,
+	cwd: string,
+	effectiveModel: EffectiveModel,
+): ParseResult<SubagentLaunchReply> {
+	let reply: SubagentLaunchReply = Object.freeze({ kind: "not-admitted" });
+	let responses = 0;
+	let accepting = true;
+	const request: SubagentLaunchResolveRequest = Object.freeze({
+		kind: "resolve",
+		sessionId: launch.sessionId,
+		toolCallId: launch.toolCallId,
+		slot: launch.slot,
+		agent,
+		task,
+		cwd,
+		effectiveModel,
+		respond: (next) => {
+			if (!accepting || ++responses !== 1) throw new Error("Loom launch port replied late or more than once");
+			if (!isRecord(next)) throw new Error("Loom launch port returned a non-object reply");
+			if (next.kind === "refused" && typeof next.reason === "string" && next.reason.length > 0) {
+				reply = Object.freeze({ kind: "refused", reason: next.reason });
+			} else if (next.kind === "emission-rpc") {
+				reply = Object.freeze({ kind: "emission-rpc", directive: next.directive });
+			} else {
+				throw new Error("Loom launch port returned an invalid reply kind or reason");
+			}
+		},
+	});
+	try {
+		launch.events.emit(LOOM_SUBAGENT_LAUNCH_CHANNEL, request);
+	} catch (cause) {
+		return { ok: false, error: `Loom launch port failed before spawn: ${boundedLaunchReason(cause instanceof Error ? cause.message : String(cause))}` };
+	} finally {
+		accepting = false;
+	}
+	return { ok: true, value: reply };
+}
+
+type ParsedEmissionDirective = Readonly<{
+	directive: EmissionRpcDirective;
+	binding: EmissionDescriptor;
+}>;
+
+function parseBindingEnv(raw: string): ParseResult<EmissionDescriptor> {
+	let value: unknown;
+	try {
+		value = JSON.parse(raw);
+	} catch {
+		return { ok: false, error: "Loom emission binding is not valid JSON" };
+	}
+	if (!isRecord(value)) return { ok: false, error: "Loom emission binding must be a JSON object" };
+
+	const fields: string[] = [];
+	for (const field of EMISSION_DESCRIPTOR_FIELDS) {
+		const candidate = value[field];
+		if (typeof candidate !== "string" || candidate.length === 0 || /\s/.test(candidate)) {
+			return { ok: false, error: `Loom emission binding ${field} must be a whitespace-free string` };
+		}
+		fields.push(candidate);
+	}
+	const [toolName, kind, version, requestId, contextDigest, schemaDigest] = fields;
+	return {
+		ok: true,
+		value: Object.freeze({ toolName, kind, version, requestId, contextDigest, schemaDigest }),
+	};
+}
+
+function parseDirective(value: unknown): ParseResult<ParsedEmissionDirective> {
+	if (!isRecord(value) || value.kind !== "emission-rpc") {
+		return { ok: false, error: "Loom launch directive must have kind emission-rpc" };
+	}
+	const { bindingEnv, expectedProvider, expectedModel, expectedToolName, verifyReadiness } = value;
+	const fields = { bindingEnv, expectedProvider, expectedModel, expectedToolName };
+	for (const [field, candidate] of Object.entries(fields)) {
+		if (typeof candidate !== "string" || candidate.trim() === "") {
+			return { ok: false, error: `Loom launch directive ${field} must be a non-empty string` };
+		}
+	}
+	if (
+		typeof bindingEnv !== "string" || typeof expectedProvider !== "string" ||
+		typeof expectedModel !== "string" || typeof expectedToolName !== "string"
+	) {
+		return { ok: false, error: "Loom launch directive contains invalid string fields" };
+	}
+	if (!isReadinessVerifier(verifyReadiness)) {
+		return { ok: false, error: "Loom launch directive verifyReadiness must be a function" };
+	}
+	if (!/^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(expectedToolName)) {
+		return { ok: false, error: "Loom launch directive expectedToolName is not a valid Pi tool name" };
+	}
+	const parsedBinding = parseBindingEnv(bindingEnv);
+	if (!parsedBinding.ok) return parsedBinding;
+	if (parsedBinding.value.toolName !== expectedToolName) {
+		return { ok: false, error: "Loom emission binding toolName does not match expectedToolName" };
+	}
+	return {
+		ok: true,
+		value: Object.freeze({
+			directive: Object.freeze({
+				kind: "emission-rpc",
+				bindingEnv,
+				expectedProvider,
+				expectedModel,
+				expectedToolName,
+				verifyReadiness,
+			}),
+			binding: parsedBinding.value,
+		}),
+	};
+}
+
+function descriptorMismatch(descriptor: EmissionDescriptor, binding: EmissionDescriptor): string | undefined {
+	for (const field of EMISSION_DESCRIPTOR_FIELDS) {
+		if (descriptor[field] !== binding[field]) {
+			return `${field} ${descriptor[field]} does not match provisioned binding ${binding[field]}`;
+		}
+	}
+	return undefined;
+}
+
 export async function runSingleAgent(
 	defaultCwd: string,
 	agents: readonly AgentConfig[],
@@ -270,6 +513,7 @@ export async function runSingleAgent(
 	onUpdate: OnUpdateCallback | undefined,
 	makeDetails: (results: SingleResult[]) => SubagentDetails,
 	routingSnapshot: SubagentRoutingSnapshot,
+	launch: LaunchContext,
 ): Promise<SingleResult> {
 	const agent = agents.find((a) => a.name === agentName);
 
@@ -302,15 +546,6 @@ export async function runSingleAgent(
 		};
 	}
 
-	// A delegated agent must execute its task directly. Inheriting this extension's
-	// subagent tool allows accidental self-delegation loops that spawn nested pi
-	// processes until the user aborts. Chaining remains available to the parent.
-	const args: string[] = [
-		"--mode", "json", "-p", "--no-session", "--exclude-tools", "subagent",
-		...route.value.args,
-	];
-	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
-
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
 
@@ -336,6 +571,92 @@ export async function runSingleAgent(
 		}
 	};
 
+	const recordMessage = (msg: Message): void => {
+		currentResult.messages.push(msg);
+		if (msg.role === "assistant") {
+			currentResult.usage.turns++;
+			const usage = msg.usage;
+			if (usage) {
+				currentResult.usage.input += usage.input || 0;
+				currentResult.usage.output += usage.output || 0;
+				currentResult.usage.cacheRead += usage.cacheRead || 0;
+				currentResult.usage.cacheWrite += usage.cacheWrite || 0;
+				currentResult.usage.cost += usage.cost?.total || 0;
+				currentResult.usage.contextTokens = usage.totalTokens || 0;
+			}
+			if (!currentResult.model && msg.model) currentResult.model = msg.model;
+			if (msg.stopReason) currentResult.stopReason = msg.stopReason;
+			if (msg.errorMessage) currentResult.errorMessage = msg.errorMessage;
+		}
+		emitUpdate();
+	};
+
+	const failBeforeSpawn = (message: string): SingleResult => {
+		currentResult.exitCode = 1;
+		appendDiagnostic(currentResult, message);
+		return currentResult;
+	};
+
+	const descriptor = parseEmissionDescriptor(task);
+	if (!descriptor.ok) return failBeforeSpawn(descriptor.error);
+	const childCwd = path.resolve(defaultCwd, cwd ?? ".");
+	const effectiveModel = effectiveModelForLaunch(route.value, agent, routingSnapshot);
+	const resolvedReply = effectiveModel
+		? resolveLaunchReply(launch, agentName, task, childCwd, effectiveModel)
+		: { ok: true as const, value: Object.freeze({ kind: "not-admitted" as const }) };
+	if (!resolvedReply.ok) return failBeforeSpawn(resolvedReply.error);
+	let reply: SubagentLaunchReply = resolvedReply.value;
+	if (descriptor.value && !effectiveModel) {
+		return failBeforeSpawn("Loom emission task has no exact routed model");
+	}
+	if (reply.kind === "refused") {
+		return failBeforeSpawn(`Loom subagent launch was refused: ${reply.reason}`);
+	}
+	if (descriptor.value && reply.kind === "not-admitted") {
+		return failBeforeSpawn("Loom emission task was not admitted for emission RPC");
+	}
+	let emissionLaunchIdentity: EmissionDescriptor | null = null;
+	if (reply.kind === "emission-rpc" && effectiveModel) {
+		const exactDescriptor = descriptor.value;
+		if (!exactDescriptor) {
+			return failBeforeSpawn("Loom emission RPC directive was supplied for a task without an emission descriptor");
+		}
+		const parsedDirective = parseDirective(reply.directive);
+		if (!parsedDirective.ok) return failBeforeSpawn(parsedDirective.error);
+		const directive = parsedDirective.value.directive;
+		if (
+			directive.expectedProvider !== effectiveModel.provider ||
+			directive.expectedModel !== effectiveModel.id
+		) {
+			return failBeforeSpawn(
+				`Loom emission route ${directive.expectedProvider}/${directive.expectedModel} does not match ` +
+				`${effectiveModel.provider}/${effectiveModel.id}`,
+			);
+		}
+		const mismatch = descriptorMismatch(exactDescriptor, parsedDirective.value.binding);
+		if (mismatch) return failBeforeSpawn(`Loom emission descriptor mismatch: ${mismatch}`);
+		emissionLaunchIdentity = parsedDirective.value.binding;
+		reply = Object.freeze({ kind: "emission-rpc", directive });
+	}
+
+	// A delegated agent must execute its task directly. Inheriting this extension's
+	// subagent tool allows accidental self-delegation loops that spawn nested pi
+	// processes until the user aborts. Chaining remains available to the parent.
+	const args: string[] = [
+		"--mode", reply.kind === "emission-rpc" ? "rpc" : "json",
+		...(reply.kind === "emission-rpc" ? [] : ["-p"]),
+		"--no-session", "--exclude-tools", "subagent",
+		...route.value.args,
+	];
+	const allowedTools = [
+		...(agent.tools ?? []),
+		...(reply.kind === "emission-rpc" ? [reply.directive.expectedToolName] : []),
+	];
+	if (allowedTools.length > 0) args.push("--tools", [...new Set(allowedTools)].join(","));
+	const childEnv: NodeJS.ProcessEnv = { ...process.env };
+	delete childEnv[LOOM_EMISSION_BINDING_ENV];
+	if (reply.kind === "emission-rpc") childEnv[LOOM_EMISSION_BINDING_ENV] = reply.directive.bindingEnv;
+
 	const markAborted = (message: string): void => {
 		currentResult.exitCode = 1;
 		currentResult.stopReason = "aborted";
@@ -343,9 +664,25 @@ export async function runSingleAgent(
 		// signal detail remains in stderr for diagnosis.
 		currentResult.errorMessage = message;
 	};
+	const recordEmissionStartupRefusal = (reason: string): void => {
+		if (!emissionLaunchIdentity) return;
+		currentResult.launchOutcome = Object.freeze({
+			kind: "emission-startup-refused",
+			sessionId: launch.sessionId,
+			toolCallId: launch.toolCallId,
+			slot: launch.slot,
+			requestId: emissionLaunchIdentity.requestId,
+			contextDigest: emissionLaunchIdentity.contextDigest,
+			toolName: emissionLaunchIdentity.toolName,
+			phase: "before-task-prompt",
+			reason: boundedLaunchReason(reason),
+		});
+	};
 
 	if (signal?.aborted) {
-		markAborted("Subagent was aborted before it started");
+		const reason = "Subagent was aborted before it started";
+		recordEmissionStartupRefusal(reason);
+		markAborted(reason);
 		return currentResult;
 	}
 
@@ -357,13 +694,36 @@ export async function runSingleAgent(
 			args.push("--append-system-prompt", tmpPromptPath);
 		}
 
+		if (reply.kind === "emission-rpc") {
+			const invocation = getPiInvocation(args);
+			const outcome = await runRpcAgent({
+				command: invocation.command,
+				args: invocation.args,
+				cwd: childCwd,
+				env: childEnv,
+				task,
+				directive: reply.directive,
+				signal,
+				readinessTimeoutMs: launch.readinessTimeoutMs,
+				onMessage: recordMessage,
+			});
+			currentResult.stderr = outcome.stderr;
+			if (outcome.ok) return currentResult;
+			currentResult.exitCode = 1;
+			if (outcome.protocolErrors) currentResult.protocolErrors = [...outcome.protocolErrors];
+			appendDiagnostic(currentResult, outcome.reason);
+			if (outcome.phase === "before-task-prompt") recordEmissionStartupRefusal(outcome.reason);
+			if (outcome.kind === "aborted") markAborted(outcome.reason);
+			return currentResult;
+		}
+
 		args.push(`Task: ${task}`);
 		let wasAborted = false;
-
 		const exitCode = await new Promise<number>((resolve) => {
 			const invocation = getPiInvocation(args);
 			const proc = spawn(invocation.command, invocation.args, {
-				cwd: cwd ?? defaultCwd,
+				cwd: childCwd,
+				env: childEnv,
 				shell: false,
 				stdio: ["ignore", "pipe", "pipe"],
 			});
@@ -375,53 +735,26 @@ export async function runSingleAgent(
 				settled = true;
 				resolve(code);
 			};
-
 			const recordProtocolError = (line: string) => {
 				currentResult.protocolErrors ??= [];
 				if (currentResult.protocolErrors.length < 3) currentResult.protocolErrors.push(line.slice(0, 500));
 			};
-
 			const processLine = (line: string) => {
 				if (!line.trim()) return;
 				let event: Record<string, unknown>;
 				try {
 					const parsed: unknown = JSON.parse(line);
-					if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+					if (!isRecord(parsed)) {
 						recordProtocolError(line);
 						return;
 					}
-					event = parsed as Record<string, unknown>;
+					event = parsed;
 				} catch {
 					recordProtocolError(line);
 					return;
 				}
-
-				if (event.type === "message_end" && event.message) {
-					const msg = event.message as Message;
-					currentResult.messages.push(msg);
-
-					if (msg.role === "assistant") {
-						currentResult.usage.turns++;
-						const usage = msg.usage;
-						if (usage) {
-							currentResult.usage.input += usage.input || 0;
-							currentResult.usage.output += usage.output || 0;
-							currentResult.usage.cacheRead += usage.cacheRead || 0;
-							currentResult.usage.cacheWrite += usage.cacheWrite || 0;
-							currentResult.usage.cost += usage.cost?.total || 0;
-							currentResult.usage.contextTokens = usage.totalTokens || 0;
-						}
-						if (!currentResult.model && msg.model) currentResult.model = msg.model;
-						if (msg.stopReason) currentResult.stopReason = msg.stopReason;
-						if (msg.errorMessage) currentResult.errorMessage = msg.errorMessage;
-					}
-					emitUpdate();
-				}
-
-				if (event.type === "tool_result_end" && event.message) {
-					currentResult.messages.push(event.message as Message);
-					emitUpdate();
-				}
+				if (event.type === "message_end" && event.message) recordMessage(event.message as Message);
+				if (event.type === "tool_result_end" && event.message) recordMessage(event.message as Message);
 			};
 
 			proc.stdout.on("data", (data) => {
@@ -430,11 +763,9 @@ export async function runSingleAgent(
 				buffer = lines.pop() || "";
 				for (const line of lines) processLine(line);
 			});
-
 			proc.stderr.on("data", (data) => {
 				currentResult.stderr += data.toString();
 			});
-
 			proc.on("close", (code, childSignal) => {
 				if (buffer.trim()) processLine(buffer);
 				if (childSignal) {
@@ -444,16 +775,14 @@ export async function runSingleAgent(
 				}
 				settle(code ?? 1);
 			});
-
 			proc.on("error", (error) => {
 				if (settled) return;
 				appendDiagnostic(currentResult, `Failed to spawn subagent process: ${error.message}`);
 				settle(1);
 			});
-
 			if (signal) {
 				const killProc = () => {
-					if (settled) return; // already done — never mis-mark a completed agent as aborted
+					if (settled) return;
 					wasAborted = true;
 					proc.kill("SIGTERM");
 					setTimeout(() => {
@@ -467,10 +796,6 @@ export async function runSingleAgent(
 
 		currentResult.exitCode = exitCode;
 		if (wasAborted && exitCode !== 0) {
-			// Salvage, don't throw: the caller keeps this result (and every other
-			// completed result in the batch) so an aborted batch is not reused as
-			// "all work lost" — pi records the tool result and the agent can
-			// proceed from what clearly finished.
 			markAborted("Subagent was aborted");
 			return currentResult;
 		}
@@ -528,6 +853,7 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
+	advertiseSubagentLaunchPort(pi.events);
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",
@@ -539,7 +865,8 @@ export default function (pi: ExtensionAPI) {
 		].join(" "),
 		parameters: SubagentParams,
 
-		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
+			const sessionId = ctx.sessionManager.getSessionId();
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const agents = discovery.agents;
@@ -646,6 +973,12 @@ export default function (pi: ExtensionAPI) {
 						chainUpdate,
 						makeDetails("chain"),
 						routingSnapshot,
+						{
+							events: pi.events,
+							sessionId,
+							toolCallId,
+							slot: { kind: "chain", index: i },
+						},
 					);
 					results.push(result);
 
@@ -726,6 +1059,12 @@ export default function (pi: ExtensionAPI) {
 						},
 						makeDetails("parallel"),
 						routingSnapshot,
+						{
+							events: pi.events,
+							sessionId,
+							toolCallId,
+							slot: { kind: "parallel", index },
+						},
 					);
 					allResults[index] = result;
 					emitParallelUpdate();
@@ -767,6 +1106,12 @@ export default function (pi: ExtensionAPI) {
 					onUpdate,
 					makeDetails("single"),
 					routingSnapshot,
+					{
+						events: pi.events,
+						sessionId,
+						toolCallId,
+						slot: { kind: "single", index: 0 },
+					},
 				);
 				const isError = resultFailed(result);
 				if (isError) {

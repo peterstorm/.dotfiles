@@ -417,7 +417,7 @@ Pi loads packages from `settings.json`:
 ```json
 {
   "packages": [
-    "../../dev/claude-plugins/loom",
+    { "source": "../../dev/claude-plugins/loom", "extensions": [] },
     "git:github.com/peterstorm/pi-goal@v0.1.0",
     "../../dev/claude-plugins/cortex",
     "../../dev/claude-plugins/obsidian"
@@ -427,7 +427,7 @@ Pi loads packages from `settings.json`:
 
 Local paths are relative to `~/.pi/agent/` (the agentDir). The Pi Goal entry is instead an immutable Git release; Pi installs it under `~/.pi/agent/git/` and does not depend on a development worktree. Packages may declare resources in a `package.json` Pi manifest or expose Pi's conventional resource directories. Loom, Pi Goal, and Cortex use manifests; Obsidian's conventional `skills/` directory exposes `obsidian-vault` from the same canonical source used by its Claude plugin. The Home Manager Claude workspace activation provisions the local plugin checkouts, while Pi owns the pinned Pi Goal clone. Use Obsidian from Pi as `/skill:obsidian-vault` or ask naturally about the vault.
 
-Pi Goal is a standalone Pi extension from `github.com/peterstorm/pi-goal`; it provides `/goal` and loads after Loom so its optional `review-and-fix-clean` evaluator can consume Loom's process-local review authority. Loom's native `pi/extension.ts` owns Loom guards and subagent-result state transitions; do not add a separate Loom bridge extension because it would process the same completion events twice.
+Pi Goal is a standalone Pi extension from `github.com/peterstorm/pi-goal`; it provides `/goal` and loads after Loom so its optional `review-and-fix-clean` evaluator can consume Loom's process-local review authority. Loom remains listed as a local package for the custom subagent's agent/skill discovery, but `"extensions": []` disables its Pi package entry. The auto-discovered `pi/extensions/loom-runtime-loader.ts` is the sole loader of Loom's native `pi/extension.ts`, so `/reload-runtime` refreshes its module graph. Do not enable the package extension as well: it registers Loom's tools twice and Pi refuses to start.
 
 ## Agents
 

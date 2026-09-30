@@ -13,13 +13,26 @@ import {
 const DEFAULT_READINESS_TIMEOUT_MS = 45_000;
 const MAX_RPC_LINE_BYTES = 1024 * 1024;
 // RPC-mode children stream every event — including per-delta envelopes for
-// thinking-heavy models (a thinking-high reviewer routinely produces tens of
-// thousands of delta lines). The transcript adapter consumes only
-// message_end/tool_result_end records; the deltas are transport noise that
-// still count here. The cap must bound a runaway child, not a normal long
-// review: 16 MiB killed real wave-gate reviewers mid-flight (every
-// qualified-local child died at exactly this cap), so the budget is 256 MiB.
+// thinking-heavy models. Two budgets, not one: the transcript adapter only
+// consumes message_end/tool_result_end (plus response, entry_appended,
+// agent_settled); everything else — message_update deltas, start/turn
+// markers — is transport noise a thinking-high reviewer produces at ~36 KB
+// per cumulative snapshot (7050 update records = 254.6 MiB of pure noise
+// against ~1.3 MiB of consumed records in one real wave-gate review). The
+// consumed budget bounds the transcript-sized stream and must stay tight;
+// the noise budget bounds a genuinely runaway child. History: 16 MiB killed
+// real reviewers at the single-cap design; 256 MiB killed them again when
+// the noise alone crossed it — so the noise class is separated entirely.
 const MAX_RPC_TOTAL_BYTES = 256 * 1024 * 1024;
+const MAX_RPC_NOISE_BYTES = 2 * 1024 * 1024 * 1024;
+const CONSUMED_RPC_TYPES: ReadonlySet<string> = new Set([
+	"response",
+	"entry_appended",
+	"message_end",
+	"tool_result_end",
+	"agent_settled",
+]);
+const rpcTypeIsConsumed = (typeKey: string): boolean => CONSUMED_RPC_TYPES.has(typeKey);
 const MAX_STDERR_BYTES = 64 * 1024;
 const KILL_GRACE_MS = 1_000;
 const STREAM_ACCOUNTING_TOP = 5;
@@ -51,14 +64,23 @@ const accountStreamRecord = (
 
 const describeStreamAccounting = (accounting: ReadonlyMap<string, StreamTypeAccounting>): string => {
 	const ranked = [...accounting.entries()]
-		.map(([type, { count, bytes }]) => ({ type, count, bytes }))
+		.map(([type, { count, bytes }]) => ({ type, count, bytes, consumed: rpcTypeIsConsumed(type) }))
 		.sort((a, b) => b.bytes - a.bytes)
 		.slice(0, STREAM_ACCOUNTING_TOP);
 	if (ranked.length === 0) return "no parsed records";
 	return ranked
-		.map(({ type, count, bytes }) => `${type}: ${count} records/${(bytes / (1024 * 1024)).toFixed(1)} MiB`)
+		.map(({ type, count, bytes, consumed }) =>
+			`${type}: ${count} records/${(bytes / (1024 * 1024)).toFixed(1)} MiB${consumed ? "" : " (noise)"}`)
 		.join(", ");
 };
+
+const streamBudgetBytes = (
+	accounting: ReadonlyMap<string, StreamTypeAccounting>,
+	budget: "consumed" | "noise",
+): number =>
+	[...accounting.entries()]
+		.filter(([type]) => rpcTypeIsConsumed(type) === (budget === "consumed"))
+		.reduce((sum, [, { bytes }]) => sum + bytes, 0);
 
 type RpcRecord = Record<string, unknown>;
 
@@ -278,6 +300,20 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 			return;
 		}
 		accountStreamRecord(streamAccounting, streamTypeKey(event), line.length + 1);
+		const consumed = streamBudgetBytes(streamAccounting, "consumed");
+		const noise = streamBudgetBytes(streamAccounting, "noise");
+		if (consumed > MAX_RPC_TOTAL_BYTES) {
+			failTransport(new Error(
+				`RPC consumed-record output exceeded ${MAX_RPC_TOTAL_BYTES} bytes (stream accounting: ${describeStreamAccounting(streamAccounting)})`,
+			));
+			return;
+		}
+		if (noise > MAX_RPC_NOISE_BYTES) {
+			failTransport(new Error(
+				`RPC transport-noise output exceeded ${MAX_RPC_NOISE_BYTES} bytes (stream accounting: ${describeStreamAccounting(streamAccounting)})`,
+			));
+			return;
+		}
 
 		if (event.type === "response") {
 			if (typeof event.id !== "string") {
@@ -317,9 +353,11 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		if (fatalError) return;
 		const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 		totalBytes += bytes.length;
-		if (totalBytes > MAX_RPC_TOTAL_BYTES) {
+		if (totalBytes > MAX_RPC_NOISE_BYTES) {
+			// Raw byte backstop: unparsed garbage or an unreadable flood must
+			// still terminate the child even if no record type was classifiable.
 			failTransport(new Error(
-				`RPC output exceeded ${MAX_RPC_TOTAL_BYTES} bytes (stream accounting: ${describeStreamAccounting(streamAccounting)})`,
+				`RPC output exceeded ${MAX_RPC_NOISE_BYTES} bytes (stream accounting: ${describeStreamAccounting(streamAccounting)})`,
 			));
 			return;
 		}
