@@ -193,6 +193,11 @@ in
     # and the homelab do not install Steam or its services.
     imports = [ ../../roles/gaming ];
 
+    # Idle-quiet fan curves, graphical profile only: the daemon drops to a
+    # gentler PECI curve while no GPU is busy. The headless inference profile
+    # leaves this unset and keeps the fixed load-tuned curves.
+    systemd.services.asus-fan-control.environment.FAN_AUTO = "1";
+
     # Specialisations inherit the base definitions, including their mkForce
     # priority (50). Priority 40 is intentionally stronger so this opt-in profile
     # can reverse both headless defaults without creating equal-priority conflicts.
@@ -492,7 +497,7 @@ in
       RestartSec = "10s";
       ExecStart = lib.getExe (pkgs.writeShellApplication {
         name = "asus-fan-control";
-        runtimeInputs = [ pkgs.coreutils ];
+        runtimeInputs = [ pkgs.coreutils config.hardware.nvidia.package.bin ];
         text = ''
           # The /sys/class/hwmon index is probe-order dependent; find the
           # nct6799 chip by driver name instead.
@@ -530,6 +535,15 @@ in
           # fans. Starts clamped at boot (cold).
           released=0
 
+          # Auto mode (FAN_AUTO=1, graphical specialisation only): while no
+          # GPU has been busy (>= 15 % util) for ~60 s, run quiet curves
+          # instead of the load-tuned ones below. Quiet curves ramp to the
+          # normal values by PECI 70 °C, and the 82/76 °C guardrail is shared,
+          # so CPU-only load (compiles, Steam) still gets full cooling.
+          auto=''${FAN_AUTO:-0}
+          busy_hold=0
+          mode=""
+
           # Main loop — re-apply every 20 s. Fast enough to repair the
           # chip/EC flipping pwm*_enable back within one cycle.
           while true; do
@@ -544,12 +558,36 @@ in
               released=0
             fi
 
+            # GPU activity (auto mode only). Hold "busy" for 3 loops after the
+            # last busy sample so bursty inference does not flap the curves.
+            quiet=0
+            if [ "$auto" = "1" ]; then
+              umax=$(nvidia-smi --query-gpu=utilization.gpu \
+                       --format=csv,noheader,nounits 2>/dev/null \
+                     | sort -n | tail -n1 | tr -d ' ' || true)
+              if [ "''${umax:-100}" -ge 15 ]; then
+                busy_hold=3
+              elif [ "$busy_hold" -gt 0 ]; then
+                busy_hold=$((busy_hold - 1))
+              fi
+              if [ "$busy_hold" -eq 0 ]; then quiet=1; fi
+              newmode=load; [ "$quiet" -eq 1 ] && newmode=quiet
+              if [ "$newmode" != "$mode" ]; then
+                echo "fan mode: $newmode (peci=$peci gpu_util=''${umax:-?})"
+                mode=$newmode
+              fi
+            fi
+
             # Cooler (fan2/CPU_OPT): Arctic AIO pump + rad fans on one cable,
             # flat duty 130 (~1750 RPM) — live-verified: Tctl 90.6 °C at 110
             # vs 90.0 °C at 150/255 under full GPU load; the extra airflow
             # keeps PECI under the release trigger so the emergency valve
-            # does the rest, rarely.
+            # does the rest, rarely. Quiet: duty 90 (~1300 RPM) up to 45 °C,
+            # ramping to 130 at 70 °C.
             d2=130
+            if [ "$quiet" -eq 1 ]; then
+              d2=$(interp "$peci" 45000 90 70000 130)
+            fi
             if [ "$released" -eq 1 ]; then
               d2=255
             fi
@@ -564,6 +602,9 @@ in
             elif [ "$d6" -gt 190 ]; then
               d6=190
             fi
+            if [ "$quiet" -eq 1 ] && [ "$released" -eq 0 ]; then
+              d6=$(interp "$peci" 35000 85 70000 190)
+            fi
             ed pwm6_enable 1
             ed pwm6 "$d6"
 
@@ -574,6 +615,9 @@ in
               d3=255
             elif [ "$d3" -gt 235 ]; then
               d3=235
+            fi
+            if [ "$quiet" -eq 1 ] && [ "$released" -eq 0 ]; then
+              d3=$(interp "$peci" 35000 85 70000 235)
             fi
             ed pwm3_enable 1
             ed pwm3 "$d3"
