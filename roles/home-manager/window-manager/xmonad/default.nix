@@ -33,6 +33,21 @@
     ".xmonad/xmonad.hs".source = ./xmonad.hs;
   };
 
+  # The live window manager is the NixOS-level xmonad, which compiles
+  # ~/.xmonad/xmonad.hs in place. It only recompiles when xmonad.hs is newer
+  # than the binary, and xmonad.hs is a store symlink (mtime 1970) — so a binary
+  # whose store dependencies were garbage-collected is never rebuilt and every
+  # login dies on "libXft.so.2: cannot open shared object file". Rebuild when
+  # the binary is missing, was built from a different config/xmonad, or has
+  # unresolved libraries. Never fails activation (see the script header).
+  home.activation.xmonadBinary =
+    lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      $DRY_RUN_CMD env PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep ]}" \
+        ${pkgs.bash}/bin/bash ${./ensure-xmonad-binary.sh} \
+        /run/current-system/sw/bin/xmonad "$HOME/.xmonad" \
+        ${pkgs.stdenv.hostPlatform.system} ${./xmonad.hs} ${pkgs.glibc.bin}/bin/ldd
+    '';
+
   # xmonad.hs launches two Firefox profiles by name: `firefox -P noscratchpad`
   # (the normal browser) and `firefox -P scratchpad --class foxpad` (the overlay
   # scratchpad). Firefox's `-P <name>` does NOT create a missing profile — it

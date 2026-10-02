@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, DeriveDataTypeable, TypeSynonymInstances, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -Wno-depcrecations #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
   -- Base
 import XMonad hiding ((|||))
 import System.IO (hPutStrLn)
