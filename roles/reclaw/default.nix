@@ -146,7 +146,11 @@ in
         # plain pin means long Telegram replies; pi's parseModelPattern honours
         # the :low suffix (thinkingLevelMap maps low → low) for responsive replies.
         RECLAW_PI_PROVIDER = "desktop-vllm";
-        RECLAW_PI_MODEL = "glm-5.3-flash-spark-tp2-v14:low";
+        # 2026-10-02: switched to Qwen3.8 27B (served as qwen3.8-27b by the
+        # desktop's qwen38-27b-trial vLLM container on GPU 1). Vision-capable
+        # (text+image), so Telegram photo attachments still work; its
+        # thinkingLevelMap maps low → low, so :low keeps replies responsive.
+        RECLAW_PI_MODEL = "qwen3.8-27b:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
