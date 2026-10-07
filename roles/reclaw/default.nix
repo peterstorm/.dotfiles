@@ -1,26 +1,5 @@
 { config, pkgs, lib, util, ... }:
 
-let
-  # Redis 8.10 writes RDB format 15 into Reclaw's multipart AOF. Nixpkgs later
-  # regressed its `redis` package to 8.8.1, which cannot read that format and
-  # leaves the durable BullMQ state offline. Keep this data store on the first
-  # known-compatible release; upgrades remain safe, downgrades do not.
-  reclawRedis = pkgs.redis.overrideAttrs (previous: rec {
-    version = "8.10.1";
-    src = pkgs.fetchFromGitHub {
-      owner = "redis";
-      repo = "redis";
-      tag = version;
-      hash = "sha256-fGLuOuiM3VHj70qlSpb2s25RYD8gFARrqwAhW6CIHXE=";
-    };
-    patches = [
-      (pkgs.fetchpatch2 {
-        url = "https://github.com/redis/redis/commit/c027c8effe13564bcbc903741305acd929cc23da.patch";
-        hash = "sha256-MynmKLQ04JjyHMVbfeSIEnKaj4jvjS1FjQNpfvQz3Pw=";
-      })
-    ] ++ previous.patches;
-  });
-in
 (util.sops.mkSecretsAndTemplatesConfig
   # 1. Secrets — decrypted to /run/secrets/
   [
@@ -30,6 +9,8 @@ in
     (util.sops.hostSecret "reclaw-google-password" "reclaw.yaml" "google_password" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-garmin-email" "reclaw.yaml" "garmin_email" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-garmin-password" "reclaw.yaml" "garmin_password" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-prej-api-key" "reclaw.yaml" "prej_api_key" { owner = "peterstorm"; group = "users"; })
+    (util.sops.hostSecret "reclaw-shelfatlas-api-key" "reclaw.yaml" "shelfatlas_api_key" { owner = "peterstorm"; group = "users"; })
     # (util.sops.hostSecret "reclaw-notebooklm-auth-token" "reclaw.yaml" "notebooklm_auth_token" { owner = "peterstorm"; group = "users"; })
     # (util.sops.hostSecret "reclaw-notebooklm-cookies" "reclaw.yaml" "notebooklm_cookies" { owner = "peterstorm"; group = "users"; })
   ]
@@ -45,6 +26,8 @@ in
         GOOGLE_PASSWORD=${config.sops.placeholder."reclaw-google-password"}
         GARMIN_EMAIL=${config.sops.placeholder."reclaw-garmin-email"}
         GARMIN_PASSWORD=${config.sops.placeholder."reclaw-garmin-password"}
+        PREJ_API_KEY=${config.sops.placeholder."reclaw-prej-api-key"}
+        SHELFATLAS_API_KEY=${config.sops.placeholder."reclaw-shelfatlas-api-key"}
       '';
       owner = "peterstorm";
       group = "users";
@@ -72,7 +55,14 @@ in
     # dodge the busy 6379) grabbed 6380 on 2026-09-15 and reclaw — whose redis
     # runs unauthenticated — was shut down with it and crash-looped for 4h on
     # NOAUTH. Production gets a port no dev workflow contests.
-    services.redis.package = reclawRedis;
+    #
+    # Redis >= 8.10.1 writes RDB format 15 into Reclaw's multipart AOF; older
+    # releases (nixpkgs once regressed to 8.8.1) cannot read it and leave the
+    # durable BullMQ state offline. Upgrades are safe, downgrades are not.
+    assertions = [{
+      assertion = lib.versionAtLeast config.services.redis.package.version "8.10.1";
+      message = "reclaw: services.redis.package is ${config.services.redis.package.version}; need >= 8.10.1 to read Reclaw's RDB format 15 AOF.";
+    }];
     services.redis.servers.reclaw = {
       enable = true;
       port = 6381;
