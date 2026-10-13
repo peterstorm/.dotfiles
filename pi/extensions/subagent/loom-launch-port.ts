@@ -90,9 +90,26 @@ function isCapabilityProbe(value: unknown): value is SubagentLaunchCapabilityPro
 	return candidate.kind === "capability" && candidate.version === 2 && typeof candidate.respond === "function";
 }
 
+/** Global marker for the currently live advertisement's unsubscribe. Pi owns one
+ * event bus for the whole process lifetime and /reload re-executes every
+ * extension module against that SAME bus without clearing it, so a bare
+ * events.on would stack one responder per reload — and Loom's emission bridge
+ * fail-closes its single-launcher capability probe as soon as two reply
+ * ("multiple launcher capabilities answered"). Re-arm instead: drop the
+ * previous listener before registering the new one, so exactly one responder
+ * is ever live no matter how many times the module loads. */
+const ADVERTISED_OFF_KEY = "__loomSubagentLaunchPortOff";
+
 /** Advertise this launcher to a future Loom extension through Pi's synchronous event bus. */
 export function advertiseSubagentLaunchPort(events: Required<Pick<SubagentLaunchEventBus, "on">>): () => void {
-	return events.on(LOOM_SUBAGENT_LAUNCH_CHANNEL, (event) => {
+	const scope = globalThis as typeof globalThis & Record<typeof ADVERTISED_OFF_KEY, (() => void) | undefined>;
+	scope[ADVERTISED_OFF_KEY]?.();
+	const off = events.on(LOOM_SUBAGENT_LAUNCH_CHANNEL, (event) => {
 		if (isCapabilityProbe(event)) event.respond(Object.freeze({ kind: "available", version: 2 }));
 	});
+	scope[ADVERTISED_OFF_KEY] = off;
+	return () => {
+		off();
+		if (scope[ADVERTISED_OFF_KEY] === off) scope[ADVERTISED_OFF_KEY] = undefined;
+	};
 }

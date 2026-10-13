@@ -295,6 +295,43 @@ describe("subagent execution shell", () => {
 		expect(replies).toEqual([{ kind: "available", version: 2 }]);
 	});
 
+	it("re-arms on re-advertisement so /reload never stacks a second responder", () => {
+		const handlers: Array<(event: unknown) => void> = [];
+		const bus = {
+			on: (_channel: string, handler: (event: unknown) => void) => {
+				handlers.push(handler);
+				return () => {
+					const index = handlers.indexOf(handler);
+					if (index >= 0) handlers.splice(index, 1);
+				};
+			},
+		};
+		const probeReplies = () => {
+			const seen: unknown[] = [];
+			const probe = Object.freeze({ kind: "capability" as const, version: 2 as const, respond: (reply: unknown) => seen.push(reply) });
+			for (const handler of [...handlers]) handler(probe);
+			return seen;
+		};
+
+		const firstOff = advertiseSubagentLaunchPort(bus);
+		expect(probeReplies()).toEqual([{ kind: "available", version: 2 }]);
+
+		// A /reload re-executes this module against the SAME process-lifetime bus:
+		// the fresh advertisement must retire the old responder, leaving exactly one.
+		const secondOff = advertiseSubagentLaunchPort(bus);
+		expect(handlers).toHaveLength(1);
+		expect(probeReplies()).toEqual([{ kind: "available", version: 2 }]);
+
+		// A stale pre-reload unsubscribe is inert — it must not drop the live responder.
+		firstOff();
+		expect(handlers).toHaveLength(1);
+		expect(probeReplies()).toEqual([{ kind: "available", version: 2 }]);
+
+		secondOff();
+		expect(handlers).toHaveLength(0);
+		expect(probeReplies()).toEqual([]);
+	});
+
 	it("passes the routed exact model and thinking args to the child process", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-child-argv-"));
 		scratch.push(dir);
