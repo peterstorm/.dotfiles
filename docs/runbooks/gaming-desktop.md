@@ -15,6 +15,13 @@ display manager, but does **not** activate the gaming packages or VM map limit.
 Switching back to `multi-user.target` closes the graphical session; stop games
 first. Don't run inference workloads on the same GPUs while playing.
 
+Boot default: the unattended boot entry stays **headless**. A
+`--specialisation graphical` apply rewrites `/boot/loader/loader.conf`'s
+`default` to the graphical entry, so the default is pinned by the persistent
+EFI variable instead (`bootctl set-default`, set 2026-10-17) — the EFI variable
+takes precedence over loader.conf and survives rebuilds and specialisation
+switches. Selecting **NixOS (graphical)** at the boot menu is per-boot only.
+
 ## Steam games
 
 Open `steam` from the XMonad session and sign in. In Steam **Settings →
