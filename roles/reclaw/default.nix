@@ -140,7 +140,11 @@
         # served as glm-5.3-flash-spark-tp2-v14) after the Qwen3.8 27B trial
         # container exited and v14 took both GPUs. Vision-capable, so Telegram
         # photo attachments still work; thinkingLevelMap maps low → low.
-        RECLAW_PI_MODEL = "glm-5.3-flash-spark-tp2-v14:low";
+        # 2026-10-17: GLM v15 (desktop container glm53-flash-qad2-tp2-v15,
+        # karmic-kraken-beta-20261015.2 + qad2 checkpoint, served as
+        # glm-5.3-flash-qad2-tp2-v15) replaces v14; vision-capable, and :low
+        # still maps through chat_template_kwargs over the server default high.
+        RECLAW_PI_MODEL = "glm-5.3-flash-qad2-tp2-v15:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";

@@ -151,7 +151,7 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers one OpenAI-compatible provider on the `desktop` workstation
-with eleven selectable models:
+with twelve selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/deepseek-v4-flash-vision`
@@ -160,7 +160,8 @@ with eleven selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1` (upstream-core-port r2.1: v11 plus the admission deadlock fix — r2 wedges once a long session heads the waiting queue)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v12` (upstream-core-port r2.1 + Spark TP2 port: SM120 disjoint-batch BMM, Mamba null-gap cleanup, graph-memory double-count fix, cublas 4 MiB workspace)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13` (upstream-core-port r2.1 + Spark TP2 port + grammar redesign: PR #52477 fixed-width stride fixes the structured-output + MTP3 crash, upstream #53046/#55455 hardening — **GLM rollback target**; v14 is the currently served profile, and v11.1 is v13's rollback target)
-- `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — **currently served**; the server resolves 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
+- `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — superseded by v15 on 2026-10-16 and its checkpoint deleted for disk space, so re-download before reuse; the server resolved 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
+- `desktop-vllm/glm-5.3-flash-qad2-tp2-v15` (karmic-kraken-beta-20261015.2 by digest, qad2 NVFP4/MXFP8 CSF checkpoint, lil-serve preset glm53-tp2: TP2/DCP2, MTP3, eight slots, fixed 7296 MiB/GPU FP8 KV = 1,844,162 tokens, 1M context, vision, server-default effort high — **served profile**; the catalog caps sessions at 524,288)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
@@ -258,7 +259,33 @@ pi --list-models glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10
 pi --model desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max
 pi --list-models glm-5.3-flash-spark-tp2-v14
 pi --model desktop-vllm/glm-5.3-flash-spark-tp2-v14:max
+pi --list-models glm-5.3-flash-qad2-tp2-v15
+pi --model desktop-vllm/glm-5.3-flash-qad2-tp2-v15:max
 ```
+
+### GLM-5.3 Flash qad2 TP2 (v15)
+
+v15 follows the third-party "GLM-5.3-Flash vLLM Recipe" (vendored in
+`docs/research/glm53-qad2-tp2-v15-2026-10-16-evidence/`): the Karmic Kraken
+beta build `20261015.2`, pulled **by digest** because beta tags move, serves
+`local-inference-lab/GLM-5.3-Flash-NVFP4-MXFP8-CSF-QAD` at revision
+`0a041763…` through `lil-serve --preset glm53-tp2` (TP2/DCP2, MTP3, eight
+slots, 4096-token prefill budget, 7,650,410,496 B/GPU fixed FP8 KV, A4 expert
+prefill, vision). It runs GPU-only (`CACHE_MODE=vram`) and sets the server
+default to effort **high** instead of the preset's max. vLLM honours
+per-request `chat_template_kwargs.reasoning_effort`, so the catalog's
+`defaultThinkingLevel: max` and the `:low` / `:high` suffixes still choose the
+effort per request.
+
+The recipe reports **1,844,162** KV tokens with a 1,048,576 context. It also
+warns against pinning a shorter `--max-model-len`: that regroups the hybrid
+KV cache and *shrinks* the pool (to 1,561,213 at 524,288). The server keeps
+its 1M, and the catalog caps **sessions** at **524,288**, which leaves room
+for about 3.5 full-length sessions in the shared pool across the eight slots.
+The exact boot values are in
+`~/.local/state/glm53/flash-qad2-tp2-v15-boot-receipt.txt`.
+
+See `docs/runbooks/glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md`.
 
 ### GLM-5.3 Flash Spark TP2 (v14)
 
