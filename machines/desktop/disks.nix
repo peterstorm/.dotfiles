@@ -110,6 +110,39 @@ in
             quota = "512G";
           };
         };
+
+        # DeepSeek-V4.1-Flash-1017 served by Project Maya (EXL3 3.5 bpw + the
+        # Engram tables, its checkout and pack). Maya keeps the experts that do
+        # not fit in VRAM in pinned RAM / the page cache and reads the rest from
+        # the SSD on demand. ARC would cache the same bytes a second time out of
+        # a 96 GB machine, so the dataset keeps only metadata in ARC.
+        "models/ds41" = {
+          type = "zfs_fs";
+          mountpoint = "/models/ds41";
+          options = {
+            mountpoint = "legacy";
+            compression = "off";
+            recordsize = "1M";
+            primarycache = "metadata";
+          };
+        };
+
+        # DeepSeek's two Engram tables (203 GB), symlinked into the model folder.
+        # The engine reads ~1 KB rows at random, 48 a token: under the parent's
+        # 1M records with no data caching every row cost a 1 MB read (480 GB of
+        # NVMe for a 6K-token prompt). Small records and a normal ARC instead.
+        # Write these files with plain read/write (curl, dd): `cp` block-clones
+        # on OpenZFS 2.4 and keeps the source's 1M blocks.
+        "models/ds41/engram" = {
+          type = "zfs_fs";
+          mountpoint = "/models/ds41/engram";
+          options = {
+            mountpoint = "legacy";
+            compression = "off";
+            recordsize = "16K";
+            primarycache = "all";
+          };
+        };
       };
     };
   };
