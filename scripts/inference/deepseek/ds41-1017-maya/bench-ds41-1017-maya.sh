@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Decode / prefill measurement for the Maya DeepSeek profile on :8000.
 #
-# Three greedy 512-token answers to a short prompt (decode), then a ~8K-token
-# prompt answered in 64 tokens (prefill). For each request: tokens, wall time,
-# end-to-end tok/s and the NVMe bytes read meanwhile (the number that told the
-# SSD-bound Q8 run apart). Run it on the desktop as a system unit - the user
+# Three greedy 512-token answers to a short prompt (decode), then one prompt
+# per BENCH_PREFILL_WORDS entry (default "6000 20000": ~6K and ~21K tokens)
+# answered in 1 token, so its wall time is the prefill. The filler is seeded
+# per run: Maya keeps the last conversation's KV, and a prompt repeated from an
+# earlier run would be served from it. For each request: tokens, wall time,
+# tok/s and the NVMe bytes read meanwhile (the number that told the SSD-bound
+# Q8 run apart). Run it on the desktop as a system unit - the user
 # has no linger, so an ssh-started job dies at logout:
 #   sudo systemd-run --unit ds41-maya-bench --collect --uid "$(id -u)" --gid "$(id -g)" \
 #     -E HOME="$HOME" -E PATH="$PATH" ./bench-ds41-1017-maya.sh <outfile>
@@ -16,6 +19,8 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 
 MODEL="deepseek-v4.1-flash"
 DISK="${BENCH_DISK:-nvme0n1}"
+PREFILL_WORDS="${BENCH_PREFILL_WORDS:-6000 20000}"
+SEED="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
 OUT="${1:-/dev/stdout}"
 
 inference_resolve_client_keyfile || { echo "error: no synchronized API key" >&2; exit 1; }
@@ -36,19 +41,25 @@ request() { # label prompt-file max-tokens
   jq -r --arg l "$label" --arg t0 "$t0" --arg t1 "$t1" --argjson b "$((b1 - b0))" '
     (($t1 | tonumber) - ($t0 | tonumber)) as $w
     | if .usage then
-        "\($l): prompt=\(.usage.prompt_tokens) completion=\(.usage.completion_tokens) wall=\($w * 10 | round / 10)s"
-        + " e2e=\(.usage.completion_tokens / $w * 100 | round / 100) tok/s"
-        + " nvme=\($b / 1e9 * 10 | round / 10) GB (\($b / 1e9 / .usage.completion_tokens * 1000 | round / 1000) GB/tok)"
+        "\($l): prompt=\(.usage.prompt_tokens) cached=\(.usage.prompt_tokens_details.cached_tokens // 0)"
+        + " completion=\(.usage.completion_tokens) wall=\($w * 10 | round / 10)s"
+        + (if $l | startswith("prefill") then " prefill=\(.usage.prompt_tokens / $w | round) tok/s"
+           else " e2e=\(.usage.completion_tokens / $w * 100 | round / 100) tok/s" end)
+        + " nvme=\($b / 1e9 * 10 | round / 10) GB"
       else "\($l): ERROR \(.error // . | tostring)" end' <<<"$body"
 }
 
-echo "Write a detailed, long technical essay on the history of compilers, from Fortran to modern LLVM, covering parsing, optimization passes, register allocation and JIT compilation." >"$WORK/short"
-# ~8K tokens of deterministic filler for the prefill request.
-awk 'BEGIN { srand(1); split("system memory kernel expert routing token cache latency throughput tensor gradient layer", w, " ");
-  printf "Summarize the following log in three sentences.\n"; for (i = 0; i < 6000; i++) printf "%s ", w[int(rand() * 12) + 1] }' >"$WORK/long"
+echo "Write a detailed, long technical essay on the history of compilers, from Fortran to modern LLVM, covering parsing, optimization passes, register allocation and JIT compilation. ($SEED)" >"$WORK/short"
+filler() { # words seed -> a prompt of about 1.06 tokens a word
+  awk -v n="$1" -v s="$2" 'BEGIN { srand(s); split("system memory kernel expert routing token cache latency throughput tensor gradient layer", w, " ");
+    printf "Summarize the following log in three sentences.\n"; for (i = 0; i < n; i++) printf "%s ", w[int(rand() * 12) + 1] }'
+}
 
 {
-  echo "# $(date -Is) $MODEL on :8000"
+  echo "# $(date -Is) $MODEL on :8000 (seed $SEED)"
   for i in 1 2 3; do request "decode$i" "$WORK/short" 512; done
-  request "prefill-8k" "$WORK/long" 64
+  for words in $PREFILL_WORDS; do
+    filler "$words" "$((SEED + words))" >"$WORK/long-$words"
+    request "prefill-${words}w" "$WORK/long-$words" 1
+  done
 } | tee "$OUT"
