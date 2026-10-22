@@ -144,7 +144,13 @@
         # karmic-kraken-beta-20261015.2 + qad2 checkpoint, served as
         # glm-5.3-flash-qad2-tp2-v15) replaces v14; vision-capable, and :low
         # still maps through chat_template_kwargs over the server default high.
-        RECLAW_PI_MODEL = "glm-5.3-flash-qad2-tp2-v15:low";
+        # 2026-10-22: DeepSeek-V4.1-Flash-1017 on Project Maya (desktop
+        # container ds41-1017-maya-exl35, served as deepseek-v4.1-flash) replaces
+        # v15 on the GPUs. Maya answers any model id, so the GLM pin kept
+        # working by accident but with GLM's 524K catalog window against Maya's
+        # 131,072 (262,144 since that afternoon); vision-capable, and :low maps
+        # to reasoning_effort low.
+        RECLAW_PI_MODEL = "deepseek-v4.1-flash:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
