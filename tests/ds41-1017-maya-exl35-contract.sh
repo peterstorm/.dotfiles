@@ -23,7 +23,7 @@ DISKS="$ROOT/machines/desktop/disks.nix"
 RUNBOOK="$ROOT/docs/runbooks/ds41-1017-maya-exl35-runbook-2026-10-21.md"
 
 MANIFEST_SHA256="b30489b0462cab55b1b9a522b7b8d8134325db9d11b5f7caee07707fd84c8ace"
-MAYA_COMMIT="8d9a9b5d705049a87da853717cdc59440252de30"
+MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 IMAGE_CONFIG="sha256:7b5c335cc647b203aacd09e7513f19266846a8efeabdcaa8724524e51e04ff7a"
 IMAGE_DIGEST="sha256:495b340eede3bbb348fd6c9662d1535e0d2f27e47c08cc71802fea6bc68caf40"
 REPO="LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-3.5bpw"
@@ -92,6 +92,9 @@ contains "$RUN" 'endswith("@" + $d)'
 contains "$RUN" 'git -C "$MAYA_DIR" status --porcelain'
 contains "$RUN" '(.archs | index(120)) and (.targets | index("maya-ds4"))'
 contains "$RUN" 'QUANT="exl3-3.5"'
+contains "$RUN" 'CONTEXT="${CONTEXT:-262144}"'
+contains "$RUN" 'PREFILL_CHUNK="${PREFILL_CHUNK:-8192}"'
+contains "$RUN" '$i != null and $a[$i + 1] == $c and $j != null and $a[$j + 1] == $p'
 contains "$RUN" 'QUANT_DIR="$MODELS_DIR/DeepSeek-V4.1-Flash-1017-3.5bpw"'
 contains "$RUN" '.installer.ds4_quant == $q'
 contains "$RUN" "--ds4-quant '\$QUANT'"
