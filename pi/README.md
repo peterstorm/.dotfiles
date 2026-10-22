@@ -151,7 +151,7 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers one OpenAI-compatible provider on the `desktop` workstation
-with twelve selectable models:
+with thirteen selectable models:
 
 - `desktop-vllm/deepseek-v4-flash`
 - `desktop-vllm/deepseek-v4-flash-vision`
@@ -161,7 +161,8 @@ with twelve selectable models:
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v12` (upstream-core-port r2.1 + Spark TP2 port: SM120 disjoint-batch BMM, Mamba null-gap cleanup, graph-memory double-count fix, cublas 4 MiB workspace)
 - `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13` (upstream-core-port r2.1 + Spark TP2 port + grammar redesign: PR #52477 fixed-width stride fixes the structured-output + MTP3 crash, upstream #53046/#55455 hardening — **GLM rollback target**; v14 is the currently served profile, and v11.1 is v13's rollback target)
 - `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — superseded by v15 on 2026-10-16 and its checkpoint deleted for disk space, so re-download before reuse; the server resolved 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
-- `desktop-vllm/glm-5.3-flash-qad2-tp2-v15` (karmic-kraken-beta-20261015.2 by digest, qad2 NVFP4/MXFP8 CSF checkpoint, lil-serve preset glm53-tp2: TP2/DCP2, MTP3, eight slots, fixed 7296 MiB/GPU FP8 KV = 1,844,162 tokens, 1M context, vision, server-default effort high — **served profile**; the catalog caps sessions at 524,288)
+- `desktop-vllm/glm-5.3-flash-qad2-tp2-v15` (karmic-kraken-beta-20261015.2 by digest, qad2 NVFP4/MXFP8 CSF checkpoint, lil-serve preset glm53-tp2: TP2/DCP2, MTP3, eight slots, fixed 7296 MiB/GPU FP8 KV = 1,844,162 tokens, 1M context, vision, server-default effort high — served until 2026-10-21 and the GLM rollback target; the catalog caps sessions at 524,288)
+- `desktop-vllm/deepseek-v4.1-flash` (DeepSeek-V4.1-Flash-1017, LibertAIDAI EXL3 3.5 bpw + DeepSeek's Engram tables, on Project Maya `b3fa99e` = v1.1.21 + the conversation-slot PR #356: TP2, DSpark drafter, 262,144-token context, vision, four conversations parked so an agent's parent and workers stop re-reading each other's prompts — **served profile** since 2026-10-21, context doubled from 131,072 on 2026-10-22)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
@@ -212,6 +213,51 @@ before sending a prompt. Verify discovery without contacting the server:
 
 ```bash
 pi --list-models deepseek-v4-flash
+```
+
+### DeepSeek V4.1 Flash 1017 (Project Maya)
+
+Not a vLLM server: Project Maya's `maya-ds4` engine (v1.1.21 plus the
+conversation-slot PR), which keeps the most-used experts in the two RTX PRO
+6000s' VRAM, reads the rest in place from the model files while holding its
+own anonymous heap copy of the most-routed ones (not a pinned tier, not page
+cache), and keeps DeepSeek's Engram tables on a 16K-record ZFS dataset
+(`docs/runbooks/ds41-1017-maya-exl35-runbook-2026-10-21.md`). Measured on
+the served config (262,144 context, 8,192-token prompt chunks, DSpark on): 83-138
+tok/s decode (108-135 on 58-88K-token conversations, 104 at 205K), 1,420-1,950 tok/s
+prefill on a cold prompt (10K-25K tokens) — level with v1.1.17's 1,541 tok/s at
+20K, because the release notes' ~1.5x prompt skip needs one GPU per layer and
+this profile is `--tp 2`. Maya keeps the last conversation's KV, so a
+continued conversation only pays for its new tokens (a 71.5K-token
+conversation's next turn: 28 tokens read, 114 ms); a new or rewritten history
+pays the cold rate, ~1,700 tok/s even at 200K (a 205,180-token prompt read in
+120 s). The engine parks the four least-recently-used conversations
+(in RAM, then in `<pack>/slots`), so switching between an agent's parent and
+its workers costs their new tokens instead of a re-read — a parked
+conversation restores in 0.1-0.5 s, and `SLOT_KEEP=0` on the run script turns
+it off.
+
+- **Auth**: every endpoint needs the shared inference key, including
+  `/metrics` (401 without it), so the vLLM switchers' idle gate cannot read
+  Maya's load — stop Maya before starting another profile.
+
+- **Context**: the catalog's 262,144 is the server's own `--max-context`,
+  proven by retrieval, not by a flag: a 205,180-token prompt with facts buried
+  at 15% and 80% depth answered with both (2026-10-22). The pack is YaRN x16
+  over a 65,536 base, so half the model's 1,048,576 remains in reach — but
+  524,288 waits for its own needle run, and `metrics.trained_context` is null.
+  Larger values are not a Pi tweak — a 32,768-token prompt chunk wedged the
+  host, and the context is pinned in the run script after measurement.
+- **Thinking**: Maya maps `reasoning_effort` `low`, `high` and `max`
+  (`medium` → high, `xhigh` → max, `none` → off); the catalog exposes those
+  three and defaults to DeepSeek's own `high`.
+- **Model id**: Maya answers any model name with this model, so a client
+  still pinned to a GLM id silently gets DeepSeek with GLM's catalog limits —
+  select this entry explicitly.
+
+```bash
+pi --list-models deepseek-v4.1-flash
+pi --model desktop-vllm/deepseek-v4.1-flash:high
 ```
 
 ### GLM-5.3 Flash EXL3 K4

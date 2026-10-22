@@ -302,6 +302,39 @@
           }
         },
         {
+          "id": "deepseek-v4.1-flash",
+          "name": "DeepSeek-V4.1-Flash-1017 EXL3 3.5bpw on Project Maya b3fa99e = v1.1.21 + slot PR #356 (TP2, DSpark, Engram on 16K ZFS, 256K ctx, four parked conversations, vision)",
+          "reasoning": true,
+          "defaultThinkingLevel": "high",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
           "id": "qwen3.8-27b",
           "name": "Qwen3.8 27B BF16 (local RTX workstation)",
           "reasoning": true,
