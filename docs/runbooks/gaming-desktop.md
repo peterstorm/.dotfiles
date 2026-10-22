@@ -20,7 +20,11 @@ Boot default: the unattended boot entry stays **headless**. A
 `default` to the graphical entry, so the default is pinned by the persistent
 EFI variable instead (`bootctl set-default`, set 2026-10-17) — the EFI variable
 takes precedence over loader.conf and survives rebuilds and specialisation
-switches. Selecting **NixOS (graphical)** at the boot menu is per-boot only.
+switches. It names one generation's entry file, so `system-apply.sh` moves it
+to each new generation's headless entry after a successful switch (without
+that the desktop kept booting generation 73 after 74 was applied,
+2026-10-22); a manual `switch-to-configuration` must re-pin by hand.
+Selecting **NixOS (graphical)** at the boot menu is per-boot only.
 
 ## Steam games
 
