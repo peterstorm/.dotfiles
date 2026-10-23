@@ -10,6 +10,14 @@ kube-prometheus-stack:
       forceConflicts: true
   grafana:
     enabled: true
+    # The chart's default renders its own admin password with a helm `lookup`
+    # that ArgoCD's offline template cannot satisfy, so every render minted a
+    # new randAlphaNum 40: the Secret and the Deployment's checksum/secret
+    # annotation churned on each sync and Grafana's hashed password stopped
+    # matching the Secret. Point at the ksops-generated Secret instead — the
+    # chart then stops rendering one entirely (see monitoring-admin/).
+    admin:
+      existingSecret: grafana-admin
     sidecar:
       dashboards:
         enabled: true
