@@ -34,7 +34,7 @@ spec:
               exit 1
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:2026.3.0
+          image: cloudflare/cloudflared:2026.10.3
           args:
             - tunnel
             - --config
