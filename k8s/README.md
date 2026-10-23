@@ -407,14 +407,23 @@ sudo nix run nixpkgs#sqlite -- /var/lib/rancher/k3s/server/db/state.db \
 sudo systemctl start k3s
 ```
 
-Note `--kube-apiserver-arg=endpoint-reconciler-type=lease` does **not** help —
-k3s overrides it, and the reconciler keeps reading the registry (verified: a
-probe Lease labelled `apiserver.kubernetes.io/identity: kube-apiserver` never
-appeared in the endpoints).
-
 Removing the ghost from `kube-system/k3s-serving`'s `listener.cattle.io/cn-*`
 annotations is also worth doing if the address lingers there; the dynamic
 listener keeps old SANs by design, so it will otherwise re-add them.
+
+Preventing the next one: pin the advertise address when the node has more than
+one IP on the same link. `homelab` runs WiFi and Ethernet on one /24
+(`192.168.0.28` / `192.168.0.29`), and without a pin k3s registers an apiserver
+endpoint for each — so the ClusterIP keeps a backend that disappears the moment
+WiFi drops. `roles/k3s/default.nix` sets `--node-ip=192.168.0.28` and
+`--advertise-address=192.168.0.28`; WiFi stays available for everything else.
+Note that `--node-ip` with a single IPv4 also drops the node's IPv6 InternalIP
+from `kubectl get node -o wide`.
+
+`--kube-apiserver-arg=endpoint-reconciler-type=lease` does **not** help —
+k3s overrides it, and the reconciler keeps reading the registry (verified: a
+probe Lease labelled `apiserver.kubernetes.io/identity: kube-apiserver` never
+appeared in the endpoints). It was tried and reverted.
 
 ### Grafana admin password drifts from the Secret
 
