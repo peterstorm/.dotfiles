@@ -371,6 +371,76 @@ The Grafana contract keys off `model_name` after normalizing runtime-specific me
 
 ## Troubleshooting
 
+### In-cluster API calls fail ~1/N of the time (dead ClusterIP backend)
+
+Symptom: `dial tcp 10.43.0.1:443: i/o timeout` from inside pods, intermittently —
+ArgoCD syncs fail with "failed to discover server resources for group version
+v1", while `curl https://<node-ip>:6443` from the same pod works every time.
+
+```bash
+kubectl get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[*].ip}{"\n"}'
+kubectl -n kube-system exec ds/cilium -- cilium-dbg bpf lb list | grep 10.43.0.1:443
+```
+
+If that list contains an address the node does not have, cilium is load
+balancing in-cluster API connections onto a black hole. The cause is the
+apiserver's `multi-master` endpoint reconciler, which reads the
+`/registry/masterleases/<ip>` registry in kine and **never expires entries**:
+a node that has changed its IPv4 address keeps every address it has ever had.
+The stale entries survive `systemctl restart k3s` and live on disk, not in the
+`kubernetes` object you can see in the API.
+
+Fix — stop k3s, insert a kine tombstone for the dead key, start k3s. Match the
+shape real deletes use (`created=0`, `deleted=1`, `create_revision=0`,
+`prev_revision` = the latest row id for that key, `lease=0`, `value=NULL`):
+
+```bash
+sudo systemctl stop k3s
+sudo cp -a /var/lib/rancher/k3s/server/db/state.db{,.bak}
+sudo nix run nixpkgs#sqlite -- /var/lib/rancher/k3s/server/db/state.db \
+  "SELECT id,name,created,deleted,create_revision,prev_revision,lease FROM kine \
+   WHERE name LIKE '/registry/masterleases/%';"
+sudo nix run nixpkgs#sqlite -- /var/lib/rancher/k3s/server/db/state.db \
+  "INSERT INTO kine (name, created, deleted, create_revision, prev_revision, lease, value) \
+   SELECT '/registry/masterleases/<ghost-ip>', 0, 1, 0, id, 0, NULL FROM kine \
+   WHERE name='/registry/masterleases/<ghost-ip>' ORDER BY id DESC LIMIT 1;"
+sudo systemctl start k3s
+```
+
+Note `--kube-apiserver-arg=endpoint-reconciler-type=lease` does **not** help —
+k3s overrides it, and the reconciler keeps reading the registry (verified: a
+probe Lease labelled `apiserver.kubernetes.io/identity: kube-apiserver` never
+appeared in the endpoints).
+
+Removing the ghost from `kube-system/k3s-serving`'s `listener.cattle.io/cn-*`
+annotations is also worth doing if the address lingers there; the dynamic
+listener keeps old SANs by design, so it will otherwise re-add them.
+
+### Grafana admin password drifts from the Secret
+
+The grafana subchart renders its admin password with `helper "grafana.password"`,
+which uses helm `lookup` to reuse the existing Secret. ArgoCD renders offline,
+so `lookup` returns nothing and a fresh `randAlphaNum 40` is generated on every
+manifest render. Consequence: `Secret/monitoring-grafana` and the Deployment
+(`checksum/secret`) are rewritten on each sync, and the password Grafana
+actually hashed at first boot no longer matches the Secret.
+
+To recover access, reset the DB hash to whatever the Secret currently holds:
+
+```bash
+P=$(kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d)
+kubectl -n monitoring exec deploy/monitoring-grafana -c grafana -- \
+  /usr/share/grafana/bin/grafana cli --homepath /usr/share/grafana \
+  --config /etc/grafana/grafana.ini admin reset-admin-password "$P"
+```
+
+The `--config` flag is required; without it the CLI starts up but silently does
+nothing visible. Verify with basic auth (`curl -u admin:$P .../api/user`) rather
+than `/api/login`, which rejects even valid credentials in this setup.
+
+The durable fix is a ksops-managed Secret in the `monitoring` namespace plus
+`grafana.admin.existingSecret`, which stops the chart rendering one at all.
+
 ```bash
 # App not syncing
 kubectl -n argocd get app <app-name> -o yaml | grep -A5 status
