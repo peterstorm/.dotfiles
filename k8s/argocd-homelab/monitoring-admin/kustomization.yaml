@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The ApplicationSet names this app after its directory and points the
+# destination at a namespace of the same name, but the only resource here is a
+# Secret that must live beside the Grafana pods, so the namespace transformer
+# overrides the destination. ArgoCD syncs it into `monitoring` and the empty
+# `monitoring-admin` namespace it creates is inert.
+namespace: monitoring
+
+generators:
+  - secret-generator.yaml
