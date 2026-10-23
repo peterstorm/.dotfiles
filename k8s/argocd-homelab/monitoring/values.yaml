@@ -1,6 +1,13 @@
 kube-prometheus-stack:
+  # CRDs are cluster-scoped and (as of the 67.x install) were created outside
+  # Helm, so they have no release ownership and Helm would never upgrade them.
+  # Enabling the chart's CRD upgrade job makes the pre-sync job apply the
+  # 0.94.1 schemas and take ownership, which is required for the operator bump.
   crds:
-    enabled: false
+    enabled: true
+    upgradeJob:
+      enabled: true
+      forceConflicts: true
   grafana:
     enabled: true
     sidecar:
