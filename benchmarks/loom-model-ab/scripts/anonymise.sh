@@ -54,7 +54,10 @@ letter_for() { printf '%b' "\\$(printf '%03o' $((65 + $1)))"; }
 # Tells that would unblind the grader if left in the artifacts.
 scrub() {
   sed -E \
-    -e 's/deepseek[-_ ]?v4[-_ ]?flash/MODEL-UNDER-TEST/gI' \
+    -e 's/deepseek[-_ ]?v4(\.1)?[-_ ]?flash[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
+    -e 's/\bds41[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
+    -e 's/\b(project )?maya\b/BACKEND/gI' \
+    -e 's/\bexl3\b/BACKEND/gI' \
     -e 's/qwen ?3\.?8[-_ ]?flash[-_ ]?next[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
     -e 's/qwen ?3\.?8[-_ ]?27b/MODEL-UNDER-TEST/gI' \
     -e 's/glm[-_ ]?5\.?3[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
@@ -62,8 +65,8 @@ scrub() {
     -e 's/\bdeepseek\b/MODEL-UNDER-TEST/gI' \
     -e 's/\b(qwen|glm)\b/MODEL-UNDER-TEST/gI' \
     -e 's/\bds4\b/MODEL-UNDER-TEST/gI' \
-    -e 's/\b(sglang|vllm|dspark|dflash2?|mtp3?)\b/BACKEND/gI' \
     -e 's/desktop-vllm[a-z0-9._\/-]*/PROVIDER/gI' \
+    -e 's/\b(sglang|vllm|dspark|dflash2?|mtp3?)\b/BACKEND/gI' \
     "$1"
 }
 

@@ -20,7 +20,8 @@ primary novel-feature planning benchmark now lives at
 fan-out feature. Scores are never comparable between the two benchmark
 families.
 
-The benchmark supports DeepSeek V4 Flash text and Vision r21, two immutable
+The benchmark supports DeepSeek V4 Flash text and Vision r21, DeepSeek-V4.1-Flash
+on Project Maya, two immutable
 Qwen3.8-27B runtime profiles, both immutable Qwen3.8 Flash-Next FP8 runtimes,
 three historical immutable GLM-5.3 Flash v84 profiles, and the qualified v10 TP2/EP2/DCP2
 profile. Results are comparable only when both `protocol_version` and the
@@ -43,9 +44,13 @@ answer key, hidden requirements, or rubric changes.
 
 ## Why this is measurable
 
-`pi/model-routing.json` routes local parents through the parent binding. When
-the parent Pi session uses a `desktop-vllm/*` model, every planning child must
-inherit that exact provider/model/thinking selector. Both ordinary subagents
+`pi/model-routing.json` routes local parents through the parent binding: its
+first rule that can match a local parent is `local-workloads-use-parent`
+(`use: {kind: parent}`), which `verify-harness.sh` asserts. When the parent Pi
+session uses a `desktop-vllm/*` model, every planning child must inherit that
+exact provider/model/thinking selector. The rendered phase-agent files carry a
+declared thinking default (e.g. `:high`); the parent rule overrides it at spawn,
+so the attested effective selector is what counts. Both ordinary subagents
 and interactive RPC phase children are checked by
 `scripts/verify-run-models.sh`; missing or mismatched routing evidence voids the
 run.
@@ -65,6 +70,7 @@ This measures planning directly. No implementation is generated or inferred.
 |---|---|---:|---|
 | `ds4` | `desktop-vllm/deepseek-v4-flash:max` | 1,048,576 | `ds4-infernal-invocation-cu133-r18` |
 | `ds4-vision-r21` | `desktop-vllm/deepseek-v4-flash-vision:max` | 312,000 | `ds4-flash-vision-infernal-invocation-cu133-r21-v1` |
+| `ds41` | `desktop-vllm/deepseek-v4.1-flash:max` | 262,144 | `ds41-1017-maya-exl35` |
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
 | `qwen-vllm-bf16kv` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dflash2-vllm-v3` |
 | `qwen-flash-next` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v1` |
@@ -80,7 +86,9 @@ bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 ```
 
 `ds4-vision-r21` measures the qualified TP2 B12X/DGLIN Vision profile with
-fixed DSpark K6. `qwen-vllm-bf16kv` measures the single-GPU vLLM
+fixed DSpark K6. `ds41` measures DeepSeek-V4.1-Flash-1017 EXL3 3.5 bpw on
+Project Maya (TP2, DSpark, cold experts read in place from the model files).
+`qwen-vllm-bf16kv` measures the single-GPU vLLM
 DFlash2/BF16-KV profile;
 `qwen` remains the historical TP2 SGLang/DSpark arm. `qwen-flash-next` preserves
 the original experimental TP2 FP8 profile; `qwen-flash-next-v2` measures the
@@ -124,15 +132,26 @@ planning result.
 Arms and repetitions must not see each other’s work:
 
 1. **Filesystem:** each run gets a fresh git worktree from one recorded Loom
-   base commit.
-2. **Cortex:** disable recall and extraction for the entire batch. Any
+   base commit — the **subject**, named by `baseline/known-failures.json`, never
+   Loom's moving HEAD.
+2. **Memory:** disable Cortex and the Obsidian vault for the entire batch. Any
    `CORTEX_MEMORY_START` in `session.jsonl` voids the run.
-3. **Loom state/GitHub:** each worktree owns fresh `.claude/` state. Keep Issue
+3. **Orchestrator:** the Loom that runs `/loom` (the **runtime**) is a clean,
+   detached checkout recorded as `loom_runtime_sha`. Pi loads it through
+   `LOOM_RUNTIME_LOADER_ROOT`, the Loom package entry in Pi settings points at
+   it (child skills resolve from package sources), and phase agents are
+   rendered from it. A dirty runtime is refused: its SHA would not identify
+   what ran.
+4. **Loom state/GitHub:** each worktree owns fresh `.claude/` state. Keep Issue
    creation disabled or record the unique issue.
-4. **Runtime:** port 8000 is exclusive. Arms cannot run concurrently.
+5. **Inference:** port 8000 is exclusive. Arms cannot run concurrently.
 
 Batching confounds arm with time-of-day and host state. Never cross a driver,
-firmware, Pi, protocol-hash, or Loom-baseline change inside one batch.
+firmware, Pi, protocol-hash, Loom-subject, or Loom-runtime change inside one
+batch. Runs recorded before `loom_runtime_sha` existed ran the orchestrator
+from the subject commit itself (Loom `3de455c`/`48483ba`, Pi 0.83.0, before
+`loom-runtime-loader.ts`); a later runtime is a confound to state alongside
+any cross-batch comparison.
 
 ## Backend switching
 
@@ -168,6 +187,9 @@ bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
 
 # DS4 Vision r21
 bash scripts/inference/deepseek/switch-ds4-flash-vision-r21-v1.sh start
+
+# DeepSeek-V4.1-Flash on Project Maya
+bash scripts/inference/deepseek/ds41-1017-maya/switch-ds41-1017-maya-exl35.sh start
 ```
 
 Then authenticate and attest the served model:
@@ -237,7 +259,8 @@ record it as unblinded.
 ## Voiding and invalidating
 
 **Void and rerun** only for harness failure, backend death, Cortex recall,
-missing/mismatched child routing, or operator answer drift.
+missing/mismatched child routing, or operator answer drift. Drift is any
+`interview.sh check` error, or a warning nobody can defend from the key.
 
 **Retain as model evidence** context exhaustion, looping, phase timeout, model
 give-up, bad requirements, bad architecture, or bad decomposition.
@@ -260,21 +283,33 @@ protocols/v2/
   hidden/ui-relay.hidden.test.ts  v2 executable cross-check
   rubric.md                       v2 blind planning rubric
 operator-tmux.md                  attended procedure, outside protocol
+scripts/interview.sh              answer selection + interview audit, outside protocol
+scripts/interview-topics.json     answer-key topic names/hints the audit matches
 runs/<run-id>/                    receipts, artifacts, transcript, scores
 ```
 
 ## Running a batch
 
-Before the first run:
+Before the first run, pin a clean runtime (any Loom commit; record why you
+chose it) and give it the engine's installed dependencies — a worktree only
+carries the tracked subset of `engine/node_modules`:
 
 ```bash
+SHA=<runtime-commit>
+RUNTIME=~/dev/claude-plugins/loom-bench-runtime-${SHA:0:7}
+git -C ~/dev/claude-plugins/loom worktree add --detach "$RUNTIME" "$SHA"
+ln -s ~/dev/claude-plugins/loom/node_modules "$RUNTIME/node_modules"
+(cd "$RUNTIME/engine" && bun install --frozen-lockfile)
+export LOOM_RUNTIME_REPO="$RUNTIME"
+
 bash scripts/verify-harness.sh
-bash scripts/isolation.sh off
+bash scripts/isolation.sh off      # with LOOM_RUNTIME_REPO set, also pins Pi's Loom package
 bash scripts/isolation.sh status
-bash scripts/run-arm.sh --probe glm-v10-dcp2
+bash scripts/run-arm.sh --probe ds41
 ```
 
-If the Loom baseline is stale, refresh and commit it before comparing arms:
+To change the subject, check out the new commit in `~/dev/claude-plugins/loom`
+and refresh and commit the baseline before comparing arms:
 
 ```bash
 bash scripts/baseline.sh
@@ -283,7 +318,7 @@ bash scripts/baseline.sh
 Per run:
 
 ```bash
-bash scripts/run-arm.sh glm-v10-dcp2 1  # v2 by default
+bash scripts/run-arm.sh ds41 1  # v2 by default
 ```
 
 `run.json` records `protocol_version` and the hash over every selected protocol
@@ -291,13 +326,16 @@ artifact. The launcher prints the matching answer-key path; use that path rather
 than assuming the retired root `frozen/` directory.
 
 Follow the printed launch instructions. In Pi, submit the one-line `/loom`
-command exactly as printed. Answer only from `frozen/answer-key.md`, recording
-every exchange in the run’s `interview.md`.
+command exactly as printed. Answer every interview question through
+`scripts/interview.sh` (`suggest`, then `log`; see `operator-tmux.md` §5). It
+reads the run's own protocol key, records the exchange in `interview.md`, and
+prints the exact text to send.
 
 When decomposition completes, stop before Wave 1. Copy the parent Pi transcript
 to `session.jsonl`, then run:
 
 ```bash
+bash scripts/interview.sh runs/<run-id> check  # any ERROR voids
 bash scripts/verify-run-models.sh runs/<run-id>
 bash scripts/grade-planning.sh <worktree> runs/<run-id>
 grep -l CORTEX_MEMORY_START runs/<run-id>/session.jsonl  # any hit voids
@@ -316,7 +354,7 @@ git -C ~/dev/claude-plugins/loom worktree remove <worktree>
 After the batch:
 
 ```bash
-bash scripts/isolation.sh on
+bash scripts/isolation.sh on       # restores Pi settings and the rendered agents
 bash scripts/anonymise.sh batch-1 runs/2026*
 ```
 

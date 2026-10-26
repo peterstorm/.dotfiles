@@ -9,7 +9,11 @@
 set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Two Loom roles: LOOM hosts the subject commit the model plans against (the
+# baseline receipt names it), and LOOM_RUNTIME is the orchestrator Pi loads.
+# The runtime must be a clean checkout so its SHA identifies what ran.
 LOOM="${LOOM_REPO:-$HOME/dev/claude-plugins/loom}"
+LOOM_RUNTIME="${LOOM_RUNTIME_REPO:-$LOOM}"
 # shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
 source "$BENCH_DIR/scripts/arms.sh"
 
@@ -52,32 +56,71 @@ IFS=$'\t' read -r MODEL EXPECTED CONTEXT_WINDOW PROFILE_CONTAINER START_HINT PRO
   <<<"$ARM_RECORD"
 [[ "$REP" =~ ^[0-9]+$ ]] || { echo "repetition must be an integer" >&2; exit 2; }
 
-BASE_SHA="$(git -C "$LOOM" rev-parse HEAD)"
 BASELINE_FILE="$BENCH_DIR/baseline/known-failures.json"
 [[ -f "$BASELINE_FILE" ]] || {
   echo "missing benchmark baseline; run: bash $BENCH_DIR/scripts/baseline.sh" >&2
   exit 1
 }
-BASELINE_SHA="$(jq -er '.base_sha' "$BASELINE_FILE")" || {
+# The subject commit is whatever the baseline receipt recorded — never Loom's
+# moving HEAD — so every arm in a batch plans against the same bytes.
+BASE_SHA="$(jq -er '.base_sha | select(test("^[0-9a-f]{40}$"))' "$BASELINE_FILE")" || {
   echo "invalid benchmark baseline: $BASELINE_FILE" >&2
   exit 1
 }
-[[ "$BASELINE_SHA" == "$BASE_SHA" ]] || {
-  echo "stale benchmark baseline: recorded $BASELINE_SHA, Loom is $BASE_SHA" >&2
+[[ "$(git -C "$LOOM" rev-parse --verify --quiet "$BASE_SHA^{commit}")" == "$BASE_SHA" ]] || {
+  echo "stale benchmark baseline: recorded subject $BASE_SHA is not a commit in $LOOM" >&2
   echo "refresh it before running an arm: bash $BENCH_DIR/scripts/baseline.sh" >&2
   exit 1
 }
 
-PI_SETTINGS="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json"
+RUNTIME_SHA="$(git -C "$LOOM_RUNTIME" rev-parse HEAD)" || {
+  echo "Loom runtime is not a git checkout: $LOOM_RUNTIME" >&2
+  exit 1
+}
+[[ -z "$(git -C "$LOOM_RUNTIME" status --porcelain)" ]] || {
+  echo "Loom runtime has uncommitted changes, so its SHA cannot identify the orchestrator: $LOOM_RUNTIME" >&2
+  echo "pin a clean one: git -C $LOOM worktree add --detach <dir> <sha>; LOOM_RUNTIME_REPO=<dir>" >&2
+  exit 1
+}
+LOOM_RUNTIME="$(cd "$LOOM_RUNTIME" && pwd)"
+
+PI_AGENT_ROOT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+PI_SETTINGS="$PI_AGENT_ROOT/settings.json"
 [[ -f "$PI_SETTINGS" ]] || { echo "missing Pi settings: $PI_SETTINGS" >&2; exit 1; }
-if node -e '
+if ! node -e '
   const settings = require(process.argv[1]);
-  process.exit((settings.packages ?? []).some((entry) => entry.includes("cortex")) ? 0 : 1);
+  const source = (p) => (typeof p === "string" ? p : p?.source);
+  const memory = (settings.packages ?? []).some((p) => /(^|\/)(cortex|obsidian)\/?$/.test(source(p) ?? ""));
+  process.exit(memory ? 1 : 0);
 ' "$PI_SETTINGS"; then
-  echo "Cortex is active; cross-arm memory would contaminate this run." >&2
+  echo "A memory package (cortex/obsidian) is active, or Pi settings are unreadable; cross-arm memory would contaminate this run." >&2
   echo "Disable it first: bash $BENCH_DIR/scripts/isolation.sh off" >&2
   exit 1
 fi
+if ! node -e '
+  const fs = require("fs");
+  const path = require("path");
+  const [file, runtime] = process.argv.slice(1);
+  const settings = JSON.parse(fs.readFileSync(file, "utf8"));
+  const source = (p) => (typeof p === "string" ? p : p?.source);
+  const loomRoots = (settings.packages ?? [])
+    .map((p) => path.resolve(path.dirname(file), source(p) ?? ""))
+    .filter((root) => {
+      try { return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name === "@peterstorm/loom"; }
+      catch { return false; }
+    })
+    .map((root) => fs.realpathSync(root));
+  process.exit(loomRoots.length === 1 && loomRoots[0] === fs.realpathSync(runtime) ? 0 : 1);
+' "$PI_SETTINGS" "$LOOM_RUNTIME"; then
+  echo "Pi's Loom package does not resolve to the pinned runtime $LOOM_RUNTIME; child skills would come from another checkout." >&2
+  echo "Pin it for the batch (after 'isolation.sh on' if isolation is already off):" >&2
+  echo "  LOOM_RUNTIME_REPO=$LOOM_RUNTIME bash $BENCH_DIR/scripts/isolation.sh off" >&2
+  exit 1
+fi
+[[ -d "$PI_AGENT_ROOT/agents.bench-backup" ]] || {
+  echo "no rendered-agent snapshot; run-arm re-renders agents, so start the batch with: bash $BENCH_DIR/scripts/isolation.sh off" >&2
+  exit 1
+}
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$ARM-$REP"
 RUN_DIR="$BENCH_DIR/runs/$RUN_ID"
@@ -166,8 +209,8 @@ EOF
 fi
 
 if [[ "$PROBE_ONLY" == true ]]; then
-  printf 'READY: arm=%s model=%s served=%s context=%s profile=%s baseline=%s protocol=%s\n' \
-    "$ARM" "$MODEL" "$SERVED" "$CONTEXT_WINDOW" "$PROFILE_CONTAINER" "$BASE_SHA" "$PROTOCOL_VERSION"
+  printf 'READY: arm=%s model=%s served=%s context=%s profile=%s baseline=%s runtime=%s protocol=%s\n' \
+    "$ARM" "$MODEL" "$SERVED" "$CONTEXT_WINDOW" "$PROFILE_CONTAINER" "$BASE_SHA" "$RUNTIME_SHA" "$PROTOCOL_VERSION"
   exit 0
 fi
 
@@ -198,6 +241,25 @@ git -C "$WORKTREE" -c user.name=benchmark -c user.email=bench@local \
 mkdir -p "$RUN_DIR"
 git -C "$WORKTREE" rev-parse HEAD > "$RUN_DIR/base_sha"
 
+# Phase agents are rendered files carrying a model binding and the Loom
+# package root that rendered them. Render them from the pinned runtime, bound
+# to this arm's model, and refuse to continue unless the render says so. The
+# rendered thinking level is only a declared default: the local-parent routing
+# rule hands every child the live parent selector (thinking included), and
+# verify-run-models.sh attests that effective selector per child.
+SELECTOR="${MODEL#*/}"
+MODEL_REF="${MODEL%%:*}"
+PI_PROVIDER="${MODEL%%/*}" \
+PI_MODEL="${SELECTOR%%:*}" \
+  "$LOOM_RUNTIME/scripts/sync-pi-agents.sh" > "$RUN_DIR/agent-render.log" 2>&1
+EXPECTED_AGENT_ROOT="$(printf '%s' "$LOOM_RUNTIME" | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+if ! grep -Eqx "model: ${MODEL_REF//./\\.}(:[a-z]+)?" "$PI_AGENT_ROOT/agents/brainstorm-agent.md" ||
+   ! grep -Fqx "loom-package-root: $EXPECTED_AGENT_ROOT" "$PI_AGENT_ROOT/agents/brainstorm-agent.md"; then
+  echo "rendered phase agents do not bind $MODEL to the pinned runtime $LOOM_RUNTIME" >&2
+  echo "see $RUN_DIR/agent-render.log" >&2
+  exit 1
+fi
+
 # Baseline evidence, captured before the model touches anything. A grade that
 # cannot distinguish "this arm broke the typecheck" from "the typecheck was
 # already broken" is not evidence.
@@ -224,6 +286,8 @@ jq -n \
   --arg profile_container "$PROFILE_CONTAINER" \
   --argjson context_window "$CONTEXT_WINDOW" \
   --arg loom_base_sha "$BASE_SHA" \
+  --arg loom_runtime_sha "$RUNTIME_SHA" \
+  --arg pi_models_sha256 "$(sha256sum "$PI_AGENT_ROOT/models.json" | cut -d' ' -f1)" \
   --arg benchmark_commit "$BENCHMARK_COMMIT" \
   --arg protocol_version "$PROTOCOL_VERSION" \
   --arg protocol_sha256 "$PROTOCOL_SHA" \
@@ -243,6 +307,8 @@ jq -n \
     profile_container: $profile_container,
     context_window: $context_window,
     loom_base_sha: $loom_base_sha,
+    loom_runtime_sha: $loom_runtime_sha,
+    pi_models_sha256: $pi_models_sha256,
     benchmark_commit: $benchmark_commit,
     protocol_sha256: $protocol_sha256,
     pi_version: $pi_version,
@@ -276,15 +342,23 @@ Run $RUN_ID prepared.
   model    : $MODEL  (serving '$SERVED')
   profile  : $PROFILE_CONTAINER
   context  : $CONTEXT_WINDOW
+  subject  : $BASE_SHA
+  runtime  : $RUNTIME_SHA ($LOOM_RUNTIME)
   protocol : $PROTOCOL_VERSION / $PROTOCOL_SHA
 
-Before launching, confirm cortex is disabled for this session — recalled memory
+Before launching, confirm memory is disabled for this session — recalled memory
 from an earlier arm is the one contamination channel that leaves no trace in
 the diff. After the run, grep the transcript for CORTEX_MEMORY_START; if it is
 there, the run is void.
 
+Launch Pi on the pinned runtime with the arm's parent metadata in the process
+environment. Pi exports PI_PROVIDER/PI_MODEL only to tool children, but Loom's
+spawn admission reads them from its own process to accept the routed agent
+renders; without them every phase spawn is rejected. RPC children inherit all
+four variables:
+
   cd "$WORKTREE"
-  pi --model $MODEL
+  LOOM_RUNTIME_LOADER_ROOT=$LOOM_RUNTIME PI_PROVIDER=${MODEL%%/*} PI_MODEL=${SELECTOR%%:*} PI_REASONING_LEVEL=${SELECTOR##*:} pi --model $MODEL
 
 Then type EXACTLY this one line — it is short on purpose, so no paste can be
 truncated and no newline can submit it early:

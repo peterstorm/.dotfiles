@@ -1,0 +1,65 @@
+{
+  "_comment": "Operator procedure, outside the hashed protocol. For each answer-key topic: `names` are the topic's own names. A name inside a question's parenthetical tag means the agent filed the question under that topic, which binds it: the judgement line is then refused. `hints` are looser phrases; a name or hint in the question body is surfaced for the operator to decide. interview.mjs refuses to run if these topics and the answer key's topics differ.",
+  "topics": {
+    "Codebase constraints": {
+      "names": ["codebase constraints", "codebase constraint"],
+      "hints": ["conventions", "test framework", "test runner", "runtime", "test organization", "test organisation"]
+    },
+    "Testability bar": {
+      "names": ["testability", "testability bar"],
+      "hints": ["coverage", "verification bar", "mocks", "branch-complete", "branch completeness", "reachable"]
+    },
+    "NFR primary axis": {
+      "names": ["nfr", "nfrs", "primary axis", "primary nfr axis"],
+      "hints": ["optimization axis", "optimisation axis", "performance", "throughput", "latency"]
+    },
+    "Concurrency and state model": {
+      "names": ["concurrency", "state model", "concurrency and state model"],
+      "hints": ["concurrent", "threading", "single-threaded", "reentrant"]
+    },
+    "Data model and persistence": {
+      "names": ["data model", "persistence", "data model and persistence"],
+      "hints": ["persisted", "persist", "retention", "storage", "lifecycle"]
+    },
+    "Sensitive boundaries": {
+      "names": ["sensitive boundaries", "sensitive boundary", "trust boundary"],
+      "hints": ["untrusted", "hostile", "security", "access model", "permissions"]
+    },
+    "Tech preference signals": {
+      "names": ["tech preference", "tech preferences", "tech preference signals"],
+      "hints": ["dependency", "dependencies", "library", "libraries", "import"]
+    },
+    "Observability": {
+      "names": ["observability"],
+      "hints": ["logging", "telemetry", "diagnostics", "diagnostic", "error surfacing", "user-visible"]
+    },
+    "Error handling philosophy": {
+      "names": ["error handling", "error-handling", "error handling philosophy", "error-handling philosophy"],
+      "hints": ["failure modes", "failure mode", "fail closed", "exceptions", "error taxonomy", "error kinds"]
+    },
+    "Scale and volume": {
+      "names": ["scale", "volume", "scale and volume"],
+      "hints": ["frames per session", "large chunk", "memory bound"]
+    },
+    "Backwards compatibility": {
+      "names": ["backwards compatibility", "backward compatibility"],
+      "hints": ["compatibility", "breaking change"]
+    },
+    "Deadline or effort budget": {
+      "names": ["deadline", "effort budget"],
+      "hints": ["slip", "p2", "p3", "this wave"]
+    },
+    "Whether to change the frozen types file": {
+      "names": ["frozen types", "frozen types file"],
+      "hints": ["types file", "change the frozen", "ui-relay-types"]
+    },
+    "Whether to build the process/stdio shell": {
+      "names": ["stdio shell", "process shell", "process/stdio shell"],
+      "hints": ["future shell", "build the shell", "external boundary", "shell boundary"]
+    },
+    "Definition of done": {
+      "names": ["definition of done"],
+      "hints": ["success criteria", "success bar", "success bars", "compile", "typecheck", "purity check", "purity checks", "mandatory"]
+    }
+  }
+}

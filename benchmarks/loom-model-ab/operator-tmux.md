@@ -27,18 +27,23 @@ arrow-key navigation.
 
 ## 2. Create a named session
 
-After `run-arm.sh` prints the worktree, model selector, and run directory:
+After `run-arm.sh` prints the worktree, model selector, and run directory,
+start Pi with the exact launch line it printed, never a hand-written
+`pi --model …`. Use a private tmux server (`-L`), so no other session on the
+machine can address the run's pane by name:
 
 ```bash
+T=(tmux -L loom-bench)
 SESSION="loom-<arm>-<repetition>"
-tmux new-session -d -s "$SESSION" -c '<worktree>' \
-tmux send-keys -t "$SESSION" -l -- 'pi --model <exact-selector>'
-tmux send-keys -t "$SESSION" Enter
-tmux attach-session -t "$SESSION"
+"${T[@]}" new-session -d -s "$SESSION" -c '<worktree>'
+"${T[@]}" send-keys -t "$SESSION" -l -- '<launch line printed by run-arm.sh>'
+"${T[@]}" send-keys -t "$SESSION" Enter
+"${T[@]}" attach-session -t "$SESSION"
 ```
 
-Keep a second terminal for observation and capture. Never run another arm in
-parallel; port 8000 and Cortex isolation are batch-wide resources.
+Use `"${T[@]}"` for every later tmux command in this runbook. Keep a second
+terminal for observation and capture. Never run another arm in parallel; port
+8000 and memory isolation are batch-wide resources.
 
 ## 3. Submit the task exactly
 
@@ -46,8 +51,8 @@ Use the single-line command printed by `run-arm.sh`. Literal insertion avoids
 shell quoting and multiline-paste surprises:
 
 ```bash
-tmux send-keys -t "$SESSION" -l -- '/loom Read /tmp/task-brief.md and carry out the task it describes.'
-tmux send-keys -t "$SESSION" Enter
+"${T[@]}" send-keys -t "$SESSION" -l -- '/loom Read /tmp/task-brief.md and carry out the task it describes.'
+"${T[@]}" send-keys -t "$SESSION" Enter
 ```
 
 The first model action must read the task file and discuss the JSONL relay core.
@@ -59,7 +64,7 @@ onto the benchmark after it has already reasoned over the wrong task.
 Capture enough scrollback to include modal headings and recent tool results:
 
 ```bash
-tmux capture-pane -p -t "$SESSION" -S -3000 > /tmp/"$SESSION".pane.txt
+"${T[@]}" capture-pane -p -t "$SESSION" -S -3000 > /tmp/"$SESSION".pane.txt
 tail -n 120 /tmp/"$SESSION".pane.txt
 ```
 
@@ -68,25 +73,61 @@ answering, confirm the bottom of a fresh capture contains an active prompt.
 Also inspect process and runtime state when progress is ambiguous:
 
 ```bash
-tmux list-panes -t "$SESSION" -F '#{pane_pid} #{pane_current_command} #{pane_dead}'
-pgrep -a -P "$(tmux display-message -p -t "$SESSION" '#{pane_pid}')"
+"${T[@]}" list-panes -t "$SESSION" -F '#{pane_pid} #{pane_current_command} #{pane_dead}'
+pgrep -a -P "$("${T[@]}" display-message -p -t "$SESSION" '#{pane_pid}')"
 ```
 
 Do not infer a timeout from an unchanged pane alone.
 
 ## 5. Answer interviews deterministically
 
-Answer only from the protocol-specific answer-key path printed by
-`run-arm.sh` (`protocols/v2/frozen/answer-key.md` for default v2) and append
-every question and exact answer to the run’s `interview.md`.
+Answer only from the run's protocol answer key, and only through
+`scripts/interview.sh`. Never type an answer, and never pick one with a
+keyword filter. The key is organised by topic while Loom asks specific
+questions, and hand-matching drifts both ways: ds41-2 and ds41-3 were voided
+for covered questions that got the judgement line, and ds41-3 Q4 got a bare
+"No." to a confirm-the-list question.
 
-For free-text prompts, insert the exact answer literally, then submit once:
+For every question, copy it exactly as shown (label included) and ask for the
+candidates:
 
 ```bash
-ANSWER='Use your judgement and record the decision in the spec.'
-tmux send-keys -t "$SESSION" -l -- "$ANSWER"
-tmux send-keys -t "$SESSION" Enter
+I=(bash benchmarks/loom-model-ab/scripts/interview.sh '<run-dir>')
+"${I[@]}" suggest '<question as shown>'
 ```
+
+- **TAGGED**: the question's parenthetical names an answer-key topic, e.g.
+  "(Error-handling philosophy / observability)". The agent filed it under that
+  topic, so answer from a tagged topic. `log` refuses the judgement line here.
+- **HINTED**: the question mentions a topic's phrases. Read that topic's
+  answer and use it only if it genuinely answers the question. A topic that
+  merely shares a word does not cover it.
+- Otherwise use `judgement`, but only after reading the full listing that
+  follows.
+- A scripted answer that begins with a bare "No." fits only a yes/no
+  question. To a "confirm …" or "which …" question it reads as a refusal, so
+  prefer the judgement line unless another topic genuinely covers it.
+
+Then log the exchange and send the exact text it prints, inserting it
+literally and submitting once:
+
+```bash
+ANSWER="$("${I[@]}" log '<question as shown>' <topic-number|judgement>)"
+"${T[@]}" send-keys -t "$SESSION" -l -- "$ANSWER"
+"${T[@]}" send-keys -t "$SESSION" Enter
+```
+
+`log` appends the numbered exchange to `interview.md`. Write the phase
+headings (`## Specify interview`, `## Architecture interview`) and gate
+outcomes into it by hand. Before preserving the run (§7), audit the whole log:
+
+```bash
+"${I[@]}" check
+```
+
+Any `ERROR` voids the run as operator answer drift. Each `WARN` names a
+decision a human must be able to defend from the key. Record that defence in
+`interview.md` or void the run.
 
 For selection modals:
 
@@ -169,7 +210,7 @@ Only after `outcome.planning.json`, the discovery worksheet, artifacts, and
 transcript exist:
 
 ```bash
-tmux kill-session -t "$SESSION" 2>/dev/null || true
+"${T[@]}" kill-session -t "$SESSION" 2>/dev/null || true
 git -C ~/dev/claude-plugins/loom worktree remove '<worktree>'
 ```
 

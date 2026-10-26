@@ -32,10 +32,10 @@ for file in "${required_files[@]}"; do
   [[ -r "$file" ]] || fail "required benchmark artifact is unreadable: $file"
 done
 
-LOOM_SHA="$(git -C "$LOOM" rev-parse HEAD)" || fail "cannot resolve Loom HEAD at $LOOM"
-BASELINE_SHA="$(jq -er '.base_sha' "$BASELINE")" || fail "baseline has no valid base_sha"
-[[ "$LOOM_SHA" == "$BASELINE_SHA" ]] \
-  || fail "baseline is stale ($BASELINE_SHA); current Loom is $LOOM_SHA; run scripts/baseline.sh"
+LOOM_SHA="$(jq -er '.base_sha | select(test("^[0-9a-f]{40}$"))' "$BASELINE")" \
+  || fail "baseline has no valid base_sha"
+[[ "$(git -C "$LOOM" rev-parse --verify --quiet "$LOOM_SHA^{commit}")" == "$LOOM_SHA" ]] \
+  || fail "baseline subject $LOOM_SHA is not a commit in $LOOM; run scripts/baseline.sh"
 jq -e '.typecheck == "clean" and (.total_tests | type == "number" and . > 0) and (.known_failures | type == "array")' \
   "$BASELINE" >/dev/null || fail "baseline is incomplete or its typecheck was dirty"
 
@@ -75,56 +75,15 @@ while IFS= read -r arm; do
   fi
 done < <(benchmark_arm_ids)
 
+# Local arms are measurable only if every child inherits the parent's exact
+# selector. Routing rules match in order, so the first rule that can apply to a
+# local parent (parentClass local or unconstrained) must be the plain
+# inherit-the-parent rule; verify-run-models.sh then attests each child.
 ROUTING="$ROOT/pi/model-routing.json"
 jq -e '
-  .targets["ds4-vision-r21"] == {
-    "model": "desktop-vllm/deepseek-v4-flash-vision",
-    "thinkingLevel": "max"
-  } and
-  .targets.qwen == {
-    "model": "desktop-vllm/qwen3.8-27b",
-    "thinkingLevel": "xhigh"
-  } and
-  .targets["qwen-flash-next-v2"] == {
-    "model": "desktop-vllm/qwen3.8-flash-next-fp8",
-    "thinkingLevel": "xhigh"
-  } and
-  .targets["glm-v10-dcp2"] == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10",
-    "thinkingLevel": "max"
-  } and
-  .targets["glm-v13"] == {
-    "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
-    "thinkingLevel": "max"
-  } and
-  .targets.sol == {
-    "model": "openai-codex/gpt-5.6-sol",
-    "thinkingLevel": "high"
-  } and
-  any(.rules[];
-    .id == "ds4-vision-r21-subagents-use-max" and
-    .when.parentClass == "local" and
-    .when.parentModel == "desktop-vllm/deepseek-v4-flash-vision" and
-    .use == {"kind": "named", "target": "ds4-vision-r21"}) and
-  any(.rules[];
-    .id == "qwen-flash-next-v2-subagents-use-xhigh" and
-    .when.parentClass == "local" and
-    .when.parentModel == "desktop-vllm/qwen3.8-flash-next-fp8" and
-    .use == {"kind": "named", "target": "qwen-flash-next-v2"}) and
-  any(.rules[];
-    .id == "glm-v10-dcp2-subagents-use-max" and
-    .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
-    .use == {"kind": "named", "target": "glm-v10-dcp2"}) and
-  any(.rules[];
-    .id == "glm-v13-subagents-use-max" and
-    .when.parentModel == "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13" and
-    .use == {"kind": "named", "target": "glm-v13"}) and
-  any(.rules[];
-    .id == "sol-subagents-use-high" and
-    .when.parentClass == "cloud" and
-    .when.parentModel == "openai-codex/gpt-5.6-sol" and
-    .use == {"kind": "named", "target": "sol"})
-' "$ROUTING" >/dev/null || fail "Pi routing lacks exact ds4/qwen/glm/sol named targets"
+  [.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)]
+  | length > 0 and (.[0].when == {"parentClass": "local"}) and (.[0].use == {"kind": "parent"})
+' "$ROUTING" >/dev/null || fail "Pi routing does not bind local children to the parent selector"
 
 reference_frs="$(mktemp)"
 test_frs="$(mktemp)"

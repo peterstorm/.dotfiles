@@ -8,7 +8,7 @@
 # Keep this module side-effect free: callers decide whether to probe, switch,
 # or launch anything.
 
-BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol)
+BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 ds41 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol)
 BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
 BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
 BENCHMARK_V1_PROTOCOL_FILES=(
@@ -101,6 +101,15 @@ benchmark_arm_record() {
         'ds4-flash-vision-infernal-invocation-cu133-r21-v1' \
         'bash ~/.dotfiles/scripts/inference/deepseek/switch-ds4-flash-vision-r21-v1.sh start' \
         'DeepSeek V4 Flash Vision r21 + DSpark K6'
+      ;;
+    ds41)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'desktop-vllm/deepseek-v4.1-flash:max' \
+        'deepseek-v4.1-flash' \
+        '262144' \
+        'ds41-1017-maya-exl35' \
+        'bash ~/.dotfiles/scripts/inference/deepseek/ds41-1017-maya/switch-ds41-1017-maya-exl35.sh start' \
+        'DeepSeek-V4.1-Flash-1017 EXL3 3.5 bpw on Project Maya TP2 + DSpark'
       ;;
     qwen)
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \

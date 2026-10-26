@@ -47,7 +47,7 @@ V2_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v2)"
 status=0
 benchmark_protocol_sha "$BENCH" future >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "protocol hasher accepted an unknown version"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 ds41 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -73,6 +73,9 @@ bash "$RUN" --protocol future --list >/dev/null 2>&1 || status=$?
 contains "$ARMS" 'desktop-vllm/deepseek-v4-flash-vision:max'
 contains "$ARMS" 'ds4-flash-vision-infernal-invocation-cu133-r21-v1'
 contains "$ARMS" 'switch-ds4-flash-vision-r21-v1.sh start'
+contains "$ARMS" 'desktop-vllm/deepseek-v4.1-flash:max'
+contains "$ARMS" 'ds41-1017-maya-exl35'
+contains "$ARMS" 'switch-ds41-1017-maya-exl35.sh start'
 contains "$ARMS" 'qwen38-27b-bf16-dflash2-vllm-v3'
 contains "$ARMS" 'switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv'
 contains "$ARMS" 'desktop-vllm/qwen3.8-flash-next-fp8:xhigh'
@@ -85,7 +88,11 @@ contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:m
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v10'
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v11'
 contains "$RUN" 'stale benchmark baseline:'
-contains "$RUN" 'Cortex is active; cross-arm memory would contaminate this run.'
+contains "$RUN" 'A memory package (cortex/obsidian) is active'
+contains "$RUN" 'Loom runtime has uncommitted changes'
+contains "$RUN" 'LOOM_RUNTIME_LOADER_ROOT=$LOOM_RUNTIME PI_PROVIDER=${MODEL%%/*} PI_MODEL=${SELECTOR%%:*} PI_REASONING_LEVEL=${SELECTOR##*:} pi --model $MODEL'
+contains "$RUN" 'loom_runtime_sha: $loom_runtime_sha'
+contains "$RUN" 'rendered phase agents do not bind'
 contains "$RUN" '~/.config/glm53/api-key'
 contains "$RUN" 'curl --config -'
 contains "$RUN" 'protocol.sha256'
@@ -94,7 +101,7 @@ contains "$RUN" 'docker inspect --format='
 contains "$RUN" 'Runtime profile mismatch:'
 contains "$RUN" 'verify-run-models.sh'
 contains "$VERIFY" '.thinkingLevelMap[$level] != null'
-contains "$VERIFY" 'Pi routing lacks exact ds4/qwen/glm/sol named targets'
+contains "$VERIFY" 'Pi routing does not bind local children to the parent selector'
 contains "$GRADE" 'child_models_attested'
 contains "$GRADE" '.current_phase == "execute"'
 contains "$GRADE" '.tasks | type == "array" and length > 0 and all(.status == "pending")'
@@ -120,6 +127,8 @@ contains "$ANON" 'glm[-_ ]?5\.?3'
 contains "$ANON" 'qwen ?3\.?8[-_ ]?flash[-_ ]?next'
 contains "$ANON" 'refusing mixed-protocol blind batch'
 contains "$ANON" 'dflash2?'
+contains "$ANON" 'deepseek[-_ ]?v4(\.1)?[-_ ]?flash'
+contains "$ANON" '(project )?maya'
 contains "$README" 'glm-v11'
 contains "$README" 'implementation-ready planning'
 
@@ -143,25 +152,15 @@ if grep -Eq -- 'curl .*Authorization: Bearer' "$RUN"; then
 fi
 
 jq -e '
-  .targets["ds4-vision-r21"] == {
-    "model": "desktop-vllm/deepseek-v4-flash-vision",
-    "thinkingLevel": "max"
-  } and
-  .targets["qwen-flash-next-v2"] == {
-    "model": "desktop-vllm/qwen3.8-flash-next-fp8",
-    "thinkingLevel": "xhigh"
-  } and
-  any(.rules[];
-    .id == "qwen-flash-next-v2-subagents-use-xhigh" and
-    .when.parentModel == "desktop-vllm/qwen3.8-flash-next-fp8" and
-    .use == {"kind": "named", "target": "qwen-flash-next-v2"}) and
-  any(.rules[];
-    .id == "ds4-vision-r21-subagents-use-max" and
-    .when.parentModel == "desktop-vllm/deepseek-v4-flash-vision" and
-    .use == {"kind": "named", "target": "ds4-vision-r21"})
-' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing lacks the exact DS4 Vision target"
+  [.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)]
+  | .[0] == {"id": "local-workloads-use-parent", "when": {"parentClass": "local"}, "use": {"kind": "parent"}}
+' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing does not make local children inherit the parent"
 
 jq -e '
+  any(.providers["desktop-vllm"].models[];
+    .id == "deepseek-v4.1-flash" and
+    .contextWindow == 262144 and
+    .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
     .id == "deepseek-v4-flash-vision" and
     .contextWindow == 312000 and
@@ -175,6 +174,41 @@ jq -e '
     .contextWindow == 359000 and
     .thinkingLevelMap.max == "max")
 ' "$PI_MODELS" >/dev/null || fail "Pi lacks a compatible GLM benchmark model"
+
+# Pi package entries may be objects ({source, extensions}); the memory guard
+# must read their source rather than crash, and must fail closed either way.
+isolation_sandbox="$(mktemp -d)"
+mkdir -p "$isolation_sandbox/agents"
+printf 'rendered\n' > "$isolation_sandbox/agents/brainstorm-agent.md"
+cat > "$isolation_sandbox/settings.json" <<'JSON'
+{"packages": [{"source": "../../dev/claude-plugins/loom", "extensions": []}, "../../dev/claude-plugins/cortex", "../../dev/claude-plugins/obsidian"]}
+JSON
+cp "$isolation_sandbox/settings.json" "$isolation_sandbox/settings.original.json"
+git -C "$isolation_sandbox" init -q runtime
+git -C "$isolation_sandbox/runtime" -c user.name=benchmark -c user.email=bench@local \
+  commit -q --allow-empty -m runtime
+status=0
+guard_output="$(PI_CODING_AGENT_DIR="$isolation_sandbox" LOOM_RUNTIME_REPO="$isolation_sandbox/runtime" \
+  bash "$RUN" --probe ds41 2>&1)" || status=$?
+[[ "$status" -eq 1 && "$guard_output" == *'A memory package (cortex/obsidian) is active'* ]] \
+  || fail "run-arm did not refuse an active memory package beside an object package entry: $guard_output"
+PI_CODING_AGENT_DIR="$isolation_sandbox" bash "$BENCH/scripts/isolation.sh" off >/dev/null
+jq -e '.packages == [{"source": "../../dev/claude-plugins/loom", "extensions": []}]' \
+  "$isolation_sandbox/settings.json" >/dev/null || fail "isolation off left a memory package or dropped Loom"
+printf 'arm render\n' > "$isolation_sandbox/agents/brainstorm-agent.md"
+PI_CODING_AGENT_DIR="$isolation_sandbox" bash "$BENCH/scripts/isolation.sh" on >/dev/null
+cmp -s "$isolation_sandbox/settings.json" "$isolation_sandbox/settings.original.json" \
+  || fail "isolation on did not restore settings byte-for-byte"
+[[ "$(cat "$isolation_sandbox/agents/brainstorm-agent.md")" == rendered ]] \
+  || fail "isolation on did not restore the rendered agents"
+PI_CODING_AGENT_DIR="$isolation_sandbox" LOOM_RUNTIME_REPO="$isolation_sandbox/runtime" \
+  bash "$BENCH/scripts/isolation.sh" off >/dev/null
+jq -e --arg runtime "$isolation_sandbox/runtime" '.packages == [{"source": $runtime, "extensions": []}]' \
+  "$isolation_sandbox/settings.json" >/dev/null || fail "isolation off did not pin the Loom package to the runtime"
+PI_CODING_AGENT_DIR="$isolation_sandbox" bash "$BENCH/scripts/isolation.sh" on >/dev/null
+cmp -s "$isolation_sandbox/settings.json" "$isolation_sandbox/settings.original.json" \
+  || fail "isolation on did not undo the runtime pin"
+rm -rf "$isolation_sandbox"
 
 mixed_protocol_sandbox="$(mktemp -d)"
 mkdir -p "$mixed_protocol_sandbox/v1" "$mixed_protocol_sandbox/v2"
@@ -345,5 +379,93 @@ trap - EXIT
 if rg -n 'grade-implementation\.sh|planning \+ implementation benchmark' "$BENCH"; then
   fail "planning-only benchmark retains implementation-era harness references"
 fi
+
+# Interview answering is mechanical where the evidence is: interview.sh
+# reproduces the drift that voided ds41-2 and ds41-3 and refuses to log it.
+INTERVIEW="$BENCH/scripts/interview.sh"
+[[ -x "$INTERVIEW" ]] || fail "interview helper is not executable: $INTERVIEW"
+bash -n "$INTERVIEW"
+node --check "$BENCH/scripts/interview.mjs"
+interview_sandbox="$(mktemp -d)"
+trap 'rm -rf "$interview_sandbox"' EXIT
+jq -n '{protocol_version: "v2"}' > "$interview_sandbox/run.json"
+JUDGEMENT='Use your judgement and record the decision in the spec.'
+SHELL_NO='No. Out of scope for this task.'
+cat > "$interview_sandbox/interview.md" <<EOF
+## Specify interview
+
+**Q1.** Out of scope: Confirm each candidate is OUT of scope for this spec.
+
+**A1.** $SHELL_NO
+
+**Q2.** Error diagnostics: What shape should RelayError.message take? (Error-handling philosophy / observability)
+
+**A2.** $JUDGEMENT
+
+**Q3.** Coverage: What coverage/verification bar must the deliverable meet?
+
+**A3.** $JUDGEMENT
+
+**Q4.** Primary NFR axis: What breaks ties? (NFR)
+
+**A4.** Correctness first, then clarity. Throughput and latency do not matter — this core runs a handful of times per phase.
+
+**Q5.** Chunk memory: How should decodeChunk handle a large chunk? (NFR-001 memory bound)
+
+**A5.** A few dozen frames per session at most. Do not optimise.
+
+**Q6.** Done: What proves the work done?
+
+**A6.** bunx tsc --noEmit clean, your own tests pass, no file outside ui-relay.ts and its test file modified.
+
+**Q7.** Retries: What happens on retry?
+
+**A7.** Retry three times with backoff.
+
+## Architecture approach gate
+
+**Q8.** Which internal architecture? (A recommended)
+
+**A8.** Approved — selected A (recommended), no commentary.
+EOF
+status=0
+interview_report="$(bash "$INTERVIEW" "$interview_sandbox" check)" || status=$?
+[[ "$status" -eq 1 ]] || fail "interview check accepted an ignored tagged topic and an improvised answer"
+grep -Fq "ERROR Q2 tagged-topic-ignored: the question tags 'Observability' and 'Error handling philosophy'" <<<"$interview_report" \
+  || fail "interview check missed a judgement answer to a question that tags two key topics"
+grep -Fq 'WARN Q1 polarity' <<<"$interview_report" || fail "interview check missed a bare 'No.' to a confirm question"
+grep -Fq "WARN Q3 possible-coverage: judgement line, but the question mentions 'Testability bar'" <<<"$interview_report" \
+  || fail "interview check did not surface a covered-looking question answered with judgement"
+grep -Fq "WARN Q6 not-verbatim: 'Definition of done'" <<<"$interview_report" \
+  || fail "interview check did not separate a formatting difference from improvisation"
+grep -Fq 'ERROR Q7 improvised' <<<"$interview_report" || fail "interview check accepted an improvised answer"
+if grep -Eq 'Q4 |Q5 |Q8 ' <<<"$interview_report"; then
+  fail "interview check flagged a matching tag, a requirement id, or an approval gate"
+fi
+grep -Fq '7 exchanges, 2 error(s), 3 warning(s)' <<<"$interview_report" \
+  || fail "interview check miscounted: $(tail -1 <<<"$interview_report")"
+
+[[ "$(bash "$INTERVIEW" "$interview_sandbox" answer judgement)" == "$JUDGEMENT" ]] \
+  || fail "interview answer did not print the judgement line verbatim"
+[[ "$(bash "$INTERVIEW" "$interview_sandbox" answer 14)" == "$SHELL_NO" ]] \
+  || fail "interview answer did not print topic 14 verbatim"
+bash "$INTERVIEW" "$interview_sandbox" suggest 'Errors: what shape? (Error-handling philosophy)' \
+  | grep -Fq 'TAGGED' || fail "interview suggest did not bind a tagged topic"
+
+rm "$interview_sandbox/interview.md"
+status=0
+bash "$INTERVIEW" "$interview_sandbox" log 'Errors: what shape? (Observability)' judgement >/dev/null 2>&1 || status=$?
+[[ "$status" -eq 1 && ! -e "$interview_sandbox/interview.md" ]] \
+  || fail "interview log accepted the judgement line for a tagged question"
+[[ "$(bash "$INTERVIEW" "$interview_sandbox" log 'Errors: what shape? (Observability)' 8)" \
+  == 'None in the core. Effects are returned as values for the shell to act on.' ]] \
+  || fail "interview log did not print the chosen scripted answer"
+bash "$INTERVIEW" "$interview_sandbox" log 'Retries: what happens on retry?' judgement >/dev/null
+bash "$INTERVIEW" "$interview_sandbox" check | grep -Fq '2 exchanges, 0 error(s), 0 warning(s)' \
+  || fail "interview log did not write a log its own check accepts"
+grep -Fq '**Q2.** Retries: what happens on retry?' "$interview_sandbox/interview.md" \
+  || fail "interview log did not number exchanges consecutively"
+rm -rf "$interview_sandbox"
+trap - EXIT
 
 printf 'PASS: Loom planning benchmark stops before implementation across all local-model arms\n'
