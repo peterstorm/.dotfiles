@@ -244,7 +244,13 @@ in
   # open kernel modules, which require GSP firmware, so GSP cannot be disabled.
   # Verify after reboot: `cat /proc/cmdline` shows pcie_aspm=off; then confirm
   # `journalctl -k | grep -i xid` stays clean under sustained load.
-  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=17179869184" "pcie_aspm=off" ];
+  # zfs_vdev_sync_read_max_active=64 (default 10): the per-vdev cap on in-flight
+  # sync reads was the ceiling for small random reads — DS4.1 Engram rows are
+  # 264 B lookups, 48 per token. fio 4K O_DIRECT randread on the 16K-record
+  # engram dataset (2026-10-26): 10 -> 107k IOPS, 32 -> 181k, 64 -> 199k,
+  # 128 -> 192k; 18.8 MB expert reads unchanged (10.8 GB/s, 2.3 ms at QD1).
+  # The raw partition does ~1M IOPS, so the remaining gap is ZFS per-IO cost.
+  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=17179869184" "pcie_aspm=off" "zfs.zfs_vdev_sync_read_max_active=64" ];
   boot.extraModprobeConfig = ''
     options nvidia_uvm uvm_disable_hmm=1
     options nvidia NVreg_RegistryDwords="ForceP2P=0x11;RMForceP2PType=1;RMPcieP2PType=2;GrdmaPciTopoCheckOverride=1;EnableResizableBar=1"
