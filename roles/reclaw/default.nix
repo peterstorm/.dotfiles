@@ -135,7 +135,7 @@
         # :low thinking suffix: the model's defaultThinkingLevel is max — a
         # plain pin means long Telegram replies; pi's parseModelPattern honours
         # the :low suffix (thinkingLevelMap maps low → low) for responsive replies.
-        RECLAW_PI_PROVIDER = "desktop-vllm";
+        RECLAW_PI_PROVIDER = "github-copilot";
         # 2026-10-05: back on GLM v14 (desktop container glm53-flash-spark-tp2-v14,
         # served as glm-5.3-flash-spark-tp2-v14) after the Qwen3.8 27B trial
         # container exited and v14 took both GPUs. Vision-capable, so Telegram
@@ -150,7 +150,10 @@
         # working by accident but with GLM's 524K catalog window against Maya's
         # 131,072 (262,144 since that afternoon); vision-capable, and :low maps
         # to reasoning_effort low.
-        RECLAW_PI_MODEL = "deepseek-v4.1-flash:low";
+        # 2026-10-26: github-copilot / claude-sonnet-5.5. Maya EXL3 is retired
+        # and the desktop GPUs are taken by ds4-native development, so there is
+        # no local DeepSeek to route to. Not self-hosted; no thinking suffix.
+        RECLAW_PI_MODEL = "claude-sonnet-5.5";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
