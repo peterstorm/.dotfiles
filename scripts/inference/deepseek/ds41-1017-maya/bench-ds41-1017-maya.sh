@@ -10,7 +10,14 @@
 # for the decode essay in that many tokens: the long prompt's KV is reused, so
 # the wall time is decode at that depth. The filler is
 # seeded per run: both engines keep earlier conversations' KV, and a prompt
-# repeated from an earlier run would be served from it. For each request:
+# repeated from an earlier run would be served from it.
+#
+# The default filler draws from 12 words, so its routing touches few Experts
+# and stays cache-hot: it measures the engine at its best, comparable across
+# runs, not what an agent's prompts cost. BENCH_CORPUS=<file> builds each
+# prompt from that file's own lines instead (code, docs, transcripts),
+# starting at a seeded line and wrapping, until it holds the requested number
+# of words; real text runs at about 3 tokens a word. For each request:
 # tokens, wall time, tok/s and the NVMe bytes read meanwhile (the number that
 # told the SSD-bound Q8 run apart). Run it on the desktop as a system unit -
 # the user has no linger, so an ssh-started job dies at logout:
@@ -26,6 +33,8 @@ MODEL="${BENCH_MODEL:-deepseek-v4.1-flash}"
 DISK="${BENCH_DISK:-nvme0n1}"
 PREFILL_WORDS="${BENCH_PREFILL_WORDS:-6000 20000}"
 DEPTH_TOKENS="${BENCH_DEPTH_TOKENS:-}"
+CORPUS="${BENCH_CORPUS:-}"
+[[ -z "$CORPUS" || -s "$CORPUS" ]] || { echo "error: BENCH_CORPUS is not a non-empty file: $CORPUS" >&2; exit 1; }
 SEED="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
 OUT="${1:-/dev/stdout}"
 
@@ -62,12 +71,19 @@ filler() { # words seed -> a prompt of about 1.06 tokens a word
   awk -v n="$1" -v s="$2" 'BEGIN { srand(s); split("system memory kernel expert routing token cache latency throughput tensor gradient layer", w, " ");
     printf "Summarize the following log in three sentences.\n"; for (i = 0; i < n; i++) printf "%s ", w[int(rand() * 12) + 1] }'
 }
+corpus() { # words seed -> the corpus's lines from a seeded line on, wrapping, until n words
+  awk -v n="$1" -v s="$2" '{ line[NR] = $0; words[NR] = NF; total += NF }
+    END { if (total == 0) exit 1
+      printf "Summarize the following files in three sentences.\n"
+      got = 0; for (i = s % NR; got < n; i = (i + 1) % NR) { print line[i + 1]; got += words[i + 1] } }' "$CORPUS"
+}
+prompt() { if [[ -n "$CORPUS" ]]; then corpus "$@"; else filler "$@"; fi; }
 
 {
-  echo "# $(date -Is) $MODEL on :8000 (seed $SEED)"
+  echo "# $(date -Is) $MODEL on :8000 (seed $SEED${CORPUS:+, corpus $CORPUS})"
   for i in 1 2 3; do request "decode$i" "$WORK/short" 512; done
   for words in $PREFILL_WORDS; do
-    filler "$words" "$((SEED + words))" >"$WORK/long-$words"
+    prompt "$words" "$((SEED + words))" >"$WORK/long-$words"
     request "prefill-${words}w" "$WORK/long-$words" 1
     [ -z "$DEPTH_TOKENS" ] || request "depth-${words}w" "$WORK/long-$words" "$DEPTH_TOKENS" "$WORK/short"
   done
