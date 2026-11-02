@@ -7,7 +7,7 @@
 # with DeepSeek-V4.1's own encoding, tokenizes, parses tool calls and streams; it starts
 # `ds4n-serve --serve ARGS` and speaks Maya's engine protocol with it over stdin/stdout (GEN / T /
 # DONE). Served on :8000 like every other profile, with the shared inference key, as
-# deepseek-v4.1-flash-native (64K context, the executor's).
+# deepseek-v4.1-flash-native (262,144-token context, the executor's).
 #
 # What the repository owns:
 #   - the image by name (ds4-native-dev:2, ds4-native's dev image: CUDA 13.4 + Python 3.12, the
@@ -38,7 +38,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-72ac68bda5c69701345b7238046a1dbaa7b28a27}"
+DS4N_COMMIT="${DS4N_COMMIT:-acb97b82795970c4a5a1381a79a022b72f7b8008}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
@@ -55,17 +55,18 @@ HF="$MODELS_DIR/hf-1017-mtp"
 PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
 # VRAM Slots and RAM tier records. Without DSpark the long-prompt setting is 8,800 Slots (95.6 GB
 # VRAM beside a 64K prompt sweep); DSpark's stages, its 384 resident Experts and feature rings take
-# ~300 Slots of that (8,800 runs out of memory at load). 3,300 records are 62 GB pinned; 3,000 leave
-# room for the server, the Rewind points and the checkpoints.
-SLOTS="${SLOTS:-8500}"
+# ~300 Slots of that (8,800 runs out of memory at load), and the 256K context's caches another ~25
+# (8,500 ran out instantiating the decode graphs). 3,300 records are 62 GB pinned; 3,000 leave room
+# for the server, the Rewind points and the checkpoints.
+SLOTS="${SLOTS:-8400}"
 RAM_RECORDS="${RAM_RECORDS:-3000}"
 # A prompt's unread tail goes as a prompt sweep from this many tokens, else as Rounds of 8: a sweep
 # costs ~0.9 s plus ~0.6 ms a token, Rounds ~11 ms a token at 9K context (ds4n-serve-check --timing).
 SWEEP_MIN="${SWEEP_MIN:-96}"
 # Conversations set aside whole in host RAM (KV checkpoints: ~5.5 KB a token and 92 MB of rings, both
-# GPUs' -- a 20K-token agent ~200 MB): the least recently used go first past this. With the server
-# loaded ~13 GB stay free of 91; 6 GB of checkpoints and 8 Rewind points (92 MB pinned each) leave
-# ~6 GB.
+# GPUs' -- a 20K-token agent ~200 MB, a 250K-token one ~1.5 GB): the least recently used go first
+# past this. With the server loaded ~13 GB stay free of 91; 6 GB of checkpoints and 8 Rewind points
+# (92 MB pinned each) leave ~6 GB.
 CHECKPOINT_GB="${CHECKPOINT_GB:-6}"
 REWIND_POINTS="${REWIND_POINTS:-8}"
 NAME="ds41-1017-native"
