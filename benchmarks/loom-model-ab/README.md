@@ -121,7 +121,9 @@ A planning run is complete only when all of the following hold:
 - every task remains `pending`;
 - `executing_tasks` is empty;
 - no wave gate has implementation, review, or test evidence;
-- no file outside `.claude/` changed after the frozen baseline;
+- no file outside `.claude/` and Loom's Pi state directory `.pi/state/`
+  changed after the frozen baseline, and the graph lives in exactly one of
+  `.pi/state/` and `.claude/state/`;
 - the frozen types file is byte-identical;
 - the transcript contains no Cortex recall;
 - at least one planning child ran, every child matches the arm selector, and no

@@ -22,7 +22,22 @@ RUN_DIR="$(cd "$2" && pwd)"
   exit 1
 }
 BASE_SHA="$(<"$RUN_DIR/base_sha")"
-GRAPH_SOURCE="$WORKTREE/.claude/state/active_task_graph.json"
+# Loom keeps the graph in its harness's state directory: `.pi/state` once it
+# detects Pi (a tool child carries PI_CODING_AGENT), `.claude/state` when the
+# in-process extension wrote it first. One pinned runtime has produced both
+# (ds41-5 and ds41-native-1), so either is the run's graph; both at once is a
+# split graph, which names no single state and fails every graph check.
+GRAPH_FOUND=()
+for relative in .pi/state/active_task_graph.json .claude/state/active_task_graph.json; do
+  [[ -e "$WORKTREE/$relative" ]] && GRAPH_FOUND+=("$relative")
+done
+GRAPH_SPLIT=false
+GRAPH_RELATIVE=''
+case "${#GRAPH_FOUND[@]}" in
+  1) GRAPH_RELATIVE="${GRAPH_FOUND[0]}" ;;
+  2) GRAPH_SPLIT=true; echo "split task graph: both ${GRAPH_FOUND[*]} exist" >&2 ;;
+esac
+GRAPH_SOURCE="$WORKTREE/${GRAPH_RELATIVE:-.no-task-graph}"
 RUN_RECEIPT="$RUN_DIR/run.json"
 PROTOCOL_VERSION_RAW="$(jq -r '.protocol_version // "v1"' "$RUN_RECEIPT" 2>/dev/null || true)"
 PROTOCOL_VERSION="$(benchmark_protocol_version "$PROTOCOL_VERSION_RAW")" || exit $?
@@ -51,12 +66,12 @@ capture_graph_artifact() {
   esac
   resolved="$(realpath -e "$unresolved" 2>/dev/null)" || return 1
   [[ "$resolved" == "$WORKTREE/"* ]] || return 1
-  cp "$resolved" "$RUN_DIR/$destination"
+  cp -f "$resolved" "$RUN_DIR/$destination"
 }
 
 # Capture the planning artifacts before staging the worktree for scope analysis.
 if [[ -r "$GRAPH_SOURCE" ]]; then
-  cp "$GRAPH_SOURCE" "$RUN_DIR/task-graph.json"
+  cp -f "$GRAPH_SOURCE" "$RUN_DIR/task-graph.json"
   capture_graph_artifact '.spec_file' spec.md || true
   capture_graph_artifact '.plan_file' plan.md || true
 
@@ -65,7 +80,7 @@ if [[ -r "$GRAPH_SOURCE" ]]; then
     for artifact in brainstorm.md plan-alignment.md; do
       candidate="$(realpath -e "$WORKTREE/$SPEC_DIR/$artifact" 2>/dev/null || true)"
       if [[ -n "$candidate" && "$candidate" == "$WORKTREE/"* ]]; then
-        cp "$candidate" "$RUN_DIR/$artifact"
+        cp -f "$candidate" "$RUN_DIR/$artifact"
       fi
     done
   fi
@@ -99,7 +114,7 @@ IMPLEMENTATION_STARTED=false
 for file in "${CHANGED[@]}"; do
   [[ -z "$file" ]] && continue
   case "$file" in
-    .claude/*|.loom/verification-manifest.json|node_modules) ;;
+    .claude/*|.pi/state/*|.loom/verification-manifest.json|node_modules) ;;
     *)
       printf 'non-planning change: %s\n' "$file" >&2
       PLANNING_SCOPE_RESPECTED=false
@@ -185,6 +200,7 @@ if [[ "$RUN_RECEIPT_VALID" == true &&
       "$PLANNING_SCOPE_RESPECTED" == true &&
       "$IMPLEMENTATION_STARTED" == false &&
       "$GRAPH_AT_BOUNDARY" == true &&
+      "$GRAPH_SPLIT" == false &&
       "$BRAINSTORM_PRESENT" == true &&
       "$SPEC_PRESENT" == true &&
       "$PLAN_PRESENT" == true &&
@@ -208,6 +224,8 @@ jq -n \
   --argjson planning_scope_respected "$(json_bool "$PLANNING_SCOPE_RESPECTED")" \
   --argjson implementation_started "$(json_bool "$IMPLEMENTATION_STARTED")" \
   --argjson task_graph_at_execution_boundary "$(json_bool "$GRAPH_AT_BOUNDARY")" \
+  --arg task_graph_path "$GRAPH_RELATIVE" \
+  --argjson task_graph_split "$(json_bool "$GRAPH_SPLIT")" \
   --argjson brainstorm "$BRAINSTORM_PRESENT" \
   --argjson spec "$SPEC_PRESENT" \
   --argjson plan "$PLAN_PRESENT" \
@@ -231,6 +249,8 @@ jq -n \
       planning_scope_respected: $planning_scope_respected,
       implementation_started: $implementation_started,
       task_graph_at_execution_boundary: $task_graph_at_execution_boundary,
+      task_graph_path: (if $task_graph_path == "" then null else $task_graph_path end),
+      task_graph_split: $task_graph_split,
       cortex_contaminated: $cortex_contaminated,
       child_models_attested: $child_models_attested,
       forbidden_execution_child: $forbidden_execution_child,

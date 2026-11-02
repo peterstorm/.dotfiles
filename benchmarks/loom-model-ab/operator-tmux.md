@@ -165,11 +165,13 @@ all wave gates untouched
 
 `execute` here means “ready to execute,” not “implementation authorized.” When
 the parent reports decomposition complete, inspect the graph before sending any
-further input:
+further input. Loom keeps it in `.pi/state/` or `.claude/state/` depending on
+which component wrote it first; exactly one exists (two is a split graph,
+which the grader fails):
 
 ```bash
 jq '{current_phase,current_wave,statuses:[.tasks[].status],executing_tasks,wave_gates}' \
-  '<worktree>/.claude/state/active_task_graph.json'
+  '<worktree>'/{.pi,.claude}/state/active_task_graph.json
 ```
 
 If all tasks are pending, stop Pi cleanly with `/quit` or two `Ctrl+C` presses.

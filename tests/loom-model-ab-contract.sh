@@ -346,6 +346,39 @@ jq -e '
   || fail "valid v2 pre-implementation planning boundary did not pass"
 grep -Fq $'FR-043\t' "$v2_run/discovery-checklist.tsv" \
   || fail "v2 grader did not use the v2 discovery reference"
+jq -e '.protocol.task_graph_path == ".claude/state/active_task_graph.json" and .protocol.task_graph_split == false' \
+  "$v2_run/outcome.planning.json" >/dev/null || fail "grader did not record the graph it read"
+
+# Under Pi, Loom keeps the graph in .pi/state; that is planning state, not a
+# non-planning change, and the graph there is the run's graph.
+pi_state_worktree="$planning_sandbox/v2-pi-state-worktree"
+pi_state_run="$planning_sandbox/v2-pi-state-run"
+cp -a "$v2_worktree" "$pi_state_worktree"
+mkdir -p "$pi_state_worktree/.pi/state" "$pi_state_run"
+jq --arg spec "$pi_state_worktree/.claude/specs/ui-relay/spec.md" '.spec_file = $spec' \
+  "$pi_state_worktree/.claude/state/active_task_graph.json" > "$pi_state_worktree/.pi/state/active_task_graph.json"
+rm "$pi_state_worktree/.claude/state/active_task_graph.json"
+cp "$v2_run"/{base_sha,run.json,session.jsonl,interview.md} "$pi_state_run/"
+bash "$GRADE" "$pi_state_worktree" "$pi_state_run" >/dev/null \
+  || fail "grader rejected a valid run whose graph is in .pi/state"
+jq -e '
+  .planning_complete == true and
+  .protocol.planning_scope_respected == true and
+  .protocol.task_graph_path == ".pi/state/active_task_graph.json"
+' "$pi_state_run/outcome.planning.json" >/dev/null || fail "grader did not read the .pi/state graph as planning state"
+# Loom leaves its graph read-only, and the first grading copies that mode.
+chmod 444 "$pi_state_run/task-graph.json"
+bash "$GRADE" "$pi_state_worktree" "$pi_state_run" >/dev/null || fail "re-grading a run is not idempotent"
+
+split_run="$planning_sandbox/v2-split-run"
+mkdir -p "$split_run"
+cp "$pi_state_worktree/.pi/state/active_task_graph.json" "$pi_state_worktree/.claude/state/active_task_graph.json"
+cp "$v2_run"/{base_sha,run.json,session.jsonl,interview.md} "$split_run/"
+status=0
+bash "$GRADE" "$pi_state_worktree" "$split_run" >/dev/null 2>&1 || status=$?
+[[ "$status" -eq 1 ]] || fail "grader accepted a split task graph"
+jq -e '.planning_complete == false and .protocol.task_graph_split == true and .artifacts.task_graph == false' \
+  "$split_run/outcome.planning.json" >/dev/null || fail "grader did not record the split task graph"
 
 stale_protocol_run="$planning_sandbox/v2-stale-protocol-run"
 mkdir -p "$stale_protocol_run"
