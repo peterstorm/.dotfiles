@@ -47,7 +47,7 @@ V2_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v2)"
 status=0
 benchmark_protocol_sha "$BENCH" future >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "protocol hasher accepted an unknown version"
-[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 ds41 qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol' ]] \
+[[ "${BENCHMARK_ARM_IDS[*]}" == 'ds4 ds4-vision-r21 ds41 ds41-native qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol' ]] \
   || fail "arm catalog changed unexpectedly: ${BENCHMARK_ARM_IDS[*]}"
 
 for arm in "${BENCHMARK_ARM_IDS[@]}"; do
@@ -76,6 +76,8 @@ contains "$ARMS" 'switch-ds4-flash-vision-r21-v1.sh start'
 contains "$ARMS" 'desktop-vllm/deepseek-v4.1-flash:max'
 contains "$ARMS" 'ds41-1017-maya-exl35'
 contains "$ARMS" 'switch-ds41-1017-maya-exl35.sh start'
+contains "$ARMS" 'desktop-vllm/deepseek-v4.1-flash-native:max'
+contains "$ARMS" 'run-ds41-1017-native.sh --launch'
 contains "$ARMS" 'qwen38-27b-bf16-dflash2-vllm-v3'
 contains "$ARMS" 'switch-qwen38-backend-v5.sh dflash2-vllm-tp1-bf16kv'
 contains "$ARMS" 'desktop-vllm/qwen3.8-flash-next-fp8:xhigh'
@@ -129,6 +131,7 @@ contains "$ANON" 'refusing mixed-protocol blind batch'
 contains "$ANON" 'dflash2?'
 contains "$ANON" 'deepseek[-_ ]?v4(\.1)?[-_ ]?flash'
 contains "$ANON" '(project )?maya'
+contains "$ANON" 'ds4[-_ ]?n(ative)?'
 contains "$README" 'glm-v11'
 contains "$README" 'implementation-ready planning'
 
@@ -159,6 +162,10 @@ jq -e '
 jq -e '
   any(.providers["desktop-vllm"].models[];
     .id == "deepseek-v4.1-flash" and
+    .contextWindow == 262144 and
+    .thinkingLevelMap.max == "max") and
+  any(.providers["desktop-vllm"].models[];
+    .id == "deepseek-v4.1-flash-native" and
     .contextWindow == 262144 and
     .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];

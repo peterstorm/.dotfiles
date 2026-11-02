@@ -21,7 +21,7 @@ fan-out feature. Scores are never comparable between the two benchmark
 families.
 
 The benchmark supports DeepSeek V4 Flash text and Vision r21, DeepSeek-V4.1-Flash
-on Project Maya, two immutable
+on Project Maya and on ds4-native, two immutable
 Qwen3.8-27B runtime profiles, both immutable Qwen3.8 Flash-Next FP8 runtimes,
 three historical immutable GLM-5.3 Flash v84 profiles, and the qualified v10 TP2/EP2/DCP2
 profile. Results are comparable only when both `protocol_version` and the
@@ -71,6 +71,7 @@ This measures planning directly. No implementation is generated or inferred.
 | `ds4` | `desktop-vllm/deepseek-v4-flash:max` | 1,048,576 | `ds4-infernal-invocation-cu133-r18` |
 | `ds4-vision-r21` | `desktop-vllm/deepseek-v4-flash-vision:max` | 312,000 | `ds4-flash-vision-infernal-invocation-cu133-r21-v1` |
 | `ds41` | `desktop-vllm/deepseek-v4.1-flash:max` | 262,144 | `ds41-1017-maya-exl35` |
+| `ds41-native` | `desktop-vllm/deepseek-v4.1-flash-native:max` | 262,144 | `ds41-1017-native` |
 | `qwen` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dspark-sglang-v2` |
 | `qwen-vllm-bf16kv` | `desktop-vllm/qwen3.8-27b:xhigh` | 262,144 | `qwen38-27b-bf16-dflash2-vllm-v3` |
 | `qwen-flash-next` | `desktop-vllm/qwen3.8-flash-next-fp8:xhigh` | 262,144 | `qwen38-flash-next-fp8-vllm-v1` |
@@ -88,6 +89,10 @@ bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 `ds4-vision-r21` measures the qualified TP2 B12X/DGLIN Vision profile with
 fixed DSpark K6. `ds41` measures DeepSeek-V4.1-Flash-1017 EXL3 3.5 bpw on
 Project Maya (TP2, DSpark, cold experts read in place from the model files).
+`ds41-native` measures the same checkpoint's released MXFP4 Experts on
+ds4-native (TP2, DSpark, Exact against the engine's reference), served through
+Maya's unmodified `server.py`; against `ds41` it isolates quantisation and
+engine, not the model.
 `qwen-vllm-bf16kv` measures the single-GPU vLLM
 DFlash2/BF16-KV profile;
 `qwen` remains the historical TP2 SGLang/DSpark arm. `qwen-flash-next` preserves
@@ -190,6 +195,9 @@ bash scripts/inference/deepseek/switch-ds4-flash-vision-r21-v1.sh start
 
 # DeepSeek-V4.1-Flash on Project Maya
 bash scripts/inference/deepseek/ds41-1017-maya/switch-ds41-1017-maya-exl35.sh start
+
+# DeepSeek-V4.1-Flash on ds4-native
+bash scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --launch
 ```
 
 Then authenticate and attest the served model:

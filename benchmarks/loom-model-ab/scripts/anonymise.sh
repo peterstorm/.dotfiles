@@ -58,6 +58,7 @@ scrub() {
     -e 's/\bds41[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
     -e 's/\b(project )?maya\b/BACKEND/gI' \
     -e 's/\bexl3\b/BACKEND/gI' \
+    -e 's/\bds4[-_ ]?n(ative)?\b[-_a-z0-9.]*/BACKEND/gI' \
     -e 's/qwen ?3\.?8[-_ ]?flash[-_ ]?next[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \
     -e 's/qwen ?3\.?8[-_ ]?27b/MODEL-UNDER-TEST/gI' \
     -e 's/glm[-_ ]?5\.?3[-_a-z0-9.]*/MODEL-UNDER-TEST/gI' \

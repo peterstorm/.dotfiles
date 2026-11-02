@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# Decode / prefill measurement for the Maya DeepSeek profile on :8000.
+# Decode / prefill measurement for a DeepSeek profile served by Maya's
+# server.py on :8000: Maya itself (ds41-1017-maya-exl35) or ds4-native
+# (ds41-1017-native, BENCH_MODEL=deepseek-v4.1-flash-native).
 #
 # Three greedy 512-token answers to a short prompt (decode), then one prompt
 # per BENCH_PREFILL_WORDS entry (default "6000 20000": ~6K and ~21K tokens)
-# answered in 1 token, so its wall time is the prefill. The filler is seeded
-# per run: Maya keeps the last conversation's KV, and a prompt repeated from an
-# earlier run would be served from it. For each request: tokens, wall time,
-# tok/s and the NVMe bytes read meanwhile (the number that told the SSD-bound
-# Q8 run apart). Run it on the desktop as a system unit - the user
-# has no linger, so an ssh-started job dies at logout:
+# answered in 1 token, so its wall time is the prefill. With BENCH_DEPTH_TOKENS
+# set, each prefill is followed by a second turn on the same prompt that asks
+# for the decode essay in that many tokens: the long prompt's KV is reused, so
+# the wall time is decode at that depth. The filler is
+# seeded per run: both engines keep earlier conversations' KV, and a prompt
+# repeated from an earlier run would be served from it. For each request:
+# tokens, wall time, tok/s and the NVMe bytes read meanwhile (the number that
+# told the SSD-bound Q8 run apart). Run it on the desktop as a system unit -
+# the user has no linger, so an ssh-started job dies at logout:
 #   sudo systemd-run --unit ds41-maya-bench --collect --uid "$(id -u)" --gid "$(id -g)" \
 #     -E HOME="$HOME" -E PATH="$PATH" ./bench-ds41-1017-maya.sh <outfile>
 set -euo pipefail
@@ -17,9 +22,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/inference/shared/inference-api-key.sh
 source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 
-MODEL="deepseek-v4.1-flash"
+MODEL="${BENCH_MODEL:-deepseek-v4.1-flash}"
 DISK="${BENCH_DISK:-nvme0n1}"
 PREFILL_WORDS="${BENCH_PREFILL_WORDS:-6000 20000}"
+DEPTH_TOKENS="${BENCH_DEPTH_TOKENS:-}"
 SEED="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
 OUT="${1:-/dev/stdout}"
 
@@ -30,11 +36,13 @@ trap 'rm -rf "$WORK"' EXIT
 
 disk_read_bytes() { awk -v d="$DISK" '$3 == d {print $6 * 512}' /proc/diskstats; }
 
-request() { # label prompt-file max-tokens
-  local label="$1" prompt="$2" max="$3" b0 b1 t0 t1 body
+request() { # label prompt-file max-tokens [follow-up-file: asked as a second turn]
+  local label="$1" prompt="$2" max="$3" follow="${4:-/dev/null}" b0 b1 t0 t1 body
   b0="$(disk_read_bytes)"; t0="$(date +%s.%N)"
-  body="$(jq -n --rawfile p "$prompt" --arg m "$MODEL" --argjson n "$max" \
-    '{model: $m, messages: [{role: "user", content: $p}], max_tokens: $n, temperature: 0, reasoning_effort: "none"}' \
+  body="$(jq -n --rawfile p "$prompt" --rawfile f "$follow" --arg m "$MODEL" --argjson n "$max" \
+    '{model: $m, messages: ([{role: "user", content: $p}]
+        + if $f == "" then [] else [{role: "assistant", content: "Noted."}, {role: "user", content: $f}] end),
+      max_tokens: $n, temperature: 0, reasoning_effort: "none"}' \
     | curl -sS --max-time 1800 http://127.0.0.1:8000/v1/chat/completions \
         -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' --data-binary @-)"
   t1="$(date +%s.%N)"; b1="$(disk_read_bytes)"
@@ -61,5 +69,6 @@ filler() { # words seed -> a prompt of about 1.06 tokens a word
   for words in $PREFILL_WORDS; do
     filler "$words" "$((SEED + words))" >"$WORK/long-$words"
     request "prefill-${words}w" "$WORK/long-$words" 1
+    [ -z "$DEPTH_TOKENS" ] || request "depth-${words}w" "$WORK/long-$words" "$DEPTH_TOKENS" "$WORK/short"
   done
 } | tee "$OUT"
