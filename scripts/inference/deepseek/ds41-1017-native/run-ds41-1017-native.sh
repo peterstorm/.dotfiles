@@ -19,8 +19,10 @@
 #   - the engine's settings: Slots, RAM tier, the Expert profile, DSpark, the sweep threshold;
 #   - the workstation gates: two idle RTX PRO 6000s, comfyui stopped, port 8000 free.
 #
-# One conversation at a time: an agent's tool loop and a chat's next turn read only their new
-# tokens (the Session and its Rewind points); a different conversation reads its prompt again.
+# One request at a time, from any conversation it keeps: an agent's tool loop and a chat's next turn
+# read only their new tokens; a conversation another one took the GPUs from comes back from its KV
+# checkpoint in host RAM (CHECKPOINT_GB of them); a subagent's first prompt resumes where it leaves
+# the system prompt it shares with its parent (a Rewind point taken there).
 #
 # Modes:
 #   --preflight   check every pin without touching the GPUs
@@ -36,7 +38,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-66fffbb46b925978e9b33cee4a34aa8a1ebfaaf5}"
+DS4N_COMMIT="${DS4N_COMMIT:-72ac68bda5c69701345b7238046a1dbaa7b28a27}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
@@ -54,12 +56,18 @@ PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
 # VRAM Slots and RAM tier records. Without DSpark the long-prompt setting is 8,800 Slots (95.6 GB
 # VRAM beside a 64K prompt sweep); DSpark's stages, its 384 resident Experts and feature rings take
 # ~300 Slots of that (8,800 runs out of memory at load). 3,300 records are 62 GB pinned; 3,000 leave
-# room for the server and the Rewind points (4 x 92 MB pinned).
+# room for the server, the Rewind points and the checkpoints.
 SLOTS="${SLOTS:-8500}"
 RAM_RECORDS="${RAM_RECORDS:-3000}"
 # A prompt's unread tail goes as a prompt sweep from this many tokens, else as Rounds of 8: a sweep
 # costs ~0.9 s plus ~0.6 ms a token, Rounds ~11 ms a token at 9K context (ds4n-serve-check --timing).
 SWEEP_MIN="${SWEEP_MIN:-96}"
+# Conversations set aside whole in host RAM (KV checkpoints: ~5.5 KB a token and 92 MB of rings, both
+# GPUs' -- a 20K-token agent ~200 MB): the least recently used go first past this. With the server
+# loaded ~13 GB stay free of 91; 6 GB of checkpoints and 8 Rewind points (92 MB pinned each) leave
+# ~6 GB.
+CHECKPOINT_GB="${CHECKPOINT_GB:-6}"
+REWIND_POINTS="${REWIND_POINTS:-8}"
 NAME="ds41-1017-native"
 SERVED_MODEL="deepseek-v4.1-flash-native"
 PORT=8000
@@ -135,11 +143,13 @@ fi
 # --- the server's config (rewritten each launch from the values above) ------------------------
 jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg hf "$HF" \
   --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg sweep "$SWEEP_MIN" \
+  --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
     args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $hf, "--slots", $slots,
-           "--ram-records", $ram, "--prior", $profile, "--ram-policy", "popular", "--sweep-min", $sweep],
+           "--ram-records", $ram, "--prior", $profile, "--ram-policy", "popular", "--sweep-min", $sweep,
+           "--checkpoint-gb", $ckpt, "--rewind-points", $points],
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "high",
     port: $port, host: "0.0.0.0", log: $log

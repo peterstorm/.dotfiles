@@ -163,7 +163,7 @@ with thirteen selectable models:
 - `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — superseded by v15 on 2026-10-16 and its checkpoint deleted for disk space, so re-download before reuse; the server resolved 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
 - `desktop-vllm/glm-5.3-flash-qad2-tp2-v15` (karmic-kraken-beta-20261015.2 by digest, qad2 NVFP4/MXFP8 CSF checkpoint, lil-serve preset glm53-tp2: TP2/DCP2, MTP3, eight slots, fixed 7296 MiB/GPU FP8 KV = 1,844,162 tokens, 1M context, vision, server-default effort high — served until 2026-10-21 and the GLM rollback target; the catalog caps sessions at 524,288)
 - `desktop-vllm/deepseek-v4.1-flash` (DeepSeek-V4.1-Flash-1017, LibertAIDAI EXL3 3.5 bpw + DeepSeek's Engram tables, on Project Maya `b3fa99e` = v1.1.21 + the conversation-slot PR #356: TP2, DSpark drafter, 262,144-token context, vision, four conversations parked so an agent's parent and workers stop re-reading each other's prompts — **served profile** since 2026-10-21, context doubled from 131,072 on 2026-10-22)
-- `desktop-vllm/deepseek-v4.1-flash-native` (the same model at released precision on ds4-native behind Maya's server: Exact, Experts streamed from the NVMe, DSpark, 65,536-token context, one live conversation — launch `ds41-1017-native/run-ds41-1017-native.sh`)
+- `desktop-vllm/deepseek-v4.1-flash-native` (the same model at released precision on ds4-native behind Maya's server: Exact, Experts streamed from the NVMe, DSpark, 65,536-token context, conversations kept as KV checkpoints in RAM — launch `ds41-1017-native/run-ds41-1017-native.sh`)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
@@ -276,10 +276,14 @@ differs. Launch it with
 - **Context**: 65,536 (the executor's), text only. The server runs with
   `--fit-max-tokens`, so a request whose 32,768 max tokens no longer fits
   beside a long prompt gets the room there is instead of a 400.
-- **One conversation**: an agent's next step and a chat's next turn read only
-  their new tokens (a 22K-token pi session's steps read 20-830 tokens); a
-  different conversation reads its prompt again — no parked conversations yet,
-  so subagents interleaving with their parent re-read each other's prompts.
+- **Conversations**: an agent's next step and a chat's next turn read only
+  their new tokens (a 22K-token pi session's steps read 20-830 tokens). A
+  conversation another one took the GPUs from is kept as a KV checkpoint in
+  RAM (6 GB of them, least recently used dropped first; a 4.5K-token one is
+  0.12 GB, set aside in ~25 ms, back in 8 ms), so a parent and its subagents
+  stop re-reading each other's prompts; a subagent's first prompt resumes
+  where it leaves the parent's system prompt. One request runs at a time, so
+  parallel subagents take turns.
 - **Speed**: decode 40-115 tok/s on a first session while the Expert cache
   learns the domain (Misses stream from the NVMe); a cold prompt reads at
   ~700 tok/s at 7K and several thousand tok/s on long prompts.

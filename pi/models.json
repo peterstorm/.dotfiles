@@ -336,7 +336,7 @@
         },
         {
           "id": "deepseek-v4.1-flash-native",
-          "name": "DeepSeek-V4.1-Flash-1017 released MXFP4 on ds4-native (Exact, TP2, Experts streamed from NVMe, DSpark, 64K ctx, one live conversation) behind Project Maya's server",
+          "name": "DeepSeek-V4.1-Flash-1017 released MXFP4 on ds4-native (Exact, TP2, Experts streamed from NVMe, DSpark, 64K ctx, conversations kept as KV checkpoints) behind Project Maya's server",
           "reasoning": true,
           "defaultThinkingLevel": "high",
           "thinkingLevelMap": {
