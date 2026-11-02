@@ -267,9 +267,11 @@ pi --model desktop-vllm/deepseek-v4.1-flash:high
 (MXFP4 Experts, FP8 dense) on ds4-native (`peterstorm/ds4-native`): Experts
 streamed from the NVMe into a VRAM Expert cache, Exact against the engine's
 reference, DSpark drafting. It runs behind Project Maya's own server
-(`serve/server.py` at `b3fa99e`, unmodified), so the chat encoding, thinking
-levels and tool calls behave as on the Maya entry above; only the engine
-differs. Launch it with
+(`serve/server.py` at `b3fa99e`, plus `maya-serve-keepalive.patch`: keep-alives
+while tokens flow with nothing to send, so a large file write's held-back
+parameter no longer trips Node's 300 s read timeout), so the chat encoding,
+thinking levels and tool calls behave as on the Maya entry above; only the
+engine differs. Launch it with
 `scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh`
 (`--install` once per pinned engine commit, then `--launch`; `--stop`).
 
@@ -277,9 +279,9 @@ differs. Launch it with
   246,234-token prompt with facts at 15% and 80% depth answered with both
   (cold read 71 s, 3,470 tok/s; reply 37.6 tok/s). A cold prompt reads at
   ~3,400 tok/s at that length, so only a conversation's first prompt pays it.
-  The server runs with `--fit-max-tokens`, so a request whose 32,768 max
-  tokens no longer fits beside a long prompt gets the room there is instead of
-  a 400.
+  `maxTokens` is the whole 262,144 and the server runs with
+  `--fit-max-tokens`, so every reply gets the room left beside its prompt: a
+  reply, reasoning included, is bounded by the context alone.
 - **Conversations**: an agent's next step and a chat's next turn read only
   their new tokens (a 22K-token pi session's steps read 20-830 tokens). A
   conversation another one took the GPUs from is kept as a KV checkpoint in
@@ -291,9 +293,12 @@ differs. Launch it with
 - **Speed**: decode 40-115 tok/s on a first session while the Expert cache
   learns the domain (Misses stream from the NVMe); a cold prompt reads at
   ~700 tok/s at 7K and several thousand tok/s on long prompts.
-- **Thinking budget**: Maya's server gives the reasoning max_tokens less a
-  quarter (at least 1,024) and this engine enforces it, so keep max tokens
-  large (pi's 32,768 gives 24,576 to think).
+- **Thinking**: no cap of its own (`thinking_budget` 262,144; Maya's default
+  is 32,768). The reasoning may use the reply's room less the quarter Maya
+  keeps for the answer (at least 1,024), so a reply never ends without one.
+  Until 2026-11-02 the 32,768 reply cap left 24,576 to think; a
+  31,291-token reasoning-plus-file-write reply was cut by the read timeout
+  1,477 tokens short of that cap.
 
 ```bash
 pi --model desktop-vllm/deepseek-v4.1-flash-native:high

@@ -1,0 +1,125 @@
+# Maya (b3fa99e) serve/: keep-alives while tokens flow with nothing to send (a held-back tool-call parameter).
+# Applied by run-ds41-1017-native.sh --install to a copy of the pinned checkout; the checkout stays clean.
+diff -ruN a/serve/server.py b/serve/server.py
+--- a/serve/server.py	2026-11-02 20:12:36.149115350 +0100
++++ b/serve/server.py	2026-11-02 20:13:09.114140969 +0100
+@@ -98,6 +98,11 @@
+ IMAGE_PAD = "<|image_pad|>"
+ VISION_START = "<|vision_start|>"
+ CTX_SLACK = 8               # `strata --serve` rejects prompt + max_new + 8 > context: keep the same margin here
++# Tokens can flow for minutes with nothing to send: a tool call's parameter that is held back until it is complete
++# (a value the parser cannot type as a string goes out whole: every DeepSeek-V4.1 DSML parameter without a schema).
++# A client's read timeout cuts such a request (Node's fetch: 300 s without a byte), so a stretch this long without
++# an event yields a ping as well, which the streaming writers send as a keep-alive comment.
++QUIET_PING_S = 10.0
+ # The live tok/s is a rate over a window, not a mean since the first token: a mean reads ~1/elapsed at the first
+ # token (the Monitor showed five-digit numbers) and then undershoots for the first second of every answer.  5 s: drafted
+ # tokens come in bursts of 1-4 a step, and over 2 s the rate swung +-25% around the engine's steady one
+@@ -2302,6 +2307,7 @@
+                 gen = attempts()
+                 for ev in pre_events:                   # a required call's opening (prepare put it in the prompt)
+                     yield "event", ev
++                quiet = time.time()                     # when this request last yielded (QUIET_PING_S)
+                 try:
+                     for t in gen:
+                         if t is None:                   # heartbeat while the engine is quiet
+@@ -2309,6 +2315,7 @@
+                             pr = getattr(self.engine, "progress", None)   # (read, total, reuse, ms), the PP parse
+                             yield "ping", ({"total": pr[1], "cache": pr[2], "processed": pr[0],
+                                             "time_ms": round(pr[3])} if pr and len(pr) >= 4 else None)
++                            quiet = time.time()
+                             continue
+                         n += 1
+                         if my_first is None:
+@@ -2346,6 +2353,11 @@
+                             if single_tool and ev.kind == "tool_call" and ev.complete:
+                                 stopped = True
+                                 break
++                        if evs:
++                            quiet = time.time()
++                        elif time.time() - quiet >= QUIET_PING_S:   # tokens, but nothing to send yet
++                            yield "ping", None
++                            quiet = time.time()
+                         if stopped:
+                             finish = "stop"
+                             break
+diff -ruN a/serve/test_keepalive.py b/serve/test_keepalive.py
+--- a/serve/test_keepalive.py	1970-01-01 01:00:00.000000000 +0100
++++ b/serve/test_keepalive.py	2026-11-02 20:13:23.460918285 +0100
+@@ -0,0 +1,76 @@
++"""serve/test_keepalive.py - a streamed answer keeps the connection alive while tokens flow with nothing to send.
++
++A tool call's parameter that is held back until it is complete (here an object, which goes out whole) can take
++minutes to write; a client's read timeout (Node's fetch: 300 s without a byte) would cut the request.  The stream
++carries keep-alive comments through such a stretch, and the call arrives whole after it.
++
++    python -m unittest serve.test_keepalive -v
++"""
++from __future__ import annotations
++
++import json
++import sys
++import time
++import unittest
++import urllib.request
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++import serve.server as srv  # noqa: E402
++from serve.frontend import ChatTemplate  # noqa: E402
++from serve.server import ByteTokenizer, MockEngine, Service, serve  # noqa: E402
++
++ROOT = Path(__file__).resolve().parents[1]
++TOOL = {"type": "function", "function": {"name": "save", "parameters": {
++    "type": "object", "properties": {"data": {"type": "object"}}}}}
++VALUE = {"text": "a" * 600}
++CALL = ("<tool_call>save\n<arg_key>data</arg_key>\n<arg_value>" + json.dumps(VALUE) + "</arg_value>\n</tool_call>")
++
++
++class Paced(MockEngine):
++    """The mock engine's tokens, 2 ms apart: the held-back value takes over a second to write."""
++
++    def generate(self, ids, max_new, sampling, cancel, embeddings=None):
++        for t in super().generate(ids, max_new, sampling, cancel, embeddings):
++            time.sleep(0.002)
++            yield t
++
++
++class KeepAliveWhileHeld(unittest.TestCase):
++    def setUp(self):
++        self.quiet = srv.QUIET_PING_S
++        srv.QUIET_PING_S = 0.2
++
++    def tearDown(self):
++        srv.QUIET_PING_S = self.quiet
++
++    def stream(self) -> str:
++        tok = ByteTokenizer()
++        svc = Service(Paced(tok, "</think>\n\n" + CALL, max_context=8192), tok,
++                      ChatTemplate(ROOT / "serve/chat_template.jinja"))
++        httpd = serve(svc, port=0)
++        base = f"http://127.0.0.1:{httpd.server_address[1]}"
++        body = {"model": "m", "stream": True, "max_tokens": 4000, "tools": [TOOL],
++                "messages": [{"role": "user", "content": "save it"}]}
++        try:
++            req = urllib.request.Request(base + "/v1/chat/completions", data=json.dumps(body).encode(),
++                                         headers={"Content-Type": "application/json"})
++            with urllib.request.urlopen(req, timeout=60) as r:
++                return r.read().decode()
++        finally:
++            httpd.shutdown()
++            httpd.server_close()
++
++    def test_keep_alives_while_a_value_is_held_and_the_call_arrives_whole(self):
++        text = self.stream()
++        # the value takes ~1.2 s at 2 ms a token: several 0.2 s stretches with nothing to send
++        self.assertGreaterEqual(text.count(": keep-alive"), 3)
++        chunks = [json.loads(line[len("data: "):]) for line in text.splitlines()
++                  if line.startswith("data: ") and line != "data: [DONE]"]
++        args = "".join(tc["function"].get("arguments") or "" for c in chunks
++                       for tc in c["choices"][0]["delta"].get("tool_calls") or [])
++        self.assertEqual(json.loads(args), {"data": VALUE})
++
++
++if __name__ == "__main__":
++    unittest.main()

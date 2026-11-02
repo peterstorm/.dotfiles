@@ -15,7 +15,10 @@
 #   - the engine by commit (DS4N_COMMIT): --install builds ds4n-serve from that commit of the
 #     desktop's clone into /models/ds41/native/bin/ds4n-serve-<commit>, which --launch runs;
 #   - the Maya checkout by commit (MAYA_COMMIT, clean) for the server, and the tokenizer exported
-#     from the HF checkpoint by Maya's tools/ds4/pack.py (write_tokenizer);
+#     from the HF checkpoint by Maya's tools/ds4/pack.py (write_tokenizer). The server runs from a
+#     copy of that commit with maya-serve-keepalive.patch applied (--install builds it, keyed by the
+#     commit and the patch): keep-alives while tokens flow with nothing to send, so a tool call whose
+#     parameter is held back until complete (a large file write) outlasts a client's read timeout;
 #   - the engine's settings: Slots, RAM tier, the Expert profile, DSpark, the sweep threshold;
 #   - the workstation gates: two idle RTX PRO 6000s, comfyui stopped, port 8000 free.
 #
@@ -43,7 +46,9 @@ DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
 MAYA_DIR="$MODELS_DIR/project-maya"
+MAYA_PATCH="$SCRIPT_DIR/maya-serve-keepalive.patch"
 NATIVE="$MODELS_DIR/native"
+MAYA_SERVE="$NATIVE/maya-${MAYA_COMMIT:0:12}-$(sha256sum "$MAYA_PATCH" | cut -c1-12)"
 SERVE_DIR="$NATIVE/serve"
 ENGINE="$NATIVE/bin/ds4n-serve-${DS4N_COMMIT:0:12}"
 TOKENIZER="$SERVE_DIR/tokenizer"
@@ -113,15 +118,26 @@ if [ "$MODE" = --install ]; then
   # The tokenizer in Maya's form, from the checkpoint's tokenizer.json (Maya's own exporter).
   docker run --rm "${container_run[@]}" -w "$MAYA_DIR/tools/ds4" "$IMAGE" "$MAYA_DIR/.venv/bin/python" -c \
     "import pathlib, pack; pack.write_tokenizer(pathlib.Path('$TOKENIZER'), pathlib.Path('$HF'))"
-  echo "installed $ENGINE and $TOKENIZER"
+  # The server: the pinned commit's tree with the patch, its tests run (Maya's .venv; no GPU).
+  if [ ! -f "$MAYA_SERVE/.installed" ]; then
+    rm -rf "$MAYA_SERVE.tmp" && mkdir -p "$MAYA_SERVE.tmp"
+    git -C "$MAYA_DIR" archive "$MAYA_COMMIT" | tar -x -C "$MAYA_SERVE.tmp"
+    patch -d "$MAYA_SERVE.tmp" -p1 --batch --forward --quiet <"$MAYA_PATCH"
+    docker run --rm "${container_run[@]}" -w "$MAYA_SERVE.tmp" "$IMAGE" "$MAYA_DIR/.venv/bin/python" -m unittest -q \
+      serve.test_keepalive serve.test_server serve.test_tools serve.test_stop serve.test_ds41_conformance
+    echo "$MAYA_COMMIT $(sha256sum "$MAYA_PATCH" | cut -d' ' -f1)" >"$MAYA_SERVE.tmp/.installed"
+    rm -rf "$MAYA_SERVE" && mv "$MAYA_SERVE.tmp" "$MAYA_SERVE"
+  fi
+  echo "installed $ENGINE, $TOKENIZER and $MAYA_SERVE"
   exit 0
 fi
 
 [ -x "$ENGINE" ] && [ "$(cat "$ENGINE.commit" 2>/dev/null)" = "$DS4N_COMMIT" ] || die "engine $ENGINE is not installed: ${0##*/} --install"
 [ -f "$TOKENIZER/vocab.json" ] && [ -f "$TOKENIZER/chat_template.jinja" ] || die "tokenizer $TOKENIZER is missing: ${0##*/} --install"
+[ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
 
 if [ "$MODE" = --preflight ]; then
-  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya $MAYA_COMMIT clean, files present)"
+  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya $MAYA_COMMIT clean + ${MAYA_SERVE##*/}, files present)"
   exit 0
 fi
 
@@ -153,6 +169,9 @@ jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg 
            "--checkpoint-gb", $ckpt, "--rewind-points", $points],
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "high",
+    # No thinking cap of its own (Maya defaults to 32,768): reasoning is bounded by the room left for
+    # the reply, less the quarter Maya keeps for the answer so a reply never ends with no answer.
+    thinking_budget: 262144,
     port: $port, host: "0.0.0.0", log: $log
   }' >"$CONFIG.tmp"
 mv -f "$CONFIG.tmp" "$CONFIG"
@@ -165,15 +184,17 @@ STRATA_API_KEY=$INFERENCE_API_KEY
 EOF
 
 # io_uring (the Expert store and Engram reads) needs seccomp lifted: Docker's default profile blocks
-# io_uring_setup/enter. --fit-max-tokens: a request whose max_tokens does not fit the 64K context
-# beside its prompt gets the room there is instead of a 400 (pi sends its model's maxTokens).
+# io_uring_setup/enter. --fit-max-tokens: a request whose max_tokens does not fit the context beside
+# its prompt gets the room there is instead of a 400 (pi sends its model's maxTokens, the whole
+# 262,144: a reply -- its reasoning included -- is bounded by the context alone).
 docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.profile="$NAME" \
   --label ai.peterstorm.inference.served-model="$SERVED_MODEL" \
   --label ai.peterstorm.inference.ds4n-commit="$DS4N_COMMIT" \
   --label ai.peterstorm.inference.maya-commit="$MAYA_COMMIT" \
+  --label ai.peterstorm.inference.maya-serve="${MAYA_SERVE##*/}" \
   --env-file "$ENVFILE" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
-  "${container_run[@]}" -w "$MAYA_DIR" --entrypoint bash "$IMAGE" -c \
-  "exec .venv/bin/python serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null
+  "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
+  "exec '$MAYA_DIR/.venv/bin/python' serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null
 echo "launched $NAME (model $SERVED_MODEL on :$PORT; loading takes a few minutes); logs: docker logs -f $NAME, $SERVE_DIR/ds4-native.log"
