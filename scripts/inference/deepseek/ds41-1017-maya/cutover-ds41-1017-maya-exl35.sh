@@ -2,7 +2,8 @@
 # Move the served Maya commit (and rebuild the engine in place), with automatic
 # rollback: stop the container, pin the run script's MAYA_COMMIT, check out,
 # rebuild inside the pinned toolchain image, launch, then prove /health, the
-# authenticated model list AND a real completion. Any failure rebuilds OLD and
+# authenticated model list AND a real completion - and only then let the
+# container restart at boot. Any failure stops it, rebuilds OLD and
 # relaunches it, so a bad upgrade cannot leave the desktop without inference
 # (there is no cloud fallback in models.json).
 #
@@ -89,10 +90,17 @@ stop_engine() {
   say "ERROR: port 8000 still listening after stop"; return 1
 }
 
+# The run script launches with --restart no; the policy is promoted only once the
+# health gate passed. Promoting at launch let an engine that wedged the host come
+# back with it at every boot (2026-11-03: the first v1.1.50 launch).
 start_engine() {
   "$RUN" --launch || { say "ERROR: launch failed"; return 1; }
+  say "launched $NAME (restart no until it proves healthy)"
+}
+
+promote() {
   docker update --restart=unless-stopped "$NAME" >/dev/null 2>&1 || say "WARN: could not promote restart policy"
-  say "launched $NAME"
+  say "promoted $NAME to restart=unless-stopped"
 }
 
 # The invariant is "the engine emitted tokens", not "the content field is set":
@@ -156,14 +164,18 @@ main() {
   build "$NEW" "$JOBS" || return 1
   start_engine || return 1
   health_gate 2400 || return 1
+  promote
   receipt "UPGRADED $NEW (conversation slots only if the run script passes STRATA_DS4_SLOT_*)"
   return 0
 }
 
 rollback() {
   say "ROLLBACK to $OLD"
+  # the failed engine may still be up: the rebuild needs its binary closed
+  stop_engine || say "WARN: the failed engine did not free port 8000"
   pin "$OLD" || say "ERROR: could not restore the pin - restore it by hand"
   if build "$OLD" "$JOBS" && start_engine && health_gate 2400; then
+    promote
     receipt "ROLLED BACK to $OLD (new engine failed)"
   else
     receipt "BROKEN: neither engine serves - needs a human"

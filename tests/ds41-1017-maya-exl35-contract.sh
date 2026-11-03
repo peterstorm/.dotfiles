@@ -90,6 +90,26 @@ contains "$DL" 'have_bytes | awk'
 contains "$DL" 'HAVE="$(have_bytes)"'
 lacks "$DL" 'du -sbL "$DEST"'
 
+# --- cutover: a new engine restarts at boot only once it proved healthy -----
+CUTOVER="$DIR/cutover-ds41-1017-maya-exl35.sh"
+bash -n "$CUTOVER"
+body() { awk -v f="$2" '$0 ~ "^" f "\\(\\) *\\{" {on = 1} on {print} on && /^}/ {exit}' "$1"; }
+first_line() { body "$1" "$2" | grep -n -F -- "$3" | head -1 | cut -d: -f1; }
+[ "$(grep -c 'docker update --restart=unless-stopped' "$CUTOVER")" = 1 ] \
+  || { echo "FAIL: the cutover promotes the restart policy outside promote()" >&2; exit 1; }
+body "$CUTOVER" promote | grep -q 'restart=unless-stopped' || { echo "FAIL: promote() does not promote" >&2; exit 1; }
+if body "$CUTOVER" start_engine | grep -q 'restart=unless-stopped'; then
+  echo "FAIL: start_engine promotes before the health gate" >&2; exit 1
+fi
+for fn in main rollback; do
+  g="$(first_line "$CUTOVER" "$fn" 'health_gate 2400')"; p="$(first_line "$CUTOVER" "$fn" 'promote')"
+  [ -n "$g" ] && [ -n "$p" ] && [ "$p" -gt "$g" ] \
+    || { echo "FAIL: $fn() must promote only after health_gate passes" >&2; exit 1; }
+done
+[ -n "$(first_line "$CUTOVER" rollback 'stop_engine')" ] \
+  && [ "$(first_line "$CUTOVER" rollback 'stop_engine')" -lt "$(first_line "$CUTOVER" rollback 'build "$OLD"')" ] \
+  || { echo "FAIL: rollback() must stop the failed engine before rebuilding" >&2; exit 1; }
+
 # --- run script: pins, gates, key never on a command line ------------------
 contains "$RUN" "IMAGE_CONFIG=\"$IMAGE_CONFIG\""
 contains "$RUN" "IMAGE_DIGEST=\"$IMAGE_DIGEST\""
