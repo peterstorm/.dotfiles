@@ -83,6 +83,12 @@ contains "$DL" 'sha256 mismatch $name'
 contains "$DL" '.download-complete'
 contains "$DL" 'sudo systemd-run --unit "$UNIT" --collect --uid "$(id -u)"'
 lacks "$DL" 'resolve/main'
+# progress and the free-space check count each manifest file where it is written
+# (the Engram tables sit in ENGRAM_DEST, linked into DEST only at the end)
+contains "$DL" 'done < <(manifest_files)'
+contains "$DL" 'have_bytes | awk'
+contains "$DL" 'HAVE="$(have_bytes)"'
+lacks "$DL" 'du -sbL "$DEST"'
 
 # --- run script: pins, gates, key never on a command line ------------------
 contains "$RUN" "IMAGE_CONFIG=\"$IMAGE_CONFIG\""

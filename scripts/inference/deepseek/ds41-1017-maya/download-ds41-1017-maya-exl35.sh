@@ -43,10 +43,31 @@ MODE="${1:---detach}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# One "dir repo revision name size sha256" line per file: the EXL3 repo's
+# files into DEST, then the Engram tables from DeepSeek's base repo into
+# ENGRAM_DEST.
+manifest_files() {
+  jq -r --arg w "$DEST" --arg e "$ENGRAM_DEST" '
+    ([$w, .], [$e, .engram]) as [$dir, $src] | $src.files | to_entries[]
+    | [$dir, $src.repo, $src.revision, .key, .value[0], .value[1]] | map(tostring) | join(" ")' "$MANIFEST"
+}
+
+# The bytes of the manifest's files on disk, each counted once where it is
+# written: the Engram tables grow in ENGRAM_DEST and are linked into DEST only
+# once every file verified, so a size of DEST alone misses them until the end.
+have_bytes() {
+  local dir name n total=0
+  while read -r dir _ _ name _ _; do
+    n="$(stat -c %s "$dir/$name" 2>/dev/null || echo 0)"
+    total=$((total + n))
+  done < <(manifest_files)
+  echo "$total"
+}
+
 case "$MODE" in
   --status)
     systemctl status "$UNIT" --no-pager 2>/dev/null | head -5 || true
-    du -sbL "$DEST" 2>/dev/null | awk -v t="$TOTAL_BYTES" '{printf "%.1f / %.1f GB on disk\n", $1/1e9, t/1e9}'
+    have_bytes | awk -v t="$TOTAL_BYTES" '{printf "%.1f / %.1f GB on disk\n", $1/1e9, t/1e9}'
     if [ -f "$DEST/.download-complete" ]; then echo "complete: $(cat "$DEST/.download-complete")"; fi
     exit 0 ;;
   --detach)
@@ -65,18 +86,13 @@ echo "$MANIFEST_SHA256  $MANIFEST" | sha256sum -c --quiet - || die "manifest doe
 mountpoint -q "$MODELS_DIR" || die "$MODELS_DIR is not mounted (rpool/models/ds41)"
 mountpoint -q "$ENGRAM_DEST" || die "$ENGRAM_DEST is not mounted (rpool/models/ds41/engram)"
 
-# One "dir repo revision name size sha256" line per file: the EXL3 repo's
-# files into DEST, then the Engram tables from DeepSeek's base repo into
-# ENGRAM_DEST. Parsed once.
-mapfile -t FILES < <(jq -r --arg w "$DEST" --arg e "$ENGRAM_DEST" '
-  ([$w, .], [$e, .engram]) as [$dir, $src] | $src.files | to_entries[]
-  | [$dir, $src.repo, $src.revision, .key, .value[0], .value[1]] | map(tostring) | join(" ")' "$MANIFEST")
+mapfile -t FILES < <(manifest_files)
 [ "${#FILES[@]}" -eq "$FILE_COUNT" ] || die "expected $FILE_COUNT files, manifest lists ${#FILES[@]}"
 NEED="$(printf '%s\n' "${FILES[@]}" | awk '{s += $5} END {print s}')"
 [ "$NEED" = "$TOTAL_BYTES" ] || die "manifest totals $NEED bytes, expected $TOTAL_BYTES"
 
 mkdir -p "$DEST" "$STATE_DIR"
-HAVE="$(du -sbL "$DEST" | cut -f1)"
+HAVE="$(have_bytes)"
 FREE="$(df -B1 --output=avail "$MODELS_DIR" | tail -1)"
 [ $((NEED - HAVE)) -lt "$FREE" ] || die "need $((NEED - HAVE)) more bytes, $FREE free"
 
