@@ -104,6 +104,9 @@ contains "$RUN" '$i != null and $a[$i + 1] == $c and $j != null and $a[$j + 1] =
 contains "$RUN" 'QUANT_DIR="$MODELS_DIR/DeepSeek-V4.1-Flash-1017-3.5bpw"'
 contains "$RUN" '.installer.ds4_quant == $q'
 contains "$RUN" "--ds4-quant '\$QUANT'"
+# the quant's FP8 dense weights become BF16 before Maya's pack (setup does not do it)
+contains "$RUN" 'tools/ds4/fp8_dense.py --model'
+contains "$RUN" '[ ! -f "$QUANT_DIR/maya-dense-bf16.safetensors" ]'
 contains "$RUN" "NAME=\"$CONTAINER\""
 contains "$RUN" "SERVED_MODEL=\"$SERVED_MODEL\""
 contains "$RUN" 'PORT=8000'

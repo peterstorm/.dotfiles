@@ -127,7 +127,7 @@ for f in "${FILES[@]}"; do
   # Maya looks for every file in DEST: the Engram tables are linked there.
   if [ "$dir" != "$DEST" ]; then ln -sfn "$dir/$name" "$DEST/$name"; fi
 done
-rm -f "$DEST"/*.ok "$ENGRAM_DEST"/*.ok
+rm -f "$DEST"/*.ok "$DEST"/.*.ok "$ENGRAM_DEST"/*.ok   # .gitattributes is one of the manifest's files
 REPO="$(jq -r .repo "$MANIFEST")"; REV="$(jq -r .revision "$MANIFEST")"
 echo "$REPO@$REV exl3-3.5 $NEED bytes, sha256-verified $(date -Is)" > "$DEST/.download-complete"
 {

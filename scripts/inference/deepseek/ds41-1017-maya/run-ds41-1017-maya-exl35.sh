@@ -173,6 +173,18 @@ common_run=(--gpus all --ipc host --network host --ulimit memlock=-1
 mkdir -p "$CONTAINER_HOME"
 
 if [ "$MODE" = --finish-setup ]; then
+  # This quant keeps attention, the shared experts and the indexer in DeepSeek's
+  # FP8, and Maya's pack reads dense matrices only as EXL3, BF16 or Q8_0: Maya's
+  # own converter writes them as BF16 - exactly, each FP8 value times its block's
+  # scale is a BF16 number - into maya-dense-bf16.safetensors (~14 GB) beside the
+  # weights, which pack.py then indexes. Setup does not run it, so once per
+  # download here; the converter writes a .tmp and renames it, so the file
+  # existing means it finished.
+  if [ ! -f "$QUANT_DIR/maya-dense-bf16.safetensors" ]; then
+    docker run --rm --name "$NAME-fp8-dense" "${common_run[@]}" "$IMAGE_CONFIG" -c \
+      "'$MAYA_DIR/.venv/bin/python' tools/ds4/fp8_dense.py --model '$QUANT_DIR'" \
+      || die "tools/ds4/fp8_dense.py could not write $QUANT_DIR/maya-dense-bf16.safetensors"
+  fi
   docker run --rm --name "$NAME-setup" "${common_run[@]}" "$IMAGE_CONFIG" -c \
     "./setup.sh --setup --model DeepSeek-V4.1-Flash-1017 --ds4-quant '$QUANT' --models-dir '$MODELS_DIR' \
        --gpus 0,1 --context '$CONTEXT' --host 0.0.0.0 --port '$PORT' --download-model --yes --plain --no-start"
