@@ -24,7 +24,8 @@
 #
 # One request at a time, from any conversation it keeps: an agent's tool loop and a chat's next turn
 # read only their new tokens; a conversation another one took the GPUs from comes back from its KV
-# checkpoint in host RAM (CHECKPOINT_GB of them); a subagent's first prompt resumes where it leaves
+# checkpoint in host RAM (CHECKPOINT_GB of them), with the rings at its last prompt's end, so its
+# next step resumes there however it re-renders the reply; a subagent's first prompt resumes where it leaves
 # the system prompt it shares with its parent (a Rewind point taken there).
 #
 # Modes:
@@ -41,7 +42,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-acb97b82795970c4a5a1381a79a022b72f7b8008}"
+DS4N_COMMIT="${DS4N_COMMIT:-1e46e6bb645d2a2deb6e5088ac59a52fb30fe2da}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
