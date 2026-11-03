@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Move the served Maya commit (and rebuild the engine in place), with automatic
-# rollback: stop the container, pin both copies of the run script, check out,
+# rollback: stop the container, pin the run script's MAYA_COMMIT, check out,
 # rebuild inside the pinned toolchain image, launch, then prove /health, the
 # authenticated model list AND a real completion. Any failure rebuilds OLD and
 # relaunches it, so a bad upgrade cannot leave the desktop without inference
@@ -27,9 +27,11 @@ OLD="${OLD:-b3fa99ec244e7885ec04ef456eac0d52474dba95}"
 JOBS="${JOBS:-8}"
 IMG=sha256:7b5c335cc647b203aacd09e7513f19266846a8efeabdcaa8724524e51e04ff7a
 NAME=ds41-1017-maya-exl35
-RUN="$HOME/.local/share/ds41-maya/repo/scripts/inference/deepseek/ds41-1017-maya/run-ds41-1017-maya-exl35.sh"
-RUN_REPO="$HOME/.dotfiles/scripts/inference/deepseek/ds41-1017-maya/run-ds41-1017-maya-exl35.sh"
-KEYFILE_HELPER="$HOME/.local/share/ds41-maya/repo/scripts/inference/shared/inference-api-key.sh"
+# The run script beside this one, in the desktop's own checkout (the deployed copy under
+# ~/.local/share/ds41-maya/repo bridged a lagging checkout in October; retired 2026-11-03).
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN="$HERE/run-ds41-1017-maya-exl35.sh"
+KEYFILE_HELPER="$HERE/../../shared/inference-api-key.sh"
 STATE="$HOME/.local/state/ds41-maya"
 mkdir -p "$STATE"
 LOG="$STATE/cutover-$(date +%Y%m%d-%H%M%S).log"
@@ -39,14 +41,10 @@ say() { printf "[%s] %s\n" "$(date +%H:%M:%S)" "$*"; }
 DELAY="${1:-0}"
 say "cutover scheduled: delay=${DELAY}s new=$NEW old=$OLD"
 
-# the pin lives in two copies of one file (the deployed mirror and the repo): write both, or fail
+# the pin is the run script's MAYA_COMMIT line: written, then read back, or fail
 pin() {
-  local f
-  for f in "$RUN" "$RUN_REPO"; do
-    [ -f "$f" ] || continue
-    sed -i "s|^MAYA_COMMIT=\"[0-9a-f]*\"|MAYA_COMMIT=\"$1\"|" "$f"
-    grep -q "^MAYA_COMMIT=\"$1\"" "$f" || { say "ERROR: could not pin MAYA_COMMIT=$1 in $f"; return 1; }
-  done
+  sed -i "s|^MAYA_COMMIT=\"[0-9a-f]*\"|MAYA_COMMIT=\"$1\"|" "$RUN"
+  grep -q "^MAYA_COMMIT=\"$1\"" "$RUN" || { say "ERROR: could not pin MAYA_COMMIT=$1 in $RUN"; return 1; }
   say "pinned MAYA_COMMIT=$1"
 }
 
