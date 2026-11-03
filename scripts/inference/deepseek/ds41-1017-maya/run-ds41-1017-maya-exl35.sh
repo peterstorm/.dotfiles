@@ -84,6 +84,15 @@ SLOT_KEEP="${SLOT_KEEP:-1}"
 SLOT_CAP="${SLOT_CAP:-4}"
 SLOT_GB="${SLOT_GB:-16}"
 SLOT_DIR="${SLOT_DIR:-$QUANT_DIR/maya-ds4/slots}"
+# The model thinks and writes bounded by the context alone: no thinking budget of
+# Maya's own (its default is 32,768; a request's max_tokens lowers it only when it
+# is 1,024 tokens or fewer, a side request's), and a max_tokens that no longer
+# fits beside a long prompt gets the room there is instead of a 400 (pi sends its
+# model's maxTokens, the whole 262,144). --finish-setup writes both into the config.
+THINKING_BUDGET="${THINKING_BUDGET:-262144}"
+# Engine settings for an experiment, passed to the container as they are
+# (space-separated K=V, e.g. MAYA_EXTRA_ENV="DS4_AR_P2P=1"); empty for the profile.
+MAYA_EXTRA_ENV="${MAYA_EXTRA_ENV:-}"
 NAME="ds41-1017-maya-exl35"
 SERVED_MODEL="deepseek-v4.1-flash"
 PORT=8000
@@ -123,6 +132,8 @@ if [ "$MODE" = --launch ]; then
     .args as $a | ($a | index("--max-context")) as $i | ($a | index("--prefill-chunk")) as $j
     | $i != null and $a[$i + 1] == $c and $j != null and $a[$j + 1] == $p' "$MAYA_DIR/$CONFIG" >/dev/null \
     || die "$CONFIG is not set for context $CONTEXT / prefill chunk $PREFILL_CHUNK; run ${0##*/} --finish-setup"
+  jq -e --argjson b "$THINKING_BUDGET" '.thinking_budget == $b and .fit_max_tokens == true' "$MAYA_DIR/$CONFIG" >/dev/null \
+    || die "$CONFIG does not leave the thinking unbounded (thinking_budget $THINKING_BUDGET, fit_max_tokens); run ${0##*/} --finish-setup"
 fi
 
 if [ "$MODE" = --preflight ]; then
@@ -167,22 +178,29 @@ if [ "$MODE" = --finish-setup ]; then
        --gpus 0,1 --context '$CONTEXT' --host 0.0.0.0 --port '$PORT' --download-model --yes --plain --no-start"
   jq -e --arg d "$QUANT_DIR" '.installer.model_dir == $d' "$MAYA_DIR/$CONFIG" >/dev/null \
     || die "setup finished without writing $CONFIG for $QUANT_DIR"
-  # Pin the prompt chunk in the config's args (replacing a value setup kept).
-  # A temp file left behind would dirty the Maya checkout and fail the next
-  # preflight, so remove it on any failure.
+  # Pin the prompt chunk in the config's args (replacing a value setup kept), and
+  # leave the thinking unbounded (THINKING_BUDGET above). A temp file left behind
+  # would dirty the Maya checkout and fail the next preflight, so remove it on any failure.
   config_tmp="$(mktemp "$MAYA_DIR/.$CONFIG.XXXXXX")"
   trap 'rm -f "$config_tmp"' EXIT
-  jq --arg p "$PREFILL_CHUNK" '
-    .args |= ((index("--prefill-chunk")) as $j
-      | if $j == null then . + ["--prefill-chunk", $p] else .[:$j + 1] + [$p] + .[$j + 2:] end)' \
+  jq --arg p "$PREFILL_CHUNK" --argjson b "$THINKING_BUDGET" '
+    (.args |= ((index("--prefill-chunk")) as $j
+      | if $j == null then . + ["--prefill-chunk", $p] else .[:$j + 1] + [$p] + .[$j + 2:] end))
+    | .thinking_budget = $b | .fit_max_tokens = true' \
     "$MAYA_DIR/$CONFIG" >"$config_tmp" \
-    || die "could not pin --prefill-chunk in $MAYA_DIR/$CONFIG"
+    || die "could not pin --prefill-chunk and the thinking budget in $MAYA_DIR/$CONFIG"
   mv -f "$config_tmp" "$MAYA_DIR/$CONFIG"
   trap - EXIT
   echo "setup complete: $MAYA_DIR/$CONFIG"
-  jq -c '{args, port, host, gpu, model_name}' "$MAYA_DIR/$CONFIG"
+  jq -c '{args, port, host, gpu, model_name, thinking_budget, fit_max_tokens}' "$MAYA_DIR/$CONFIG"
   exit 0
 fi
+
+extra_env=()
+for kv in $MAYA_EXTRA_ENV; do
+  [[ "$kv" =~ ^[A-Z][A-Z0-9_]*=[^[:space:]]*$ ]] || die "MAYA_EXTRA_ENV entry is not K=V: $kv"
+  extra_env+=(-e "$kv")
+done
 
 inference_remove_container_if_present "$NAME"
 if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
@@ -205,6 +223,8 @@ docker run -d --name "$NAME" --restart no \
   -e MAYA_DS4_SLOT_CAP="$SLOT_CAP" \
   -e MAYA_DS4_SLOT_GB="$SLOT_GB" \
   -e MAYA_DS4_SLOT_DIR="$SLOT_DIR" \
+  --label ai.peterstorm.inference.extra-env="$MAYA_EXTRA_ENV" \
+  "${extra_env[@]}" \
   "${common_run[@]}" "$IMAGE_CONFIG" -c \
   "exec ./maya.sh --plain --config '$CONFIG' --host 0.0.0.0 --port '$PORT'" >/dev/null
 echo "launched $NAME (model $SERVED_MODEL on :$PORT); logs: docker logs -f $NAME"
