@@ -8,17 +8,22 @@
 #
 # The 2026-10-22 upgrade ran this logic verbatim as ~/ds41-cutover-v121.sh
 # (sha256 a1261dd9…): 8d9a9b5/v1.1.17 -> b3fa99e/v1.1.21 + PR #356, in 4m50s.
+# 2026-11-03: b3fa99e -> e7163db, v1.1.50 (conversation slots upstream since)
+# plus one local commit on branch ds41-local-v1.1.50: serve/ keep-alives while
+# tokens flow with nothing to send (a large tool-call write no longer trips a
+# client's 300 s read timeout). The same build line compiles it: llama.cpp is
+# still pinned at 3cf03257 (third_party/llama.cpp, ignored, kept by checkout).
 #
 # Usage: cutover-ds41-1017-maya-exl35.sh [delay_seconds]
 #   NEW=<commit> OLD=<commit> JOBS=<n> override the defaults (NEW defaults to
-#   the v1.1.21 + conversation-slots merge, OLD to the v1.1.17 rollback target).
+#   v1.1.50 + the keep-alive commit, OLD to the v1.1.21 + slots rollback target).
 #   The delay exists so a caller can finish its last generation before the
 #   engine dies. Log and receipt land in ~/.local/state/ds41-maya/.
 set -uo pipefail
 
 MAYA=/models/ds41/project-maya
-NEW="${NEW:-b3fa99ec244e7885ec04ef456eac0d52474dba95}"
-OLD="${OLD:-8d9a9b5d705049a87da853717cdc59440252de30}"
+NEW="${NEW:-e7163db4a932b5e53c7e3a4850aef566dfff0ffc}"
+OLD="${OLD:-b3fa99ec244e7885ec04ef456eac0d52474dba95}"
 JOBS="${JOBS:-8}"
 IMG=sha256:7b5c335cc647b203aacd09e7513f19266846a8efeabdcaa8724524e51e04ff7a
 NAME=ds41-1017-maya-exl35

@@ -14,7 +14,7 @@
 #     base Maya's .venv was made in);
 #   - the engine by commit (DS4N_COMMIT): --install builds ds4n-serve from that commit of the
 #     desktop's clone into /models/ds41/native/bin/ds4n-serve-<commit>, which --launch runs;
-#   - the Maya checkout by commit (MAYA_COMMIT, clean) for the server, and the tokenizer exported
+#   - the Maya server by commit (MAYA_COMMIT, in the shared checkout's history), and the tokenizer exported
 #     from the HF checkpoint by Maya's tools/ds4/pack.py (write_tokenizer). The server runs from a
 #     copy of that commit with maya-serve-keepalive.patch applied (--install builds it, keyed by the
 #     commit and the patch): keep-alives while tokens flow with nothing to send, so a tool call whose
@@ -96,8 +96,9 @@ fi
 # --- pins: image, sources, engine, files ----------------------------------------------------
 docker image inspect "$IMAGE" >/dev/null 2>&1 || die "image $IMAGE is absent (ds4-native: scripts/dev.sh image)"
 mountpoint -q "$MODELS_DIR" || die "$MODELS_DIR is not mounted (rpool/models/ds41)"
-[ "$(git -C "$MAYA_DIR" rev-parse HEAD 2>/dev/null)" = "$MAYA_COMMIT" ] || die "Maya checkout at $MAYA_DIR is not at $MAYA_COMMIT"
-[ -z "$(git -C "$MAYA_DIR" status --porcelain)" ] || die "Maya checkout at $MAYA_DIR has local changes"
+# The server runs from its own copy of MAYA_COMMIT (MAYA_SERVE), so the checkout itself may sit
+# wherever the Maya profile pins it; the commit only has to be in its history.
+git -C "$MAYA_DIR" cat-file -e "$MAYA_COMMIT^{commit}" 2>/dev/null || die "Maya checkout at $MAYA_DIR has no commit $MAYA_COMMIT"
 [ -f "$MAYA_DIR/.venv/pyvenv.cfg" ] || die "Maya's .venv is missing ($MAYA_DIR/.venv; its python is the image's)"
 for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json"; do [ -f "$f" ] || die "missing $f"; done
 
@@ -137,7 +138,7 @@ fi
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
 
 if [ "$MODE" = --preflight ]; then
-  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya $MAYA_COMMIT clean + ${MAYA_SERVE##*/}, files present)"
+  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, files present)"
   exit 0
 fi
 
