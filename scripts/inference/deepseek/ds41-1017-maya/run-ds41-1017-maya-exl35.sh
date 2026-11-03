@@ -164,10 +164,20 @@ for row in "${gpu_rows[@]}"; do
     || die "GPU $index power limit is ${power_limit} W; declarative config pins ${DECLARED_GPU_WATTS} W"
 done
 
-# Maya takes ~77 GB of RAM as its own heap copy of the cold experts (not page
-# cache, nothing pinned) and leaves ~3 GB; containers in the
-# same image share the checkout's .venv, so it always runs under this image.
+# Maya copies the cold experts into RAM (~76 GB here) and pins them through the
+# CUDA driver (cudaHostRegister: locked, though VmLck reads 0), leaving ~3 GB; a
+# load that outgrows the RAM cannot be reclaimed and froze the whole desktop
+# (2026-11-03, the first v1.1.50 launch: no OOM kill, sshd dead, a hard reset).
+# Every container here is therefore capped below the host's RAM, so the kernel
+# kills the container instead; MAYA_MEMORY_GB overrides the default, which
+# leaves 10 GiB to the kernel, ZFS's ARC and sshd. Containers in the same image
+# share the checkout's .venv, so it always runs under this image.
+host_mem_gib=$(($(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1048576))
+MAYA_MEMORY_GB="${MAYA_MEMORY_GB:-$((host_mem_gib - 10))}"
+[[ "$MAYA_MEMORY_GB" =~ ^[0-9]+$ ]] && ((MAYA_MEMORY_GB > 0 && MAYA_MEMORY_GB < host_mem_gib)) \
+  || die "MAYA_MEMORY_GB must be a whole number of GiB below the host's $host_mem_gib"
 common_run=(--gpus all --ipc host --network host --ulimit memlock=-1
+  --memory "${MAYA_MEMORY_GB}g" --memory-swap "${MAYA_MEMORY_GB}g"
   --user "$(id -u):$(id -g)" -e HOME="$CONTAINER_HOME" -e MAYA_UPDATE_CHECK=0
   -v "$MODELS_DIR:$MODELS_DIR" -w "$MAYA_DIR" --entrypoint bash)
 mkdir -p "$CONTAINER_HOME"
