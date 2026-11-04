@@ -75,6 +75,9 @@ SWEEP_MIN="${SWEEP_MIN:-96}"
 # (92 MB pinned each) leave ~6 GB.
 CHECKPOINT_GB="${CHECKPOINT_GB:-6}"
 REWIND_POINTS="${REWIND_POINTS:-8}"
+# Engine settings for an experiment, passed to the container as they are (space-separated K=V, e.g.
+# NATIVE_EXTRA_ENV="DS4N_DECODER_TAIL=0" for every layer on every prompt row); empty for the profile.
+NATIVE_EXTRA_ENV="${NATIVE_EXTRA_ENV:-}"
 NAME="ds41-1017-native"
 SERVED_MODEL="deepseek-v4.1-flash-native"
 PORT=8000
@@ -185,6 +188,12 @@ inference_write_private_file "$ENVFILE" <<EOF
 STRATA_API_KEY=$INFERENCE_API_KEY
 EOF
 
+extra_env=()
+for kv in $NATIVE_EXTRA_ENV; do
+  [[ "$kv" =~ ^[A-Z][A-Z0-9_]*=[^[:space:]]*$ ]] || die "NATIVE_EXTRA_ENV entry is not K=V: $kv"
+  extra_env+=(-e "$kv")
+done
+
 # io_uring (the Expert store and Engram reads) needs seccomp lifted: Docker's default profile blocks
 # io_uring_setup/enter. --fit-max-tokens: a request whose max_tokens does not fit the context beside
 # its prompt gets the room there is instead of a 400 (pi sends its model's maxTokens, the whole
@@ -195,7 +204,8 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.ds4n-commit="$DS4N_COMMIT" \
   --label ai.peterstorm.inference.maya-commit="$MAYA_COMMIT" \
   --label ai.peterstorm.inference.maya-serve="${MAYA_SERVE##*/}" \
-  --env-file "$ENVFILE" \
+  --label ai.peterstorm.inference.extra-env="$NATIVE_EXTRA_ENV" \
+  --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
   "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
   "exec '$MAYA_DIR/.venv/bin/python' serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null

@@ -35,7 +35,10 @@ PREFILL_WORDS="${BENCH_PREFILL_WORDS:-6000 20000}"
 DEPTH_TOKENS="${BENCH_DEPTH_TOKENS:-}"
 CORPUS="${BENCH_CORPUS:-}"
 [[ -z "$CORPUS" || -s "$CORPUS" ]] || { echo "error: BENCH_CORPUS is not a non-empty file: $CORPUS" >&2; exit 1; }
-SEED="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
+# BENCH_SEED fixes the prompts, for an A/B of two fresh engines (a restarted engine keeps no KV);
+# otherwise a fresh seed per run.
+SEED="${BENCH_SEED:-$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')}"
+[[ "$SEED" =~ ^[0-9]+$ ]] || { echo "error: BENCH_SEED is not a number: $SEED" >&2; exit 1; }
 OUT="${1:-/dev/stdout}"
 
 inference_resolve_client_keyfile || { echo "error: no synchronized API key" >&2; exit 1; }
