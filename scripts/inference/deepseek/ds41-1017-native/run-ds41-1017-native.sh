@@ -58,6 +58,9 @@ BACKBONE="$NATIVE/backbone.safetensors"
 STORE="$NATIVE/experts.ds4n"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"
 HF="$MODELS_DIR/hf-1017-mtp"
+# The DSpark head (its three mtp.* shards): DeepSeek's released one in $HF, or another in the same
+# layout. Drafts are verified, so the head changes speed only, never the output.
+DSPARK="${DSPARK:-$HF}"
 PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
 # VRAM Slots and RAM tier records. Without DSpark the long-prompt setting is 8,800 Slots (95.6 GB
 # VRAM beside a 64K prompt sweep); DSpark's stages, its 384 resident Experts and feature rings take
@@ -104,7 +107,9 @@ mountpoint -q "$MODELS_DIR" || die "$MODELS_DIR is not mounted (rpool/models/ds4
 # wherever the Maya profile pins it; the commit only has to be in its history.
 git -C "$MAYA_DIR" cat-file -e "$MAYA_COMMIT^{commit}" 2>/dev/null || die "Maya checkout at $MAYA_DIR has no commit $MAYA_COMMIT"
 [ -f "$MAYA_DIR/.venv/pyvenv.cfg" ] || die "Maya's .venv is missing ($MAYA_DIR/.venv; its python is the image's)"
-for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json"; do [ -f "$f" ] || die "missing $f"; done
+for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
+  [ -f "$f" ] || die "missing $f"
+done
 
 container_run=(--user "$(id -u):$(id -g)" -e HOME="$CONTAINER_HOME" -e PYTHONDONTWRITEBYTECODE=1 -v "$MODELS_DIR:$MODELS_DIR")
 mkdir -p "$CONTAINER_HOME" "$NATIVE/bin" "$SERVE_DIR"
@@ -163,13 +168,13 @@ if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
 fi
 
 # --- the server's config (rewritten each launch from the values above) ------------------------
-jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg hf "$HF" \
+jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
   --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg sweep "$SWEEP_MIN" \
   --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
-    args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $hf, "--slots", $slots,
+    args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
            "--ram-records", $ram, "--prior", $profile, "--ram-policy", "popular", "--sweep-min", $sweep,
            "--checkpoint-gb", $ckpt, "--rewind-points", $points],
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
@@ -205,6 +210,7 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.maya-commit="$MAYA_COMMIT" \
   --label ai.peterstorm.inference.maya-serve="${MAYA_SERVE##*/}" \
   --label ai.peterstorm.inference.extra-env="$NATIVE_EXTRA_ENV" \
+  --label ai.peterstorm.inference.dspark="$DSPARK" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
   "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
