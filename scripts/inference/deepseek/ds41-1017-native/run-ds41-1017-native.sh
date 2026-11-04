@@ -42,7 +42,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-f5f8055de52f2b127bc7de0a5d223206ac866f47}"
+DS4N_COMMIT="${DS4N_COMMIT:-7bb73432dd7fe4c5e4fd80fa640a0a773229a0ec}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
@@ -69,10 +69,12 @@ PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
 # for the server, the Rewind points and the checkpoints.
 SLOTS="${SLOTS:-8400}"
 RAM_RECORDS="${RAM_RECORDS:-3000}"
-# How the RAM tier chooses its records: popular (decayed load count, warmed with the profile's next-hottest
-# Experts after the VRAM set), recent (the last loaded; empty at first) or victim (exclusive: the Experts
-# the VRAM Slots evicted, copied down as they go; engine::RamPolicy).
-RAM_POLICY="${RAM_POLICY:-popular}"
+# How the RAM tier chooses its records: victim (exclusive: the Experts the VRAM Slots evicted, copied down
+# as they go, so the two hold distinct Experts; 48 of the Slots are spares), popular (decayed load count,
+# warmed with the profile's next-hottest Experts after the VRAM set) or recent (the last loaded). Victim
+# against popular, served 2026-11-04: prefill +26-48 %, a warm code reply 77 -> 135 tok/s, the reply after
+# a fresh prompt 60 -> 84 (engine::RamPolicy; ds4-native docs/design/forward-pass.md).
+RAM_POLICY="${RAM_POLICY:-victim}"
 [[ "$RAM_POLICY" =~ ^(popular|recent|victim)$ ]] || { echo "error: RAM_POLICY is popular, recent or victim: $RAM_POLICY" >&2; exit 2; }
 # A prompt's unread tail goes as a prompt sweep from this many tokens, else as Rounds of 8: a sweep
 # costs ~0.9 s plus ~0.6 ms a token, Rounds ~11 ms a token at 9K context (ds4n-serve-check --timing).
