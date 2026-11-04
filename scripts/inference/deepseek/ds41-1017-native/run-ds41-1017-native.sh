@@ -70,9 +70,10 @@ PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
 SLOTS="${SLOTS:-8400}"
 RAM_RECORDS="${RAM_RECORDS:-3000}"
 # How the RAM tier chooses its records: popular (decayed load count, warmed with the profile's next-hottest
-# Experts after the VRAM set) or recent (the last loaded; empty at first).
+# Experts after the VRAM set), recent (the last loaded; empty at first) or victim (exclusive: the Experts
+# the VRAM Slots evicted, copied down as they go; engine::RamPolicy).
 RAM_POLICY="${RAM_POLICY:-popular}"
-[[ "$RAM_POLICY" = popular || "$RAM_POLICY" = recent ]] || { echo "error: RAM_POLICY is popular or recent: $RAM_POLICY" >&2; exit 2; }
+[[ "$RAM_POLICY" =~ ^(popular|recent|victim)$ ]] || { echo "error: RAM_POLICY is popular, recent or victim: $RAM_POLICY" >&2; exit 2; }
 # A prompt's unread tail goes as a prompt sweep from this many tokens, else as Rounds of 8: a sweep
 # costs ~0.9 s plus ~0.6 ms a token, Rounds ~11 ms a token at 9K context (ds4n-serve-check --timing).
 SWEEP_MIN="${SWEEP_MIN:-96}"
