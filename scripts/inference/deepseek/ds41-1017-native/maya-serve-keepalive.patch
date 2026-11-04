@@ -1,21 +1,63 @@
-# Maya (b3fa99e) serve/: keep-alives while tokens flow with nothing to send (a held-back tool-call parameter).
+# Maya (b3fa99e) serve/: keep-alives while tokens flow with nothing to send (a held-back tool-call parameter),
+# and while a request waits in line behind other requests' answers (several agents at once).
 # Applied by run-ds41-1017-native.sh --install to a copy of the pinned checkout; the checkout stays clean.
 diff -ruN a/serve/server.py b/serve/server.py
---- a/serve/server.py	2026-11-02 20:12:36.149115350 +0100
-+++ b/serve/server.py	2026-11-02 20:13:09.114140969 +0100
-@@ -98,6 +98,11 @@
+--- a/serve/server.py	2026-11-04 19:11:26.806190334 +0100
++++ b/serve/server.py	2026-11-04 19:11:26.807190337 +0100
+@@ -98,6 +98,12 @@
  IMAGE_PAD = "<|image_pad|>"
  VISION_START = "<|vision_start|>"
  CTX_SLACK = 8               # `strata --serve` rejects prompt + max_new + 8 > context: keep the same margin here
 +# Tokens can flow for minutes with nothing to send: a tool call's parameter that is held back until it is complete
 +# (a value the parser cannot type as a string goes out whole: every DeepSeek-V4.1 DSML parameter without a schema).
 +# A client's read timeout cuts such a request (Node's fetch: 300 s without a byte), so a stretch this long without
-+# an event yields a ping as well, which the streaming writers send as a keep-alive comment.
++# an event yields a ping as well, which the streaming writers send as a keep-alive comment.  So does a request
++# waiting in line behind others' answers (Service.run).
 +QUIET_PING_S = 10.0
  # The live tok/s is a rate over a window, not a mean since the first token: a mean reads ~1/elapsed at the first
  # token (the Monitor showed five-digit numbers) and then undershoots for the first second of every answer.  5 s: drafted
  # tokens come in bursts of 1-4 a step, and over 2 s the rate swung +-25% around the engine's steady one
-@@ -2302,6 +2307,7 @@
+@@ -2099,10 +2105,13 @@
+         return now
+ 
+     @contextlib.contextmanager
+-    def _turn(self, hold, cancel=None, units=1):
+-        """The engine's turn for one request: the FIFO, given back at the end unless a fair slice already did."""
++    def _turn(self, hold, cancel=None, units=1, waited=None):
++        """The engine's turn for one request: the FIFO, given back at the end unless a fair slice already did.
++        `waited`: (place, held) when the caller waited in line itself (run(): keep-alives while in line)."""
+         place = None
+-        if cancel is None:
++        if waited is not None:
++            place, hold[0] = waited
++        elif cancel is None:
+             self.fifo.acquire(units=units)
+             hold[0] = True
+         else:
+@@ -2247,7 +2256,21 @@
+             self.status["queued"] += 1
+         hold = [False, False]                           # holds the FIFO (fair slices let go of it); counts as active
+         try:
+-            with self._turn(hold, cancel):
++            # In line for the engine, with keep-alives: the answers ahead can outlast a client's read timeout (Node's
++            # fetch: 300 s without a byte), and a request in line sends nothing else (several agents at once)
++            place, my_turn, quiet = self.fifo.enqueue(units=1), False, time.time()
++            try:
++                while not my_turn and not cancel.is_set():
++                    my_turn = self.fifo.wait_turn(place, timeout=0.1)
++                    if not my_turn and time.time() - quiet >= QUIET_PING_S:
++                        yield "ping", None
++                        quiet = time.time()
++            except GeneratorExit:                       # the client left while in line
++                self.fifo.leave(place)
++                with self.status_lock:
++                    self.status["queued"] -= 1
++                raise
++            with self._turn(hold, cancel, waited=(place, my_turn)):
+                 with self.status_lock:
+                     self.status["queued"] -= 1
+                 if cancel.is_set():
+@@ -2302,6 +2325,7 @@
                  gen = attempts()
                  for ev in pre_events:                   # a required call's opening (prepare put it in the prompt)
                      yield "event", ev
@@ -23,7 +65,7 @@ diff -ruN a/serve/server.py b/serve/server.py
                  try:
                      for t in gen:
                          if t is None:                   # heartbeat while the engine is quiet
-@@ -2309,6 +2315,7 @@
+@@ -2309,6 +2333,7 @@
                              pr = getattr(self.engine, "progress", None)   # (read, total, reuse, ms), the PP parse
                              yield "ping", ({"total": pr[1], "cache": pr[2], "processed": pr[0],
                                              "time_ms": round(pr[3])} if pr and len(pr) >= 4 else None)
@@ -31,7 +73,7 @@ diff -ruN a/serve/server.py b/serve/server.py
                              continue
                          n += 1
                          if my_first is None:
-@@ -2346,6 +2353,11 @@
+@@ -2346,6 +2371,11 @@
                              if single_tool and ev.kind == "tool_call" and ev.complete:
                                  stopped = True
                                  break
@@ -45,13 +87,16 @@ diff -ruN a/serve/server.py b/serve/server.py
                              break
 diff -ruN a/serve/test_keepalive.py b/serve/test_keepalive.py
 --- a/serve/test_keepalive.py	1970-01-01 01:00:00.000000000 +0100
-+++ b/serve/test_keepalive.py	2026-11-02 20:13:23.460918285 +0100
-@@ -0,0 +1,76 @@
-+"""serve/test_keepalive.py - a streamed answer keeps the connection alive while tokens flow with nothing to send.
++++ b/serve/test_keepalive.py	2026-11-04 19:11:26.807190337 +0100
+@@ -0,0 +1,131 @@
++"""serve/test_keepalive.py - a streamed answer keeps the connection alive while tokens flow with nothing to send,
++and while it waits in line behind other requests' answers.
 +
 +A tool call's parameter that is held back until it is complete (here an object, which goes out whole) can take
 +minutes to write; a client's read timeout (Node's fetch: 300 s without a byte) would cut the request.  The stream
-+carries keep-alive comments through such a stretch, and the call arrives whole after it.
++carries keep-alive comments through such a stretch, and the call arrives whole after it.  So can the answers ahead
++of a request in line (several agents asking one engine): it carries keep-alives until its turn, and a client that
++leaves the line holds up nobody behind it.
 +
 +    python -m unittest serve.test_keepalive -v
 +"""
@@ -59,6 +104,7 @@ diff -ruN a/serve/test_keepalive.py b/serve/test_keepalive.py
 +
 +import json
 +import sys
++import threading
 +import time
 +import unittest
 +import urllib.request
@@ -119,6 +165,57 @@ diff -ruN a/serve/test_keepalive.py b/serve/test_keepalive.py
 +        args = "".join(tc["function"].get("arguments") or "" for c in chunks
 +                       for tc in c["choices"][0]["delta"].get("tool_calls") or [])
 +        self.assertEqual(json.loads(args), {"data": VALUE})
++
++
++class KeepAliveWhileQueued(unittest.TestCase):
++    """Each answer takes ~1.2 s (600 tokens, 2 ms apart); keep-alives every 0.2 s of nothing to send."""
++
++    def setUp(self):
++        self.quiet = srv.QUIET_PING_S
++        srv.QUIET_PING_S = 0.2
++        tok = ByteTokenizer()
++        self.svc = Service(Paced(tok, "</think>\n\n" + "a" * 600, max_context=8192), tok,
++                           ChatTemplate(ROOT / "serve/chat_template.jinja"))
++        self.httpd = serve(self.svc, port=0)
++        self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
++
++    def tearDown(self):
++        self.httpd.shutdown()
++        self.httpd.server_close()
++        srv.QUIET_PING_S = self.quiet
++
++    def open(self):
++        body = {"model": "m", "stream": True, "max_tokens": 4000, "messages": [{"role": "user", "content": "go"}]}
++        req = urllib.request.Request(self.base + "/v1/chat/completions", data=json.dumps(body).encode(),
++                                     headers={"Content-Type": "application/json"})
++        return urllib.request.urlopen(req, timeout=60)
++
++    def busy(self) -> threading.Thread:
++        """A request holding the engine for its whole answer, started now."""
++        t = threading.Thread(target=lambda: self.open().read())
++        t.start()
++        time.sleep(0.2)
++        return t
++
++    def test_keep_alives_while_in_line(self):
++        first = self.busy()
++        with self.open() as r:
++            lines = r.read().decode().splitlines()
++        first.join()
++        answer = next(i for i, line in enumerate(lines) if '"content": "a' in line)   # its first answer text
++        self.assertGreaterEqual(lines[:answer].count(": keep-alive"), 3)               # ~1 s in line
++        self.assertIn("data: [DONE]", lines)
++
++    def test_a_client_leaving_the_line_holds_up_nobody(self):
++        first = self.busy()
++        gone = self.open()                              # in line behind the first ...
++        gone.close()                                    # ... and gone
++        t0 = time.time()
++        with self.open() as r:                          # in line behind the first only
++            self.assertIn("data: [DONE]", r.read().decode())
++        first.join()
++        self.assertLess(time.time() - t0, 3.0)          # not behind a second whole answer too
++        self.assertEqual((self.svc.fifo.waiting(), self.svc.status["queued"]), (0, 0))
 +
 +
 +if __name__ == "__main__":

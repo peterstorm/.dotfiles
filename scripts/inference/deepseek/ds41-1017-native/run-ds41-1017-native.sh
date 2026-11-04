@@ -18,7 +18,9 @@
 #     from the HF checkpoint by Maya's tools/ds4/pack.py (write_tokenizer). The server runs from a
 #     copy of that commit with maya-serve-keepalive.patch applied (--install builds it, keyed by the
 #     commit and the patch): keep-alives while tokens flow with nothing to send, so a tool call whose
-#     parameter is held back until complete (a large file write) outlasts a client's read timeout;
+#     parameter is held back until complete (a large file write) outlasts a client's read timeout,
+#     and while a request waits in line behind other requests' answers (several agents at once:
+#     Node's fetch cuts a request after 300 s without a byte);
 #   - the engine's settings: Slots, RAM tier, the Expert profile, DSpark, the sweep threshold;
 #   - the workstation gates: two idle RTX PRO 6000s, comfyui stopped, port 8000 free.
 #
@@ -26,7 +28,9 @@
 # read only their new tokens; a conversation another one took the GPUs from comes back from its KV
 # checkpoint in host RAM (CHECKPOINT_GB of them), with the rings at its last prompt's end, so its
 # next step resumes there however it re-renders the reply; a subagent's first prompt resumes where it leaves
-# the system prompt it shares with its parent (a Rewind point taken there).
+# the system prompt it shares with its parent (a Rewind point taken there). Concurrent requests (pi's
+# parallel subagents, Loom's panels) take turns in the server's line, each kept alive while it waits;
+# sharing the GPUs between them in one batch is studied, not built (ds4-native serving.md).
 #
 # Modes:
 #   --preflight   check every pin without touching the GPUs
@@ -141,7 +145,7 @@ if [ "$MODE" = --install ]; then
     git -C "$MAYA_DIR" archive "$MAYA_COMMIT" | tar -x -C "$MAYA_SERVE.tmp"
     patch -d "$MAYA_SERVE.tmp" -p1 --batch --forward --quiet <"$MAYA_PATCH"
     docker run --rm "${container_run[@]}" -w "$MAYA_SERVE.tmp" "$IMAGE" "$MAYA_DIR/.venv/bin/python" -m unittest -q \
-      serve.test_keepalive serve.test_server serve.test_tools serve.test_stop serve.test_ds41_conformance
+      serve.test_keepalive serve.test_server serve.test_tools serve.test_stop serve.test_ds41_conformance serve.test_fair
     echo "$MAYA_COMMIT $(sha256sum "$MAYA_PATCH" | cut -d' ' -f1)" >"$MAYA_SERVE.tmp/.installed"
     rm -rf "$MAYA_SERVE" && mv "$MAYA_SERVE.tmp" "$MAYA_SERVE"
   fi
