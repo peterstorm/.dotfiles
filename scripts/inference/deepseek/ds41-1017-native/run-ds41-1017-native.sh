@@ -69,6 +69,10 @@ PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
 # for the server, the Rewind points and the checkpoints.
 SLOTS="${SLOTS:-8400}"
 RAM_RECORDS="${RAM_RECORDS:-3000}"
+# How the RAM tier chooses its records: popular (decayed load count, warmed with the profile's next-hottest
+# Experts after the VRAM set) or recent (the last loaded; empty at first).
+RAM_POLICY="${RAM_POLICY:-popular}"
+[[ "$RAM_POLICY" = popular || "$RAM_POLICY" = recent ]] || { echo "error: RAM_POLICY is popular or recent: $RAM_POLICY" >&2; exit 2; }
 # A prompt's unread tail goes as a prompt sweep from this many tokens, else as Rounds of 8: a sweep
 # costs ~0.9 s plus ~0.6 ms a token, Rounds ~11 ms a token at 9K context (ds4n-serve-check --timing).
 SWEEP_MIN="${SWEEP_MIN:-96}"
@@ -169,13 +173,13 @@ fi
 
 # --- the server's config (rewritten each launch from the values above) ------------------------
 jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
-  --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg sweep "$SWEEP_MIN" \
+  --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg ram_policy "$RAM_POLICY" --arg sweep "$SWEEP_MIN" \
   --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
     args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
-           "--ram-records", $ram, "--prior", $profile, "--ram-policy", "popular", "--sweep-min", $sweep,
+           "--ram-records", $ram, "--prior", $profile, "--ram-policy", $ram_policy, "--sweep-min", $sweep,
            "--checkpoint-gb", $ckpt, "--rewind-points", $points],
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "high",
@@ -211,6 +215,7 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.maya-serve="${MAYA_SERVE##*/}" \
   --label ai.peterstorm.inference.extra-env="$NATIVE_EXTRA_ENV" \
   --label ai.peterstorm.inference.dspark="$DSPARK" \
+  --label ai.peterstorm.inference.ram-policy="$RAM_POLICY" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
   "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
