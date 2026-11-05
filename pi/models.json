@@ -367,6 +367,38 @@
           }
         },
         {
+          "id": "warmind-1017-native",
+          "name": "WARMIND-1017 (jcartu's abliterated DeepSeek-V4.1-Flash-1017: 132 dense tensors re-written, Experts and Engram DeepSeek's) on ds4-native (TP2, Experts streamed from NVMe, DSpark, 256K ctx, conversations kept as KV checkpoints) behind Project Maya's server",
+          "reasoning": true,
+          "defaultThinkingLevel": "high",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
           "id": "qwen3.8-27b",
           "name": "Qwen3.8 27B BF16 (local RTX workstation)",
           "reasoning": true,

@@ -7,9 +7,12 @@
 # with DeepSeek-V4.1's own encoding, tokenizes, parses tool calls and streams; it starts
 # `ds4n-serve --serve ARGS` and speaks Maya's engine protocol with it over stdin/stdout (GEN / T /
 # DONE). Served on :8000 like every other profile, with the shared inference key, as
-# deepseek-v4.1-flash-native (262,144-token context, the executor's).
+# deepseek-v4.1-flash-native (262,144-token context, the executor's), or with WEIGHTS=warmind as
+# warmind-1017-native: jcartu's abliterated WARMIND-1017, which differs only in its Backbone.
 #
 # What the repository owns:
+#   - the Backbone by source (WEIGHTS): each names the HF repo and revision it was fetched from in
+#     its header (ds4-native tools/hf-backbone), and the launch refuses one that names another;
 #   - the image by name (ds4-native-dev:2, ds4-native's dev image: CUDA 13.4 + Python 3.12, the
 #     base Maya's .venv was made in);
 #   - the engine by commit (DS4N_COMMIT): --install builds ds4n-serve from that commit of the
@@ -58,7 +61,28 @@ SERVE_DIR="$NATIVE/serve"
 ENGINE="$NATIVE/bin/ds4n-serve-${DS4N_COMMIT:0:12}"
 TOKENIZER="$SERVE_DIR/tokenizer"
 CONFIG="$SERVE_DIR/ds4-native.json"
-BACKBONE="$NATIVE/backbone.safetensors"
+# Whose dense weights the Backbone carries. The routed Experts, the Engram tables and the DSpark head
+# are DeepSeek's bytes in both, so the store, the GGUF and the profile serve either:
+#   deepseek  DeepSeek's released Backbone;
+#   warmind   WARMIND-1017 (jcartu; norm-preserving biprojected abliteration, alpha 3): 132 tensors
+#             re-written -- attn.wo_b and ffn.shared_experts.w2, weights and scales, layers 4-36 --
+#             and every other byte DeepSeek's (its DERIVATIVE.json). Fetched like DeepSeek's, by
+#             /models/ds41/native/warmind/fetch_backbone.sh.
+# Maya answers any model name with what is loaded; the served name is what /v1/models reports.
+WEIGHTS="${WEIGHTS:-deepseek}"
+case "$WEIGHTS" in
+  deepseek)
+    BACKBONE="$NATIVE/backbone.safetensors"
+    BACKBONE_SOURCE="deepseek-ai/DeepSeek-V4.1-Flash-1017@1bae0e1088993b9b82de08f59de5be5a34e42170"
+    SERVED_MODEL="deepseek-v4.1-flash-native"
+    ;;
+  warmind)
+    BACKBONE="$NATIVE/warmind/backbone.safetensors"
+    BACKBONE_SOURCE="jcartu/WARMIND-1017@4fbce6300b1e579f608b28ad3325c88008ea4bd4"
+    SERVED_MODEL="warmind-1017-native"
+    ;;
+  *) echo "error: WEIGHTS is deepseek or warmind: $WEIGHTS" >&2; exit 2 ;;
+esac
 STORE="$NATIVE/experts.ds4n"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"
 HF="$MODELS_DIR/hf-1017-mtp"
@@ -93,7 +117,6 @@ REWIND_POINTS="${REWIND_POINTS:-8}"
 # NATIVE_EXTRA_ENV="DS4N_DECODER_TAIL=0" for every layer on every prompt row); empty for the profile.
 NATIVE_EXTRA_ENV="${NATIVE_EXTRA_ENV:-}"
 NAME="ds41-1017-native"
-SERVED_MODEL="deepseek-v4.1-flash-native"
 PORT=8000
 CONTAINER_HOME="$MODELS_DIR/.home"
 MODE="${1:---launch}"
@@ -121,6 +144,13 @@ git -C "$MAYA_DIR" cat-file -e "$MAYA_COMMIT^{commit}" 2>/dev/null || die "Maya 
 for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
   [ -f "$f" ] || die "missing $f"
 done
+# The source hf-backbone recorded in the Backbone's safetensors header (__metadata__.source).
+backbone_source() {
+  local header
+  header="$(head -c 8 "$1" | od -An -tu8 | tr -d ' ')"
+  dd if="$1" iflag=skip_bytes,count_bytes skip=8 count="$header" status=none | jq -r '.__metadata__.source // empty'
+}
+[ "$(backbone_source "$BACKBONE")" = "$BACKBONE_SOURCE" ] || die "$BACKBONE is not $BACKBONE_SOURCE's Backbone (WEIGHTS=$WEIGHTS)"
 
 container_run=(--user "$(id -u):$(id -g)" -e HOME="$CONTAINER_HOME" -e PYTHONDONTWRITEBYTECODE=1 -v "$MODELS_DIR:$MODELS_DIR")
 mkdir -p "$CONTAINER_HOME" "$NATIVE/bin" "$SERVE_DIR"
@@ -158,7 +188,7 @@ fi
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
 
 if [ "$MODE" = --preflight ]; then
-  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, files present)"
+  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present)"
   exit 0
 fi
 
@@ -217,6 +247,7 @@ done
 docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.profile="$NAME" \
   --label ai.peterstorm.inference.served-model="$SERVED_MODEL" \
+  --label ai.peterstorm.inference.backbone="$BACKBONE_SOURCE" \
   --label ai.peterstorm.inference.ds4n-commit="$DS4N_COMMIT" \
   --label ai.peterstorm.inference.maya-commit="$MAYA_COMMIT" \
   --label ai.peterstorm.inference.maya-serve="${MAYA_SERVE##*/}" \
