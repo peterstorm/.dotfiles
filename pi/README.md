@@ -319,6 +319,16 @@ names another source. Context, conversations and thinking behave as above.
 Maya answers any model name with what is loaded, so `/v1/models` is how to
 tell which one is up.
 
+- **Verified**: `bun tools/hf-backbone/cli.ts verify` (ds4-native) against
+  DeepSeek's Backbone and WARMIND's `DERIVATIVE.json`: all 132 re-written
+  tensors carry the manifest's bytes, the other 1,129 are DeepSeek's.
+- **Speed** (2026-11-05, the stock A/B's victim-tier arm on a fresh engine,
+  seed 424242): warm code reply 131-134 tok/s (stock 126-136), decode at 7K-48K
+  context 85-87 (stock 81-87), prefill 1,085 / 1,963 / 4,735 tok/s at 7K / 14K /
+  48K tokens (stock 1,091-1,152 / 1,962-2,063 / 4,714-4,988). Short-prompt prose
+  ran 101-104 against stock's 107-114: its different text needed 15-30 % more
+  Expert loads.
+
 ```bash
 WEIGHTS=warmind scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --launch
 pi --model desktop-vllm/warmind-1017-native:high
