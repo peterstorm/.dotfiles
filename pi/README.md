@@ -163,8 +163,8 @@ with fifteen selectable models:
 - `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — superseded by v15 on 2026-10-16 and its checkpoint deleted for disk space, so re-download before reuse; the server resolved 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
 - `desktop-vllm/glm-5.3-flash-qad2-tp2-v15` (karmic-kraken-beta-20261015.2 by digest, qad2 NVFP4/MXFP8 CSF checkpoint, lil-serve preset glm53-tp2: TP2/DCP2, MTP3, eight slots, fixed 7296 MiB/GPU FP8 KV = 1,844,162 tokens, 1M context, vision, server-default effort high — served until 2026-10-21 and the GLM rollback target; the catalog caps sessions at 524,288)
 - `desktop-vllm/deepseek-v4.1-flash` (DeepSeek-V4.1-Flash-1017, LibertAIDAI EXL3 3.5 bpw + DeepSeek's Engram tables, on Project Maya `b3fa99e` = v1.1.21 + the conversation-slot PR #356: TP2, DSpark drafter, 262,144-token context, vision, four conversations parked so an agent's parent and workers stop re-reading each other's prompts — **served profile** since 2026-10-21, context doubled from 131,072 on 2026-10-22)
-- `desktop-vllm/deepseek-v4.1-flash-native` (the same model at released precision on ds4-native behind Maya's server: Exact, Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM — launch `ds41-1017-native/run-ds41-1017-native.sh`)
-- `desktop-vllm/warmind-1017-native` (jcartu's abliterated WARMIND-1017 on the same engine and server: only the Backbone differs — launch `WEIGHTS=warmind ds41-1017-native/run-ds41-1017-native.sh`)
+- `desktop-vllm/deepseek-v4.1-flash-native` (the same model at released precision on ds4-native behind Maya's server: Exact, Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM — launch `WEIGHTS=deepseek ds41-1017-native/run-ds41-1017-native.sh`)
+- `desktop-vllm/warmind-1017-native` (jcartu's abliterated WARMIND-1017 on the same engine and server: only the Backbone differs — **served profile** since 2026-11-06 and the launcher's default — `ds41-1017-native/run-ds41-1017-native.sh`; it comes back with Docker at boot)
 - `desktop-vllm/qwen3.8-27b`
 - `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
 - `desktop-vllm/qwen3.8-flash-next-fp8`
@@ -314,7 +314,7 @@ layers 4–36 — and every other byte DeepSeek's, so the routed Experts, Engram
 tables and DSpark head are the ones the entry above serves. It answers requests
 the stock model refuses. ds4-native keeps all 132 tensors in its Backbone, so
 this entry is a second 10 GB Backbone beside the shared Expert store; the
-launcher selects it with `WEIGHTS=warmind` and refuses a Backbone whose header
+launcher serves it by default (`WEIGHTS=deepseek` for the release) and refuses a Backbone whose header
 names another source. Context, conversations and thinking behave as above.
 Maya answers any model name with what is loaded, so `/v1/models` is how to
 tell which one is up.
@@ -330,7 +330,7 @@ tell which one is up.
   Expert loads.
 
 ```bash
-WEIGHTS=warmind scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --launch
+scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --launch   # returns once serving; restart=unless-stopped
 pi --model desktop-vllm/warmind-1017-native:high
 ```
 
