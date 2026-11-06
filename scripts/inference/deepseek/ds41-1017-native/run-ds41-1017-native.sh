@@ -9,8 +9,8 @@
 # DONE). Served on :8000 like every other profile, with the shared inference key, as
 # warmind-1017-native (262,144-token context, the executor's): jcartu's abliterated WARMIND-1017,
 # which differs from DeepSeek's release only in its Backbone; WEIGHTS=deepseek serves the release
-# as deepseek-v4.1-flash-native. The desktop's ds41-native unit runs --launch at boot
-# (machines/desktop/default.nix).
+# as deepseek-v4.1-flash-native. Once a launch serves, the container restarts with Docker at boot
+# until it is stopped.
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS): each names the HF repo and revision it was fetched from in
@@ -40,8 +40,8 @@
 # Modes:
 #   --preflight   check every pin without touching the GPUs
 #   --install     build the pinned engine (once per DS4N_COMMIT; GPUs not needed)
-#   --launch      start the server container (default)
-#   --stop        stop it
+#   --launch      start the server container (default); returns once it serves, set to restart at boot
+#   --stop        stop it (and so keep it down at boot)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -69,7 +69,7 @@ CONFIG="$SERVE_DIR/ds4-native.json"
 #   warmind   WARMIND-1017 (jcartu; norm-preserving biprojected abliteration, alpha 3): 132 tensors
 #             re-written -- attn.wo_b and ffn.shared_experts.w2, weights and scales, layers 4-36 --
 #             and every other byte DeepSeek's (its DERIVATIVE.json). Fetched like DeepSeek's, by
-#             /models/ds41/native/warmind/fetch_backbone.sh. The default, and what boots.
+#             /models/ds41/native/warmind/fetch_backbone.sh. The default.
 # Maya answers any model name with what is loaded; the served name is what /v1/models reports.
 WEIGHTS="${WEIGHTS:-warmind}"
 case "$WEIGHTS" in
@@ -261,3 +261,18 @@ docker run -d --name "$NAME" --restart no \
   "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
   "exec '$MAYA_DIR/.venv/bin/python' serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null
 echo "launched $NAME (model $SERVED_MODEL on :$PORT; loading takes a few minutes); logs: docker logs -f $NAME, $SERVE_DIR/ds4-native.log"
+
+# --- back at boot once it has served -------------------------------------------------------------
+# Launched restart=no and promoted to unless-stopped only once /v1/models lists $SERVED_MODEL: the
+# profile last launched and healthy comes back with Docker at boot (as GLM's did), a stopped one
+# (--stop, or another profile's launch) stays down, and an engine that never came up cannot
+# crash-loop the next boot (a Maya build once wedged the box that way).
+deadline=$((SECONDS + ${STARTUP_TIMEOUT_SECONDS:-1800}))
+until curl -fsS --connect-timeout 2 --max-time 5 -H "Authorization: Bearer $INFERENCE_API_KEY" \
+  "http://127.0.0.1:$PORT/v1/models" 2>/dev/null | jq -e --arg m "$SERVED_MODEL" 'any(.data[]; .id == $m)' >/dev/null 2>&1; do
+  [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ] || die "$NAME exited while loading (restart=no): docker logs $NAME"
+  ((SECONDS < deadline)) || die "$NAME did not serve $SERVED_MODEL within ${STARTUP_TIMEOUT_SECONDS:-1800}s (restart=no)"
+  sleep 5
+done
+docker update --restart=unless-stopped "$NAME" >/dev/null || die "could not set $NAME to restart=unless-stopped"
+echo "serving $SERVED_MODEL; $NAME comes back with Docker at boot (restart=unless-stopped) until stopped"
