@@ -54,6 +54,6 @@ in {
       sha256 = info.sha256;
       name = "vscode-insiders.${info.archive}";
     };
-    installPhase = if stdenv.isDarwin then darwinInstallPhase else linuxInstallPhase;
+    installPhase = if stdenv.hostPlatform.isDarwin then darwinInstallPhase else linuxInstallPhase;
   });
 }

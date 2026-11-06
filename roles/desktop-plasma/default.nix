@@ -34,7 +34,7 @@
     };
     displayManager = {
       setupCommands = ''
-        ${pkgs.xorg.xrandr}/bin/xrandr --dpi 144;
+        ${pkgs.xrandr}/bin/xrandr --dpi 144;
       '';
     };
     windowManager.xmonad = {

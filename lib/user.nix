@@ -16,7 +16,7 @@ rec {
  let
   mkRole = name: import (../roles/home-manager + "/${name}");
   mod_roles = map (r: mkRole r) roles;
-  homeDirectory = if pkgs.stdenv.isDarwin
+  homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin
     then "/Users/${username}"
     else "/home/${username}";
  in [
