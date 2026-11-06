@@ -7,8 +7,10 @@
 # with DeepSeek-V4.1's own encoding, tokenizes, parses tool calls and streams; it starts
 # `ds4n-serve --serve ARGS` and speaks Maya's engine protocol with it over stdin/stdout (GEN / T /
 # DONE). Served on :8000 like every other profile, with the shared inference key, as
-# deepseek-v4.1-flash-native (262,144-token context, the executor's), or with WEIGHTS=warmind as
-# warmind-1017-native: jcartu's abliterated WARMIND-1017, which differs only in its Backbone.
+# warmind-1017-native (262,144-token context, the executor's): jcartu's abliterated WARMIND-1017,
+# which differs from DeepSeek's release only in its Backbone; WEIGHTS=deepseek serves the release
+# as deepseek-v4.1-flash-native. The desktop's ds41-native unit runs --launch at boot
+# (machines/desktop/default.nix).
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS): each names the HF repo and revision it was fetched from in
@@ -67,9 +69,9 @@ CONFIG="$SERVE_DIR/ds4-native.json"
 #   warmind   WARMIND-1017 (jcartu; norm-preserving biprojected abliteration, alpha 3): 132 tensors
 #             re-written -- attn.wo_b and ffn.shared_experts.w2, weights and scales, layers 4-36 --
 #             and every other byte DeepSeek's (its DERIVATIVE.json). Fetched like DeepSeek's, by
-#             /models/ds41/native/warmind/fetch_backbone.sh.
+#             /models/ds41/native/warmind/fetch_backbone.sh. The default, and what boots.
 # Maya answers any model name with what is loaded; the served name is what /v1/models reports.
-WEIGHTS="${WEIGHTS:-deepseek}"
+WEIGHTS="${WEIGHTS:-warmind}"
 case "$WEIGHTS" in
   deepseek)
     BACKBONE="$NATIVE/backbone.safetensors"

@@ -638,6 +638,52 @@ in
   # (The 60 s timer variant was replaced 2026-09 by the daemon above — the
   # 20 s loop needs no timer unit at all.)
 
+  # --- The boot-time inference profile ---------------------------------------
+  #
+  # ds4-native serving WARMIND-1017 (the script's default WEIGHTS) comes up on
+  # :8000 at boot. The unit runs the profile's own --launch rather than leaning
+  # on a Docker restart policy, so every boot passes the same gates a hand
+  # launch does (the pinned engine and Backbone, comfyui stopped, both GPUs
+  # idle, port 8000 free) and a failed gate leaves the box idle instead of a
+  # container crash-looping on it. The container itself stays restart=no.
+  # Another profile instead: stop this one (run-ds41-1017-native.sh --stop),
+  # then launch it; `systemctl start ds41-native` relaunches this one.
+  systemd.services.ds41-native = {
+    description = "ds4-native (WARMIND-1017) on :8000";
+    wantedBy = [ "multi-user.target" ];
+    wants = [ "network-online.target" "nvidia-power-limit.service" ];
+    after = [
+      "network-online.target"
+      "docker.service"
+      "nvidia-persistenced.service"
+      "nvidia-power-limit.service"
+    ];
+    requires = [ "docker.service" ];
+    unitConfig.RequiresMountsFor = [ "/models/ds41" "/models/ds41/engram" ];
+    path = [
+      config.virtualisation.docker.package
+      config.hardware.nvidia.package.bin
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.git
+      pkgs.gnugrep
+      pkgs.gnutar
+      pkgs.iproute2
+      pkgs.jq
+      pkgs.patch
+      pkgs.systemd
+      pkgs.util-linux
+    ];
+    environment.HOME = "/home/peterstorm";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "peterstorm";
+      Group = "users";
+      ExecStart = "${../../scripts/inference}/deepseek/ds41-1017-native/run-ds41-1017-native.sh --launch";
+    };
+  };
+
   # --- Local inference token ledger + heatmap -------------------------------
   #
   # The homelab's Prometheus only keeps 30d of history and dies on cluster
