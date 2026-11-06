@@ -14,6 +14,38 @@ let
   # approval-gated. Its policy would also reject importing the skill's own
   # trajectory module and defining classes inside scene scripts. Enable it in
   # the `.mcp.json` ssh env for any session that consumes untrusted text.
+  #
+  # 1.9.1 is v1 SDK code (`from mcp.server.fastmcp import FastMCP`), which mcp 2
+  # removed (FastMCP became mcp.server.mcpserver.MCPServer); nixpkgs carries
+  # mcp 2 since the 2026-11 bump. The server gets the last 1.x wheel of its own
+  # rather than a global override, and the import check holds the v1 API.
+  mcpV1 = pkgs.python3Packages.buildPythonPackage {
+    pname = "mcp";
+    version = "1.30.0";
+    format = "wheel";
+    src = pkgs.fetchurl {
+      url = "https://files.pythonhosted.org/packages/f5/f4/e58bc33317c92a0203664daaf00bf6f41166cc0149e5d6870a03f7cd004a/mcp-1.30.0-py3-none-any.whl";
+      hash = "sha256-Zm7bUAlQPhBHydYDRqdW+UsmHwXMJiXyPUHHKP/EhNA="; # 666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0
+    };
+    dependencies = with pkgs.python3Packages; [
+      anyio
+      cryptography
+      httpx
+      httpx-sse
+      jsonschema
+      pydantic
+      pydantic-settings
+      pyjwt
+      python-multipart
+      sse-starlette
+      starlette
+      typing-extensions
+      typing-inspection
+      uvicorn
+    ];
+    pythonImportsCheck = [ "mcp.server.fastmcp" ];
+  };
+
   blenderMcpServer = pkgs.python3Packages.buildPythonApplication {
     pname = "blender-mcp";
     version = "1.9.1";
@@ -22,9 +54,9 @@ let
       url = "https://files.pythonhosted.org/packages/98/93/3e8656c0436c7df6397775064cc05261910c05be009c598d38dda0eda816/blender_mcp-1.9.1-py3-none-any.whl";
       hash = "sha256-7eOu00km93FCuPAO5PhUT2gGfS3HR9qCldHEVhcTVbI="; # ede3aed34926f77142b8f00ee4f8544f68067d2dc747da8295d1c456171355b2
     };
-    dependencies = with pkgs.python3Packages; [
-      httpx
-      mcp
+    dependencies = [
+      pkgs.python3Packages.httpx
+      mcpV1
     ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postFixup = ''
