@@ -541,12 +541,16 @@ let
     hash = "sha256-/uK+MV+x2W1Gpm3vo54154fjGcUebNRPhPByS5ms2Qk=";
   };
 
-  krea2EnhancerSource = pkgs.fetchFromGitHub {
-    owner = "capitan01R";
-    repo = "ComfyUI-Krea2T-Enhancer";
-    # Upstream's focused ComfyUI diffusion-wrapper ABI compatibility fix.
-    rev = "a01434a0d7a77eba1899116ce2b52ffab5584e91";
-    hash = "sha256-UuDjX2neQkFcGvL9V6nXSSTYfyiu9VhgmuX9/EySo5M=";
+  # capitan01R/ComfyUI-Krea2T-Enhancer (MIT) at a01434a0d7a77eba1899116ce2b52ffab5584e91,
+  # upstream's focused ComfyUI diffusion-wrapper ABI compatibility fix. The
+  # repository was deleted by 2026-11-06 (Pixaroma folded the node into its own
+  # pack), so the tree is vendored, recovered from the desktop's build of this
+  # pin; the fixed hash is the one the GitHub fetch carried, so the vendored copy
+  # is that commit's tree or the build fails.
+  krea2EnhancerSource = builtins.path {
+    path = ../../comfyui/custom_nodes/ComfyUI-Krea2T-Enhancer;
+    name = "source";
+    sha256 = "sha256-UuDjX2neQkFcGvL9V6nXSSTYfyiu9VhgmuX9/EySo5M=";
   };
 
   krea2EnhancerNode =
