@@ -1749,12 +1749,12 @@ let
   # graphs used before, exactly as they carried it: same strength, the third
   # widget false, the earlier upload's node size and properties.
   restoreKrea2tEnhancer = ''
-    def restore_krea2t_enhancer:
+    def restore_krea2t_enhancer($size):
       (.nodes[] | select(.type == "Krea2EnhancerPixaroma")) |= (
         if .widgets_values | length != 2
           then error("Krea2EnhancerPixaroma: expected [enabled, strength]") else . end
         | .type = "ComfyUI-Krea2T-Enhancer"
-        | .size = [280.5669921875, 106]
+        | .size = $size
         | .properties = {
             "cnr_id": "ComfyUI-Krea2T-Enhancer",
             "ver": "cf8895005540680306cd46e1faaf75f8902db794",
@@ -1769,10 +1769,47 @@ let
     hash = "sha256-DV0WoYk/S9zdMEKOWaCfj5Uru0YDpzea6XLLTwcZWbM=";
   };
 
+  # Re-uploaded in place on 2026-11-06 like Episode 24: the enhancer moved into
+  # Pixaroma's pack, and each Krea graph's "Nodes Installed from Manager" note
+  # dropped it. Every consumer reads the archive through pixaromaEp30Source.
   pixaromaEp30Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep30%20Workflows.zip";
-    hash = "sha256-Rvy8DmMPWk7gKL3YQdBPJsqXylOMPDPSkjFZ2bH1l5k=";
+    hash = "sha256-YuixZNu+TymW40wqguwUmN3sMnlzekiyiO5SxAAxWXc=";
   };
+
+  # The unpacked archive with the pinned enhancer restored, its node and its note
+  # line as the earlier upload carried them. The scripts downstream parse and
+  # re-serialize every graph, so jq's formatting here never reaches an output.
+  pixaromaEp30Source =
+    pkgs.runCommand "pixaroma-ep30-source"
+      {
+        nativeBuildInputs = [
+          pkgs.findutils
+          pkgs.gnugrep
+          pkgs.jq
+          pkgs.unzip
+        ];
+      }
+      ''
+        unzip -q ${pixaromaEp30Archive} -d "$out"
+        test "$(grep -RlF Krea2EnhancerPixaroma "$out" | wc -l)" -eq 5
+        grep -RlF Krea2EnhancerPixaroma "$out" | while IFS= read -r graph; do
+          jq '
+            ${restoreKrea2tEnhancer}
+            def restore_manager_note:
+              (.nodes[] | select(.type == "PixaromaNote") | .widgets_values[0]
+                | select(contains("Nodes Installed from Manager"))) |=
+                (split("<li>Pixaroma</li>\\n<li>Krea 2 Identity Edit")
+                  | if length != 2
+                      then error("Episode 30 note: no single Pixaroma line to restore after")
+                      else join("<li>Pixaroma</li>\\n<li>ComfyUI-Krea2T-Enhancer</li>\\n<li>Krea 2 Identity Edit")
+                    end);
+            restore_krea2t_enhancer([263.08694658746447, 106]) | restore_manager_note
+          ' "$graph" >"$graph.restored"
+          mv "$graph.restored" "$graph"
+        done
+        test "$(grep -RlF Krea2EnhancerPixaroma "$out" | wc -l)" -eq 0
+      '';
 
   kreaFluxKleinWorkflowSource = pkgs.fetchurl {
     name = "krea2-flux2-klein9b-source.json";
@@ -2282,7 +2319,7 @@ let
                   (.[1] = $clip_loader_id | .[2] = $clip_loader_slot)
               | del(.links[] | select(.[0] == $clip_input_link));
 
-            restore_krea2t_enhancer
+            restore_krea2t_enhancer([280.5669921875, 106])
             | (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
               "krea2_turbo_bf16.safetensors"
             | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
@@ -2309,7 +2346,7 @@ let
             --arg profile_note "$abliterated_profile_note" \
             --arg encoder "${krea2AbliteratedEncoder}" '
               ${restoreKrea2tEnhancer}
-              restore_krea2t_enhancer
+              restore_krea2t_enhancer([280.5669921875, 106])
               | (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
                 "krea2_turbo_bf16.safetensors"
               | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
@@ -2504,15 +2541,15 @@ let
           pkgs.gnugrep
           pkgs.jq
           pkgs.python3
-          pkgs.unzip
         ];
       }
       ''
-        unzip -q ${pixaromaEp30Archive} -d unpacked
+        source_root=${pixaromaEp30Source}/EP30\ Workflows
         mkdir -p "$out/workflows" "$out/media"
-        cp unpacked/EP30\ Workflows/Krea2\ Edit/*.json "$out/workflows/"
-        cp unpacked/EP30\ Workflows/H3\ Video\ Prompts/*.json "$out/workflows/"
-        cp unpacked/EP30\ Workflows/Media\ Inputs/* "$out/media/"
+        cp "$source_root"/Krea2\ Edit/*.json "$out/workflows/"
+        cp "$source_root"/H3\ Video\ Prompts/*.json "$out/workflows/"
+        cp "$source_root"/Media\ Inputs/* "$out/media/"
+        chmod u+w "$out"/workflows/*.json
 
         # Fail closed if the pinned archive's three known stale selectors drift.
         test "$(grep -RohF 'krea2\\krea2_turbo_int8_convrot.safetensors' "$out/workflows" | wc -l)" -eq 5
@@ -2674,17 +2711,14 @@ let
       {
         nativeBuildInputs = [
           pkgs.python3
-          pkgs.unzip
           pkgs.jq
           pkgs.gnugrep
         ];
       }
       ''
         set -euo pipefail
-        mkdir -p unpacked "$out/workflows"
-        cp ${pixaromaEp30Archive} episode30.zip
-        unzip -q episode30.zip -d unpacked
-        identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
+        mkdir -p "$out/workflows"
+        identity="${pixaromaEp30Source}/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
         destination="$out/workflows/Krea 2 Single-View Character + Optional Realism and FLUX.2 Klein 9B BF16.json"
         PYTHONPATH=${../../scripts/comfyui} \
           python3 ${../../scripts/comfyui/build-krea2-composed-workflows.py} \
@@ -2854,15 +2888,12 @@ let
           pkgs.gnugrep
           pkgs.jq
           pkgs.python3
-          pkgs.unzip
         ];
       }
       ''
         set -euo pipefail
-        mkdir -p unpacked "$out/workflows"
-        cp ${pixaromaEp30Archive} episode30.zip
-        unzip -q episode30.zip -d unpacked
-        identity="unpacked/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
+        mkdir -p "$out/workflows"
+        identity="${pixaromaEp30Source}/EP30 Workflows/Krea2 Edit/Krea 2 + Edit Lora - Custom Ratio.json"
 
         raw_t2i="$out/workflows/01 Krea 2 RAW BF16 - Maximum Quality Text to Image.json"
         jq '
