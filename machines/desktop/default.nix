@@ -729,18 +729,18 @@ in
   # here, because this is a fixed headless workstation you only ever reach over
   # SSH — unlike a laptop joining strange networks, which should stay quiet.
   # avahi.openFirewall defaults to true, so UDP 5353 is handled.
-  services.avahi = {
+  services.avahi.settings = {
     publish = {
-      enable = true;
-      addresses = true;
-      workstation = true;
+      disable-publishing = false;
+      publish-addresses = true;
+      publish-workstation = true;
     };
     # Only announce on the physical NICs. Without this, avahi also publishes
     # `desktop.local` on docker0 (172.17.0.1) and every transient docker
     # `br-*`/`veth*` bridge this box spins up for the vLLM containers, so a
     # client resolving the name can land on a non-routable address instead of
     # the LAN one. Whitelisting the real interfaces keeps the A record clean.
-    allowInterfaces = [ "wlp10s0" "enp11s0" "enp12s0" ];
+    server.allow-interfaces = [ "wlp10s0" "enp11s0" "enp12s0" ];
   };
 
   # Expose the concurrent inference endpoints (Qwen/DeepSeek on 8000 and Muse on
