@@ -1736,10 +1736,33 @@ let
 
   krea2AbliteratedEncoder = "huihui_qwen3vl_4b_abliterated_bf16.safetensors";
 
+  # Pixaroma re-uploads this archive in place (last 2026-11-06), so the hash pins
+  # one upload. That upload moved the Krea 2 Turbo enhancer into Pixaroma's own
+  # pack (Krea2EnhancerPixaroma, ComfyUI-Pixaroma 1.4.230; our pin predates it)
+  # and changed nothing else in the graphs.
   pixaromaEp24Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep24%20Workflows.zip";
-    hash = "sha256-aHuDeJ6dpP3bcTR1FOLyVaV+WYv99f6vT5VhUjBq8nQ=";
+    hash = "sha256-blHzYOgYmMSnmZoACIhFBwaYCHfb4djm6qTyOmlHYX0=";
   };
+
+  # Translates that node back to the pinned, ABI-tested capitan01R enhancer the
+  # graphs used before, exactly as they carried it: same strength, the third
+  # widget false, the earlier upload's node size and properties.
+  restoreKrea2tEnhancer = ''
+    def restore_krea2t_enhancer:
+      (.nodes[] | select(.type == "Krea2EnhancerPixaroma")) |= (
+        if .widgets_values | length != 2
+          then error("Krea2EnhancerPixaroma: expected [enabled, strength]") else . end
+        | .type = "ComfyUI-Krea2T-Enhancer"
+        | .size = [280.5669921875, 106]
+        | .properties = {
+            "cnr_id": "ComfyUI-Krea2T-Enhancer",
+            "ver": "cf8895005540680306cd46e1faaf75f8902db794",
+            "Node name for S&R": "ComfyUI-Krea2T-Enhancer"
+          }
+        | .widgets_values += [false]
+      );
+  '';
 
   pixaromaEp29Archive = pkgs.fetchurl {
     url = "https://workflows.pixaroma.com/workflows/Ep29%20Workflows.zip";
@@ -2224,6 +2247,7 @@ let
           destination="$out/workflows/$filename"
           test -f "$source"
           jq --arg profile_note "$profile_note" '
+            ${restoreKrea2tEnhancer}
             def adapt_power_lora:
               (.nodes[] | select(.type == "Power Lora Loader (rgthree)")) as $power
               | ($power.inputs[] | select(.name == "clip") | .link) as $clip_input_link
@@ -2258,7 +2282,8 @@ let
                   (.[1] = $clip_loader_id | .[2] = $clip_loader_slot)
               | del(.links[] | select(.[0] == $clip_input_link));
 
-            (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
+            restore_krea2t_enhancer
+            | (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
               "krea2_turbo_bf16.safetensors"
             | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
                 "qwen3vl_4b_bf16.safetensors"
@@ -2283,7 +2308,9 @@ let
           jq \
             --arg profile_note "$abliterated_profile_note" \
             --arg encoder "${krea2AbliteratedEncoder}" '
-              (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
+              ${restoreKrea2tEnhancer}
+              restore_krea2t_enhancer
+              | (.nodes[] | select(.type == "UNETLoader") | .widgets_values[0]) =
                 "krea2_turbo_bf16.safetensors"
               | (.nodes[] | select(.type == "CLIPLoader") | .widgets_values[0]) =
                   $encoder
