@@ -9,12 +9,21 @@
 # from this rebuild — the pi/claude/nvim/home.activation hooks now run
 # inside that service rather than in your terminal, so this is where their
 # output lives.
+#
+# `--boot` builds and installs the generation for the next boot without
+# activating it (`nixos-rebuild boot`): for a kernel or driver change on a box
+# that is serving, so nothing restarts under it until it reboots.
 set -u
 START=$(date +%s)
-sudo nixos-rebuild switch --flake .# "$@"
+action=switch
+if [ "${1:-}" = --boot ]; then
+  action=boot
+  shift
+fi
+sudo nixos-rebuild "$action" --flake .# "$@"
 rc=$?
 if [ "$rc" -ne 0 ]; then
-  echo "nixos-rebuild failed (exit $rc) — skipping home recap" >&2
+  echo "nixos-rebuild $action failed (exit $rc) — skipping home recap" >&2
   exit "$rc"
 fi
 
@@ -33,6 +42,11 @@ if [ -e "$pin" ]; then
   else
     echo "warning: no headless boot entry for generation $gen — boot default still pinned to an older generation" >&2
   fi
+fi
+
+if [ "$action" = boot ]; then
+  echo "generation $(readlink /nix/var/nix/profiles/system) installed for the next boot; nothing activated"
+  exit 0
 fi
 
 for unit in $(sudo systemctl list-unit-files --no-legend 'home-manager-*.service' 2>/dev/null | awk '{print $1}'); do
