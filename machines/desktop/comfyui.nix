@@ -8,14 +8,26 @@ let
   # Nixpkgs enables NVSHMEM's exhaustive test/example compile even though its
   # check phase is disabled. Neither output is installed or used by PyTorch;
   # suppressing them avoids compiling every collective for every CUDA arch.
+  # Nixpkgs 2026-11 splits those two into `samples` and `test` outputs; with
+  # neither built, the package has only `out`, and the moves into them go.
   binaryCudaPackages = pkgs.cudaPackages_13.overrideScope (
     _final: prev: {
-      libnvshmem = prev.libnvshmem.overrideAttrs (old: {
-        cmakeFlags = old.cmakeFlags ++ [
-          (pkgs.lib.cmakeBool "NVSHMEM_BUILD_TESTS" false)
-          (pkgs.lib.cmakeBool "NVSHMEM_BUILD_EXAMPLES" false)
-        ];
-      });
+      libnvshmem = prev.libnvshmem.overrideAttrs (old:
+        let
+          splitMoves = [
+            ''moveToOutput "bin/examples" "$samples"''
+            ''moveToOutput "bin/perftest" "$test"''
+          ];
+        in
+        assert pkgs.lib.all (move: pkgs.lib.hasInfix move old.postInstall) splitMoves;
+        {
+          cmakeFlags = old.cmakeFlags ++ [
+            (pkgs.lib.cmakeBool "NVSHMEM_BUILD_TESTS" false)
+            (pkgs.lib.cmakeBool "NVSHMEM_BUILD_EXAMPLES" false)
+          ];
+          outputs = [ "out" ];
+          postInstall = builtins.replaceStrings splitMoves [ "" "" ] old.postInstall;
+        });
     }
   );
 
