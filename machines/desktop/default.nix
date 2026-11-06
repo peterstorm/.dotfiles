@@ -66,30 +66,47 @@ let
   #   * The BT RAM code is installed to mediatek/mt7927/ as well as
   #     mediatek/mt6639/. The patched btmtk requests it from the former.
   #
-  # Both corrections match what other NixOS users of this card converged on.
+  #   * Each module is debug-stripped and then signed with kmodigest as
+  #     installed, the order kbuild's modules_install uses (nixpkgs 2026-11 sets
+  #     its cmd_sign to kmodigest). Signing writes the <module>.ko.cer that
+  #     aggregateModules merges into modules.cer; without one the system's
+  #     module tree fails to build. The fixup strip is off because it would
+  #     drop the appended signature (kbuild's own .ko.xz output escapes it).
+  #
+  # The first two corrections match what other NixOS users of this card converged on.
   mt7927 = inputs.mt7927.packages.${pkgs.stdenv.hostPlatform.system};
   kver = config.boot.kernelPackages.kernel.modDirVersion;
 
-  mt7927Wifi = mt7927.wifi.overrideAttrs (_: {
+  # Install built modules under updates/<dir>, as { "<subdir>" = [ files ]; }
+  # ("" for the directory itself), each stripped and signed in place.
+  installSignedModules = dir: layout: old: {
+    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.buildPackages.kmodigest ];
+    dontStrip = true;
     installPhase = ''
       runHook preInstall
-      modDir="$out/lib/modules/${kver}/updates/mt76"
-      install -dm755 "$modDir/mt7921" "$modDir/mt7925"
-      install -m644 mt76.ko mt76-connac-lib.ko mt792x-lib.ko "$modDir/"
-      install -m644 mt7921/*.ko "$modDir/mt7921/"
-      install -m644 mt7925/*.ko "$modDir/mt7925/"
+      modDir="$out/lib/modules/${kver}/updates/${dir}"
+    '' + lib.concatStrings (lib.mapAttrsToList (sub: files: ''
+      install -dm755 "$modDir/${sub}"
+      install -m644 ${lib.concatStringsSep " " files} "$modDir/${sub}"
+    '') layout) + ''
+      find "$out/lib/modules" -name '*.ko' -exec "$STRIP" --strip-debug {} \;
+      find "$out/lib/modules" -name '*.ko' -exec kmodigest {} \;
+      find "$out/lib/modules" -name '*.ko' | while IFS= read -r module; do
+        test -f "$module.cer"
+        tail -c 28 "$module" | grep -qF '~Module signature appended~'
+      done
       runHook postInstall
     '';
+  };
+
+  mt7927Wifi = mt7927.wifi.overrideAttrs (installSignedModules "mt76" {
+    "" = [ "mt76.ko" "mt76-connac-lib.ko" "mt792x-lib.ko" ];
+    "mt7921" = [ "mt7921/*.ko" ];
+    "mt7925" = [ "mt7925/*.ko" ];
   });
 
-  mt7927Bluetooth = mt7927.bluetooth.overrideAttrs (_: {
-    installPhase = ''
-      runHook preInstall
-      modDir="$out/lib/modules/${kver}/updates/bluetooth"
-      install -dm755 "$modDir"
-      install -m644 btusb.ko btmtk.ko "$modDir/"
-      runHook postInstall
-    '';
+  mt7927Bluetooth = mt7927.bluetooth.overrideAttrs (installSignedModules "bluetooth" {
+    "" = [ "btusb.ko" "btmtk.ko" ];
   });
 
   mt7927Firmware = mt7927.firmware.overrideAttrs (_: {
