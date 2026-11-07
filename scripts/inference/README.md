@@ -32,8 +32,9 @@ glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            v7's cache correctness and latency remain unqualified.
 shared/    Components more than one profile uses: the credential helper every
            launcher sources, the secret-safe SGLang entrypoint, GPU telemetry
-           recording, throughput probing, and the durable vLLM/SGLang stats
-           recorder/heatmap (systemd units in machines/desktop/default.nix).
+           recording, throughput probing, the durable vLLM/SGLang/ds4-native
+           stats recorder/heatmap, and the ds4-native Prometheus bridge
+           (systemd units in machines/desktop/default.nix).
 ```
 
 Conventions:
@@ -43,6 +44,11 @@ Conventions:
   Docker arguments or the environment it inherits.
 - Launchers fail closed: checkpoint pins, GPU power caps, port conflicts, and
   display-manager state are checked before anything is stopped or started.
+- Monitoring never sits on the inference hot path. Engines expose Prometheus
+  counters; `vllm-stats-record.py` turns per-interval deltas into the durable
+  ledger, and `ds4-native-metrics.py` polls Maya's cached `/metrics` on :8000
+  and re-exposes it model-labelled on :8010. Neither writes to an engine's
+  stdin or asks it to compute anything, so prefill and decode are unaffected.
 - Image and model revisions are pinned by digest/rev and asserted by the
   `tests/*-contract.sh` static contracts — change a pin and its contract in
   the same commit. Derived images additionally prove their pinned official-base

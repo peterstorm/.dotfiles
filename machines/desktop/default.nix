@@ -655,6 +655,43 @@ in
   # (The 60 s timer variant was replaced 2026-09 by the daemon above — the
   # 20 s loop needs no timer unit at all.)
 
+  # --- Native ds4 engine: Prometheus + ledger bridge -----------------------
+  #
+  # The native DeepSeek stack (ds4n-serve behind Project Maya) exposes its
+  # counters on :8000 behind the shared API key, under llama.cpp/Maya names and
+  # without a model label. Prometheus scrapes :8000 unauthenticated and the
+  # durable recorder needs model-aware cumulative counters, so
+  # scripts/inference/shared/ds4-native-metrics.py translates once and serves
+  # the result unauthenticated on :8010. It only *reads* Maya's cached
+  # /metrics snapshot; it never writes to the engine's stdin, so prefill and
+  # decode are not touched. When another runtime owns :8000 (or the engine is
+  # stopped) the bridge answers 503 and the recorder skips the interval.
+  systemd.services.ds4-native-metrics = {
+    description = "Expose the ds4-native engine's counters to Prometheus";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network.target" ];
+    environment = {
+      DS4_NATIVE_SOURCE = "http://127.0.0.1:8000";
+      DS4_NATIVE_LISTEN = "0.0.0.0:8010";
+      DS4_NATIVE_KEY_FILE = "/home/peterstorm/.config/ds4-flash/api-key";
+    };
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.python3}/bin/python3 ${../../scripts/inference/shared/ds4-native-metrics.py}";
+      # Reads the operator's API key; ProtectHome=read-only still permits that.
+      User = "peterstorm";
+      Restart = "always";
+      RestartSec = "5s";
+      UMask = "0027";
+      CapabilityBoundingSet = "";
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = "read-only";
+    };
+  };
+
   # --- Local inference token ledger + heatmap -------------------------------
   #
   # The homelab's Prometheus only keeps 30d of history and dies on cluster
@@ -669,7 +706,7 @@ in
     # the final aggregate scrape before model-aware recording. Port 8000 served
     # only Qwen through SGLang in this interval, so these rows are attributable
     # facts; older mixed-runtime rows remain Historical aggregate.
-    environment.VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics";
+    environment.VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics http://127.0.0.1:8010/metrics";
     environment.VLLM_STATS_LEGACY_ATTRIBUTIONS = builtins.toJSON [
       {
         from_ts = 1786837395;
@@ -744,7 +781,8 @@ in
   };
 
   # Expose the concurrent inference endpoints (Qwen/DeepSeek on 8000 and Muse on
-  # 8001, both --network host) plus the stats heatmap server (8090). sshd opens
-  # 22 itself; the wifi role opens 8081. Merges with those.
-  networking.firewall.allowedTCPPorts = [ 8000 8001 8090 ];
+  # 8001, both --network host), the native engine's metrics bridge (8010), and
+  # the stats heatmap server (8090). sshd opens 22 itself; the wifi role opens
+  # 8081. Merges with those. The bridge is read-only and carries no secrets.
+  networking.firewall.allowedTCPPorts = [ 8000 8001 8010 8090 ];
 }

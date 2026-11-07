@@ -118,3 +118,71 @@ spec:
           expr: label_replace(vllm:spec_decode_num_drafts_total, "engine", "vllm", "__name__", ".*")
         - record: inference:spec_num_draft_tokens
           expr: label_replace(vllm:spec_decode_num_draft_tokens_total, "engine", "vllm", "__name__", ".*")
+
+        # ds4-native (ds4n-serve behind Project Maya) through desktop's bridge.
+        # The engine keeps one 262K context and tiers Experts in VRAM/RAM/SSD,
+        # so the vLLM KV-cache gauge maps to Expert-cache residency and the
+        # Mamba-state gauge maps to RAM-tier residency. Maya exposes offered /
+        # kept DSpark drafts, not verify rounds, so accept length and rate are
+        # both derived per offered draft (the +1 bonus keeps length comparable
+        # with vLLM's convention).
+        - record: inference:prompt_tokens_total
+          expr: label_replace(ds4:prompt_tokens_total, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:generation_tokens_total
+          expr: label_replace(ds4:generation_tokens_total, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:request_success_total
+          expr: >-
+            label_replace(
+            label_replace(ds4:requests_total,
+            "finished_reason", "completed", "model_name", ".*"),
+            "engine", "ds4-native", "__name__", ".*")
+        - record: inference:num_requests_running
+          expr: label_replace(ds4:requests_running, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:num_requests_waiting
+          expr: label_replace(ds4:requests_waiting, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:kv_cache_usage_ratio
+          expr: label_replace(ds4:expert_cache_residency, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:e2e_request_latency_seconds_bucket
+          expr: label_replace(ds4:e2e_request_latency_seconds_bucket, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:time_to_first_token_seconds_bucket
+          expr: label_replace(ds4:time_to_first_token_seconds_bucket, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:inter_token_latency_seconds_bucket
+          expr: label_replace(ds4:inter_token_latency_seconds_bucket, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:prefix_cache_hit_ratio
+          labels:
+            calculation: token_weighted_5m
+          expr: >-
+            label_replace(
+            ((rate(ds4:prefix_cache_hits_total[5m])
+            or (0 * rate(ds4:prefix_cache_queries_total[5m])))
+            / rate(ds4:prefix_cache_queries_total[5m]))
+            and (rate(ds4:prefix_cache_queries_total[5m]) > 0),
+            "engine", "ds4-native", "model_name", ".*")
+        - record: inference:spec_accept_length
+          expr: >
+            1 + rate(ds4:spec_accepted_total[5m])
+            /
+            rate(ds4:spec_drafts_total[5m])
+            and rate(ds4:spec_drafts_total[5m]) > 0
+          labels:
+            engine: ds4-native
+            calculation: accepted_per_offered_plus_bonus
+        - record: inference:spec_accept_rate
+          expr: >
+            rate(ds4:spec_accepted_total[5m])
+            /
+            rate(ds4:spec_drafts_total[5m])
+            and rate(ds4:spec_drafts_total[5m]) > 0
+          labels:
+            engine: ds4-native
+            calculation: accepted_per_offered
+        - record: inference:spec_verify_calls_total
+          expr: label_replace(ds4:spec_drafts_total, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:spec_num_draft_tokens
+          expr: label_replace(ds4:spec_drafts_total, "engine", "ds4-native", "__name__", ".*")
+        - record: inference:mamba_usage_ratio
+          expr: >-
+            label_replace(
+            ((ds4:ram_slots_used / ds4:ram_slots) and ds4:ram_slots > 0)
+            or ((0 * ds4:expert_cache_residency) and ds4:ram_slots == 0),
+            "engine", "ds4-native", "model_name", ".*")

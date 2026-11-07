@@ -2,10 +2,13 @@
 """Record durable, model-aware inference token usage.
 
 The active inference engine exposes process-local Prometheus counters that reset
-on container restart. Every 15 minutes this recorder translates supported vLLM
-or SGLang schemas into one durable row per endpoint/model. Historical five-column
-rows are migrated atomically and retained as ``Historical aggregate`` because
-model identity cannot be reconstructed after the fact.
+on container restart. Every 15 minutes this recorder translates supported vLLM,
+SGLang, or ds4-native schemas into one durable row per endpoint/model.
+ds4-native rows come from the bridge on desktop:8010, which labels Maya's
+counters with the served model; the native engine itself carries no model label.
+Historical five-column rows are migrated atomically and retained as
+``Historical aggregate`` because model identity cannot be reconstructed after
+the fact.
 
 The VLLM_* environment names remain for backwards compatibility.
 
@@ -64,6 +67,15 @@ COUNTER_SCHEMAS = {
         "prompt": "sglang:prompt_tokens_total",
         "gen": "sglang:generation_tokens_total",
         "req": "sglang:generation_tokens_histogram_count",
+    },
+    # ds4-native (ds4n-serve behind Project Maya): the bridge in
+    # scripts/inference/shared/ds4-native-metrics.py adds model_name labels and
+    # cumulative counters, so the ledger keeps exact model/engine attribution
+    # across WEIGHTS switches.
+    "ds4-native": {
+        "prompt": "ds4:prompt_tokens_total",
+        "gen": "ds4:generation_tokens_total",
+        "req": "ds4:requests_total",
     },
 }
 

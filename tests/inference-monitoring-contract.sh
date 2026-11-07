@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Static contract for runtime-neutral vLLM/SGLang monitoring.
+# Static contract for runtime-neutral vLLM/SGLang/ds4-native monitoring.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD="$ROOT/k8s/argocd-homelab/monitoring/dashboard-vllm.json"
 RULES="$ROOT/k8s/argocd-homelab/monitoring/templates/inference-recording-rules.yaml"
 RECORDER="$ROOT/scripts/inference/shared/vllm-stats-record.py"
+BRIDGE="$ROOT/scripts/inference/shared/ds4-native-metrics.py"
+BRIDGE_TEST="$ROOT/tests/ds4-native-metrics-unit.py"
 HEATMAP="$ROOT/scripts/inference/shared/vllm-stats-heatmap.py"
 DESKTOP="$ROOT/machines/desktop/default.nix"
 PROMETHEUS="$ROOT/k8s/argocd-homelab/monitoring/values.yaml"
@@ -27,8 +29,8 @@ jq -e '
   ([.panels[].title] | index("DSpark acceptance length") != null) and
   ([.panels[].title] | index("DSpark draft acceptance") != null) and
   ([.panels[].title] | index("DSpark verification rate") != null) and
-  ([.panels[].title] | index("Mamba state usage") != null) and
-  ([.panels[].title] | index("KV cache occupancy") != null) and
+  ([.panels[].title] | index("Mamba / RAM-tier usage") != null) and
+  ([.panels[].title] | index("KV / expert cache occupancy") != null) and
   ([.panels[].title] | index("Prefix cache hit rate (5m)") != null) and
   (.panels[] | select(.id == 15) | (.targets | length) == 1 and .gridPos.w == 8) and
   (.panels[] | select(.id == 20) |
@@ -48,6 +50,14 @@ jq -e '
   fail "normalized vLLM series do not preserve engine identity"
 [ "$(grep -Fc -- '"engine", "sglang"' "$RULES")" -ge 15 ] ||
   fail "normalized SGLang series do not preserve engine identity"
+[ "$(grep -Fc -- '"engine", "ds4-native"' "$RULES")" -ge 10 ] ||
+  fail "normalized ds4-native series do not preserve engine identity"
+[ "$(grep -Fc -- 'ds4:spec_drafts_total' "$RULES")" -ge 2 ] ||
+  fail "ds4-native DSpark drafts counter is not normalized"
+grep -Fq -- 'ds4:expert_cache_residency' "$RULES" ||
+  fail "ds4-native expert-cache residency is not the KV proxy"
+grep -Fq -- 'ds4:ram_slots_used / ds4:ram_slots' "$RULES" ||
+  fail "ds4-native RAM-tier residency is not the hybrid-state proxy"
 grep -Fq -- 'calculation: token_weighted_5m' "$RULES" ||
   fail "prefix-cache calculation identity is not versioned"
 grep -Fq -- 'sglang:prefill_effective_tokens_total{mode=~".*_hit"}[5m]' "$RULES" ||
@@ -89,7 +99,9 @@ done
 for marker in \
   '"vllm": {' \
   '"sglang": {' \
+  '"ds4-native": {' \
   'sglang:generation_tokens_histogram_count' \
+  'ds4:generation_tokens_total' \
   'engine changed' \
   'merge_endpoint_states' \
   'recover_pending_interval' \
@@ -107,14 +119,31 @@ grep -Fq -- 'through_ts = 1786846530;' "$DESKTOP" &&
 grep -Fq -- 'model = "qwen3.8-27b";' "$DESKTOP" &&
 grep -Fq -- 'engine = "sglang";' "$DESKTOP" ||
   fail "desktop does not preserve the evidence-backed SGLang/Qwen attribution range"
-grep -Fq -- 'VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics"' "$DESKTOP" ||
-  fail "durable recorder does not scrape both concurrent inference endpoints"
-for endpoint in '192.168.0.80:8000' '192.168.0.80:8001'; do
+grep -Fq -- 'VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics http://127.0.0.1:8010/metrics"' "$DESKTOP" ||
+  fail "durable recorder does not scrape both concurrent inference endpoints and the native bridge"
+
+# The native bridge is a read-only anti-corruption layer; it must never be in a
+# position to stall the engine (no stdin writes, no GPU work, no privileged user).
+for marker in \
+  'systemd.services.ds4-native-metrics' \
+  'DS4_NATIVE_SOURCE = "http://127.0.0.1:8000"' \
+  'DS4_NATIVE_LISTEN = "0.0.0.0:8010"' \
+  'DS4_NATIVE_KEY_FILE = "/home/peterstorm/.config/ds4-flash/api-key"' \
+  'User = "peterstorm";' \
+  'networking.firewall.allowedTCPPorts = [ 8000 8001 8010 8090 ];'; do
+  grep -Fq -- "$marker" "$DESKTOP" || fail "desktop configuration missing: $marker"
+done
+for endpoint in '192.168.0.80:8000' '192.168.0.80:8001' '192.168.0.80:8010'; do
   grep -Fq -- "$endpoint" "$PROMETHEUS" || fail "Prometheus does not scrape $endpoint"
 done
-for instance in 'desktop:8000' 'desktop:8001'; do
+for instance in 'desktop:8000' 'desktop:8001' 'desktop:8010'; do
   grep -Fq -- "instance: $instance" "$PROMETHEUS" || fail "Prometheus does not preserve instance $instance"
 done
+
+# The bridge's functional core must compile and pass its pure-function suite.
+PYTHON="$(nix build --no-link --print-out-paths nixpkgs#python3)/bin/python3"
+"$PYTHON" -m py_compile "$BRIDGE"
+"$PYTHON" "$BRIDGE_TEST" >/dev/null
 
 for marker in \
   'All models' \
@@ -127,4 +156,4 @@ for marker in \
   grep -Fq -- "$marker" "$HEATMAP" || fail "stats page missing: $marker"
 done
 
-echo "PASS: inference monitoring supports normalized vLLM and SGLang metrics"
+echo "PASS: inference monitoring supports normalized vLLM, SGLang and ds4-native metrics"
