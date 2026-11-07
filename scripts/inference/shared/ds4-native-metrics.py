@@ -327,11 +327,18 @@ class SourceCache:
                 self._seen, fresh = unseen(seen, rows)
                 self._snapshot = accrue(replace(snapshot, values=values), fresh)
                 self._newest = newest
+                recovered = self._last_error is not None
                 self._last_ok = time.monotonic()
                 self._last_error = None
+            if recovered:
+                sys.stderr.write("ds4-native-metrics: poll recovered\n")
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+            message = f"{type(error).__name__}: {error}"
             with self._lock:
-                self._last_error = f"{type(error).__name__}: {error}"
+                changed = message != self._last_error
+                self._last_error = message
+            if changed:
+                sys.stderr.write(f"ds4-native-metrics: poll failed: {message}\n")
 
     def exposition(self) -> tuple[int, str]:
         with self._lock:
@@ -358,6 +365,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def log_message(self, fmt, *args):
+        # Every scrape is 200; log only the requests that are not.
+        if self.command == "GET" and self.path.split("?", 1)[0] == "/metrics":
+            return
         sys.stderr.write("ds4-native-metrics: " + fmt % args + "\n")
 
 
