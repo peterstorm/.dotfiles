@@ -1175,6 +1175,7 @@
         }
       ],
       "title": "DSpark acceptance length",
+      "description": "Mean accepted tokens per drafted round. ds4-native: 1 + 5 x the engine's live kept/verified ratio (a 5-token-block estimate; its adaptive verifier may use fewer rows). vLLM/SGLang: accepted per offered draft + 1.",
       "type": "stat"
     },
     {
@@ -1244,6 +1245,7 @@
         }
       ],
       "title": "DSpark draft acceptance",
+      "description": "Share of offered draft tokens the verifier kept. ds4-native reads the engine's live STAT ratio (the pinned Maya copy omits per-request draft counts); vLLM/SGLang use accepted/offered counters.",
       "type": "stat"
     },
     {
@@ -1303,6 +1305,7 @@
         }
       ],
       "title": "DSpark verification rate",
+      "description": "Verification rounds per second. ds4-native counts offered draft tokens as the proxy (the engine exports no round counter), so it reads 0 until Maya's history surfaces draft counts.",
       "type": "stat"
     },
     {
