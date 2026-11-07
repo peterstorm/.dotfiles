@@ -123,10 +123,11 @@ spec:
         # The engine keeps one 262K context and tiers Experts in VRAM/RAM/SSD,
         # so the KV-cache gauge maps to Expert-cache pressure (the share of
         # routed Experts *not* in VRAM, lower is better) and the Mamba-state
-        # gauge maps to RAM-tier residency. Maya exposes offered / kept DSpark
-        # drafts, not verify rounds, so accept length and rate are both derived
-        # per offered draft (the +1 bonus keeps length comparable with vLLM's
-        # convention).
+        # gauge maps to RAM-tier residency. DSpark is always on when the pack
+        # has a drafter, but the pinned Maya copy does not put per-request
+        # draft counts in /metrics history; the bridge exports the engine's
+        # live STAT kept/verified ratio instead, and acceptance length is the
+        # 5-token block estimate 1 + 5 x ratio.
         - record: inference:prompt_tokens_total
           expr: label_replace(ds4:prompt_tokens_total, "engine", "ds4-native", "__name__", ".*")
         - record: inference:generation_tokens_total
@@ -162,23 +163,15 @@ spec:
             and (rate(ds4:prefix_cache_queries_total[5m]) > 0),
             "engine", "ds4-native", "model_name", ".*")
         - record: inference:spec_accept_length
-          expr: >
-            1 + rate(ds4:spec_accepted_total[5m])
-            /
-            rate(ds4:spec_drafts_total[5m])
-            and rate(ds4:spec_drafts_total[5m]) > 0
+          expr: label_replace(ds4:spec_accept_length, "engine", "ds4-native", "__name__", ".*")
           labels:
             engine: ds4-native
-            calculation: accepted_per_offered_plus_bonus
+            calculation: block5_estimate
         - record: inference:spec_accept_rate
-          expr: >
-            rate(ds4:spec_accepted_total[5m])
-            /
-            rate(ds4:spec_drafts_total[5m])
-            and rate(ds4:spec_drafts_total[5m]) > 0
+          expr: label_replace(ds4:spec_accept_rate, "engine", "ds4-native", "__name__", ".*")
           labels:
             engine: ds4-native
-            calculation: accepted_per_offered
+            calculation: engine_stat_kept_ratio
         - record: inference:spec_verify_calls_total
           expr: label_replace(ds4:spec_drafts_total, "engine", "ds4-native", "__name__", ".*")
         - record: inference:spec_num_draft_tokens

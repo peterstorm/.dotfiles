@@ -118,6 +118,10 @@ check(
 )
 check("prefix hits are the cached tokens", 'ds4:prefix_cache_hits_total{model_name="warmind-1017-native"} 13661656' in out)
 check("expert residency is exported", 'ds4:expert_cache_residency{model_name="warmind-1017-native"} 0.9505' in out)
+values["maya:engine_drafts"] = 0.715
+out = metrics.render(metrics.replace(snapshot, values=values))
+check("DSpark kept ratio is exported", 'ds4:spec_accept_rate{model_name="warmind-1017-native"} 0.715' in out)
+check("DSpark length uses the 5-token block", 'ds4:spec_accept_length{model_name="warmind-1017-native"} 4.57' in out)
 check("histogram has an +Inf bucket", 'le="+Inf"} 2' in out)
 check("histogram has a count", 'ds4:e2e_request_latency_seconds_count{model_name="warmind-1017-native"} 1' in out)
 check("label values escape quotes", 'model_name="a\\"b"' in metrics.render(metrics.replace(snapshot, model='a"b')))

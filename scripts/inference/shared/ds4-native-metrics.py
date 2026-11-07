@@ -248,6 +248,11 @@ def render(snapshot: Snapshot) -> str:
         ("ds4:engine_alive", "gauge", "1 while the engine process runs", gauge(v, "maya:engine_alive")),
         ("ds4:spec_drafts_total", "counter", "DSpark drafts offered at verification", snapshot.spec_drafts),
         ("ds4:spec_accepted_total", "counter", "DSpark drafts kept", snapshot.spec_accepted),
+        ("ds4:spec_accept_rate", "gauge", "DSpark drafted tokens kept of those verified (engine STAT)",
+         max(gauge(v, "maya:engine_drafts"), 0.0)),
+        ("ds4:spec_accept_length", "gauge",
+         "Estimated mean tokens per drafted round: 1 + 5 x kept ratio (DSpark block size 5)",
+         1.0 + 5.0 * max(gauge(v, "maya:engine_drafts"), 0.0)),
     ]
 
     lines = [
@@ -313,6 +318,13 @@ class SourceCache:
             model = self._model()
             history = json.loads(self._get("/metrics?requests=all"))
             rows = history.get("requests") or []
+            # The pinned Maya copy predates per-request draft counts in its
+            # history rows, but the engine's live STAT snapshot carries the
+            # kept/verified ratio. Use it for the acceptance gauges; the
+            # counters below fill in when the server surfaces them.
+            drafts = ((history.get("tiers") or {}).get("now") or {}).get("drafts")
+            if isinstance(drafts, (int, float)) and not isinstance(drafts, bool):
+                values["maya:engine_drafts"] = float(drafts)
             newest = max((float(row.get("time") or 0.0) for row in rows), default=0.0)
             with self._lock:
                 previous = self._snapshot

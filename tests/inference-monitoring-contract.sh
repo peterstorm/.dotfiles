@@ -56,6 +56,12 @@ jq -e '
   fail "ds4-native DSpark drafts counter is not normalized"
 grep -Fq -- 'ds4:expert_cache_residency' "$RULES" ||
   fail "ds4-native expert-cache pressure is not derived from the residency gauge"
+grep -Fq -- 'ds4:spec_accept_rate' "$RULES" ||
+  fail "ds4-native DSpark acceptance rate is not exported"
+grep -Fq -- 'maya:engine_drafts' "$BRIDGE" ||
+  fail "bridge does not read the engine's DSpark STAT ratio"
+grep -Fq -- 'maya:engine_drafts' "$BRIDGE_TEST" ||
+  fail "bridge tests do not cover the DSpark STAT ratio"
 grep -Fq -- 'ds4:ram_slots_used / ds4:ram_slots' "$RULES" ||
   fail "ds4-native RAM-tier residency is not the hybrid-state proxy"
 grep -Fq -- 'calculation: token_weighted_5m' "$RULES" ||
