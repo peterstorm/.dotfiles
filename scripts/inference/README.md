@@ -49,6 +49,9 @@ Conventions:
   ledger, and `ds4-native-metrics.py` polls Maya's cached `/metrics` on :8000
   and re-exposes it model-labelled on :8010. Neither writes to an engine's
   stdin or asks it to compute anything, so prefill and decode are unaffected.
+  The bridge takes DSpark acceptance from the engine's live STAT kept/verified
+  ratio because the pinned Maya copy omits per-request draft counts from its
+  history rows.
 - Image and model revisions are pinned by digest/rev and asserted by the
   `tests/*-contract.sh` static contracts — change a pin and its contract in
   the same commit. Derived images additionally prove their pinned official-base

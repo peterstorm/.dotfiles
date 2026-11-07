@@ -29,8 +29,10 @@ Exposition contract (consumed by `tests/inference-monitoring-contract.sh`):
   ds4:e2e_request_latency_seconds_bucket / _sum / _count
   ds4:time_to_first_token_seconds_bucket / _sum / _count
   ds4:inter_token_latency_seconds_bucket / _sum / _count
-  ds4:spec_drafts_total            DSpark drafts offered
-  ds4:spec_accepted_total          DSpark drafts kept
+  ds4:spec_drafts_total            DSpark drafts offered (0 until Maya's history carries them)
+  ds4:spec_accepted_total          DSpark drafts kept (same caveat)
+  ds4:spec_accept_rate             DSpark kept/verified ratio from the engine's live STAT
+  ds4:spec_accept_length           mean tokens per drafted round: 1 + 5 x that ratio
 plus the expert-tier gauges and `model_name` on every series.
 
 A 503 means "no native engine behind me right now" (vLLM profile active,
