@@ -383,7 +383,7 @@
           "refId": "A"
         }
       ],
-      "title": "KV / expert cache used",
+      "title": "KV / expert cache pressure",
       "type": "stat"
     },
     {
@@ -1027,12 +1027,12 @@
             "uid": "${datasource}"
           },
           "expr": "(max(inference:kv_cache_usage_ratio{model_name=~\"$model\"}) * 100) or (max(vllm:kv_cache_usage_perc{model_name=~\"$model\"}) * 100)",
-          "legendFormat": "cache residency",
+          "legendFormat": "cache pressure",
           "refId": "A"
         }
       ],
-      "title": "KV / expert cache occupancy",
-      "description": "Active KV-cache occupancy (vLLM/SGLang) or the share of routed Experts resident in VRAM (ds4-native). Lower values leave more headroom for running and queued requests.",
+      "title": "KV cache / expert cache miss",
+      "description": "Active KV-cache occupancy (vLLM/SGLang) or the share of routed Experts not resident in VRAM (ds4-native; lower is better). Lower values leave more headroom for running and queued requests.",
       "type": "timeseries"
     },
     {

@@ -30,7 +30,7 @@ jq -e '
   ([.panels[].title] | index("DSpark draft acceptance") != null) and
   ([.panels[].title] | index("DSpark verification rate") != null) and
   ([.panels[].title] | index("Mamba / RAM-tier usage") != null) and
-  ([.panels[].title] | index("KV / expert cache occupancy") != null) and
+  ([.panels[].title] | index("KV cache / expert cache miss") != null) and
   ([.panels[].title] | index("Prefix cache hit rate (5m)") != null) and
   (.panels[] | select(.id == 15) | (.targets | length) == 1 and .gridPos.w == 8) and
   (.panels[] | select(.id == 20) |
@@ -55,7 +55,7 @@ jq -e '
 [ "$(grep -Fc -- 'ds4:spec_drafts_total' "$RULES")" -ge 2 ] ||
   fail "ds4-native DSpark drafts counter is not normalized"
 grep -Fq -- 'ds4:expert_cache_residency' "$RULES" ||
-  fail "ds4-native expert-cache residency is not the KV proxy"
+  fail "ds4-native expert-cache pressure is not derived from the residency gauge"
 grep -Fq -- 'ds4:ram_slots_used / ds4:ram_slots' "$RULES" ||
   fail "ds4-native RAM-tier residency is not the hybrid-state proxy"
 grep -Fq -- 'calculation: token_weighted_5m' "$RULES" ||

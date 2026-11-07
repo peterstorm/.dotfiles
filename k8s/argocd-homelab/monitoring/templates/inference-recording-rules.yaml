@@ -121,11 +121,12 @@ spec:
 
         # ds4-native (ds4n-serve behind Project Maya) through desktop's bridge.
         # The engine keeps one 262K context and tiers Experts in VRAM/RAM/SSD,
-        # so the vLLM KV-cache gauge maps to Expert-cache residency and the
-        # Mamba-state gauge maps to RAM-tier residency. Maya exposes offered /
-        # kept DSpark drafts, not verify rounds, so accept length and rate are
-        # both derived per offered draft (the +1 bonus keeps length comparable
-        # with vLLM's convention).
+        # so the KV-cache gauge maps to Expert-cache pressure (the share of
+        # routed Experts *not* in VRAM, lower is better) and the Mamba-state
+        # gauge maps to RAM-tier residency. Maya exposes offered / kept DSpark
+        # drafts, not verify rounds, so accept length and rate are both derived
+        # per offered draft (the +1 bonus keeps length comparable with vLLM's
+        # convention).
         - record: inference:prompt_tokens_total
           expr: label_replace(ds4:prompt_tokens_total, "engine", "ds4-native", "__name__", ".*")
         - record: inference:generation_tokens_total
@@ -141,7 +142,9 @@ spec:
         - record: inference:num_requests_waiting
           expr: label_replace(ds4:requests_waiting, "engine", "ds4-native", "__name__", ".*")
         - record: inference:kv_cache_usage_ratio
-          expr: label_replace(ds4:expert_cache_residency, "engine", "ds4-native", "__name__", ".*")
+          expr: label_replace(1 - ds4:expert_cache_residency, "engine", "ds4-native", "__name__", ".*")
+          labels:
+            calculation: expert_vram_miss_rate
         - record: inference:e2e_request_latency_seconds_bucket
           expr: label_replace(ds4:e2e_request_latency_seconds_bucket, "engine", "ds4-native", "__name__", ".*")
         - record: inference:time_to_first_token_seconds_bucket
