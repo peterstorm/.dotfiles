@@ -435,3 +435,65 @@ Two environment facts worth keeping:
 
 Still unbuilt and still worth building: `commands/security-audit.md` (the
 slash-command surface). Everything else in the plan shipped.
+
+## Second review-and-fix campaign (registered façade)
+
+The first pass ran the panel directly because the façade was runtime-skew
+blocked. Once the Pi extension revision matched the checkout, the same review
+ran the way it is meant to: `helper orchestration start standalone-review` →
+`resume` → `subagent` per issued task → `resume` for the refutation batch →
+`resume` publishes. Six slices, because one scope could not fit the context
+budget (`cores-a`, `cores-b`, `handler`, `tests-core`, `tests-other`, `docs`);
+scope was narrowed with the stdin `files` field, **not** the `--files` flag,
+which does not narrow scope at all.
+
+**54 reviewer slots, 49 surviving critical findings, 204 advisory, 0 refuted.**
+The criticals dedupe to 22 distinct defects; all 22 are remediated, each pinned
+by a test.
+
+What this pass found that the first one could not:
+
+- **Enforcement facts must not round-trip through a file the command can
+  write.** The sandbox receipt was built from `$scratch/.enforcement`, inside
+  the one directory the command owns — so a command that refused its own
+  `ulimit` could still report it as applied. The facts now travel on the *inner
+  shell's* stdout, which the command cannot reach (its stdout is redirected to
+  `$scratch/.command-stdout`), and the receipt marker carries a caller nonce
+  derived from the artifact path. Two independent defences against a forged
+  receipt line.
+- **A remount that fails is counted, never swallowed.** `|| true` in the
+  per-mount loop hid how much writable surface a run actually had.
+- **Gate the provable surface, record the rest.** A user namespace cannot
+  remount a superblock it does not own (227 mounts on this host), so gating
+  `unremountedMounts === 0` would refuse every run. What *is* provable is the
+  user's home: bind-then-remount-ro succeeds because the uid mapping makes the
+  caller its owner. So `homeReadOnly` is the gate; `readOnlyRoot` and
+  `unremountedMounts` are recorded exposure.
+- **The run directory's reads are fail-closed, one document at a time.** An
+  absent `findings.json` was indistinguishable from "the run found nothing", so
+  a deleted file read as an empty result. Absence is now a refusal naming the
+  path, and every document is re-parsed on read rather than cast.
+- **Documentation drift is a runtime failure, not a doc bug.** The agent docs
+  are the wire contract; a doc naming a key the parser refuses is an agent whose
+  output the engine discards. The doc test now imports the parsers' own
+  `UNIT_RESULT_KEYS` / `CHECK_KEYS` / `CRITIC_KEYS` / `CRITIC_PROPOSAL_KEYS` /
+  `VERDICT_KEYS` instead of hand-copying them, so the two cannot drift apart —
+  and the critic's proposal allowlist, which had never existed, now refuses
+  invented keys instead of silently dropping them.
+- **One owner for path normalization.** Two `repoRelative` implementations
+  disagreed, so every `pi/…` baseline key was dead and only looked consumed.
+  `baseline.ts` now owns both the keys and the normalization, and the drift
+  pass walks the baseline's own paths so a scoped lint run no longer reports
+  every other entry stale.
+- **A differential oracle needs two assertions, not one restated twice.** The
+  "we never accept what upstream rejects" loop compared `upstream` against
+  `ours || upstream`, which can only fail when the first assertion already
+  failed. It now asserts the rejection set directly and pins, by name, the one
+  mutation where this port is deliberately stricter than the vendored validator.
+- **Routing traits are pinned by spawning the real CLI with an open stdin**,
+  which is the parent-shell shape that hangs any route reading to EOF — the
+  trait table was previously the only witness, and a table cannot be wrong about
+  the code it predicts.
+
+Still unbuilt and still worth building: `commands/security-audit.md` (the
+slash-command surface).
