@@ -495,5 +495,9 @@ What this pass found that the first one could not:
   trait table was previously the only witness, and a table cannot be wrong about
   the code it predicts.
 
-Still unbuilt and still worth building: `commands/security-audit.md` (the
-slash-command surface).
+The slash-command surface shipped last: `commands/security-audit.md`, bound to
+the operation table by
+`engine/tests/handlers/security-audit-command-contract.test.ts` so it cannot
+name an operation the program does not declare, omit one it does, disagree about
+which operations read stdin, or repeat the claim that a read-only projection
+survives a runtime skew when its traits say otherwise.
