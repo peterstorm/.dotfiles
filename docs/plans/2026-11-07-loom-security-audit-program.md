@@ -388,3 +388,50 @@ Estimated total: ~8 days agent-assisted.
 - A confirmed finding round-trips into `/review-and-fix`.
 - Calibration shows rejection rate falling across runs without new findings
   collapsing to zero.
+
+## Review-and-fix pass (2026-11-07)
+
+The shipped program went through an independent panel: eight reviewer roles in
+three waves of three (`code-reviewer`, `architecture-tech-lead`,
+`silent-failure-hunter`, `type-design-analyzer`, `security-agent`,
+`ts-test-agent`, `code-simplifier`, `comment-analyzer`), then a
+`review-verifier-agent` refutation pass over the 15 most consequential claims.
+**15/15 confirmed; 0 refuted.** Remediation is `f3ff3a7e`.
+
+What the panel found that matters for the design, not just the code:
+
+- **INV-S3 was a comment, not a check.** A ballot's `profile` was free prose, so
+  a hunter could certify its own claim by writing `profile: "refutation"`. The
+  fix makes profile identity structural: the profile must be in the catalog and
+  must be the one the voting agent sits on.
+- **"Total" validators weren't.** `validateLedger` threw on `[{}]` — the one
+  input a hand-edited ledger produces. Totality is now a property test that
+  feeds `fc.anything()` at it.
+- **Evidence that could be prose.** A `local` check only had to *name* an
+  artifact. The engine now reads the receipt and judges it (exit zero, measured
+  scratch, limits actually applied), and the receipt itself reports what the
+  kernel enforced rather than what the caller requested.
+- **One root cause, one record** was implemented on root-cause TEXT alone, which
+  silently dropped a finding when a hunter reused a sentence. Consolidation now
+  also requires the same sink.
+- **The docs were the contract and they had drifted**: the hunter documented
+  `unitStatus`/`localChecks`, the critic `requeue`/`unprovenClaims`, the verifier
+  a `security-refutation` kind with a `refutation` block. All three would have
+  been refused by the real parsers. There is now a test that reads the JSON
+  blocks out of the agent docs and checks their key sets against the parsers'
+  allowlists, so documentation drift fails CI.
+
+Two environment facts worth keeping:
+
+- The registered `/review-and-fix` façade (`helper orchestration start
+  standalone-review`) could not run in the session: the loaded Pi extension
+  carried revision `ab6025de`, which no clean worktree reproduces (probes:
+  `bcf52332` at HEAD, `6873ba40` at the base commit). The panel ran directly
+  instead, and the façade blockage is reported rather than worked around —
+  unsetting the admission env vars to force it would have been the forbidden move.
+- Running vitest **inside** Pi fails ~495 tests with runtime-skew errors unless
+  `PI_CODING_AGENT`, `LOOM_PI_EXTENSION_RUNTIME_ROOT` and
+  `LOOM_PI_EXTENSION_RUNTIME_REVISION` are unset for the child process.
+
+Still unbuilt and still worth building: `commands/security-audit.md` (the
+slash-command surface). Everything else in the plan shipped.
