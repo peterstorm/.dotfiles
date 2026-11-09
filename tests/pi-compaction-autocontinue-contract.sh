@@ -10,13 +10,19 @@
 # "Cannot continue from message role: assistant" and killed the run.
 #
 # This contract drives the deployed pi against a fake OpenAI-compatible
-# model server and asserts both resume shapes:
+# model server and asserts both shapes end to end:
 #   A: completed turn over threshold -> compaction, then a queued
 #      "[auto-compacted]" continuation prompt, then a continued assistant
 #      response (exit 0).
-#   B: mid-turn error over threshold -> compaction, the failed assistant
-#      message dropped from working context, then a resumed assistant
-#      response (exit 0).
+#   B: a tool result carries the context over the threshold mid-turn -> pi
+#      compacts BEFORE the next request (upstream behaviour since 1.x), so the
+#      server never sees the oversized request and the turn resumes with a
+#      normal assistant response (exit 0, no error response in the session).
+#
+# The patch's error-tail branch (drop the failed assistant message before
+# agent.continue()) is only reachable when pre-request compaction is skipped
+# or fails, so it is covered at the unit level instead:
+# pi/tests/compaction-resume.test.ts.
 #
 # Requires: pi on PATH (the Nix-built package under test), node on PATH.
 set -euo pipefail
@@ -47,6 +53,7 @@ trap cleanup EXIT
 #   nudge-continue -> last user message carries the "[auto-compacted]" marker
 #   resume/fail    -> transcript ends with a tool result; fail only before the
 #                     compaction summary (COMPACT-SUMMARY-MARKER) is in context
+#                     (a regression guard: pi must compact before sending it)
 #   initial        -> otherwise; scenario B answers with a tool call, A with text
 # Usage numbers: initial responses report prompt=1900/completion=50 against a
 # 2000-token window with reserveTokens=100 — above the compaction threshold
@@ -215,7 +222,7 @@ node -e '
 ' "$(ls -t "$TMP/home-A"/.pi/agent/sessions/*/*.jsonl | head -1)" \
   || fail "scenario A: no continued assistant response after the nudge"
 
-# --- Scenario B: mid-turn error over threshold -> drop + resume -------------
+# --- Scenario B: tool result crosses threshold -> compact first, then resume --
 rc_B="$(run_scenario B)"
 [ "$rc_B" = 0 ] || fail "scenario B: pi exited $rc_B (stderr: $(head -c 300 "$TMP/err-B.txt"))"
 assert_no_continue_error B
@@ -228,11 +235,11 @@ node -e '
   for (const line of lines) {
     let e; try { e = JSON.parse(line); } catch { continue; }
     if (e.type === "message" && e.message.role === "assistant" && e.message.stopReason === "error") sawError = true;
-    if (e.type === "compaction") { if (!sawError) process.exit(2); sawCompaction = true; continue; }
+    if (e.type === "compaction") { sawCompaction = true; continue; }
     if (e.type === "message" && sawCompaction && e.message.role === "assistant" && e.message.stopReason === "stop") sawResumed = true;
   }
-  process.exit(sawError && sawCompaction && sawResumed ? 0 : 1);
+  process.exit(!sawError && sawCompaction && sawResumed ? 0 : 1);
 ' "$(ls -t "$TMP/home-B"/.pi/agent/sessions/*/*.jsonl | head -1)" \
-  || fail "scenario B: no resumed assistant response after error-triggered compaction"
+  || fail "scenario B: expected compaction before the next request and a resumed response, with no error response"
 
-printf 'OK: pi compaction auto-continue (completed-turn nudge + mid-turn-error resume)\n'
+printf 'OK: pi compaction auto-continue (completed-turn nudge + compact-before-request resume)\n'

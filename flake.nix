@@ -39,7 +39,7 @@
         overlays = [
           (import ./overlays/vscode-insiders.nix)
           (import ./overlays/antigravity.nix)
-          (import ./overlays/pi-coding-agent.nix)
+          (import ./overlays/pi-coding-agent.nix inputs)
           inputs.nix-vscode-extensions.overlays.default
         ];
 

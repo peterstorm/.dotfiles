@@ -1,96 +1,47 @@
-final: prev:
+# Pi coding agent = numtide/llm-agents.nix's package + our patches.
+#
+# Version, source hash, lockfile and npm deps hash all come from the `llm-agents`
+# flake input, so `nix flake update` is what upgrades Pi. Nothing here pins a
+# version. When a new upstream release no longer applies one of the patches the
+# build fails in patchPhase — rebase the patch (see overlays/patches/pi-*.patch).
+#
+# Why not use upstream's package untouched:
+#
+#  * Patches. They are made against the *unbundled* `dist/` tree of the npm
+#    tarball, so they cannot touch `dist/bundle/` (minified, what upstream's
+#    default `bin` runs) nor the Bun standalone binary built from it.
+#  * Node entry point. `useBun = false` keeps the node_modules layout under
+#    $out/lib/node_modules that pi/verify.sh and tests/pi-compaction-autocontinue-
+#    contract.sh resolve the Pi SDK from, and `bin` is pointed at the unbundled
+#    `dist/cli.js` so the patched files are what actually runs.
+inputs: final: prev:
 
+let
+  upstream = inputs.llm-agents.packages.${prev.stdenv.hostPlatform.system}.pi;
+in
 {
-  pi-coding-agent = prev.buildNpmPackage (finalAttrs: {
-    pname = "pi-coding-agent";
-    version = "0.83.0";
-
-    src = prev.fetchurl {
-      url = "https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-${finalAttrs.version}.tgz";
-      hash = "sha256-cJf+Szh2Ldp+x4AB57kEMMhJ+69xcyW/6BCXROMiVeY=";
-    };
-
-    npmDepsHash = "sha256-S2mAnU0pf3U3gSgNYEkudNIvxpSI4nior2m0R27O+3E=";
-
-    # Upstream 0.83.0 only has a global thinking default. Add a model-local
-    # default that initializes/switches session state without mutating the global
-    # setting; explicit --thinking and scoped model levels still take precedence.
-    patches = [
+  pi-coding-agent = (upstream.override { useBun = false; }).overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [
+      # models.json `defaultThinkingLevel`: a model-local default that applies at
+      # startup and on model switches without mutating the global default. An
+      # explicit level (--thinking, ctrl+t, SDK `thinkingPreference`) is pinned
+      # for the session; scoped and per-model settings levels still win.
       ./patches/pi-model-default-thinking.patch
-      # Auto-compaction used to end the agent turn (waiting for input) unless
-      # the user had queued a message. autoContinue resumes the turn from the
-      # compaction boundary; disable with {"compaction": {"autoContinue": false}}.
+      # Threshold auto-compaction used to end the agent turn (waiting for input)
+      # unless the user had queued a message. autoContinue resumes the turn from
+      # the compaction boundary; disable with {"compaction": {"autoContinue": false}}.
       ./patches/pi-autocontinue-after-compact.patch
-      # Pi 0.83 sendUserMessage intentionally bypasses extension commands; the
-      # documented reload tool otherwise feeds /reload-runtime to the model.
-      # Opt-in deferred command dispatch waits for the current agent run to
-      # settle, then invokes only a registered extension command.
+      # `pi.sendUserMessage("/cmd", { deliverAs: "followUp", executeCommandAfterIdle:
+      # true })` waits for the current run to settle, then invokes only a
+      # registered extension command. Upstream's `expandPromptTemplates` runs the
+      # command immediately, even mid-run, which is wrong for a model-scheduled
+      # /reload.
       ./patches/pi-extension-command-after-idle.patch
     ];
 
-    postPatch = ''
-      substituteInPlace npm-shrinkwrap.json \
-        --replace-fail '"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.83.0.tgz",' '"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.83.0.tgz",
-			"integrity": "sha512-RorGp9OH5l3ElpuC5a5ZQ2eWcchZGXflXRzVGkV99y3y6tT+LLNyxoYIdVKvTKWEObwhExeQbTH0fI2tE4iX4g==",' \
-        --replace-fail '"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.83.0.tgz",' '"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.83.0.tgz",
-			"integrity": "sha512-m3IZD4g3er0V8TC9+Vpgw/sjTKqcJlkcIBy/JvsgRubuuik3tAVzyugUg4rVrShIkkOT69mEd34NEqKUIsl6JQ==",' \
-        --replace-fail '"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.83.0.tgz",' '"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.83.0.tgz",
-			"integrity": "sha512-IoYrb0rORjELmEpNtoCA/U8je3KopMkRAVJRdSzvXRvgb+Huo1gNh8Q5CSZvNOiYtDxJdj2tYZZHZ4B3+IN3hA==",'
-
+    postPatch = (old.postPatch or "") + ''
       substituteInPlace package.json \
-        --replace-fail '	},
-	"devDependencies": {
-		"@types/cross-spawn": "6.0.6",
-		"@types/diff": "7.0.2",
-		"@types/hosted-git-info": "3.0.5",
-		"@types/ms": "2.1.0",
-		"@types/node": "24.12.4",
-		"@types/proper-lockfile": "4.1.4",
-		"@types/semver": "7.7.1",
-		"shx": "0.4.0",
-		"typescript": "5.9.3",
-		"vitest": "4.1.9"
-	},
-	"keywords": [' '	},
-	"keywords": ['
+        --replace-fail '"pi": "dist/bundle/cli.js"' '"pi": "dist/cli.js"'
     '';
-
-    npmDepsFetcherVersion = 2;
-
-    # The Model interface belongs to pi-ai, whose dependency is materialized
-    # only after patchPhase. Patch its declaration after npm dependencies exist.
-    postConfigure = ''
-      substituteInPlace node_modules/@earendil-works/pi-ai/dist/types.d.ts \
-        --replace-fail '    reasoning: boolean;' '    reasoning: boolean;
-    defaultThinkingLevel?: ModelThinkingLevel;'
-    '';
-
-    dontNpmBuild = true;
-
-    npmFlags = [ "--omit=dev" ];
-    npmInstallFlags = [ "--omit=dev" ];
-    npmRebuildFlags = [ "--ignore-scripts" ];
-
-    nativeBuildInputs = [
-      prev.makeBinaryWrapper
-    ];
-
-    postFixup = "wrapProgram $out/bin/pi --prefix PATH : ${prev.lib.makeBinPath [ prev.ripgrep ]}";
-
-    doInstallCheck = true;
-    nativeInstallCheckInputs = [
-      prev.writableTmpDirAsHomeHook
-      prev.versionCheckHook
-    ];
-    versionCheckKeepEnvironment = [ "HOME" ];
-    versionCheckProgram = "${placeholder "out"}/bin/pi";
-    versionCheckProgramArg = "--version";
-
-    meta = {
-      description = "Coding agent CLI with read, bash, edit, write tools and session management";
-      homepage = "https://pi.dev/";
-      license = prev.lib.licenses.mit;
-      mainProgram = "pi";
-    };
   });
 }
