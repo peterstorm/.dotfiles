@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Anonymise finished planning benchmark runs for blind grading.
 #
-#   bash scripts/anonymise.sh <batch-id> runs/<run-id> [runs/<run-id> ...]
+#   bash scripts/anonymise.sh <batch-id> runs/<run-id> [runs/<run-id> ...]   (one run is enough to blind a grader)
 #
 # Copies each run's gradeable artifacts to blind/<batch-id>/arm-<LETTER>/ under
 # a shuffled label, and writes the label→run mapping to a sibling file the
@@ -14,7 +14,7 @@ set -euo pipefail
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BENCH_DIR"
 
-(($# >= 3)) || { echo "usage: $0 <batch-id> <run-dir> <run-dir> [...]" >&2; exit 2; }
+(($# >= 2)) || { echo "usage: $0 <batch-id> <run-dir> [<run-dir> ...]" >&2; exit 2; }
 
 BATCH="$1"; shift
 OUT="blind/$BATCH"

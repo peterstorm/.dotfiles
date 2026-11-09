@@ -28,7 +28,7 @@ PROTOCOL_SHA="$(fugue_protocol_sha "$BENCH")"
 [[ "$FUGUE_SUITE_ID" == 'fugue-f1-map-v1' && "$FUGUE_PROTOCOL_VERSION" == v1 ]] || fail 'suite identity drifted'
 [[ "$PROTOCOL_SHA" == 'd2629e9eb966e25364e24a34423e55247040344115874dc2f2de5fee415beed1' ]] || fail 'immutable protocol hash changed'
 ARM_LIST="$(bash "$RUN" --list | tail -n +2)"
-[[ "$(wc -l <<<"$ARM_LIST")" -eq 8 ]] || fail 'local arm list is incomplete'
+[[ "$(wc -l <<<"$ARM_LIST")" -eq 10 ]] || fail 'local arm list is incomplete'
 grep -q '^glm-v10-dcp2 ' <<<"$ARM_LIST" || fail 'v10 arm is absent'
 ! grep -q '^sol ' <<<"$ARM_LIST" || fail 'cloud arm leaked into the local-only F1 harness'
 grep -q '^glm-v11 ' <<<"$ARM_LIST" || fail 'v11 arm is absent'

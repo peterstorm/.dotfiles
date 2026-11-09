@@ -19,6 +19,10 @@ V2_TYPES="$V2/frozen/ui-relay-types.ts"
 V2_WIRE="$V2/frozen/wire-contract.md"
 V2_REFERENCE="$V2/hidden/reference-spec.md"
 V2_LOCK="$V2/source-lock.json"
+V3="$BENCH/protocols/v3"
+V3_WIRE="$V3/frozen/wire-contract.md"
+V3_REFERENCE="$V3/hidden/reference-spec.md"
+V3_LOCK="$V3/source-lock.json"
 OPERATOR="$BENCH/operator-tmux.md"
 PI_MODELS="$ROOT/pi/models.json"
 
@@ -32,7 +36,7 @@ contains() {
   grep -Fq -- "$text" "$file" || fail "$file does not contain: $text"
 }
 
-for script in "$ARMS" "$RUN" "$VERIFY" "$VERIFY_MODELS" "$GRADE" "$ANON"; do
+for script in "$ARMS" "$RUN" "$VERIFY" "$VERIFY_MODELS" "$GRADE" "$ANON" "$BENCH/scripts/gnu.sh" "$BENCH/scripts/worktree-deps.sh" "$BENCH/scripts/pi-root.sh" "$BENCH/scripts/server-ledger.sh"; do
   [[ -x "$script" ]] || fail "benchmark script is not executable: $script"
   bash -n "$script"
 done
@@ -41,9 +45,19 @@ done
 source "$ARMS"
 V1_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v1)"
 V2_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v2)"
-[[ "${BENCHMARK_PROTOCOL_VERSIONS[*]}" == 'v1 v2' ]] \
+V3_PROTOCOL_SHA="$(benchmark_protocol_sha "$BENCH" v3)"
+[[ "${BENCHMARK_PROTOCOL_VERSIONS[*]}" == 'v1 v2 v3' ]] \
   || fail "protocol catalog changed unexpectedly: ${BENCHMARK_PROTOCOL_VERSIONS[*]}"
-[[ "$BENCHMARK_DEFAULT_PROTOCOL_VERSION" == v2 ]] || fail "v2 is not the default protocol"
+[[ "$BENCHMARK_DEFAULT_PROTOCOL_VERSION" == v3 ]] || fail "v3 is not the default protocol"
+# A released protocol is immutable: its hash is its identity, and earlier scores
+# are only meaningful against it. Change a task, answer key, hidden requirement,
+# visible contract or rubric by adding a new version, never in place.
+[[ "$V1_PROTOCOL_SHA" == 17908b755b8a9a7a1fda554c62fcb2a6379a1bb8dd606333ec74154be2756dd3 ]] \
+  || fail "protocol v1 changed in place; add a new version instead"
+[[ "$V2_PROTOCOL_SHA" == f8d3a66edae61265db15492d5508f1d3e6ac216d59b23519a8c5aff5daa1ce99 ]] \
+  || fail "protocol v2 changed in place; add a new version instead"
+[[ "$V3_PROTOCOL_SHA" == f5095e2ed6bfb48665ae78c7e06875d947efea3287c9d416960d254b848123ee ]] \
+  || fail "protocol v3 changed in place; add a new version instead"
 status=0
 benchmark_protocol_sha "$BENCH" future >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 2 ]] || fail "protocol hasher accepted an unknown version"
@@ -87,6 +101,24 @@ contains "$ARMS" 'qwen38-flash-next-fp8-vllm-v2'
 contains "$ARMS" 'switch-qwen38-flash-next-profile-v2.sh start'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10:max'
 contains "$ARMS" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max'
+contains "$ARMS" 'desktop-vllm/deepseek-v4.1-flash:max'
+contains "$ARMS" 'ds41-1017-maya-exl35'
+contains "$ARMS" 'switch-ds41-1017-maya-exl35.sh start'
+IFS=$'\t' read -r ds41_model ds41_served ds41_context ds41_profile _ <<<"$(benchmark_arm_record ds41)"
+[[ "$ds41_model" == 'desktop-vllm/deepseek-v4.1-flash:max' &&
+   "$ds41_served" == deepseek-v4.1-flash &&
+   "$ds41_context" == 262144 &&
+   "$ds41_profile" == ds41-1017-maya-exl35 ]] || fail "ds41 arm record drifted"
+contains "$RUN" 'ds41-*-maya-*)'
+contains "$RUN" 'Server busy:'
+contains "$RUN" 'BENCH_ALLOW_CONTENDED'
+contains "$RUN" 'server_idle_at_start'
+contains "$RUN" 'worktree-deps.sh'
+contains "$BENCH/scripts/pi-root.sh" 'packages = exactly one entry'
+contains "$BENCH/scripts/pi-root.sh" 'live Pi has no subagent extension'
+contains "$BENCH/scripts/server-ledger.sh" 'server_requests'
+contains "$BENCH/scripts/baseline.sh" 'rm -f "$OUT/suite.json"'
+contains "$BENCH/scripts/worktree-deps.sh" '--skip-worktree'
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v10'
 contains "$ARMS" 'glm53-flash-exl3-k4-vllm-sm120-v11'
 contains "$RUN" 'stale benchmark baseline:'
@@ -105,6 +137,7 @@ contains "$RUN" 'verify-run-models.sh'
 contains "$VERIFY" '.thinkingLevelMap[$level] != null'
 contains "$VERIFY" 'Pi routing does not bind local children to the parent selector'
 contains "$GRADE" 'child_models_attested'
+contains "$GRADE" '.pi/state/active_task_graph.json'
 contains "$GRADE" '.current_phase == "execute"'
 contains "$GRADE" '.tasks | type == "array" and length > 0 and all(.status == "pending")'
 contains "$GRADE" 'planning_only_receipt'
@@ -123,7 +156,8 @@ contains "$V2_REFERENCE" '**FR-043**'
 contains "$V2_REFERENCE" 'Recursive delegation is explicitly out of scope'
 contains "$OPERATOR" 'Stop at the planning boundary'
 contains "$VERIFY" 'hidden suite and reference specification cover different FR sets'
-contains "$VERIFY" 'v2 source lock mismatch'
+contains "$VERIFY" 'source lock mismatch for'
+contains "$VERIFY" 'for lock_version in v2 v3; do'
 contains "$GRADE" 'protocol_version // "v1"'
 contains "$ANON" 'glm[-_ ]?5\.?3'
 contains "$ANON" 'qwen ?3\.?8[-_ ]?flash[-_ ]?next'
@@ -149,6 +183,19 @@ contains "$README" 'implementation-ready planning'
   || fail "legacy v1 rubric changed"
 jq -e '.protocol_version == "v2" and (.sources | length == 2)' "$V2_LOCK" >/dev/null \
   || fail "v2 source lock is malformed"
+jq -e '.protocol_version == "v3" and .amends == "v2" and (.sources | length == 2)' "$V3_LOCK" >/dev/null \
+  || fail "v3 source lock is malformed"
+# v3 amends v2 in exactly one way: the visible wire contract states the terminal
+# effects (FR-038..FR-041) explicitly. Task, types, answer key and the
+# requirements themselves are unchanged, so v2 and v3 stay comparable in shape.
+cmp -s "$V2/frozen/ui-relay-types.ts" "$V3/frozen/ui-relay-types.ts" || fail "v3 changed the frozen types"
+cmp -s "$V2/frozen/answer-key.md" "$V3/frozen/answer-key.md" || fail "v3 changed the answer key"
+contains "$V3_WIRE" '### Terminal effects'
+contains "$V3_WIRE" '| `agent_settled`, no pending dialog | `terminate-child` | none |'
+contains "$V3_WIRE" '| child exit before `agent_settled` | `terminate-child` | `protocol-state` |'
+contains "$V3_WIRE" 'it produces no observation effect'
+contains "$V3_REFERENCE" '**Revision note.**'
+if grep -Fq '### Terminal effects' "$V2_WIRE"; then fail "v2 wire contract was amended in place"; fi
 
 if grep -Eq -- 'curl .*Authorization: Bearer' "$RUN"; then
   fail "run-arm puts its bearer token in argv"
@@ -379,6 +426,41 @@ bash "$GRADE" "$pi_state_worktree" "$split_run" >/dev/null 2>&1 || status=$?
 [[ "$status" -eq 1 ]] || fail "grader accepted a split task graph"
 jq -e '.planning_complete == false and .protocol.task_graph_split == true and .artifacts.task_graph == false' \
   "$split_run/outcome.planning.json" >/dev/null || fail "grader did not record the split task graph"
+
+v3_worktree="$planning_sandbox/v3-worktree"
+v3_run="$planning_sandbox/v3-run"
+cp -a "$planning_worktree" "$v3_worktree"
+mkdir -p "$v3_run"
+cp "$V3/frozen/ui-relay-types.ts" "$v3_worktree/engine/src/core/ui-relay-types.ts"
+cp "$V3_WIRE" "$v3_worktree/engine/src/core/ui-relay-wire-contract.md"
+git -C "$v3_worktree" add engine/src/core/ui-relay-types.ts engine/src/core/ui-relay-wire-contract.md
+git -C "$v3_worktree" -c user.name=benchmark -c user.email=bench@local commit -qm 'v3 frozen contract'
+git -C "$v3_worktree" rev-parse HEAD > "$v3_run/base_sha"
+jq --arg spec "$v3_worktree/.claude/specs/ui-relay/spec.md" '.spec_file = $spec' \
+  "$v3_worktree/.claude/state/active_task_graph.json" \
+  > "$v3_worktree/.claude/state/active_task_graph.json.tmp"
+mv "$v3_worktree/.claude/state/active_task_graph.json.tmp" "$v3_worktree/.claude/state/active_task_graph.json"
+jq -n --arg sha "$V3_PROTOCOL_SHA" '{
+  benchmark_kind: "planning-only",
+  protocol_version: "v3",
+  stop_before: "wave-1-implementation",
+  protocol_sha256: $sha,
+  model: "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11:max"
+}' > "$v3_run/run.json"
+cp "$planning_run/session.jsonl" "$planning_run/interview.md" "$v3_run/"
+bash "$GRADE" "$v3_worktree" "$v3_run" >/dev/null
+jq -e '.planning_complete == true and .protocol_version == "v3" and .protocol.frozen_file_intact == true' \
+  "$v3_run/outcome.planning.json" >/dev/null || fail "valid v3 pre-implementation planning boundary did not pass"
+grep -Fq $'FR-043\t' "$v3_run/discovery-checklist.tsv" || fail "v3 grader did not use the v3 discovery reference"
+# A v3 run whose frozen wire contract differs from the shipped text is not a v3 run.
+printf '\n' >> "$v3_worktree/engine/src/core/ui-relay-wire-contract.md"
+v3_tampered="$planning_sandbox/v3-tampered-run"
+cp -a "$v3_run" "$v3_tampered"
+status=0
+bash "$GRADE" "$v3_worktree" "$v3_tampered" >/dev/null 2>&1 || status=$?
+[[ "$status" -eq 1 ]] || fail "grader accepted a v3 run whose frozen wire contract was altered"
+jq -e '.planning_complete == false and .protocol.frozen_file_intact == false' "$v3_tampered/outcome.planning.json" >/dev/null \
+  || fail "altered v3 wire contract was not recorded"
 
 stale_protocol_run="$planning_sandbox/v2-stale-protocol-run"
 mkdir -p "$stale_protocol_run"
