@@ -13,7 +13,7 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BENCH_DIR/scripts/arms.sh"
 
 (($# == 2)) || { echo "usage: $0 <worktree> <run-dir>" >&2; exit 2; }
-WORKTREE="$(cd "$1" && pwd)"
+WORKTREE="$(cd "$1" && pwd -P)"
 mkdir -p "$2"
 RUN_DIR="$(cd "$2" && pwd)"
 
@@ -100,7 +100,8 @@ if ! cmp -s "$BENCH_DIR/$FROZEN_TYPES" "$WORKTREE/engine/src/core/ui-relay-types
   diff -u "$BENCH_DIR/$FROZEN_TYPES" "$WORKTREE/engine/src/core/ui-relay-types.ts" \
     > "$RUN_DIR/frozen-types.diff" || true
 fi
-if [[ "$PROTOCOL_VERSION" == v2 ]]; then
+# v2 and later freeze the raw wire contract next to the types; v1 predates it.
+if [[ "$PROTOCOL_VERSION" != v1 ]]; then
   FROZEN_WIRE="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/wire-contract.md)"
   if ! cmp -s "$BENCH_DIR/$FROZEN_WIRE" "$WORKTREE/engine/src/core/ui-relay-wire-contract.md"; then
     FROZEN_INTACT=false

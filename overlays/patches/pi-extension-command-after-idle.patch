@@ -1,7 +1,19 @@
+diff -ruN a/dist/core/agent-session.d.ts b/dist/core/agent-session.d.ts
+--- a/dist/core/agent-session.d.ts
++++ b/dist/core/agent-session.d.ts
+@@ -636,6 +636,8 @@
+     sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
+         deliverAs?: "steer" | "followUp";
+         expandPromptTemplates?: boolean;
++        /** Wait for the agent to settle, then execute only a registered extension command (never sent to the model). Requires slash text and deliverAs "followUp". */
++        executeCommandAfterIdle?: boolean;
+     }): Promise<void>;
+     /**
+      * Clear all queued messages and return them.
 diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
-@@ -1134,6 +1134,18 @@
+@@ -1947,6 +1947,18 @@
              if (images.length === 0)
                  images = undefined;
          }
@@ -17,32 +29,36 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
 +                throw new Error(`unknown deferred extension command: ${text}`);
 +            return;
 +        }
-         // Use prompt() with expandPromptTemplates: false to skip command handling and template expansion
          await this.prompt(text, {
-             expandPromptTemplates: false,
-diff -ruN a/dist/core/agent-session.d.ts b/dist/core/agent-session.d.ts
---- a/dist/core/agent-session.d.ts
-+++ b/dist/core/agent-session.d.ts
-@@ -441,5 +441,6 @@
-     sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
-         deliverAs?: "steer" | "followUp";
-+        executeCommandAfterIdle?: boolean;
-     }): Promise<void>;
-     /**
-      * Clear all queued messages and return them.
+             expandPromptTemplates: options?.expandPromptTemplates ?? false,
+             streamingBehavior: options?.deliverAs,
 diff -ruN a/dist/core/extensions/types.d.ts b/dist/core/extensions/types.d.ts
 --- a/dist/core/extensions/types.d.ts
 +++ b/dist/core/extensions/types.d.ts
-@@ -302,5 +302,6 @@
+@@ -353,6 +353,8 @@
      sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
          deliverAs?: "steer" | "followUp";
+         expandPromptTemplates?: boolean;
++        /** Wait for the agent to settle, then execute only a registered extension command (never sent to the model). Requires slash text and deliverAs "followUp". */
 +        executeCommandAfterIdle?: boolean;
      }): Promise<void>;
  }
  /** Rendering options for tool results */
-@@ -919,5 +920,6 @@
+@@ -1290,6 +1292,8 @@
      sendUserMessage(content: string | (TextContent | ImageContent)[], options?: {
          deliverAs?: "steer" | "followUp";
+         expandPromptTemplates?: boolean;
++        /** Wait for the agent to settle, then execute only a registered extension command (never sent to the model). Requires slash text and deliverAs "followUp". */
 +        executeCommandAfterIdle?: boolean;
      }): void;
      /** Append a custom entry to the session for state persistence (not sent to LLM). */
+     appendEntry<T = unknown>(customType: string, data?: T): void;
+@@ -1591,6 +1595,8 @@
+ export type SendUserMessageHandler = (content: string | (TextContent | ImageContent)[], options?: {
+     deliverAs?: "steer" | "followUp";
+     expandPromptTemplates?: boolean;
++    /** Wait for the agent to settle, then execute only a registered extension command (never sent to the model). Requires slash text and deliverAs "followUp". */
++    executeCommandAfterIdle?: boolean;
+ }) => void;
+ export type AppendEntryHandler = <T = unknown>(customType: string, data?: T) => void;
+ export type SetSessionNameHandler = (name: string) => void;

@@ -1,6 +1,14 @@
 {
-  "base_sha": "3de455c2f1580c2429d52ae6e286650ec5727392",
+  "base_sha": "bded32d635850595126795aa0d7b3bdd565c6dc2",
   "typecheck": "clean",
-  "total_tests": 5656,
-  "known_failures": []
+  "total_tests": 13626,
+  "known_failures": [
+    "INV-3: settlement is byte-identical under every affected-check outcome AS-027: FR-026: with the runner timing out, the stop proceeds and the settled TaskGraph equals the all-pass settlement",
+    "audited reviewer runtime closure engine/src/core/standalone-review.ts refuses additional capability: import \"zod/v4/core\";",
+    "current Wave native capture settles only through the registered facade 'pi' 'ambiguous' terminalizes only the second native attempt",
+    "fixture-owned Pi session scopes owns identity/transport with an absent parent and restores async rejection exactly",
+    "helper stop-check-plan refusals (CT-1) AS-004: an unknown Task id is refused naming the id, with a non-zero exit",
+    "review-panel helper CLI the panel size is fixed for the life of the run rejects a tally whose verdict directory holds more votes than the panel",
+    "unifiedDiff changes exactly as many lines as Git's minimal diff"
+  ]
 }

@@ -3,9 +3,9 @@
 # and recorded baseline. Stops short of launching Pi because the model conducts
 # its own interview. The model must stop after decomposition, before Wave 1.
 #
-#   bash scripts/run-arm.sh [--protocol v1|v2] --list
-#   bash scripts/run-arm.sh [--protocol v1|v2] --probe glm-mtp
-#   bash scripts/run-arm.sh [--protocol v1|v2] glm-mtp 1
+#   bash scripts/run-arm.sh [--protocol v1|v2|v3] --list
+#   bash scripts/run-arm.sh [--protocol v1|v2|v3] --probe glm-mtp
+#   bash scripts/run-arm.sh [--protocol v1|v2|v3] glm-mtp 1
 set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,9 +16,11 @@ LOOM="${LOOM_REPO:-$HOME/dev/claude-plugins/loom}"
 LOOM_RUNTIME="${LOOM_RUNTIME_REPO:-$LOOM}"
 # shellcheck source=benchmarks/loom-model-ab/scripts/arms.sh
 source "$BENCH_DIR/scripts/arms.sh"
+# shellcheck source=benchmarks/loom-model-ab/scripts/worktree-deps.sh
+source "$BENCH_DIR/scripts/worktree-deps.sh"
 
 usage() {
-  echo "usage: $0 [--protocol v1|v2] (--list | --probe <arm> | <arm> <repetition>)" >&2
+  echo "usage: $0 [--protocol v1|v2|v3] (--list | --probe <arm> | <arm> <repetition>)" >&2
 }
 
 PROTOCOL_VERSION="$BENCHMARK_DEFAULT_PROTOCOL_VERSION"
@@ -149,6 +151,8 @@ if [[ "$PROFILE_CONTAINER" == cloud:* ]]; then
     exit 1
   fi
   SERVED="$EXPECTED"
+  SERVER_IDLE=not-applicable
+  RUNTIME_ATTESTATION="$PROFILE_CONTAINER"
 else
   # Same resolution chain as pi/models.json, including the ssh fallback — on a
   # machine that is not the desktop, the key exists only on the desktop.
@@ -181,7 +185,7 @@ else
   SERVED="$(jq -er '
     .data | select(type == "array" and length == 1) | .[0].id | select(type == "string")
   ' <<<"$MODELS_JSON" 2>/dev/null)" || SERVED=''
-  unset API_KEY ESCAPED_API_KEY MODELS_JSON
+  unset MODELS_JSON
 
   if [[ "$SERVED" != "$EXPECTED" ]]; then
     cat >&2 <<EOF
@@ -195,17 +199,65 @@ EOF
     exit 1
   fi
 
-  PROFILE_RUNNING="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
-    "docker inspect --format='{{.State.Running}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
-  if [[ "$PROFILE_RUNNING" != true ]]; then
-    cat >&2 <<EOF
+  case "$PROFILE_CONTAINER" in
+    ds41-*-maya-*)
+      # Project Maya is not vLLM: it answers any model name with the model it
+      # loaded, and its engine reports what is actually resident. Attest that
+      # engine state (authenticated /metrics) instead of reaching into docker
+      # over ssh, which also works through the local forwarder. The same
+      # snapshot gates contention: Maya runs one conversation at a time and
+      # parks only four, so a busy server turns wall time, timeouts and cache
+      # eviction into measurements of the other tenant, not the model.
+      METRICS_JSON="$({
+        printf 'header = "Authorization: Bearer %s"\n' "$ESCAPED_API_KEY"
+      } | curl --config - -fsS -m 30 "${INFERENCE_URL:-http://192.168.0.80:8000}/metrics" 2>/dev/null)" \
+        || METRICS_JSON=''
+      IFS=$'\t' read -r ENGINE_MODEL ENGINE_CONTEXT ENGINE_ACTIVE ENGINE_QUEUED ENGINE_VERSION \
+        <<<"$(jq -er '[.engine.model, .engine.context, .live.active, .live.queued, .engine.engine]
+          | map(tostring) | @tsv' <<<"$METRICS_JSON" 2>/dev/null)" || ENGINE_MODEL=''
+      unset METRICS_JSON
+      if [[ "$ENGINE_MODEL" != "$EXPECTED" || "$ENGINE_CONTEXT" != "$CONTEXT_WINDOW" ]]; then
+        cat >&2 <<EOF
+Runtime profile mismatch: Maya reports model '${ENGINE_MODEL:-<unreadable>}' at context '${ENGINE_CONTEXT:-?}', arm '$ARM' needs '$EXPECTED' at $CONTEXT_WINDOW.
+
+Attended startup hint for $PROFILE_LABEL:
+  $START_HINT
+EOF
+        exit 1
+      fi
+      SERVER_IDLE=true
+      if [[ "$ENGINE_ACTIVE" != 0 || "$ENGINE_QUEUED" != 0 ]]; then
+        SERVER_IDLE=false
+        if [[ "${BENCH_ALLOW_CONTENDED:-}" != 1 ]]; then
+          cat >&2 <<EOF
+Server busy: Maya has $ENGINE_ACTIVE active and $ENGINE_QUEUED queued request(s). Another tenant on this
+endpoint would contaminate wall time and evict this run's parked conversations.
+
+Wait for idle or stop the other client, then retry. To run anyway and record the
+run as contended (descriptive evidence only): BENCH_ALLOW_CONTENDED=1
+EOF
+          exit 1
+        fi
+      fi
+      RUNTIME_ATTESTATION="maya:$ENGINE_VERSION"
+      ;;
+    *)
+      PROFILE_RUNNING="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${INFERENCE_HOST:-desktop}" \
+        "docker inspect --format='{{.State.Running}}' '$PROFILE_CONTAINER'" 2>/dev/null || true)"
+      if [[ "$PROFILE_RUNNING" != true ]]; then
+        cat >&2 <<EOF
 Runtime profile mismatch: arm '$ARM' requires running container '$PROFILE_CONTAINER'.
 
 Attended startup hint for $PROFILE_LABEL:
   $START_HINT
 EOF
-    exit 1
-  fi
+        exit 1
+      fi
+      SERVER_IDLE=unknown
+      RUNTIME_ATTESTATION="docker:$PROFILE_CONTAINER"
+      ;;
+  esac
+  unset API_KEY ESCAPED_API_KEY
 fi
 
 if [[ "$PROBE_ONLY" == true ]]; then
@@ -226,11 +278,12 @@ WORKTREE="$(cd "$WORKTREE" && pwd)"
 if [[ ! -e "$WORKTREE/node_modules" && -d "$LOOM/node_modules" ]]; then
   ln -s "$LOOM/node_modules" "$WORKTREE/node_modules"
 fi
+benchmark_overlay_node_modules "$LOOM" "$WORKTREE"
 
 FROZEN_TYPES="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/ui-relay-types.ts)"
 cp "$BENCH_DIR/$FROZEN_TYPES" "$WORKTREE/engine/src/core/ui-relay-types.ts"
 git -C "$WORKTREE" add engine/src/core/ui-relay-types.ts
-if [[ "$PROTOCOL_VERSION" == v2 ]]; then
+if [[ "$PROTOCOL_VERSION" != v1 ]]; then
   FROZEN_WIRE="$(benchmark_protocol_path "$PROTOCOL_VERSION" frozen/wire-contract.md)"
   cp "$BENCH_DIR/$FROZEN_WIRE" "$WORKTREE/engine/src/core/ui-relay-wire-contract.md"
   git -C "$WORKTREE" add engine/src/core/ui-relay-wire-contract.md
@@ -294,6 +347,8 @@ jq -n \
   --arg pi_version "$PI_VERSION" \
   --arg worktree "$WORKTREE" \
   --arg baseline_typecheck "$BASELINE_TSC" \
+  --arg runtime_attestation "$RUNTIME_ATTESTATION" \
+  --arg server_idle_at_start "$SERVER_IDLE" \
   --arg started "$STARTED" \
   '{
     benchmark_kind: "planning-only",
@@ -314,6 +369,8 @@ jq -n \
     pi_version: $pi_version,
     worktree: $worktree,
     baseline_typecheck: $baseline_typecheck,
+    runtime_attestation: $runtime_attestation,
+    server_idle_at_start: $server_idle_at_start,
     started: $started
   }' > "$RUN_DIR/run.json"
 

@@ -39,7 +39,20 @@ LOOM_SHA="$(jq -er '.base_sha | select(test("^[0-9a-f]{40}$"))' "$BASELINE")" \
 jq -e '.typecheck == "clean" and (.total_tests | type == "number" and . > 0) and (.known_failures | type == "array")' \
   "$BASELINE" >/dev/null || fail "baseline is incomplete or its typecheck was dirty"
 
+# BENCH_ARMS="ds41" (space/comma separated) verifies only the arms about to run.
+# Historical arms may have left pi/models.json when their serving profile was
+# retired; their recorded runs stay valid, but their catalog rows can no longer
+# be re-verified against a live config.
+selected_arms() {
+  if [[ -n "${BENCH_ARMS:-}" ]]; then
+    tr ' ,' '\n\n' <<<"$BENCH_ARMS" | sed '/^$/d'
+  else
+    benchmark_arm_ids
+  fi
+}
+
 while IFS= read -r arm; do
+  benchmark_arm_record "$arm" >/dev/null || fail "unknown arm in BENCH_ARMS: $arm"
   IFS=$'\t' read -r model served context profile _ label \
     <<<"$(benchmark_arm_record "$arm")"
   provider="${model%%/*}"
@@ -73,13 +86,17 @@ while IFS= read -r arm; do
     [[ "$thinking_level" =~ ^(off|minimal|low|medium|high|xhigh|max)$ ]] \
       || fail "$arm pins an unsupported thinking level: $thinking_level"
   fi
-done < <(benchmark_arm_ids)
+done < <(selected_arms)
 
 # Local arms are measurable only if every child inherits the parent's exact
 # selector. Routing rules match in order, so the first rule that can apply to a
 # local parent (parentClass local or unconstrained) must be the plain
 # inherit-the-parent rule; verify-run-models.sh then attests each child.
 ROUTING="$ROOT/pi/model-routing.json"
+# Every local arm depends on one rule: a local parent's children inherit its exact
+# provider/model/thinking selector. Named per-arm targets were retired with the
+# per-model rules; verify-run-models.sh still proves each child ran on the
+# selector, so a routing regression voids the run instead of passing silently.
 jq -e '
   [.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)]
   | length > 0 and (.[0].when == {"parentClass": "local"}) and (.[0].use == {"kind": "parent"})
@@ -101,15 +118,18 @@ while IFS= read -r protocol_version; do
   fi
 done < <(benchmark_protocol_versions)
 
-V2_SOURCE_LOCK="$BENCH_DIR/protocols/v2/source-lock.json"
-V2_SOURCE_SHA="$(jq -er '.loom_base_sha' "$V2_SOURCE_LOCK")" \
-  || fail "v2 source lock has no Loom base SHA"
-while IFS=$'\t' read -r source_path expected_sha; do
-  observed_sha="$(git -C "$LOOM" show "$V2_SOURCE_SHA:$source_path" | sha256sum | cut -d' ' -f1)" \
-    || fail "cannot read v2 locked source $source_path at $V2_SOURCE_SHA"
-  [[ "$observed_sha" == "$expected_sha" ]] \
-    || fail "v2 source lock mismatch for $source_path: expected $expected_sha, observed $observed_sha"
-done < <(jq -r '.sources[] | [.path, .sha256] | @tsv' "$V2_SOURCE_LOCK")
+# Every protocol after v1 pins the Loom source its wire contract was frozen from.
+for lock_version in v2 v3; do
+  SOURCE_LOCK="$BENCH_DIR/protocols/$lock_version/source-lock.json"
+  SOURCE_SHA="$(jq -er '.loom_base_sha' "$SOURCE_LOCK")" \
+    || fail "$lock_version source lock has no Loom base SHA"
+  while IFS=$'\t' read -r source_path expected_sha; do
+    observed_sha="$(git -C "$LOOM" show "$SOURCE_SHA:$source_path" | sha256sum | cut -d' ' -f1)" \
+      || fail "cannot read $lock_version locked source $source_path at $SOURCE_SHA"
+    [[ "$observed_sha" == "$expected_sha" ]] \
+      || fail "$lock_version source lock mismatch for $source_path: expected $expected_sha, observed $observed_sha"
+  done < <(jq -r '.sources[] | [.path, .sha256] | @tsv' "$SOURCE_LOCK")
+done
 
 for script in \
   "$BENCH_DIR/scripts/arms.sh" \
@@ -129,5 +149,5 @@ while IFS= read -r protocol_version; do
   printf '  Protocol %s SHA: %s%s\n' "$protocol_version" "$PROTOCOL_SHA" \
     "$([[ "$protocol_version" == "$BENCHMARK_DEFAULT_PROTOCOL_VERSION" ]] && printf ' (default)' || true)"
 done < <(benchmark_protocol_versions)
-printf '  Arms: %s\n' "${BENCHMARK_ARM_IDS[*]}"
+printf '  Arms: %s\n' "$(selected_arms | tr '\n' ' ')"
 printf 'Run an authenticated online check with: bash scripts/run-arm.sh --probe <arm>\n'

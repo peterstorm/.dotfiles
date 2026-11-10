@@ -9,8 +9,10 @@
 # or launch anything.
 
 BENCHMARK_ARM_IDS=(ds4 ds4-vision-r21 ds41 ds41-native qwen qwen-vllm-bf16kv qwen-flash-next qwen-flash-next-v2 glm-v10-dcp2 glm-v11 sol)
-BENCHMARK_PROTOCOL_VERSIONS=(v1 v2)
-BENCHMARK_DEFAULT_PROTOCOL_VERSION=v2
+BENCHMARK_PROTOCOL_VERSIONS=(v1 v2 v3)
+# v3 is the default: v2 left two reference requirements (FR-038, FR-040) to
+# inference, so every v2 arm lost the same points. v2 stays reproducible.
+BENCHMARK_DEFAULT_PROTOCOL_VERSION=v3
 BENCHMARK_V1_PROTOCOL_FILES=(
   frozen/brief.md
   frozen/ui-relay-types.ts
@@ -29,6 +31,16 @@ BENCHMARK_V2_PROTOCOL_FILES=(
   protocols/v2/hidden/ui-relay.hidden.test.ts
   protocols/v2/rubric.md
 )
+BENCHMARK_V3_PROTOCOL_FILES=(
+  protocols/v3/source-lock.json
+  protocols/v3/frozen/brief.md
+  protocols/v3/frozen/ui-relay-types.ts
+  protocols/v3/frozen/wire-contract.md
+  protocols/v3/frozen/answer-key.md
+  protocols/v3/hidden/reference-spec.md
+  protocols/v3/hidden/ui-relay.hidden.test.ts
+  protocols/v3/rubric.md
+)
 
 benchmark_arm_ids() {
   printf '%s\n' "${BENCHMARK_ARM_IDS[@]}"
@@ -40,7 +52,7 @@ benchmark_protocol_versions() {
 
 benchmark_protocol_version() {
   case "${1:-$BENCHMARK_DEFAULT_PROTOCOL_VERSION}" in
-    v1|v2) printf '%s\n' "${1:-$BENCHMARK_DEFAULT_PROTOCOL_VERSION}" ;;
+    v1|v2|v3) printf '%s\n' "${1:-$BENCHMARK_DEFAULT_PROTOCOL_VERSION}" ;;
     *)
       printf 'unknown protocol: %s (expected one of: %s)\n' \
         "${1:-<empty>}" "${BENCHMARK_PROTOCOL_VERSIONS[*]}" >&2
@@ -55,6 +67,7 @@ benchmark_protocol_files() {
   case "$version" in
     v1) printf '%s\n' "${BENCHMARK_V1_PROTOCOL_FILES[@]}" ;;
     v2) printf '%s\n' "${BENCHMARK_V2_PROTOCOL_FILES[@]}" ;;
+    v3) printf '%s\n' "${BENCHMARK_V3_PROTOCOL_FILES[@]}" ;;
   esac
 }
 
@@ -66,6 +79,7 @@ benchmark_protocol_path() {
   case "$version" in
     v1) printf '%s\n' "$relative" ;;
     v2) printf 'protocols/v2/%s\n' "$relative" ;;
+    v3) printf 'protocols/v3/%s\n' "$relative" ;;
   esac
 }
 

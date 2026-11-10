@@ -191,21 +191,25 @@ They are one model with a per-request Pi setting, not separate models:
 | `max` | Exhaustive “beyond maximum” reasoning prefix |
 
 Pi hides unsupported `minimal`, `medium`, and `xhigh` levels for this model. The tracked
-model catalog assigns DeepSeek Flash a model-specific default of `max`. The pinned Pi
-package carries a small upstream patch that applies this default to new sessions and model
-switches without modifying Pi's global cloud-model default. Explicit `--thinking` and
-scoped `model:level` values win, and resumed sessions preserve their recorded level. Use
+model catalog assigns DeepSeek Flash a model-specific default of `max`. The Nix-built Pi
+package carries a small patch (`pi-model-default-thinking.patch`) that applies this default
+to new sessions and model switches without modifying Pi's global cloud-model default.
+Precedence on a model switch: scoped `model:level` > the per-model level saved in settings >
+a level you chose this session (`--thinking`, `Shift+Tab`, SDK `thinkingPreference`) > the
+model's `defaultThinkingLevel` > the global default. Resumed sessions preserve their
+recorded level. Use
 `Shift+Tab` to cycle `off → low → high → max`. The command-line equivalent is:
 
 ```bash
 pi --model desktop-vllm/deepseek-v4-flash:max
 ```
 
-A second pinned-Pi patch, `pi-autocontinue-after-compact.patch`, resumes the
+A second patch, `pi-autocontinue-after-compact.patch`, resumes the
 agent turn automatically after *threshold* auto-compaction instead of
-stalling for input. Upstream ends the turn after compaction unless the user
-queued a message; with the patch the turn continues from the compaction
-boundary. Overflow compaction with a completed answer is not auto-continued
+stalling for input. Upstream ends the turn after a post-run compaction unless
+the user queued a message; with the patch the turn continues from the
+compaction boundary. (Upstream already compacts *between* a tool result and the
+next request, so that case needs no resume.) Overflow compaction with a completed answer is not auto-continued
 (that response already finished). Disable per-session with
 `{"compaction": {"autoContinue": false}}` in `~/.pi/agent/settings.json`;
 `enabled`, `reserveTokens`, and `keepRecentTokens` are unchanged.
@@ -780,11 +784,11 @@ symlinks the whole directory into `~/.pi/agent/extensions`, so adding or
 editing a file needs **no Home Manager rebuild**. Run `/reload` once in each
 active Pi session to load the new code; new sessions discover it at startup.
 
-`reload-runtime.ts` registers the LLM-callable `reload_runtime` tool. The pinned
-Pi 0.83.0 SDK normally treats `sendUserMessage("/reload-runtime")` as plain user
-text: it disables command expansion. The Nix overlay's
-`pi-extension-command-after-idle.patch` adds an explicit
-`executeCommandAfterIdle` opt-in. It waits for the agent run to settle, then
+`reload-runtime.ts` registers the LLM-callable `reload_runtime` tool. The Pi SDK
+treats `sendUserMessage("/reload-runtime")` as plain user text unless
+`expandPromptTemplates` is set, and then runs the command *immediately*, even
+mid-run. The Nix overlay's `pi-extension-command-after-idle.patch` adds an
+explicit `executeCommandAfterIdle` opt-in. It waits for the agent run to settle, then
 dispatches *only* a registered extension command; unknown commands fail rather
 than reaching the model. The command calls Pi's real `ctx.reload()` on the
 **parent** session, not a child subagent. Apply the updated Nix package and
@@ -793,3 +797,24 @@ the running Pi core binary. Later reloads can use the model-callable tool.
 
 Run `./pi/verify.sh --tests` after extension changes (including the real SDK
 command-dispatch test).
+
+## Upgrading Pi
+
+Pi is not pinned in this repo. `overlays/pi-coding-agent.nix` takes the package
+from the `llm-agents` flake input (`numtide/llm-agents.nix`, which tracks npm
+releases, lockfile and hashes) and adds the three patches in `overlays/patches/`,
+so upgrading is:
+
+```bash
+nix flake update llm-agents
+./hm-apply.sh            # Mac;  ./system-apply.sh on NixOS hosts
+./pi/verify.sh --tests && ./pi/verify.sh && bash tests/pi-compaction-autocontinue-contract.sh
+```
+
+The patches apply to the unbundled `dist/` tree of the npm tarball (the overlay
+builds the Node entry point `dist/cli.js`, not upstream's minified
+`dist/bundle/` or Bun binary). If a release changes the code a patch touches the
+build fails in `patchPhase`; rebase the patch against the new tarball
+(`npm pack @earendil-works/pi-coding-agent@<version>`, edit a copy of `dist/`,
+`diff -ruN a/dist b/dist`) and re-run the checks above. Check the release's
+CHANGELOG first — a patch whose behavior shipped upstream should be deleted.

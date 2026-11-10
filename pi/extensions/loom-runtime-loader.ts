@@ -1,4 +1,7 @@
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
 
 // Loom runtime loader — the ONLY loader for the loom extension in this Pi
 // process (loom is intentionally absent from settings.json `packages`).
@@ -26,9 +29,12 @@ import { createRequire } from "node:module";
 // The loom root defaults to this machine's checkout and can be overridden with
 // LOOM_RUNTIME_LOADER_ROOT. Load failures are fatal (rethrown) so a broken
 // checkout surfaces at the point of failure instead of silently vanishing.
-const PI_DIST_INDEX = "/nix/store/dggdykd2b337cmqki7bl53z39psny2bv-pi-coding-agent-0.83.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js";
-const PI_NODE_MODULES = "/nix/store/dggdykd2b337cmqki7bl53z39psny2bv-pi-coding-agent-0.83.0/lib/node_modules/@earendil-works/pi-coding-agent/node_modules";
-const DEFAULT_LOOM_ROOT = "/home/peterstorm/dev/claude-plugins/loom";
+// Derive Pi's install dir from the running CLI (argv[1] = <pkg>/dist/cli.js) so
+// the loader survives Nix store path changes on every pi rebuild/upgrade.
+const PI_PACKAGE_ROOT = dirname(dirname(realpathSync(process.argv[1])));
+const PI_DIST_INDEX = `${PI_PACKAGE_ROOT}/dist/index.js`;
+const PI_NODE_MODULES = `${PI_PACKAGE_ROOT}/node_modules`;
+const DEFAULT_LOOM_ROOT = `${homedir()}/dev/claude-plugins/loom`;
 
 /** Load one Loom Pi entry (path relative to the Loom root) through the private jiti. */
 export async function loadLoomExtension(pi: unknown, entryRelativePath: string): Promise<void> {

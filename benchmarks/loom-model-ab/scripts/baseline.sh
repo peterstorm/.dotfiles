@@ -17,6 +17,8 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOOM="${LOOM_REPO:-$HOME/dev/claude-plugins/loom}"
 OUT="$BENCH_DIR/baseline"
 mkdir -p "$OUT"
+# shellcheck source=benchmarks/loom-model-ab/scripts/worktree-deps.sh
+source "$BENCH_DIR/scripts/worktree-deps.sh"
 
 BASE_SHA="$(git -C "$LOOM" rev-parse HEAD)"
 WORKTREE="$LOOM/../loom-baseline-$BASE_SHA"
@@ -31,6 +33,7 @@ git -C "$LOOM" worktree add --detach "$WORKTREE" "$BASE_SHA" >/dev/null
 WORKTREE="$(cd "$WORKTREE" && pwd)"
 [[ -e "$WORKTREE/node_modules" || ! -d "$LOOM/node_modules" ]] || \
   ln -s "$LOOM/node_modules" "$WORKTREE/node_modules"
+benchmark_overlay_node_modules "$LOOM" "$WORKTREE"
 
 echo "Typechecking..."
 if (cd "$WORKTREE/engine" && env -u PI_CODING_AGENT timeout 600 bunx tsc --noEmit) \
@@ -41,10 +44,18 @@ else
 fi
 echo "  typecheck: $TSC"
 
+# A suite report left by an earlier base commit must never be mistaken for this
+# run's result: a crashed runner would otherwise "pass" with someone else's data.
+rm -f "$OUT/suite.json"
 echo "Running the full suite (this takes a few minutes)..."
 (cd "$WORKTREE/engine" && env -u PI_CODING_AGENT timeout 1800 \
   bunx vitest run --testTimeout=15000 --reporter=json --outputFile="$OUT/suite.json") \
   > "$OUT/suite.log" 2>&1 || true
+
+[[ -s "$OUT/suite.json" ]] || {
+  echo "the suite produced no report; see $OUT/suite.log" >&2
+  exit 1
+}
 
 node -e '
   const fs = require("fs");

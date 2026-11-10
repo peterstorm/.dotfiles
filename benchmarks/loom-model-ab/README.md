@@ -29,7 +29,17 @@ complete protocol SHA match.
 
 ## Protocol versions
 
-- **v2 (default):** aligns the visible contract, hidden reference, and executable
+- **v3 (default):** v2 plus one change — the visible wire contract now states
+  the terminal effects explicitly (`### Terminal effects`). v2 left two reference
+  requirements to inference: that `agent_settled` emits `terminate-child` and *no*
+  `observe-event` (FR-038), and that a child exit before settlement emits
+  `terminate-child` (FR-040). Nothing in the visible v2 authority determined them,
+  so every v2 arm lost the same points and the discovery column understated the
+  models. The frozen types, answer key, task, requirements and rubric scoring are
+  unchanged, so v3 totals have the same shape as v2 — but they are **not
+  comparable with v2 totals**: re-run an arm on v3 before comparing it with
+  another v3 arm.
+- **v2:** aligns the visible contract, hidden reference, and executable
   suite with Loom's shipped Pi 0.83.0 `extension_ui_request` RPC wire. Its source
   provenance is pinned in `protocols/v2/source-lock.json`, and its raw schema is
   explicit model-visible input rather than hidden grader knowledge.
@@ -40,7 +50,8 @@ complete protocol SHA match.
   Loom implementation readiness and must not be compared with v2 totals.
 
 Do not mutate a protocol in place. Add a new version whenever the task contract,
-answer key, hidden requirements, or rubric changes.
+answer key, hidden requirements, visible contract, or rubric changes. The
+contract test pins every released protocol hash and fails if one is edited.
 
 ## Why this is measurable
 
@@ -82,7 +93,7 @@ This measures planning directly. No implementation is generated or inferred.
 List the machine-readable catalog with:
 
 ```bash
-bash scripts/run-arm.sh --list                 # default v2
+bash scripts/run-arm.sh --list                 # default v3
 bash scripts/run-arm.sh --protocol v1 --list  # historical reproduction only
 ```
 
@@ -103,6 +114,11 @@ recurrent-state safeguards, and MTP3.
 `glm-v11` is the upstream-core-port r2 runtime with native FP8 KV and vision.
 The historical `glm-dflash`, `glm-mtp`, and `glm-fp8` arms were retired with
 their serving profiles; their recorded runs remain under `runs/`.
+
+Maya is not vLLM: it answers *any* model name with the model it loaded, so
+`/v1/models` alone proves nothing for `ds41`. `run-arm.sh` instead attests the
+engine's own `/metrics` (`engine.model` and `engine.context`), and routing is
+proven afterwards from the transcript by `verify-run-models.sh`.
 
 ### Asymmetries that remain part of the experiment
 
@@ -160,6 +176,67 @@ from the subject commit itself (Loom `3de455c`/`48483ba`, Pi 0.83.0, before
 `loom-runtime-loader.ts`); a later runtime is a confound to state alongside
 any cross-batch comparison.
 
+## Server contention (Maya serves one request at a time)
+
+Maya runs one active conversation, queues the rest, and parks only the four
+least-recently-used conversations. Another tenant on the endpoint (an agent
+fleet, a second Pi) turns wall time, timeouts and KV-slot eviction into
+measurements of that tenant. `run-arm.sh` therefore refuses to prepare a `ds41`
+run unless `/metrics` reports 0 active and 0 queued requests:
+
+```text
+Server busy: Maya has 1 active and 5 queued request(s). ...
+```
+
+`BENCH_ALLOW_CONTENDED=1` overrides it. A contended run is recorded with
+`server_idle_at_start: "false"` in `run.json` and is **descriptive evidence
+only** — never pool it with idle runs or compare its wall time or context
+pressure with earlier arms. Idleness is a start-of-run snapshot: keep the other
+client stopped for the whole run.
+
+## Running from macOS (or any host that is not the desktop)
+
+The harness was written on the Linux desktop. `scripts/gnu.sh` runs any command
+under GNU bash/coreutils from Nix (offline) so the same scripts work unchanged:
+
+```bash
+export INFERENCE_URL=http://127.0.0.1:8000   # the local forwarder to Maya
+bash scripts/gnu.sh bash scripts/baseline.sh
+BENCH_ARMS=ds41 bash scripts/gnu.sh bash scripts/verify-harness.sh
+bash scripts/gnu.sh bash scripts/run-arm.sh --probe ds41
+```
+
+Loom tracks a Linux-built `engine/node_modules`, so a fresh worktree cannot
+typecheck or run tests on macOS. `scripts/worktree-deps.sh` clones the live
+install into every benchmark worktree and marks the tracked paths
+`skip-worktree`, keeping the grader's "no file changed" check honest.
+`baseline.sh` deletes any previous `suite.json` first: a crashed runner must never
+inherit another commit's results.
+
+## Isolated Pi root (preferred over flipping the live settings)
+
+`isolation.sh` edits the operator's live `settings.json`. `scripts/pi-root.sh`
+instead builds a separate root (`~/.pi/bench-agent`) whose only package is a
+detached Loom checkout at the recorded base commit — no Cortex, no Obsidian, and
+no uncommitted edits from the working Loom checkout:
+
+```bash
+bash scripts/gnu.sh bash scripts/pi-root.sh create
+bash scripts/pi-root.sh status
+eval "$(bash scripts/pi-root.sh env)"      # PI_CODING_AGENT_DIR + LOOM_RUNTIME_LOADER_ROOT
+bash scripts/pi-root.sh trust <worktree>   # before launching Pi in a run worktree
+```
+
+The extension set (including the `subagent` transport whose absence voided an
+earlier Qwen attempt), prompts, skills and routing policy are shared by symlink;
+the model catalog is copied so it is frozen for the batch. The root's sessions
+live under `$PI_CODING_AGENT_DIR/sessions/`.
+
+Phase agents are not rendered by `create`: `run-arm.sh` renders them into the
+active root from the pinned runtime, bound to the arm's model, and refuses to
+prepare a run unless the render names that runtime. With this root active the
+render lands in `$PI_CODING_AGENT_DIR/agents`, never in the live agents.
+
 ## Backend switching
 
 Use only attended, versioned switch paths:
@@ -188,6 +265,9 @@ bash scripts/inference/qwen38/switch-qwen38-flash-next-profile-v1.sh start
 
 # Qwen Flash-Next v2 FP8 TP2 with UVA PLE, exact QSA, and state safety
 bash scripts/inference/qwen38/switch-qwen38-flash-next-profile-v2.sh start
+
+# DeepSeek-V4.1-Flash-1017 on Project Maya (served profile)
+bash scripts/inference/deepseek/ds41-1017-maya/switch-ds41-1017-maya-exl35.sh start
 
 # DS4 text rollback
 bash scripts/inference/deepseek/run-ds4-infernal-invocation-r18.sh
@@ -283,7 +363,8 @@ but do not mix it into planning-quality comparisons.
 
 ```text
 frozen/, hidden/, rubric.md       immutable retired v1 protocol
-protocols/v2/
+protocols/v3/                     default; same files as v2, terminal effects explicit
+protocols/v2/                     retired; reproduces the earlier arms' scores
   source-lock.json                pinned Loom source provenance
   frozen/brief.md                 task and planning-only stop condition
   frozen/ui-relay-types.ts        frozen ADTs/signatures copied to worktree
@@ -328,7 +409,7 @@ bash scripts/baseline.sh
 Per run:
 
 ```bash
-bash scripts/run-arm.sh ds41 1  # v2 by default
+bash scripts/run-arm.sh ds41 1  # v3 by default (--protocol v2 reproduces the earlier runs)
 ```
 
 `run.json` records `protocol_version` and the hash over every selected protocol

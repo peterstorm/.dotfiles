@@ -1,113 +1,163 @@
+diff -ruN a/dist/core/agent-session.d.ts b/dist/core/agent-session.d.ts
+--- a/dist/core/agent-session.d.ts
++++ b/dist/core/agent-session.d.ts
+@@ -770,6 +770,7 @@
+      * @returns Whether the post-run loop should call `agent.continue()`
+      */
+     private _runAutoCompaction;
++    private _prepareTurnResumeAfterCompaction;
+     /**
+      * Toggle auto-compaction setting.
+      */
 diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
-@@ -1724,8 +1724,40 @@
+@@ -1574,7 +1574,7 @@
+             });
+             this._retryAttempt = 0;
+         }
+-        if (await this._checkCompaction(message)) {
++        if (await this._checkCompaction(message, true, true)) {
+             return !this._agentRunAbortRequested;
+         }
+         // The low-level loop drains both queues before agent_end. Messages queued by
+@@ -2406,7 +2406,7 @@
+      * @param skipAbortedCheck If false, include aborted messages (for pre-prompt check). Default: true
+      * @returns Whether the post-run loop should call `agent.continue()` for overflow recovery or queued messages
+      */
+-    async _checkCompaction(assistantMessage, skipAbortedCheck = true) {
++    async _checkCompaction(assistantMessage, skipAbortedCheck = true, resumeTurn = false) {
+         const settings = this.settingsManager.getCompactionSettings(this.model);
+         if (!settings.enabled)
+             return false;
+@@ -2522,7 +2522,7 @@
+             contextTokens = directContextTokens;
+         }
+         if (shouldCompact(contextTokens, contextWindow, settings)) {
+-            return await this._runAutoCompaction("threshold", false);
++            return await this._runAutoCompaction("threshold", false, resumeTurn);
+         }
+         return false;
+     }
+@@ -2534,9 +2534,12 @@
+      *
+      * @param reason Automatic trigger selected by `_checkCompaction()`
+      * @param willRetry Whether to continue the interrupted turn after overflow compaction
++     * @param resumeTurn Whether the caller is the post-run loop, so a threshold compaction may
++     *   resume the turn (compaction.autoContinue). Pre-prompt compaction must not: the new prompt
++     *   drives the next turn.
+      * @returns Whether the post-run loop should call `agent.continue()`
+      */
+-    async _runAutoCompaction(reason, willRetry) {
++    async _runAutoCompaction(reason, willRetry, resumeTurn = false) {
+         const model = this.model;
+         const settings = this.settingsManager.getCompactionSettings(model);
+         let abortController;
+@@ -2628,7 +2631,13 @@
+             if (willRetry)
                  return true;
-             }
              // Auto-compaction can complete while follow-up/steering/custom messages are waiting.
 -            // Continue once so queued messages are delivered.
--            return this.agent.hasQueuedMessages();
-+            // Continue once so queued messages are delivered — and, for threshold
-+            // compaction with compaction.autoContinue (default true), resume the
-+            // turn from the compaction boundary instead of stalling for input.
-+            // Overflow with a completed answer is NOT auto-continued: that
-+            // response already finished and must not be retried.
-+            const continueAfterCompaction = reason === "threshold" && this.settingsManager.getCompactionSettings().autoContinue;
-+            // Pre-prompt compaction (a fresh user prompt is about to be sent)
-+            // must not resume anything: the new prompt drives the next turn.
-+            if (!continueAfterCompaction || !this._isAgentRunActive) {
-+                return this.agent.hasQueuedMessages();
++            // Continue once so queued messages are delivered, and, for threshold compaction with
++            // compaction.autoContinue (default true), resume the turn from the compaction
++            // boundary instead of stalling for input. Overflow with a completed answer is NOT
++            // resumed: that response already finished and must not be retried.
++            if (resumeTurn && reason === "threshold" && this.settingsManager.getCompactionAutoContinue()) {
++                return await this._prepareTurnResumeAfterCompaction();
 +            }
-+            // The rebuilt context keeps the recent tail, which ends with the
-+            // just-finished turn's final assistant message, and agent.continue()
-+            // rejects an assistant-tailed transcript ("Cannot continue from
-+            // message role: assistant"). Shape the tail before resuming:
-+            const messages = this.agent.state.messages;
-+            const lastMsg = messages[messages.length - 1];
-+            if (lastMsg?.role === "assistant") {
-+                if (lastMsg.stopReason === "error") {
-+                    // Interrupted turn: drop the failed assistant message (it
-+                    // stays in session history) so the loop resumes from the
-+                    // preceding tool result or user message.
-+                    this.agent.state.messages = messages.slice(0, -1);
-+                    return true;
-+                }
-+                if (!this.agent.hasQueuedMessages()) {
-+                    // Completed turn with nothing queued: the loop cannot
-+                    // continue from its own answer, so queue a minimal
-+                    // continuation prompt; agent.continue() drains the
-+                    // follow-up queue and delivers it as a normal prompt.
-+                    await this._queueFollowUp("[auto-compacted] Continue from where you left off.");
-+                }
-+            }
-+            return true;
+             return this.agent.hasQueuedMessages();
          }
          catch (error) {
-             const errorMessage = error instanceof Error ? error.message : "compaction failed";
-diff -ruN a/dist/core/compaction/compaction.d.ts b/dist/core/compaction/compaction.d.ts
---- a/dist/core/compaction/compaction.d.ts
-+++ b/dist/core/compaction/compaction.d.ts
-@@ -29,6 +29,8 @@
-     enabled: boolean;
-     reserveTokens: number;
-     keepRecentTokens: number;
-+    /** Resume the agent turn automatically after threshold auto-compaction (default true). */
-+    autoContinue: boolean;
- }
- export declare const DEFAULT_COMPACTION_SETTINGS: CompactionSettings;
- /**
-diff -ruN a/dist/core/compaction/compaction.js b/dist/core/compaction/compaction.js
---- a/dist/core/compaction/compaction.js
-+++ b/dist/core/compaction/compaction.js
-@@ -75,6 +75,7 @@
-     enabled: true,
-     reserveTokens: 16384,
-     keepRecentTokens: 20000,
-+    autoContinue: true,
- };
- // ============================================================================
- // Token calculation
+@@ -2664,6 +2673,31 @@
+             }
+             this._resolveIdleWaitIfIdle();
+         }
++    }
++    /**
++     * Shape the working context so agent.continue() can resume the turn after threshold
++     * compaction. The rebuilt context keeps the recent tail, which ends with the just-finished
++     * turn's final assistant message, and agent.continue() rejects an assistant-tailed transcript.
++     * @returns true: the turn is always resumed
++     */
++    async _prepareTurnResumeAfterCompaction() {
++        const messages = this.agent.state.messages;
++        const lastMessage = messages[messages.length - 1];
++        if (lastMessage?.role !== "assistant")
++            return true;
++        if (lastMessage.stopReason === "error") {
++            // Interrupted turn: drop the failed assistant message (it stays in session history) so
++            // the loop resumes from the preceding tool result or user message.
++            this.agent.state.messages = messages.slice(0, -1);
++            return true;
++        }
++        if (!this.agent.hasQueuedMessages()) {
++            // Completed turn with nothing queued: the loop cannot continue from its own answer, so
++            // queue a minimal continuation prompt; agent.continue() drains the follow-up queue and
++            // delivers it as a normal prompt.
++            await this._queueFollowUp("[auto-compacted] Continue from where you left off.");
++        }
++        return true;
+     }
+     /**
+      * Toggle auto-compaction setting.
+diff -ruN a/dist/core/settings-defaults.d.ts b/dist/core/settings-defaults.d.ts
+--- a/dist/core/settings-defaults.d.ts
++++ b/dist/core/settings-defaults.d.ts
+@@ -8,6 +8,7 @@
+         readonly enabled: true;
+         readonly reserveTokens: 16384;
+         readonly keepRecentTokens: 20000;
++        readonly autoContinue: true;
+     };
+     readonly branchSummary: {
+         readonly reserveTokens: 16384;
+diff -ruN a/dist/core/settings-defaults.js b/dist/core/settings-defaults.js
+--- a/dist/core/settings-defaults.js
++++ b/dist/core/settings-defaults.js
+@@ -9,6 +9,7 @@
+         enabled: true,
+         reserveTokens: 16384,
+         keepRecentTokens: 20000,
++        autoContinue: true,
+     },
+     branchSummary: {
+         reserveTokens: 16384,
 diff -ruN a/dist/core/settings-manager.d.ts b/dist/core/settings-manager.d.ts
 --- a/dist/core/settings-manager.d.ts
 +++ b/dist/core/settings-manager.d.ts
-@@ -4,6 +4,8 @@
-     enabled?: boolean;
-     reserveTokens?: number;
-     keepRecentTokens?: number;
+@@ -128,6 +128,8 @@
+     private getCompactionTokenSetting;
+     getCompactionReserveTokens(model?: Pick<Model<string>, "provider" | "id">): number;
+     getCompactionKeepRecentTokens(model?: Pick<Model<string>, "provider" | "id">): number;
 +    /** Resume the agent turn automatically after threshold auto-compaction (default true). */
-+    autoContinue?: boolean;
- }
- export interface BranchSummarySettings {
-     reserveTokens?: number;
-@@ -198,10 +200,12 @@
-     setCompactionEnabled(enabled: boolean): void;
-     getCompactionReserveTokens(): number;
-     getCompactionKeepRecentTokens(): number;
 +    getCompactionAutoContinue(): boolean;
-     getCompactionSettings(): {
+     /** Resolve each token setting through model override, ordinary setting, then built-in default. */
+     getCompactionSettings(model?: Pick<Model<string>, "provider" | "id">): {
          enabled: boolean;
-         reserveTokens: number;
-         keepRecentTokens: number;
-+        autoContinue: boolean;
-     };
-     getBranchSummarySettings(): {
-         reserveTokens: number;
 diff -ruN a/dist/core/settings-manager.js b/dist/core/settings-manager.js
 --- a/dist/core/settings-manager.js
 +++ b/dist/core/settings-manager.js
-@@ -523,11 +523,15 @@
-     getCompactionKeepRecentTokens() {
-         return this.settings.compaction?.keepRecentTokens ?? 20000;
+@@ -674,6 +674,9 @@
+     getCompactionKeepRecentTokens(model) {
+         return this.getCompactionTokenSetting("keepRecentTokens", model);
      }
 +    getCompactionAutoContinue() {
-+        return this.settings.compaction?.autoContinue ?? true;
++        return this.settings.compaction?.autoContinue ?? SETTINGS_DEFAULTS.compaction.autoContinue;
 +    }
-     getCompactionSettings() {
+     /** Resolve each token setting through model override, ordinary setting, then built-in default. */
+     getCompactionSettings(model) {
          return {
-             enabled: this.getCompactionEnabled(),
-             reserveTokens: this.getCompactionReserveTokens(),
-             keepRecentTokens: this.getCompactionKeepRecentTokens(),
-+            autoContinue: this.getCompactionAutoContinue(),
-         };
-     }
-     getBranchSummarySettings() {
+diff -ruN a/dist/core/settings-schema.js b/dist/core/settings-schema.js
+--- a/dist/core/settings-schema.js
++++ b/dist/core/settings-schema.js
+@@ -15,6 +15,10 @@
+     enabled: Type.Optional(Type.Boolean({ default: SETTINGS_DEFAULTS.compaction.enabled })),
+     reserveTokens: Type.Optional(nonNegativeSafeInteger({ default: SETTINGS_DEFAULTS.compaction.reserveTokens })),
+     keepRecentTokens: Type.Optional(nonNegativeSafeInteger({ default: SETTINGS_DEFAULTS.compaction.keepRecentTokens })),
++    autoContinue: Type.Optional(Type.Boolean({
++        default: SETTINGS_DEFAULTS.compaction.autoContinue,
++        description: "Resume the agent turn automatically after threshold auto-compaction.",
++    })),
+     modelOverrides: Type.Optional(Type.Record(Type.String(), CompactionModelOverrideSchema, {
+         description: 'Per-model overrides keyed by exact "provider/modelId" strings.',
+     })),

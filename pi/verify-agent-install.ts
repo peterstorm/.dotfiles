@@ -253,7 +253,35 @@ const installedSettings = JSON.parse(readFileSync(join(agentDir, "settings.json"
   defaultThinkingLevel?: string;
 };
 copyFileSync(join(agentDir, "settings.json"), join(runtimeAgentDir, "settings.json"));
-symlinkSync(modelsLink, join(runtimeAgentDir, "models.json"));
+// The cross-capability check needs a model that cannot think. Upstream's built-in catalog rotates
+// (Gemini 2.0 Flash, the previous fixture, was dropped), so declare one in the isolated catalog.
+const nonThinkingFixture = "verify-fixture/no-thinking";
+const installedCatalog = JSON.parse(readFileSync(modelsLink, "utf8")) as {
+  providers?: Record<string, unknown>;
+};
+writeFileSync(
+  join(runtimeAgentDir, "models.json"),
+  JSON.stringify({
+    ...installedCatalog,
+    providers: {
+      ...installedCatalog.providers,
+      "verify-fixture": {
+        baseUrl: "http://127.0.0.1:9/v1",
+        api: "openai-completions",
+        apiKey: "verify-fixture-key",
+        models: [{
+          id: "no-thinking",
+          name: "Verification fixture without thinking",
+          reasoning: false,
+          input: ["text"],
+          contextWindow: 8192,
+          maxTokens: 1024,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        }],
+      },
+    },
+  }, null, 2),
+);
 symlinkSync(routingLink, join(runtimeAgentDir, "model-routing.json"));
 symlinkSync(join(agentDir, "extensions"), join(runtimeAgentDir, "extensions"));
 for (const credentialFile of ["auth.json", "models-store.json"]) {
@@ -423,8 +451,8 @@ try {
     fail("another scoped model's thinking pin suppresses DeepSeek's model default");
   }
   const crossCapability = await thinkingAfterCycle({
-    startModel: "google/gemini-2.0-flash",
-    models: "google/gemini-2.0-flash,desktop-vllm/deepseek-v4-flash",
+    startModel: nonThinkingFixture,
+    models: `${nonThinkingFixture},desktop-vllm/deepseek-v4-flash`,
     expectedProvider: "desktop-vllm",
     expectedModel: "deepseek-v4-flash",
     thinkingLevel: "low",
