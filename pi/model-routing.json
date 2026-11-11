@@ -10,20 +10,20 @@
   "targets": {},
   "rules": [
     {
-      "id": "cloud-workers-use-parent",
+      "id": "local-children-inherit-parent",
       "when": {
-        "parentClass": "cloud",
-        "workload": "subagent",
-        "agent": "worker"
+        "parentClass": "local"
       },
       "use": {
         "kind": "parent"
       }
     },
     {
-      "id": "local-workloads-use-parent",
+      "id": "cloud-workers-use-parent",
       "when": {
-        "parentClass": "local"
+        "parentClass": "cloud",
+        "workload": "subagent",
+        "agent": "worker"
       },
       "use": {
         "kind": "parent"
