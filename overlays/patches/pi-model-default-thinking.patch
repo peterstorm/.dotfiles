@@ -12,10 +12,10 @@ diff -ruN a/dist/core/agent-session-services.js b/dist/core/agent-session-servic
 diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
-@@ -89,11 +89,33 @@
- // ============================================================================
- // AgentSession Class
- // ============================================================================
+@@ -103,11 +103,33 @@
+         return undefined;
+     return direction === "forward" ? (currentIndex + 1) % length : (currentIndex - 1 + length) % length;
+ }
 +/**
 + * Pure precedence rule for the thinking level applied when switching models.
 + * Explicit scoped level, then the user's per-model setting, then a level the user pinned this
@@ -46,7 +46,7 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
      // Event subscription state
      _unsubscribeAgent;
      _eventListeners = [];
-@@ -187,6 +209,8 @@
+@@ -204,6 +226,8 @@
          this.sessionManager = config.sessionManager;
          this.settingsManager = config.settingsManager;
          this._scopedModels = config.scopedModels ?? [];
@@ -55,7 +55,7 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
          this._resourceLoader = config.resourceLoader;
          this._customTools = config.customTools ?? [];
          this._cwd = config.cwd;
-@@ -2028,7 +2052,7 @@
+@@ -2112,7 +2136,7 @@
              throw new Error(`No API key for ${model.provider}/${model.id}`);
          }
          const previousModel = this.model;
@@ -64,7 +64,7 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
          this.agent.state.model = model;
          this.sessionManager.appendModelChange(model.provider, model.id);
          if (options.persist) {
-@@ -2038,7 +2062,7 @@
+@@ -2122,7 +2146,7 @@
          // Apply thinking level for the new model.
          // Per-model thinking level overrides take priority over the global default.
          // Model persistence does not implicitly rewrite the global thinking default.
@@ -73,16 +73,16 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
          await this._emitModelSelect(model, previousModel, "set");
      }
      _addPersistedDefaultToNonEmptyScope(model) {
-@@ -2079,7 +2103,7 @@
-         const len = scopedModels.length;
-         const nextIndex = direction === "forward" ? (currentIndex + 1) % len : (currentIndex - 1 + len) % len;
+@@ -2160,7 +2184,7 @@
+         if (nextIndex === undefined)
+             return undefined;
          const next = scopedModels[nextIndex];
 -        const thinkingLevel = this._getThinkingLevelForModelSwitch(next.model, next.thinkingLevel);
 +        const thinking = this._resolveThinkingForModelSwitch(next.model, next.thinkingLevel);
          // Apply model
          this.agent.state.model = next.model;
          this.sessionManager.appendModelChange(next.model.provider, next.model.id);
-@@ -2092,7 +2116,7 @@
+@@ -2173,7 +2197,7 @@
          // - Per-model thinking level overrides take priority over the global default
          // setThinkingLevel clamps to model capabilities.
          // Model persistence does not implicitly rewrite the global thinking default.
@@ -91,16 +91,16 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
          await this._emitModelSelect(next.model, currentModel, "cycle");
          return { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
      }
-@@ -2107,7 +2131,7 @@
-         const len = availableModels.length;
-         const nextIndex = direction === "forward" ? (currentIndex + 1) % len : (currentIndex - 1 + len) % len;
+@@ -2185,7 +2209,7 @@
+         if (nextIndex === undefined)
+             return undefined;
          const nextModel = availableModels[nextIndex];
 -        const thinkingLevel = this._getThinkingLevelForModelSwitch(nextModel);
 +        const thinking = this._resolveThinkingForModelSwitch(nextModel);
          this.agent.state.model = nextModel;
          this.sessionManager.appendModelChange(nextModel.provider, nextModel.id);
          if (options.persist) {
-@@ -2116,7 +2140,7 @@
+@@ -2194,7 +2218,7 @@
          }
          // Apply thinking level for the new model.
          // Model persistence does not implicitly rewrite the global thinking default.
@@ -109,7 +109,7 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
          await this._emitModelSelect(nextModel, currentModel, "cycle");
          return { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
      }
-@@ -2130,6 +2154,15 @@
+@@ -2208,6 +2232,15 @@
       * Persists the requested level to global defaults only when options.persist is true.
       */
      setThinkingLevel(level, options = {}) {
@@ -125,7 +125,7 @@ diff -ruN a/dist/core/agent-session.js b/dist/core/agent-session.js
          const availableLevels = this.getAvailableThinkingLevels();
          const effectiveLevel = availableLevels.includes(level) ? level : this._clampThinkingLevel(level, availableLevels);
          // Only persist if actually changing
-@@ -2178,18 +2211,20 @@
+@@ -2256,18 +2289,20 @@
      supportsThinking() {
          return !!this.model?.reasoning;
      }
@@ -232,7 +232,7 @@ diff -ruN a/dist/core/sdk.js b/dist/core/sdk.js
 diff -ruN a/dist/main.js b/dist/main.js
 --- a/dist/main.js
 +++ b/dist/main.js
-@@ -696,7 +696,9 @@
+@@ -743,7 +743,9 @@
          });
          const cliThinkingOverride = parsed.thinking !== undefined || cliThinkingFromModel;
          if (created.session.model && cliThinkingOverride) {
@@ -246,7 +246,7 @@ diff -ruN a/dist/main.js b/dist/main.js
 diff -ruN a/dist/modes/interactive/interactive-mode.js b/dist/modes/interactive/interactive-mode.js
 --- a/dist/modes/interactive/interactive-mode.js
 +++ b/dist/modes/interactive/interactive-mode.js
-@@ -4215,7 +4215,7 @@
+@@ -4282,7 +4282,7 @@
                      // If the override is for the current model, apply it to the session too
                      const current = this.session.model;
                      if (current && current.provider === provider && current.id === modelId) {
@@ -255,7 +255,7 @@ diff -ruN a/dist/modes/interactive/interactive-mode.js b/dist/modes/interactive/
                          this.footer.invalidate();
                          this.updateEditorBorderColor();
                      }
-@@ -4226,7 +4226,7 @@
+@@ -4293,7 +4293,7 @@
                      const current = this.session.model;
                      if (current && current.provider === provider && current.id === modelId) {
                          const globalDefault = this.settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
