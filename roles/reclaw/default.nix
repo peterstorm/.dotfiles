@@ -153,7 +153,11 @@
         # 2026-10-26: github-copilot / claude-sonnet-5.5. Maya EXL3 is retired
         # and the desktop GPUs are taken by ds4-native development, so there is
         # no local DeepSeek to route to. Not self-hosted; no thinking suffix.
-        RECLAW_PI_MODEL = "claude-sonnet-5.5";
+        # 2026-11-05: pinned to :medium. Without a suffix pi falls back to
+        # defaultThinkingLevel in ~/.pi/agent/settings.json, which interactive
+        # sessions share; it went max on 2026-11-03 20:02 UTC and every scheduled
+        # run inherited it (5-30x slower, per-skill timeouts tripped).
+        RECLAW_PI_MODEL = "claude-sonnet-5.5:medium";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
