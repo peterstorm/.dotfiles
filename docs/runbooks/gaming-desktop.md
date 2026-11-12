@@ -21,9 +21,14 @@ Boot default: the unattended boot entry stays **headless**. A
 EFI variable instead (`bootctl set-default`, set 2026-10-17) — the EFI variable
 takes precedence over loader.conf and survives rebuilds and specialisation
 switches. It names one generation's entry file, so `system-apply.sh` moves it
-to each new generation's headless entry after a successful switch (without
-that the desktop kept booting generation 73 after 74 was applied,
-2026-10-22); a manual `switch-to-configuration` must re-pin by hand.
+to each new generation's headless entry after a successful switch
+(`scripts/boot-pin-entry.sh` picks the entry and the apply re-reads the
+variable to prove the move landed): without that the desktop kept booting
+generation 73 after 74 was applied (2026-10-22), and booted 75 over 76-78 from
+2026-11-08 (the ds4-native metrics bridge disappeared from Grafana and the
+stats ledger until 79 was applied on 2026-11-12). A pin that cannot be moved
+now fails the apply instead of only warning. A manual
+`switch-to-configuration` must re-pin by hand.
 Selecting **NixOS (graphical)** at the boot menu is per-boot only.
 
 ## Steam games
