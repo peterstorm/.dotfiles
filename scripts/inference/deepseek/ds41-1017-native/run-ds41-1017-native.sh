@@ -52,7 +52,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-c9a920068bed7248bd76c20035b4fd4ec7d19ff7}"
+DS4N_COMMIT="${DS4N_COMMIT:-d3274aa83b85f753fc621be367c438486769e6d0}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
@@ -107,7 +107,9 @@ SWEEP_SLOTS="${SWEEP_SLOTS:-384}"
 # VRAM beside a 64K prompt sweep); DSpark's stages, its 384 resident Experts and feature rings take
 # ~300 Slots of that (8,800 runs out of memory at load), and the 256K context's caches another ~25
 # (8,500 ran out instantiating the decode graphs): 8,400 beside 512 sweep Slots, so 8,528 beside 384,
-# less 78 a Lane after the first (8,450 at 2 and 8,294 at 4 measured to fit). Every Expert that is in
+# less 78 a Lane after the first (8,450 at 2 and 8,294 at 4 measured to fit). Beside them the engine
+# keeps its captured Round graphs within 512 MiB a GPU (--round-graphs-mb; uncapped, 3-4 requests at
+# once ran the GPUs out of memory after a few hours, 2026-11-13). Every Expert that is in
 # neither is read from the NVMe (1.7 ms against 0.36 from a record), a fifth of the Loads and over half
 # of the wait for them: 3,400 records serve ~7 % more tok/s than 3,000 on every arm, for 7 GiB more
 # pinned (61 GiB); with the server loaded ~8 GiB then stay free, and ZFS's ARC gives way past that.
