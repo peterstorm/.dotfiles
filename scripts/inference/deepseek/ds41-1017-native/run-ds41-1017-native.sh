@@ -29,13 +29,14 @@
 #   - the engine's settings: Slots, RAM tier, the Expert profile, DSpark, the sweep threshold;
 #   - the workstation gates: two idle RTX PRO 6000s, comfyui stopped, port 8000 free.
 #
-# One request at a time, from any conversation it keeps: an agent's tool loop and a chat's next turn
-# read only their new tokens; a conversation another one took the GPUs from comes back from its KV
+# Requests from any conversation it keeps: an agent's tool loop and a chat's next turn read only
+# their new tokens; a conversation another one took its place on the GPUs from comes back from its KV
 # checkpoint in host RAM (CHECKPOINT_GB of them), with the rings at its last prompt's end, so its
 # next step resumes there however it re-renders the reply; a subagent's first prompt resumes where it leaves
-# the system prompt it shares with its parent (a Rewind point taken there). Concurrent requests (pi's
-# parallel subagents, Loom's panels) take turns in the server's line, each kept alive while it waits;
-# sharing the GPUs between them in one batch is studied, not built (ds4-native serving.md).
+# the system prompt it shares with its parent (a Rewind point taken there). LANES of them run at once
+# (pi's parallel subagents, Loom's Wave gates and panels), their rows sharing the engine's Rounds, each
+# Reply the bits it is alone; requests beyond that take turns in the server's line, each kept alive
+# while it waits (ds4-native serving.md, Concurrent Sessions).
 #
 # Modes:
 #   --preflight   check every pin without touching the GPUs
@@ -51,7 +52,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-7bb73432dd7fe4c5e4fd80fa640a0a773229a0ec}"
+DS4N_COMMIT="${DS4N_COMMIT:-e43e12da8df0c9a4889c408b7497222695a24c16}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
@@ -92,13 +93,27 @@ HF="$MODELS_DIR/hf-1017-mtp"
 # layout. Drafts are verified, so the head changes speed only, never the output.
 DSPARK="${DSPARK:-$HF}"
 PROFILE="$MODELS_DIR/baseline/maya-expert-profile.bin"
+# Requests at once (Lanes: each a live conversation's caches on the GPUs, ~730 MiB a GPU, so 78 fewer
+# Slots). Served 2026-11-13 against one Lane, with the settings below: five reviewers of one diff
+# 91 -> 115 tok/s in all, the first four writing within ~13 s instead of one after another; four
+# different agents the same tok/s, all writing within 8 s; a lone request 87 -> 78 tok/s (the Slots
+# the Lanes take). LANES=1: taking turns, as before 2026-11-13; LANES=2 costs a lone request ~5 %.
+LANES="${LANES:-4}"
+[[ "$LANES" =~ ^[1-8]$ ]] || { echo "error: LANES is 1 to 8: $LANES" >&2; exit 2; }
+# The Slots prompt sweeps load into, VRAM beside SLOTS: a layer's sweep reads at most its 384 Experts,
+# so 384 serves prompts as fast as the engine's default 512 and leaves 128 more for SLOTS.
+SWEEP_SLOTS="${SWEEP_SLOTS:-384}"
 # VRAM Slots and RAM tier records. Without DSpark the long-prompt setting is 8,800 Slots (95.6 GB
 # VRAM beside a 64K prompt sweep); DSpark's stages, its 384 resident Experts and feature rings take
 # ~300 Slots of that (8,800 runs out of memory at load), and the 256K context's caches another ~25
-# (8,500 ran out instantiating the decode graphs). 3,300 records are 62 GB pinned; 3,000 leave room
-# for the server, the Rewind points and the checkpoints.
-SLOTS="${SLOTS:-8400}"
-RAM_RECORDS="${RAM_RECORDS:-3000}"
+# (8,500 ran out instantiating the decode graphs): 8,400 beside 512 sweep Slots, so 8,528 beside 384,
+# less 78 a Lane after the first (8,450 at 2 and 8,294 at 4 measured to fit). Every Expert that is in
+# neither is read from the NVMe (1.7 ms against 0.36 from a record), a fifth of the Loads and over half
+# of the wait for them: 3,400 records serve ~7 % more tok/s than 3,000 on every arm, for 7 GiB more
+# pinned (61 GiB); with the server loaded ~8 GiB then stay free, and ZFS's ARC gives way past that.
+# RAM_RECORDS=3000 is the setting before 2026-11-13.
+SLOTS="${SLOTS:-$((8528 - 78 * (LANES - 1)))}"
+RAM_RECORDS="${RAM_RECORDS:-3400}"
 # How the RAM tier chooses its records: victim (exclusive: the Experts the VRAM Slots evicted, copied down
 # as they go, so the two hold distinct Experts; 48 of the Slots are spares), popular (decayed load count,
 # warmed with the profile's next-hottest Experts after the VRAM set) or recent (the last loaded). Victim
@@ -111,8 +126,9 @@ RAM_POLICY="${RAM_POLICY:-victim}"
 SWEEP_MIN="${SWEEP_MIN:-96}"
 # Conversations set aside whole in host RAM (KV checkpoints: ~5.5 KB a token and 92 MB of rings, both
 # GPUs' -- a 20K-token agent ~200 MB, a 250K-token one ~1.5 GB): the least recently used go first
-# past this. With the server loaded ~13 GB stay free of 91; 6 GB of checkpoints and 8 Rewind points
-# (92 MB pinned each) leave ~6 GB.
+# past this. With the server loaded ~8 GiB stay free of 91; 6 GB of checkpoints and 8 Rewind points
+# (92 MB pinned each) take most of that (the ARC's 16 GB shrink under pressure). The engine wants
+# more Rewind points than Lanes.
 CHECKPOINT_GB="${CHECKPOINT_GB:-6}"
 REWIND_POINTS="${REWIND_POINTS:-8}"
 # Engine settings for an experiment, passed to the container as they are (space-separated K=V, e.g.
@@ -213,13 +229,13 @@ fi
 # --- the server's config (rewritten each launch from the values above) ------------------------
 jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
   --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg ram_policy "$RAM_POLICY" --arg sweep "$SWEEP_MIN" \
-  --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" \
+  --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" --arg lanes "$LANES" --arg sweep_slots "$SWEEP_SLOTS" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
     args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
            "--ram-records", $ram, "--prior", $profile, "--ram-policy", $ram_policy, "--sweep-min", $sweep,
-           "--checkpoint-gb", $ckpt, "--rewind-points", $points],
+           "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots],
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "high",
     # No thinking cap of its own (Maya defaults to 32,768): reasoning is bounded by the room left for
@@ -256,6 +272,7 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.extra-env="$NATIVE_EXTRA_ENV" \
   --label ai.peterstorm.inference.dspark="$DSPARK" \
   --label ai.peterstorm.inference.ram-policy="$RAM_POLICY" \
+  --label ai.peterstorm.inference.lanes="$LANES" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
   "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \

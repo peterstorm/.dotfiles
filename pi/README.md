@@ -293,8 +293,12 @@ engine differs. Launch it with
   RAM (6 GB of them, least recently used dropped first; a 4.5K-token one is
   0.12 GB, set aside in ~25 ms, back in 8 ms), so a parent and its subagents
   stop re-reading each other's prompts; a subagent's first prompt resumes
-  where it leaves the parent's system prompt. One request runs at a time, so
-  parallel subagents take turns.
+  where it leaves the parent's system prompt. Four requests run at once
+  (`LANES=4`, since 2026-11-13), their rows sharing the engine's Rounds, each
+  reply the bits it is alone: parallel subagents all write within seconds
+  (each slower while they share: five reviewers of one diff 115 tok/s in all
+  against 91 taking turns); a fifth waits in line, kept alive. A lone request
+  pays ~10 % for the VRAM the Lanes take (`LANES=1` takes turns as before).
 - **Speed**: decode 40-115 tok/s on a first session while the Expert cache
   learns the domain (Misses stream from the NVMe); a cold prompt reads at
   ~700 tok/s at 7K and several thousand tok/s on long prompts.

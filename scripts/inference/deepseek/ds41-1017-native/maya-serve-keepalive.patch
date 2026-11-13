@@ -88,7 +88,7 @@ diff -ruN a/serve/server.py b/serve/server.py
 diff -ruN a/serve/test_keepalive.py b/serve/test_keepalive.py
 --- a/serve/test_keepalive.py	1970-01-01 01:00:00.000000000 +0100
 +++ b/serve/test_keepalive.py	2026-11-04 19:11:26.807190337 +0100
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,159 @@
 +"""serve/test_keepalive.py - a streamed answer keeps the connection alive while tokens flow with nothing to send,
 +and while it waits in line behind other requests' answers.
 +
@@ -216,6 +216,34 @@ diff -ruN a/serve/test_keepalive.py b/serve/test_keepalive.py
 +        first.join()
 +        self.assertLess(time.time() - t0, 3.0)          # not behind a second whole answer too
 +        self.assertEqual((self.svc.fifo.waiting(), self.svc.status["queued"]), (0, 0))
++
++
++class KeepAliveBesideOthers(KeepAliveWhileQueued):
++    """An engine that answers two requests at once (READY ... multi=2): two places, and the line behind them."""
++
++    def setUp(self):
++        super().setUp()
++        self.svc.engine.multi = 2
++        self.svc.fifo.set_capacity(2)
++
++    def test_a_second_request_answers_beside_the_first(self):
++        first = self.busy()
++        with self.open() as r:
++            lines = r.read().decode().splitlines()
++        first.join()
++        answer = next(i for i, line in enumerate(lines) if '"content": "a' in line)
++        self.assertLess(lines[:answer].count(": keep-alive"), 2)                       # it never stood in line
++        self.assertIn("data: [DONE]", lines)
++
++    def test_keep_alives_while_in_line(self):
++        first, second = self.busy(), self.busy()                                       # both places taken
++        with self.open() as r:
++            lines = r.read().decode().splitlines()
++        first.join()
++        second.join()
++        answer = next(i for i, line in enumerate(lines) if '"content": "a' in line)
++        self.assertGreaterEqual(lines[:answer].count(": keep-alive"), 2)               # ~0.8 s in line
++        self.assertIn("data: [DONE]", lines)
 +
 +
 +if __name__ == "__main__":
