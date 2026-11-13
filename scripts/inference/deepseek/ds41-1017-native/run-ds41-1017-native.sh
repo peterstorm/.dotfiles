@@ -52,7 +52,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-e43e12da8df0c9a4889c408b7497222695a24c16}"
+DS4N_COMMIT="${DS4N_COMMIT:-c9a920068bed7248bd76c20035b4fd4ec7d19ff7}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MODELS_DIR="${MODELS_DIR:-/models/ds41}"
