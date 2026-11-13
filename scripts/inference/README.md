@@ -29,12 +29,16 @@ glm53/     GLM-5.3-Flash profiles: immutable NVFP4 and EXL3 K4 checkpoints,
            and MTP3, plus multimodal NVFP4 v7 with prefix caching and a 512-token
            long-prefill fairness cap. v6 measured 403,989 tokens on its cold JIT-cache
            boot and 737,953 after cache warmup, reproducing the roughly 700K claim;
-           v7's cache correctness and latency remain unqualified.
+           v7's cache correctness and latency remain unqualified. v16 leaves
+           vLLM: NVIDIA Hyperflare (AzallazA fork, hyperflare-glm-20261112)
+           serving the FP4-Local checkpoint as the recipe's TP2/DCP2 package,
+           from a locally built, input-pinned image (glm53-v16-hyperflare/)
+           with a separate export step that needs both GPUs idle.
 shared/    Components more than one profile uses: the credential helper every
            launcher sources, the secret-safe SGLang entrypoint, GPU telemetry
-           recording, throughput probing, the durable vLLM/SGLang/ds4-native
-           stats recorder/heatmap, and the ds4-native Prometheus bridge
-           (systemd units in machines/desktop/default.nix).
+           recording, throughput probing, the durable vLLM/SGLang/ds4-native/
+           Hyperflare stats recorder/heatmap, and the ds4-native and Hyperflare
+           Prometheus bridges (systemd units in machines/desktop/default.nix).
 ```
 
 Conventions:
@@ -47,8 +51,11 @@ Conventions:
 - Monitoring never sits on the inference hot path. Engines expose Prometheus
   counters; `vllm-stats-record.py` turns per-interval deltas into the durable
   ledger, and `ds4-native-metrics.py` polls Maya's cached `/metrics` on :8000
-  and re-exposes it model-labelled on :8010. Neither writes to an engine's
-  stdin or asks it to compute anything, so prefill and decode are unaffected.
+  and re-exposes it model-labelled on :8010. `hyperflare-metrics.py` does the
+  same for Hyperflare on :8011, statelessly per scrape, adding the model label
+  and the prefix-reuse tokens Hyperflare's prefill counter leaves out. None of
+  them writes to an engine's stdin or asks it to compute anything, so prefill
+  and decode are unaffected.
   The bridge takes DSpark acceptance from the engine's live STAT kept/verified
   ratio because the pinned Maya copy omits per-request draft counts from its
   history rows.

@@ -692,6 +692,41 @@ in
     };
   };
 
+  # --- NVIDIA Hyperflare (GLM-5.3 v16): Prometheus + ledger bridge ---------
+  #
+  # `flare run` serves unauthenticated flare_* counters on :8000/metrics, but
+  # with no model label and with prefix-cache reuse outside its prefill
+  # counter. scripts/inference/shared/hyperflare-metrics.py translates on
+  # demand (no poll loop, no cache: each scrape reads the engine's own
+  # exposition plus /v1/models) and serves model-labelled hyperflare:* series
+  # on :8011. Read-only; when another runtime owns :8000 it answers 503 and
+  # the recorder skips the interval.
+  systemd.services.hyperflare-metrics = {
+    description = "Expose the Hyperflare engine's counters to Prometheus";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network.target" ];
+    environment = {
+      HYPERFLARE_SOURCE = "http://127.0.0.1:8000";
+      HYPERFLARE_LISTEN = "0.0.0.0:8011";
+      HYPERFLARE_KEY_FILE = "/home/peterstorm/.config/glm53/api-key";
+    };
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.python3}/bin/python3 ${../../scripts/inference/shared/hyperflare-metrics.py}";
+      # Reads the operator's API key for /v1/models; ProtectHome=read-only still permits that.
+      User = "peterstorm";
+      Restart = "always";
+      RestartSec = "5s";
+      UMask = "0027";
+      CapabilityBoundingSet = "";
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = "read-only";
+    };
+  };
+
   # --- Local inference token ledger + heatmap -------------------------------
   #
   # The homelab's Prometheus only keeps 30d of history and dies on cluster
@@ -706,7 +741,7 @@ in
     # the final aggregate scrape before model-aware recording. Port 8000 served
     # only Qwen through SGLang in this interval, so these rows are attributable
     # facts; older mixed-runtime rows remain Historical aggregate.
-    environment.VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics http://127.0.0.1:8010/metrics";
+    environment.VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics http://127.0.0.1:8010/metrics http://127.0.0.1:8011/metrics";
     environment.VLLM_STATS_LEGACY_ATTRIBUTIONS = builtins.toJSON [
       {
         from_ts = 1786837395;
@@ -780,9 +815,10 @@ in
     server.allow-interfaces = [ "wlp10s0" "enp11s0" "enp12s0" ];
   };
 
-  # Expose the concurrent inference endpoints (Qwen/DeepSeek on 8000 and Muse on
-  # 8001, both --network host), the native engine's metrics bridge (8010), and
-  # the stats heatmap server (8090). sshd opens 22 itself; the wifi role opens
-  # 8081. Merges with those. The bridge is read-only and carries no secrets.
-  networking.firewall.allowedTCPPorts = [ 8000 8001 8010 8090 ];
+  # Expose the concurrent inference endpoints (Qwen/DeepSeek/GLM on 8000 and
+  # Muse on 8001, both --network host), the native engine's metrics bridge
+  # (8010), the Hyperflare metrics bridge (8011), and the stats heatmap server
+  # (8090). sshd opens 22 itself; the wifi role opens 8081. Merges with those.
+  # The bridges are read-only and carry no secrets.
+  networking.firewall.allowedTCPPorts = [ 8000 8001 8010 8011 8090 ];
 }

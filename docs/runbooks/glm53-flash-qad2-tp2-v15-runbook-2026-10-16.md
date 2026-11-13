@@ -2,6 +2,11 @@
 
 ## Status
 
+**Checkpoint deleted 2026-11-13** to make room for the v16 Hyperflare profile
+(`glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`): the qad2 hub cache
+and v15's JIT cache are gone, so v15 needs
+`download-glm53-flash-qad2-tp2-v15-checkpoint.sh` (~177 GB) before it can serve.
+
 **Serving since 2026-10-16 23:03 UTC** (accepted on the first swap; replaces
 v14). Chain: preflight → idle gate → v14 quiesced → CUDA runtime probe
 (cuBLAS + cuDNN + two-GPU NCCL on driver 595.91.07) → launch →

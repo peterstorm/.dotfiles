@@ -715,7 +715,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(histogram_quantile(0.50, sum by (le) (rate(inference:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval]))))",
+          "expr": "(histogram_quantile(0.50, sum by (le) (rate(inference:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\"}[$__rate_interval])))) or (max(inference:first_response_median_seconds{model_name=~\"$model\"}))",
           "legendFormat": "p50",
           "refId": "A"
         },

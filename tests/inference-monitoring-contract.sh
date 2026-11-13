@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static contract for runtime-neutral vLLM/SGLang/ds4-native monitoring.
+# Static contract for runtime-neutral vLLM/SGLang/ds4-native/Hyperflare monitoring.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -8,6 +8,9 @@ RULES="$ROOT/k8s/argocd-homelab/monitoring/templates/inference-recording-rules.y
 RECORDER="$ROOT/scripts/inference/shared/vllm-stats-record.py"
 BRIDGE="$ROOT/scripts/inference/shared/ds4-native-metrics.py"
 BRIDGE_TEST="$ROOT/tests/ds4-native-metrics-unit.py"
+FLARE_BRIDGE="$ROOT/scripts/inference/shared/hyperflare-metrics.py"
+FLARE_BRIDGE_TEST="$ROOT/tests/test_hyperflare_metrics.py"
+RECORDER_TEST="$ROOT/tests/test_vllm_stats_record.py"
 HEATMAP="$ROOT/scripts/inference/shared/vllm-stats-heatmap.py"
 DESKTOP="$ROOT/machines/desktop/default.nix"
 PROMETHEUS="$ROOT/k8s/argocd-homelab/monitoring/values.yaml"
@@ -52,6 +55,27 @@ jq -e '
   fail "normalized SGLang series do not preserve engine identity"
 [ "$(grep -Fc -- '"engine", "ds4-native"' "$RULES")" -ge 10 ] ||
   fail "normalized ds4-native series do not preserve engine identity"
+[ "$(grep -Fc -- '"engine", "hyperflare"' "$RULES")" -ge 10 ] ||
+  fail "normalized Hyperflare series do not preserve engine identity"
+for metric in \
+  hyperflare:prompt_tokens_total \
+  hyperflare:prompt_tokens_cached_total \
+  hyperflare:generation_tokens_total \
+  hyperflare:requests_total \
+  hyperflare:kv_cache_usage_ratio \
+  hyperflare:spec_accepted_tokens_total \
+  hyperflare:spec_draft_rounds_total \
+  hyperflare:spec_draft_tokens_total \
+  hyperflare:first_response_median_seconds; do
+  grep -Fq -- "$metric" "$RULES" || fail "Hyperflare recording rules missing $metric"
+  grep -Fq -- "$metric" "$FLARE_BRIDGE" || fail "Hyperflare bridge does not export $metric"
+done
+# Hyperflare's prefill counter excludes prefix reuse; the bridge must add it
+# back or the ledger undercounts prompt tokens against every other engine.
+grep -Fq -- 'c.prefilled + cached' "$FLARE_BRIDGE" ||
+  fail "Hyperflare prompt tokens do not include prefix-cache reuse"
+jq -e '[.panels[].targets[]?.expr] | any(contains("inference:first_response_median_seconds"))' "$DASHBOARD" >/dev/null ||
+  fail "dashboard TTFT does not fall back to Hyperflare's server-side median"
 [ "$(grep -Fc -- 'ds4:spec_drafts_total' "$RULES")" -ge 2 ] ||
   fail "ds4-native DSpark drafts counter is not normalized"
 grep -Fq -- 'ds4:expert_cache_residency' "$RULES" ||
@@ -106,6 +130,8 @@ for marker in \
   '"vllm": {' \
   '"sglang": {' \
   '"ds4-native": {' \
+  '"hyperflare": {' \
+  'hyperflare:prompt_tokens_total' \
   'sglang:generation_tokens_histogram_count' \
   'ds4:generation_tokens_total' \
   'engine changed' \
@@ -125,8 +151,8 @@ grep -Fq -- 'through_ts = 1786846530;' "$DESKTOP" &&
 grep -Fq -- 'model = "qwen3.8-27b";' "$DESKTOP" &&
 grep -Fq -- 'engine = "sglang";' "$DESKTOP" ||
   fail "desktop does not preserve the evidence-backed SGLang/Qwen attribution range"
-grep -Fq -- 'VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics http://127.0.0.1:8010/metrics"' "$DESKTOP" ||
-  fail "durable recorder does not scrape both concurrent inference endpoints and the native bridge"
+grep -Fq -- 'VLLM_METRICS_URLS = "http://127.0.0.1:8000/metrics http://127.0.0.1:8001/metrics http://127.0.0.1:8010/metrics http://127.0.0.1:8011/metrics"' "$DESKTOP" ||
+  fail "durable recorder does not scrape both concurrent inference endpoints and both bridges"
 
 # The native bridge is a read-only anti-corruption layer; it must never be in a
 # position to stall the engine (no stdin writes, no GPU work, no privileged user).
@@ -136,13 +162,17 @@ for marker in \
   'DS4_NATIVE_LISTEN = "0.0.0.0:8010"' \
   'DS4_NATIVE_KEY_FILE = "/home/peterstorm/.config/ds4-flash/api-key"' \
   'User = "peterstorm";' \
-  'networking.firewall.allowedTCPPorts = [ 8000 8001 8010 8090 ];'; do
+  'systemd.services.hyperflare-metrics' \
+  'HYPERFLARE_SOURCE = "http://127.0.0.1:8000"' \
+  'HYPERFLARE_LISTEN = "0.0.0.0:8011"' \
+  'HYPERFLARE_KEY_FILE = "/home/peterstorm/.config/glm53/api-key"' \
+  'networking.firewall.allowedTCPPorts = [ 8000 8001 8010 8011 8090 ];'; do
   grep -Fq -- "$marker" "$DESKTOP" || fail "desktop configuration missing: $marker"
 done
-for endpoint in '192.168.0.80:8000' '192.168.0.80:8001' '192.168.0.80:8010'; do
+for endpoint in '192.168.0.80:8000' '192.168.0.80:8001' '192.168.0.80:8010' '192.168.0.80:8011'; do
   grep -Fq -- "$endpoint" "$PROMETHEUS" || fail "Prometheus does not scrape $endpoint"
 done
-for instance in 'desktop:8000' 'desktop:8001' 'desktop:8010'; do
+for instance in 'desktop:8000' 'desktop:8001' 'desktop:8010' 'desktop:8011'; do
   grep -Fq -- "instance: $instance" "$PROMETHEUS" || fail "Prometheus does not preserve instance $instance"
 done
 
@@ -150,6 +180,9 @@ done
 PYTHON="$(nix build --no-link --print-out-paths nixpkgs#python3)/bin/python3"
 "$PYTHON" -m py_compile "$BRIDGE"
 "$PYTHON" "$BRIDGE_TEST" >/dev/null
+"$PYTHON" -m py_compile "$FLARE_BRIDGE"
+"$PYTHON" "$FLARE_BRIDGE_TEST" >/dev/null 2>&1 || fail "Hyperflare bridge unit tests failed"
+"$PYTHON" "$RECORDER_TEST" >/dev/null 2>&1 || fail "ledger recorder unit tests failed"
 
 for marker in \
   'All models' \
@@ -162,4 +195,4 @@ for marker in \
   grep -Fq -- "$marker" "$HEATMAP" || fail "stats page missing: $marker"
 done
 
-echo "PASS: inference monitoring supports normalized vLLM, SGLang and ds4-native metrics"
+echo "PASS: inference monitoring supports normalized vLLM, SGLang, ds4-native and Hyperflare metrics"

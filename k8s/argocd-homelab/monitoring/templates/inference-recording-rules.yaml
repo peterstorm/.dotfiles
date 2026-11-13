@@ -182,3 +182,62 @@ spec:
             ((ds4:ram_slots_used / ds4:ram_slots) and ds4:ram_slots > 0)
             or ((0 * ds4:expert_cache_residency) and ds4:ram_slots == 0),
             "engine", "ds4-native", "model_name", ".*")
+
+        # NVIDIA Hyperflare (`flare run`, GLM-5.3 v16) through desktop's bridge
+        # on :8011. The bridge already counts prompt tokens like vLLM (prefilled
+        # + GPU- and host-prefix reuse) and labels the served model. Hyperflare
+        # exports no latency histograms, so the TTFT/ITL/e2e panels stay vLLM/
+        # SGLang/ds4-only; its rolling server-side first-response median is
+        # normalized separately below. Acceptance length follows Hyperflare's
+        # own definition: accepted drafts per round that offered a draft, plus
+        # the bonus token (the same 1 + accepted/drafts convention as vLLM).
+        - record: inference:prompt_tokens_total
+          expr: label_replace(hyperflare:prompt_tokens_total, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:generation_tokens_total
+          expr: label_replace(hyperflare:generation_tokens_total, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:request_success_total
+          expr: >-
+            label_replace(
+            label_replace(hyperflare:requests_total,
+            "finished_reason", "completed", "model_name", ".*"),
+            "engine", "hyperflare", "__name__", ".*")
+        - record: inference:num_requests_running
+          expr: label_replace(hyperflare:requests_running, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:num_requests_waiting
+          expr: label_replace(hyperflare:requests_waiting, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:kv_cache_usage_ratio
+          expr: label_replace(hyperflare:kv_cache_usage_ratio, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:prefix_cache_hit_ratio
+          labels:
+            calculation: token_weighted_5m
+          expr: >-
+            label_replace(
+            ((rate(hyperflare:prompt_tokens_cached_total[5m])
+            or (0 * rate(hyperflare:prompt_tokens_total[5m])))
+            / rate(hyperflare:prompt_tokens_total[5m]))
+            and (rate(hyperflare:prompt_tokens_total[5m]) > 0),
+            "engine", "hyperflare", "model_name", ".*")
+        - record: inference:spec_accept_length
+          expr: >
+            1 + rate(hyperflare:spec_accepted_tokens_total[5m])
+            /
+            rate(hyperflare:spec_draft_rounds_total[5m])
+            and rate(hyperflare:spec_draft_rounds_total[5m]) > 0
+          labels:
+            engine: hyperflare
+        - record: inference:spec_accept_rate
+          expr: >
+            rate(hyperflare:spec_accepted_tokens_total[5m])
+            /
+            rate(hyperflare:spec_draft_tokens_total[5m])
+            and rate(hyperflare:spec_draft_tokens_total[5m]) > 0
+          labels:
+            engine: hyperflare
+        - record: inference:spec_verify_calls_total
+          expr: label_replace(hyperflare:spec_draft_rounds_total, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:spec_num_draft_tokens
+          expr: label_replace(hyperflare:spec_draft_tokens_total, "engine", "hyperflare", "__name__", ".*")
+        - record: inference:first_response_median_seconds
+          expr: label_replace(hyperflare:first_response_median_seconds, "engine", "hyperflare", "__name__", ".*")
+          labels:
+            calculation: server_rolling_median

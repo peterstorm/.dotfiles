@@ -3,9 +3,10 @@
 
 The active inference engine exposes process-local Prometheus counters that reset
 on container restart. Every 15 minutes this recorder translates supported vLLM,
-SGLang, or ds4-native schemas into one durable row per endpoint/model.
-ds4-native rows come from the bridge on desktop:8010, which labels Maya's
-counters with the served model; the native engine itself carries no model label.
+SGLang, ds4-native or Hyperflare schemas into one durable row per endpoint/model.
+ds4-native rows come from the bridge on desktop:8010 and Hyperflare rows from
+the bridge on desktop:8011; each labels its engine's counters with the served
+model, which neither engine's own exposition carries.
 Historical five-column rows are migrated atomically and retained as
 ``Historical aggregate`` because model identity cannot be reconstructed after
 the fact.
@@ -76,6 +77,15 @@ COUNTER_SCHEMAS = {
         "prompt": "ds4:prompt_tokens_total",
         "gen": "ds4:generation_tokens_total",
         "req": "ds4:requests_total",
+    },
+    # NVIDIA Hyperflare (`flare run`, GLM-5.3 v16) through the bridge in
+    # scripts/inference/shared/hyperflare-metrics.py on desktop:8011, which adds
+    # model_name and counts prompt tokens as prefilled + prefix-reused (raw
+    # flare_prefill_tokens_total excludes reuse, unlike vLLM's prompt counter).
+    "hyperflare": {
+        "prompt": "hyperflare:prompt_tokens_total",
+        "gen": "hyperflare:generation_tokens_total",
+        "req": "hyperflare:requests_total",
     },
 }
 
