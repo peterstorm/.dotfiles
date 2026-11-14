@@ -134,10 +134,31 @@ rpool had 59.5 GB free. To fit checkpoint + package:
 Lesson for the next cleanup: check `disks.nix` comments, symlinks
 (`find -lname`) and every profile's run script, not just the running process.
 
+## First boot on desktop (2026-11-14)
+
+Accepted on the third start (the first two exposed the store-path and
+signing-trust issues fixed above). Switch-to-promoted **45 s**: weights
+167.9 GiB in 22.7 s (warm page cache right after the export), 7,274 kernels,
+`Plan cache. per GPU: 86.46 GiB loaded · 7.72–7.75 GiB cache budget`,
+`Allocate cache. 15.4 GiB · 2240000 KV tokens · 86 shared snapshot slots`
+(recipe served 2,231,808), host prefix cache 16.9 GiB.
+
+Smoke results, served through `:8000` with the shared key:
+
+| Check | Result |
+| --- | --- |
+| Chat, `reasoning_effort: low` | coherent 373-token answer, `finish=stop` |
+| Chat, `reasoning_effort: high` | reasoning in `reasoning_content` (pi's `thinkingFormat: deepseek`), `reasoning_tokens` reported |
+| Tool call | `finish=tool_calls`, `get_weather({"city":"Copenhagen"})` |
+| c1 decode, 2,500-token story incl. prefill | 175 tok/s average (recipe c1 248 tok/s is ignore-EOS at 450 W) |
+| MTP acceptance length (Grafana) | 1.78 (recipe: ~1.8 drafts per round) |
+| TTFT server median | 0.57 s |
+| Bridge / ledger / Prometheus | `:8011` model-labelled; ledger row engine `hyperflare`; target `desktop:8011` up; every `inference:*` panel except the histogram-based ones has data |
+
 ## Not yet qualified
 
 The recipe's qualification (corruption check, eval-43, tool calls 60/60,
-GPQA, KV stress) ran on its hardware. On desktop, after the first export:
-the `Allocate cache` KV count, a decode bench at c1/c4/c8, the recipe's
+GPQA, KV stress) ran on its hardware. Still to run on desktop before this
+replaces ds41 as the default: a decode bench at c1/c4/c8, the recipe's
 `tools/verify_fix.py 20` (must report `TRUE corruptions 0`) and
-`tools/tool_calls.py 60 8` are the gates before this replaces ds41 as default.
+`tools/tool_calls.py 60 8`.
