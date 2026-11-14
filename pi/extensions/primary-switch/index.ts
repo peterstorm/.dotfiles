@@ -2,8 +2,9 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { probeServedModels, servedModelSourceFromRegistry } from "../model-routing/served.js";
+import { errorMessage, probeServedModels, servedModelSourceFromRegistry } from "../model-routing/served.js";
 import {
+	PRIMARY_PROVIDER as PROVIDER,
 	parseSwitchRequest,
 	runPrimarySwitch,
 	switchCompletions,
@@ -12,8 +13,6 @@ import {
 	type SwitchPorts,
 } from "./switch.js";
 
-/** The provider the primaries are served under in pi/models.json. */
-const PROVIDER = "desktop-vllm";
 const STATUS_KEY = "primary-switch";
 /** Generous: a ds41 cold start plus the idle gate and a rollback can take many minutes. */
 const SCRIPT_TIMEOUT_MS = 40 * 60_000;
@@ -21,8 +20,6 @@ const SCRIPT_TIMEOUT_MS = 40 * 60_000;
 /** The repo always lives at ~/.dotfiles (switch-primary.sh re-runs itself there over ssh). */
 const switchScript = (): string =>
 	process.env.PI_SWITCH_PRIMARY_SCRIPT ?? join(homedir(), ".dotfiles/scripts/inference/switch-primary.sh");
-
-const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 function ports(pi: ExtensionAPI, ctx: ExtensionCommandContext): SwitchPorts {
 	const script = switchScript();
@@ -34,7 +31,7 @@ function ports(pi: ExtensionAPI, ctx: ExtensionCommandContext): SwitchPorts {
 				const run = await pi.exec("bash", [script, request], { timeout: SCRIPT_TIMEOUT_MS, cwd: homedir() });
 				return { code: run.code, stdout: run.stdout, stderr: run.stderr, killed: run.killed };
 			} catch (error) {
-				return { code: 1, stdout: "", stderr: `cannot run ${script}: ${describe(error)}`, killed: false };
+				return { code: 1, stdout: "", stderr: `cannot run ${script}: ${errorMessage(error)}`, killed: false };
 			}
 		},
 		probeServed: async () => {
@@ -48,7 +45,7 @@ function ports(pi: ExtensionAPI, ctx: ExtensionCommandContext): SwitchPorts {
 			try {
 				if (!(await pi.setModel(model))) return { ok: false, error: `no credentials for ${PROVIDER}` };
 			} catch (error) {
-				return { ok: false, error: `cannot select ${PROVIDER}/${servedId}: ${describe(error)}` };
+				return { ok: false, error: `cannot select ${PROVIDER}/${servedId}: ${errorMessage(error)}` };
 			}
 			return { ok: true, value: `${PROVIDER}/${servedId}` };
 		},

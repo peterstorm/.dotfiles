@@ -19,7 +19,8 @@ export type ServedModelSource = Readonly<{
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
-const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+/** A thrown value as one line of text (an Error's message, anything else stringified). */
+export const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** Parse an OpenAI `/v1/models` body into the single model it lists. */
 export function servedModelId(body: unknown): Result<string, string> {
@@ -45,7 +46,7 @@ async function probeOne(provider: string, source: ServedModelSource): Promise<Re
 		try {
 			body = await source.fetchJson(`${base.replace(/\/+$/, "")}/models`, { Authorization: `Bearer ${key}` });
 		} catch (error) {
-			return { ok: false, error: `cannot reach ${provider}: ${describe(error)}` };
+			return { ok: false, error: `cannot reach ${provider}: ${errorMessage(error)}` };
 		}
 		const id = servedModelId(body);
 		if (!id.ok) return id;
@@ -55,7 +56,7 @@ async function probeOne(provider: string, source: ServedModelSource): Promise<Re
 		return parseModelReference(`${provider}/${id.value}`);
 	} catch (error) {
 		// A failing `!command` key, catalog lookup or similar: recorded, never thrown.
-		return { ok: false, error: `cannot probe ${provider}: ${describe(error)}` };
+		return { ok: false, error: `cannot probe ${provider}: ${errorMessage(error)}` };
 	}
 }
 

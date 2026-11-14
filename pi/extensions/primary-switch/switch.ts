@@ -9,9 +9,18 @@
  */
 import type { Result } from "../model-routing/policy.js";
 
+/** The provider pi/models.json serves the primaries under; the verifier checks routing agrees. */
+export const PRIMARY_PROVIDER = "desktop-vllm";
+
+/** The primaries switch-primary.sh can report (it owns which served id each has). */
+export const PRIMARIES = ["glm", "warmind", "deepseek"] as const;
+export type Primary = (typeof PRIMARIES)[number];
+
 /** The script's vocabulary (`switch-primary.sh [toggle|glm|warmind|deepseek|status]`). */
-export const SWITCH_REQUESTS = ["toggle", "glm", "warmind", "deepseek", "status"] as const;
+export const SWITCH_REQUESTS = ["toggle", ...PRIMARIES, "status"] as const;
 export type SwitchRequest = (typeof SWITCH_REQUESTS)[number];
+
+const isPrimary = (word: string): word is Primary => (PRIMARIES as readonly string[]).includes(word);
 
 const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
 	toggle: "GLM -> WARMIND; WARMIND or DeepSeek -> GLM",
@@ -44,7 +53,7 @@ export function switchCompletions(prefix: string): ReadonlyArray<Readonly<{ valu
 }
 
 /** What the script reports after a switch or a no-op: `PRIMARY: <name> (<served-id> on :8000)`. */
-export type SwitchReport = Readonly<{ primary: string; servedId: string; unchanged: boolean }>;
+export type SwitchReport = Readonly<{ primary: Primary; servedId: string; unchanged: boolean }>;
 
 const REPORT_LINE = /^PRIMARY: (\S+) \((\S+) on :8000\)$/m;
 const NOOP_LINE = "(already the primary; nothing to do)";
@@ -52,14 +61,17 @@ const NOOP_LINE = "(already the primary; nothing to do)";
 export function parseSwitchReport(stdout: string): Result<SwitchReport, string> {
 	const match = REPORT_LINE.exec(stdout);
 	if (!match) return { ok: false, error: "switch-primary.sh finished without its PRIMARY report line" };
-	return { ok: true, value: Object.freeze({ primary: match[1], servedId: match[2], unchanged: stdout.includes(NOOP_LINE) }) };
+	const primary = match[1];
+	if (!isPrimary(primary)) return { ok: false, error: `switch-primary.sh reported an unknown primary "${primary}"` };
+	return { ok: true, value: Object.freeze({ primary, servedId: match[2], unchanged: stdout.includes(NOOP_LINE) }) };
 }
 
 /** The last meaningful lines of a failed run, without ssh's own banner warnings. */
 export function failureTail(stdout: string, stderr: string, lines: number = 6): string {
 	const pick = (text: string) =>
 		text.split("\n").map((line) => line.trimEnd()).filter((line) => line !== "" && !line.startsWith("** "));
-	const chosen = pick(stderr).length > 0 ? pick(stderr) : pick(stdout);
+	const fromStderr = pick(stderr);
+	const chosen = fromStderr.length > 0 ? fromStderr : pick(stdout);
 	return chosen.slice(-lines).join("\n") || "no output";
 }
 
@@ -98,7 +110,7 @@ export type SwitchFailureStage = "script" | "report" | "serve" | "model";
 
 export type SwitchOutcome =
 	| Readonly<{ kind: "status"; text: string }>
-	| Readonly<{ kind: "switched"; primary: string; model: string; unchanged: boolean; waitedMs: number }>
+	| Readonly<{ kind: "switched"; primary: Primary; model: string; unchanged: boolean; waitedMs: number }>
 	| Readonly<{ kind: "failed"; stage: SwitchFailureStage; message: string }>;
 
 /** Poll until the provider serves `targetId` or the deadline passes. */

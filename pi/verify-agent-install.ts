@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createAgentSession, getAgentDir, ModelRuntime, parseFrontmatter, SessionManager } from "@earendil-works/pi-coding-agent";
 import { loadModelRoutingPolicy } from "./extensions/model-routing/config";
-import { parseModelReference, resolveModelRoute, type ServedModels } from "./extensions/model-routing/policy";
+import { parseModelReference, resolveModelRoute, servedProviders, type ServedModels } from "./extensions/model-routing/policy";
+import { PRIMARY_PROVIDER } from "./extensions/primary-switch/switch";
 import { discoverAgents, resolvePackageAgentDirs } from "./extensions/subagent/agents";
 
 const requiredPanelAgents = [
@@ -151,9 +152,15 @@ const llamaCppModel = parseModelReference("llama.cpp/local-model");
 if (!warmindModel.ok || !glmModel.ok || !cloudModel.ok || !llamaCppModel.ok) {
   fail("verification model references are invalid");
 }
+// /switch moves a session onto PRIMARY_PROVIDER's served model; routing must probe that
+// same provider, or children and the switched parent would follow different engines.
+const routedProviders = servedProviders(loadedRouting.value.policy);
+if (routedProviders.length !== 1 || routedProviders[0] !== PRIMARY_PROVIDER) {
+  fail(`routing probes [${routedProviders.join(", ")}] but /switch serves the primaries under ${PRIMARY_PROVIDER}`);
+}
 // Routing follows whatever desktop-vllm serves now. The shell probes that once per
 // subagent call; here the probe's answer is fixed input, so the policy is checked
-// deterministically for both primaries regardless of which one is live.
+// deterministically for every primary regardless of which one is live.
 const reviewer = { workload: "subagent", profile: "general-review", agent: "code-reviewer" } as const;
 const declaredCloud = { model: cloudModel.value, thinkingLevel: "high" as const };
 const servedAs = (model: typeof glmModel.value): ServedModels => ({ "desktop-vllm": { ok: true, value: model } });

@@ -85,16 +85,33 @@ for start in "${PRIMARIES[@]}"; do
   done
 done
 
-# GLM toggles to WARMIND for now, and main passes that constant (not the
-# ds41 container's last weights) to every decision.
+# Sourcing must never run main, whatever $0 is: on 2026-11-14 a test sourced the
+# script as `bash -c 'source "$0"; …' SCRIPT`, the old BASH_SOURCE==$0 guard
+# matched, and main ssh'd to desktop with a real switch request (the idle gate
+# refused it). A stub ssh/hostname first on PATH records any call.
+guard_bin="$(mktemp -d)"
+printf '#!/usr/bin/env bash\necho "$0 $*" >>"%s/calls"\n' "$guard_bin" >"$guard_bin/ssh"
+cp "$guard_bin/ssh" "$guard_bin/hostname"
+chmod +x "$guard_bin/ssh" "$guard_bin/hostname"
+PATH="$guard_bin:$PATH" bash -c 'source "$0" glm' "$ROOT/scripts/inference/switch-primary.sh" >/dev/null 2>&1 || true
+PATH="$guard_bin:$PATH" bash -c 'source "$1" warmind' bash "$ROOT/scripts/inference/switch-primary.sh" >/dev/null 2>&1 || true
+check "sourcing never runs main (no hostname or ssh call)" '[ ! -e "$guard_bin/calls" ]'
+rm -rf "$guard_bin"
+
+# GLM's toggle partner is the fixed GLM_TOGGLE_TARGET (run_request's tests below
+# prove the shell passes it, not the ds41 container's last weights).
 check "GLM toggle target is WARMIND" '[ "$GLM_TOGGLE_TARGET" = warmind ]'
-# Read by the check() eval string below.
-# shellcheck disable=SC2034
-script_source="$(cat "$ROOT/scripts/inference/switch-primary.sh")"
-check "main decides with GLM_TOGGLE_TARGET" \
-  '[ "$(grep -c "\"\$last\" \"\$GLM_TOGGLE_TARGET\"" <<<"$script_source")" = 2 ]'
-check "toggle from glm starts warmind even after deepseek ran" \
-  '[ "$(primary_decide toggle glm deepseek "$GLM_TOGGLE_TARGET")" = start:warmind ]'
+
+# --- report: the exact lines pi's /switch parses -----------------------------
+# pi/extensions/primary-switch/switch.test.ts runs this same function's output
+# through parseSwitchReport; these pin the shell side.
+for primary in "${PRIMARIES[@]}"; do
+  served="$(served_of_primary "$primary")"
+  check "report $primary" \
+    '[ "$(report "$primary")" = "PRIMARY: $primary ($served on :8000)"$'"'"'\n'"'"'"pi:      pi --model desktop-vllm/$served" ]'
+  check "report $primary noop" '[ "$(report "$primary" noop | tail -1)" = "(already the primary; nothing to do)" ]'
+done
+check "report refuses an unknown primary" '! report qwen >/dev/null 2>&1'
 
 # The served-id mapping round-trips for every primary and rejects strangers.
 for primary in "${PRIMARIES[@]}"; do
@@ -181,6 +198,44 @@ run_switch glm warmind
 check "to glm: its own switcher does gate and rollback" '[ "$switch_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
 FAIL_STARTS="glm" run_switch glm warmind
 check "failed glm switch fails without a report" '[ "$switch_rc" = 1 ] && [ "$calls" = "start:glm" ]'
+REPORT_RC=1
+report() { echo "report:$1" >>"$log_file"; return "${REPORT_RC:-0}"; }
+run_switch glm warmind
+check "a failed glm report fails the switch" '[ "$switch_rc" = 1 ] && [ "$calls" = "start:glm report:glm" ]'
+unset REPORT_RC
+
+# --- run_request: state in, decision, effects (stubbed above) ----------------
+# request_out and request_rc are read by the check() eval strings below.
+# shellcheck disable=SC2034
+run() {
+  : >"$log_file"
+  request_rc=0
+  request_out="$( (run_request "$1") 2>&1)" || request_rc=$?
+  calls="$(paste -sd' ' "$log_file")"
+}
+# GLM serves; DeepSeek was the last weights the ds41 container ran.
+state; running[$GLM_CONTAINER]=0; label[$DS41_CONTAINER]=deepseek-v4.1-flash-native
+finished[$DS41_CONTAINER]=2026-11-14T10:00:00Z
+run status
+check "status names the served id and toggles GLM to WARMIND despite last DeepSeek" \
+  '[ "$request_rc" = 0 ] && [ "$request_out" = "active:     glm (glm-5.3-flash-hyperflare-tp2-v16)"$'"'"'\n'"'"'"last:       deepseek"$'"'"'\n'"'"'"toggle ->   start:warmind" ] && [ -z "$calls" ]'
+run toggle
+check "toggle from GLM switches to WARMIND" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:glm gpus start:warmind report:warmind" ]'
+run glm
+check "already-serving request reports without switching" '[ "$request_rc" = 0 ] && [ "$calls" = "report:glm" ]'
+state; running[$DS41_CONTAINER]=0; label[$DS41_CONTAINER]=warmind-1017-native
+run toggle
+check "toggle from WARMIND switches to GLM" '[ "$request_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
+run status
+check "status with nothing to suffix" '[[ "$request_out" == *"active:     warmind (warmind-1017-native)"* ]]'
+state; running[qwen38-27b-bf16]=0
+run toggle
+check "a foreign profile refuses the switch and touches nothing" \
+  '[ "$request_rc" = 1 ] && [ -z "$calls" ] && [[ "$request_out" == *"qwen38-27b-bf16 holds the GPUs"* ]]'
+inference_container_running() { return 2; }
+run status
+check "an uninspectable container fails the request" '[ "$request_rc" = 1 ] && [ -z "$calls" ]'
 
 if [ "$failures" -ne 0 ]; then
   echo "switch-primary unit: $failures of $cases checks FAILED" >&2

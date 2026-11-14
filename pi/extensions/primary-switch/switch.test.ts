@@ -5,6 +5,7 @@ import type { Result } from "../model-routing/policy";
 import {
 	failureTail,
 	observe,
+	PRIMARIES,
 	parseSwitchReport,
 	parseSwitchRequest,
 	runPrimarySwitch,
@@ -98,11 +99,33 @@ describe("parsing the switch-primary.sh report", () => {
 		expect(parseSwitchReport("PRIMARY: glm\n").ok).toBe(false);
 	});
 
-	it("matches the exact line the script prints, and the script's request words", () => {
-		const source = readFileSync(SCRIPT, "utf8");
-		expect(source).toContain('echo "PRIMARY: $primary ($served on :8000)"');
-		expect(source).toContain('echo "(already the primary; nothing to do)"');
-		expect(source).toContain("Usage: switch-primary.sh [toggle|glm|warmind|deepseek|status]");
+	it("parses what the script's own report function prints, for every primary", () => {
+		// Golden test across the seam: run switch-primary.sh's real `report` (sourcing
+		// the script defines functions only) and parse its output.
+		const report = (...args: string[]): string => {
+			const run = Bun.spawnSync(["bash", "-c", 'source "$1"; shift; report "$@"', "bash", SCRIPT, ...args]);
+			if (run.exitCode !== 0) throw new Error(run.stderr.toString());
+			return run.stdout.toString();
+		};
+		const served = { glm: GLM, warmind: WARMIND, deepseek: "deepseek-v4.1-flash-native" } as const;
+		for (const primary of PRIMARIES) {
+			expect(parseSwitchReport(report(primary))).toEqual({
+				ok: true,
+				value: { primary, servedId: served[primary], unchanged: false },
+			});
+			expect(parseSwitchReport(report(primary, "noop"))).toEqual({
+				ok: true,
+				value: { primary, servedId: served[primary], unchanged: true },
+			});
+		}
+		expect(readFileSync(SCRIPT, "utf8")).toContain("Usage: switch-primary.sh [toggle|glm|warmind|deepseek|status]");
+	});
+
+	it("refuses a report naming a primary the script does not have", () => {
+		expect(parseSwitchReport("PRIMARY: x (y on :8000)\n")).toEqual({
+			ok: false,
+			error: 'switch-primary.sh reported an unknown primary "x"',
+		});
 	});
 
 	it("keeps the meaningful tail of a failure and drops ssh banners", () => {

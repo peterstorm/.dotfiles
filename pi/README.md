@@ -565,6 +565,11 @@ desktop-vllm: …") — there is no silent fallback to a stale id. Children ther
 `scripts/inference/switch-primary.sh` without any config change, and get the served model's
 own catalog limits (GLM's 1M context, WARMIND's 262K).
 
+A parallel `subagent` call names at most 8 tasks and runs up to 8 at once
+(`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY` in `extensions/subagent/index.ts`; separate knobs).
+8 matches desktop: GLM v16 serves 8 slots, and ds4-native runs 4 Lanes and keeps the
+rest alive in its queue.
+
 Every child receives one routing decision snapshotted at the beginning of its parent tool
 call: the served-model probe happens once there, so parallel tasks and chains cannot drift
 if `/model` changes or the primary switches mid-call. Overrides launch with one exact

@@ -33,18 +33,20 @@ INFERENCE_PROFILE_CONTAINERS=(
   ds41-1017-native
 )
 
-# In-flight (running + waiting) requests on whatever owns :8000, read from the
-# one source that runtime exposes without a key: the ds4-native bridge (:8010),
-# the Hyperflare bridge (:8011), or vLLM/SGLang's own /metrics. An unknown
-# runtime fails closed (status 1) rather than being treated as idle.
-# A model-labelled bridge answers only while its own engine owns :8000
-# (503 otherwise), so the first one that answers names the runtime.
+# Running + waiting requests from one bridge's /metrics (series prefixed
+# PREFIX); status 1 when the bridge does not answer.
 _inference_bridge_inflight() {
   local url="$1" prefix="$2" text
   text="$(curl -fsS --connect-timeout 2 --max-time 5 "$url" 2>/dev/null)" || return 1
   awk -v pattern="^${prefix}requests_(running|waiting)[{]" '$0 ~ pattern {sum += $NF} END {print sum + 0}' <<<"$text"
 }
 
+# In-flight (running + waiting) requests on whatever owns :8000, read from the
+# one source that runtime exposes without a key: the ds4-native bridge (:8010),
+# the Hyperflare bridge (:8011), or vLLM/SGLang's own /metrics. An unknown
+# runtime fails closed (status 1) rather than being treated as idle.
+# A model-labelled bridge answers only while its own engine owns :8000
+# (503 otherwise), so the first one that answers names the runtime.
 inference_active_requests() {
   local text
   _inference_bridge_inflight http://127.0.0.1:8010/metrics 'ds4:' && return 0

@@ -158,10 +158,23 @@ contains "$RUNBOOK" 'switch-primary.sh'
 
 # The primaries switch: its pure decision core, and the catalog it serves.
 bash "$ROOT/tests/switch-primary-unit.sh" >/dev/null || fail "switch-primary decision core failed its unit tests"
+bash "$ROOT/tests/switch-glm53-hyperflare-receipt-unit.sh" >/dev/null || fail "v16 boot receipt failed its unit tests"
 contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER\""
 jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
   "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the three primaries"
 jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-native"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's default model must be a primary (warmind-1017-native)"
+
+# Thinking defaults to max everywhere a default is set (2026-11-14): Pi's global
+# default, every primary's catalog default, a cloud parent's served children, and
+# the ds41 engine's own default for requests that name no effort.
+jq -e '.defaultThinkingLevel == "max"' "$ROOT/pi/settings.json" >/dev/null ||
+  fail "pi's global defaultThinkingLevel must be max"
+jq -e '[.providers["desktop-vllm"].models[].defaultThinkingLevel] | length == 3 and all(. == "max")' \
+  "$PI_MODELS" >/dev/null || fail "every primary must default to max thinking"
+jq -e '.targets["served-max"] == {"served": "desktop-vllm", "thinkingLevel": "max"}
+  and any(.rules[]; .when.parentClass == "cloud" and .use.target == "served-max")' \
+  "$ROOT/pi/model-routing.json" >/dev/null || fail "a cloud parent's served children must run at max"
+contains "$ROOT/scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh" 'reasoning_effort: "max",'
 
 echo "GLM-5.3 v16 Hyperflare TP2 contract: PASS"

@@ -52,7 +52,13 @@ import {
 } from "./loom-launch-port.js";
 import { runRpcAgent } from "./rpc-launcher.js";
 
+/** How many tasks one parallel call may name. */
 const MAX_PARALLEL_TASKS = 8;
+/**
+ * How many of them run at once, a separate knob from the task cap. 8 matches the
+ * engines on desktop: GLM v16 serves 8 slots; ds4-native runs 4 Lanes and keeps the
+ * rest alive in its queue (Loom's Wave gates and review panels issue up to 8).
+ */
 const MAX_CONCURRENCY = 8;
 const COLLAPSED_ITEM_COUNT = 10;
 
@@ -163,13 +169,16 @@ function formatUnknownToolCall(
 	return themeFg("accent", toolName) + themeFg("dim", ` ${preview}`);
 }
 
-function formatToolCall(
+export function formatToolCall(
 	toolName: string,
 	args: Record<string, unknown>,
 	themeFg: (color: ThemeColor, text: string) => string,
 ): string {
-	const formatter = TOOL_CALL_FORMATTERS[toolName];
-	return formatter ? formatter(args, themeFg) : formatUnknownToolCall(toolName, args, themeFg);
+	// Own keys only: a tool named "constructor" or "toString" must preview as JSON,
+	// not resolve to an inherited Object.prototype function.
+	return Object.hasOwn(TOOL_CALL_FORMATTERS, toolName)
+		? TOOL_CALL_FORMATTERS[toolName](args, themeFg)
+		: formatUnknownToolCall(toolName, args, themeFg);
 }
 
 interface UsageStats {
@@ -287,7 +296,7 @@ function addExpandedResultSection(
 	if (usage) container.addChild(new Text(themeFg("dim", usage), 0, 0));
 }
 
-async function mapWithConcurrencyLimit<TIn, TOut>(
+export async function mapWithConcurrencyLimit<TIn, TOut>(
 	items: TIn[],
 	concurrency: number,
 	fn: (item: TIn, index: number) => Promise<TOut>,

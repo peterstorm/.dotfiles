@@ -150,6 +150,8 @@ restore_profiles() {
   return "$failed"
 }
 
+# Sourcing defines the functions only (tests/switch-glm53-hyperflare-receipt-unit.sh).
+main() {
 case "$MODE" in
   status)
     active_output="$(running_profiles)" || exit $?
@@ -206,3 +208,10 @@ case "$MODE" in
     ;;
   *) echo "usage: ${0##*/} {status|start|stop}" >&2; exit 2 ;;
 esac
+}
+
+# Run only when executed, never when sourced: `return` succeeds only in a sourced
+# file, whatever $0 is.
+if ! (return 0 2>/dev/null); then
+  main
+fi

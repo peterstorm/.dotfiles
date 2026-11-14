@@ -27,8 +27,10 @@ DS41_CONTAINER="ds41-1017-native"
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
 SERVING_HOST="desktop"
-# Where toggle goes from GLM: WARMIND for now (2026-11-14). Set it to deepseek to toggle to
-# stock DeepSeek-V4.1 instead; `switch-primary.sh deepseek` reaches it either way.
+# The ds41 primary toggle starts from GLM. Fixed rather than taken from whichever
+# weights ran last, so toggle is predictable (operator choice, 2026-11-14). Set it to
+# deepseek to toggle to stock DeepSeek-V4.1 instead; `switch-primary.sh deepseek`
+# reaches it either way.
 GLM_TOGGLE_TARGET="warmind"
 
 # --- functional core -------------------------------------------------------
@@ -128,21 +130,16 @@ ds41_served_primary() {
   primary_of_served "$(container_label "$DS41_CONTAINER" ai.peterstorm.inference.served-model)"
 }
 
-read_last_ds41() {
-  local primary
-  primary="$(ds41_served_primary)"
-  echo "${primary:-warmind}"
-}
-
 # LAST: of the two containers that exist, the one that stopped most recently
-# (RFC 3339 UTC timestamps sort lexically).
+# (RFC 3339 UTC timestamps sort lexically); a ds41 stop counts as the weights it
+# last served, WARMIND when its label is missing.
 read_last() {
-  local glm_at ds41_at
+  local glm_at ds41_at ds41_primary
   glm_at="$(finished_at "$GLM_CONTAINER")"
   ds41_at="$(finished_at "$DS41_CONTAINER")"
   if [[ "$glm_at" == 0001-* && "$ds41_at" == 0001-* ]]; then echo none
   elif [[ "$glm_at" > "$ds41_at" ]]; then echo glm
-  else read_last_ds41
+  else ds41_primary="$(ds41_served_primary)"; echo "${ds41_primary:-warmind}"
   fi
 }
 
@@ -185,11 +182,15 @@ start_primary() {
   esac
 }
 
+# report PRIMARY [noop]: the one report format callers parse (pi's /switch reads
+# the PRIMARY line, and the no-op line when nothing had to change).
 report() {
   local primary="$1" served
   served="$(served_of_primary "$primary")"
+  [ -n "$served" ] || { echo "error: no served id for primary '$primary'" >&2; return 1; }
   echo "PRIMARY: $primary ($served on :8000)"
   echo "pi:      pi --model desktop-vllm/$served"
+  if [ "${2:-}" = noop ]; then echo "(already the primary; nothing to do)"; fi
 }
 
 # Returns non-zero on failure (main exits), so the sequencing is testable with
@@ -199,7 +200,7 @@ switch_to() {
   if [ "$target" = glm ]; then
     # The GLM switcher gates, quiesces, accepts and rolls back by itself.
     start_primary glm || return 1
-    report glm
+    report glm || return 1
     return 0
   fi
   # To ds41: gate on idle, stop what serves, launch, and on failure bring the
@@ -219,20 +220,13 @@ switch_to() {
   report "$target"
 }
 
-main() {
-  local request="${1:-toggle}" active last decision
-  if [ "$(hostname)" != "$SERVING_HOST" ]; then
-    local tty=()
-    [ -t 0 ] && tty=(-t)
-    exec ssh "${tty[@]}" "$SERVING_HOST" "\$HOME/.dotfiles/scripts/inference/switch-primary.sh $(printf '%q ' "$@")"
-  fi
-  # shellcheck source=scripts/inference/shared/inference-api-key.sh
-  source "$SCRIPT_DIR/shared/inference-api-key.sh"
-  # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
-  source "$SCRIPT_DIR/shared/inference-profile-catalog.sh"
-
-  active="$(read_active)"
-  last="$(read_last)"
+# run_request REQUEST: read the containers, decide, act. Returns non-zero on
+# failure; split from main (host re-exec and sourcing) so tests can drive it
+# with stubbed state (tests/switch-primary-unit.sh).
+run_request() {
+  local request="$1" active last decision
+  active="$(read_active)" || return 1
+  last="$(read_last)" || return 1
   if [ "$request" = status ]; then
     local suffix=""
     case "$active" in glm | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
@@ -244,13 +238,29 @@ main() {
 
   decision="$(primary_decide "$request" "$active" "$last" "$GLM_TOGGLE_TARGET")"
   case "$decision" in
-    noop:*) report "${decision#noop:}"; echo "(already the primary; nothing to do)" ;;
-    start:*) echo "switching: $active -> ${decision#start:}"; switch_to "${decision#start:}" "$active" || exit 1 ;;
-    error:*) die "${decision#error:}" ;;
-    *) die "internal: unexpected decision '$decision'" ;;
+    noop:*) report "${decision#noop:}" noop ;;
+    start:*) echo "switching: $active -> ${decision#start:}"; switch_to "${decision#start:}" "$active" ;;
+    error:*) echo "error: ${decision#error:}" >&2; return 1 ;;
+    *) echo "error: internal: unexpected decision '$decision'" >&2; return 1 ;;
   esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+main() {
+  local request="${1:-toggle}"
+  if [ "$(hostname)" != "$SERVING_HOST" ]; then
+    local tty=()
+    [ -t 0 ] && tty=(-t)
+    exec ssh "${tty[@]}" "$SERVING_HOST" "\$HOME/.dotfiles/scripts/inference/switch-primary.sh $(printf '%q ' "$@")"
+  fi
+  # shellcheck source=scripts/inference/shared/inference-api-key.sh
+  source "$SCRIPT_DIR/shared/inference-api-key.sh"
+  # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
+  source "$SCRIPT_DIR/shared/inference-profile-catalog.sh"
+  run_request "$request" || exit 1
+}
+
+# Run only when executed, never when sourced: `return` succeeds only in a sourced
+# file, whatever $0 is (`bash -c 'source script' script` sets $0 to the script).
+if ! (return 0 2>/dev/null); then
   main "$@"
 fi
