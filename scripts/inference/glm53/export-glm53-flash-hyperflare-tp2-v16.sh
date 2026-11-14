@@ -42,6 +42,10 @@ CONC="${CONC:-8}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# The image's uid-1000 user has home /flare-home so the Rust flare CLI
+# (getpwuid) and the Python exporter ($HOME) share one store; see Dockerfile.
+[ "$(id -u)" = 1000 ] || die "run as uid 1000 (the image maps only uid 1000's home to /flare-home)"
+
 [ "$(git hash-object "$RECIPE_EXPORT")" = "$RECIPE_EXPORT_BLOB" ] \
   || die "vendored recipe export script drifted from blob $RECIPE_EXPORT_BLOB"
 "$SCRIPT_DIR/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify

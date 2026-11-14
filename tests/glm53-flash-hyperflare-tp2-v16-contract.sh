@@ -84,6 +84,12 @@ grep -Eq '^IMAGE="python@sha256:[0-9a-f]{64}"$' "$DL" || fail "download image is
 contains "$EXPORT" 'download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify'
 contains "$EXPORT" '-v "$CKPT_HOST:/ckpt/glm53-fp4-local:ro"'
 contains "$EXPORT" '--ulimit memlock=-1'
+# flare (Rust) finds its store via getpwuid, the exporter (Python) via $HOME:
+# uid 1000's passwd home must be the mounted /flare-home, and only uid 1000 runs.
+contains "$DOCKERFILE" 'usermod -d /flare-home ubuntu'
+contains "$EXPORT" '[ "$(id -u)" = 1000 ]'
+contains "$RUN" '[ "$(id -u)" = 1000 ]'
+contains "$RUN" '.cache/flare/cores/models/'
 # b12x's io_uring weight loader: headers in the image, syscalls allowed.
 contains "$EXPORT" '--security-opt seccomp=unconfined'
 contains "$RUN" '--security-opt seccomp=unconfined'

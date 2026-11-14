@@ -60,9 +60,18 @@ RUN SP="$(.venv/bin/python -c 'import flashinfer, pathlib; print(pathlib.Path(fl
 #     io_uring_setup/enter/register.
 #   - ninja-build: torch.utils.cpp_extension builds the graph-catalog operators
 #     with ninja (FileNotFoundError: 'ninja' at "Construct graph catalog").
+#   - uid 1000's home: the Rust `flare` CLI finds ~/.cache/flare (cores) and
+#     ~/.config/flare (signing key, trust) through getpwuid_r, ignoring $HOME,
+#     while the Python exporter honors $HOME. Pointing the image's uid-1000
+#     user at /flare-home makes both resolve the same mounted store (first
+#     serve failed "cannot access core" with the core under /flare-home and
+#     the CLI looking in /home/ubuntu). The scripts run as uid 1000 only.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends liburing-dev ninja-build \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && test "$(getent passwd 1000 | cut -d: -f1)" = ubuntu \
+    && usermod -d /flare-home ubuntu \
+    && test "$(getent passwd 1000 | cut -d: -f6)" = /flare-home
 
 LABEL ai.peterstorm.inference.profile=glm53-flash-hyperflare-tp2-v16 \
       ai.peterstorm.inference.hyperflare-commit=$FORK_COMMIT \

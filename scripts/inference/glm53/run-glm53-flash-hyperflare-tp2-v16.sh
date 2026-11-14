@@ -53,6 +53,12 @@ esac
   echo "error: PREFIX_CACHE must be whole gibibytes, e.g. 16G" >&2
   exit 2
 }
+# flare resolves ~/.cache/flare through getpwuid, not $HOME; the image maps
+# only uid 1000's home to /flare-home (see the Dockerfile).
+[ "$(id -u)" = 1000 ] || {
+  echo "error: run as uid 1000 (the image maps only uid 1000's home to /flare-home)" >&2
+  exit 2
+}
 
 label="$(docker image inspect "$IMAGE" \
   --format '{{index .Config.Labels "ai.peterstorm.inference.hyperflare-commit"}}' 2>/dev/null)" || {
