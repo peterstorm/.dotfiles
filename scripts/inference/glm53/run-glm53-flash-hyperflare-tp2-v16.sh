@@ -75,7 +75,9 @@ PACKAGE="$(sed -n 's/^package=//p' "$PACKAGE_RECEIPT")"
   echo "error: package receipt names '$PACKAGE', expected glm53-fp4-local@gb202-tp2-<timestamp>" >&2
   exit 1
 }
-package_dir="$FLARE_HOME/.cache/flare/packages/models/${PACKAGE%@*}/${PACKAGE#*@}"
+# The fork stores exports as "cores" (config key core_cache; EXPORT.md's
+# packages/ path is the legacy name).
+package_dir="$FLARE_HOME/.cache/flare/cores/models/${PACKAGE%@*}/${PACKAGE#*@}"
 [ -d "$package_dir" ] || {
   echo "error: package $PACKAGE is not in the store at $package_dir" >&2
   exit 1

@@ -10,7 +10,7 @@
 #
 # Persistent state lives under /models/glm53-hyperflare (rpool/models, not
 # /home): flare-home/ is the container's $HOME, so the package store
-# (~/.cache/flare/packages), the shared kernel-tuning cache
+# (~/.cache/flare/cores), the shared kernel-tuning cache
 # (~/.cache/flare/kernels), FlashInfer/Triton JIT caches and the local
 # package-signing key (~/.config/flare) survive between export and serve;
 # brrr-ext/ keeps the torch extension builds.

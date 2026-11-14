@@ -42,7 +42,7 @@ adaptive verification, token embedding and vision tower in host memory.
 ```
 /models/glm53-hyperflare/
   glm53-fp4-local/        checkpoint (dir name = Hyperflare model name), .download-complete
-  flare-home/             container $HOME: .cache/flare/packages (package store),
+  flare-home/             container $HOME: .cache/flare/cores (package store),
                           .cache/flare/kernels (tuning cache), .config/flare (signing key)
   brrr-ext/               torch extension builds (export)
   package-v16.txt         export receipt: package=glm53-fp4-local@gb202-tp2-<ts>
