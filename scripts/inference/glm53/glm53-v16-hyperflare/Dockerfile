@@ -51,13 +51,17 @@ RUN SP="$(.venv/bin/python -c 'import flashinfer, pathlib; print(pathlib.Path(fl
     && bash tp3-tools/make-b12x-overlay.sh /opt/flare/.b12x-overlay \
     && .venv/bin/ignition export --help >/dev/null
 
-# b12x's checkpoint loader JIT-builds an io_uring batch executor at weight load
-# and refuses without liburing headers ("io_uring bounce support is
-# unavailable", first export 2026-11-14). Its own layer so the uv/cargo layers
-# above stay cached. The containers also need seccomp=unconfined: Docker's
-# default profile blocks io_uring_setup/enter/register.
+# Export-time JIT prerequisites the recipe's Ubuntu host had and this image did
+# not (first exports, 2026-11-14), in their own layer so the uv/cargo layers
+# above stay cached:
+#   - liburing-dev: b12x's checkpoint loader JIT-builds an io_uring batch
+#     executor at weight load ("io_uring bounce support is unavailable"). The
+#     containers also need seccomp=unconfined: Docker's default profile blocks
+#     io_uring_setup/enter/register.
+#   - ninja-build: torch.utils.cpp_extension builds the graph-catalog operators
+#     with ninja (FileNotFoundError: 'ninja' at "Construct graph catalog").
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends liburing-dev \
+    && apt-get install -y --no-install-recommends liburing-dev ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 LABEL ai.peterstorm.inference.profile=glm53-flash-hyperflare-tp2-v16 \

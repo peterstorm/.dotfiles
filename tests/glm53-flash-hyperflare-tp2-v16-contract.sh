@@ -87,7 +87,7 @@ contains "$EXPORT" '--ulimit memlock=-1'
 # b12x's io_uring weight loader: headers in the image, syscalls allowed.
 contains "$EXPORT" '--security-opt seccomp=unconfined'
 contains "$RUN" '--security-opt seccomp=unconfined'
-contains "$DOCKERFILE" 'liburing-dev'
+contains "$DOCKERFILE" 'liburing-dev ninja-build'
 contains "$RUN" "CHECKPOINT=\"$REPO@$REVISION\""
 
 # Package: produced by the export receipt, consumed by name@version only.
