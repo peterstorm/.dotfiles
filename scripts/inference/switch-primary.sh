@@ -197,7 +197,9 @@ switch_to() {
 main() {
   local request="${1:-toggle}" active last last_ds41 decision
   if [ "$(hostname)" != "$SERVING_HOST" ]; then
-    exec ssh -t "$SERVING_HOST" "\$HOME/.dotfiles/scripts/inference/switch-primary.sh $(printf '%q ' "$@")"
+    local tty=()
+    [ -t 0 ] && tty=(-t)
+    exec ssh "${tty[@]}" "$SERVING_HOST" "\$HOME/.dotfiles/scripts/inference/switch-primary.sh $(printf '%q ' "$@")"
   fi
   # shellcheck source=scripts/inference/shared/inference-api-key.sh
   source "$SCRIPT_DIR/shared/inference-api-key.sh"
