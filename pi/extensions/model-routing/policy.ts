@@ -78,9 +78,15 @@ export type RoutingRequest = Readonly<{
 	workload: string;
 	profile?: string;
 	agent?: string;
-	/** provider -> the model it serves now, as probed by the shell (see servedProviders). */
-	served?: Readonly<Record<string, ModelReference>>;
+	/** What the shell probed for each provider in servedProviders(policy). */
+	served?: ServedModels;
 }>;
+
+/**
+ * provider -> the model it serves now, or why that could not be determined.
+ * One entry per probed provider, so a provider cannot be both served and failed.
+ */
+export type ServedModels = Readonly<Record<string, Result<ModelReference, string>>>;
 
 type RoutingDecisionBase = Readonly<{
 	declared?: ModelBinding;
@@ -97,7 +103,7 @@ export type RoutingError =
 	| Readonly<{ kind: "ambiguous-model-class"; model: string; classes: readonly string[] }>
 	| Readonly<{ kind: "ambiguous-rule"; ruleIds: readonly string[] }>
 	| Readonly<{ kind: "parent-unavailable"; ruleId: string }>
-	| Readonly<{ kind: "served-model-unknown"; ruleId: string; provider: string }>;
+	| Readonly<{ kind: "served-model-unknown"; ruleId: string; provider: string; reason: string }>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
@@ -205,6 +211,46 @@ function parseRuleTarget(raw: unknown, path: string, errors: string[]): RuleTarg
 	return undefined;
 }
 
+/** One target field: not given, given and valid, or given and malformed. */
+type FieldParse<T> =
+	| Readonly<{ kind: "absent" }>
+	| Readonly<{ kind: "present"; value: T }>
+	| Readonly<{ kind: "malformed"; error: string }>;
+
+function parseTargetModel(raw: unknown, path: string): FieldParse<ModelReference> {
+	if (raw === undefined) return { kind: "absent" };
+	const model = typeof raw === "string" ? parseModelReference(raw) : undefined;
+	return model?.ok
+		? { kind: "present", value: model.value }
+		: { kind: "malformed", error: `${path}.model must be an exact provider/model reference` };
+}
+
+function parseTargetProvider(raw: unknown, path: string): FieldParse<string> {
+	if (raw === undefined) return { kind: "absent" };
+	return typeof raw === "string" && PROVIDER.test(raw)
+		? { kind: "present", value: raw }
+		: { kind: "malformed", error: `${path}.served must be a provider name` };
+}
+
+/** Parse a target once: each field independently, then exactly one of model or served. */
+function parseTarget(target: Readonly<Record<string, unknown>>, path: string): Result<PolicyTarget, readonly string[]> {
+	const model = parseTargetModel(target.model, path);
+	const served = parseTargetProvider(target.served, path);
+	const malformed = [model, served].flatMap((field) => (field.kind === "malformed" ? [field.error] : []));
+	if (target.thinkingLevel !== undefined && !isThinkingLevel(target.thinkingLevel)) {
+		malformed.push(`${path}.thinkingLevel is invalid`);
+	}
+	if (malformed.length > 0) return { ok: false, error: malformed };
+	const thinking = isThinkingLevel(target.thinkingLevel) ? { thinkingLevel: target.thinkingLevel } : {};
+	if (model.kind === "present" && served.kind === "absent") {
+		return { ok: true, value: Object.freeze({ kind: "exact", model: model.value, ...thinking }) };
+	}
+	if (served.kind === "present" && model.kind === "absent") {
+		return { ok: true, value: Object.freeze({ kind: "served", provider: served.value, ...thinking }) };
+	}
+	return { ok: false, error: [`${path} must name exactly one of model or served`] };
+}
+
 function selectorsOverlap(first: RuleSelector, second: RuleSelector): boolean {
 	for (const field of ["parentClass", "workload", "profile", "agent"] as const) {
 		if (first[field] !== undefined && second[field] !== undefined && first[field] !== second[field]) return false;
@@ -269,31 +315,12 @@ export function parseModelRoutingPolicy(raw: unknown): PolicyParseResult {
 				continue;
 			}
 			errors.push(...unknownFields(target, ["model", "served", "thinkingLevel"], targetPath));
-			const hasModel = typeof target.model === "string";
-			const hasServed = typeof target.served === "string" && target.served.trim() !== "";
-			if (hasModel === hasServed) {
-				errors.push(`${targetPath} must name exactly one of model or served`);
+			const parsed = parseTarget(target, targetPath);
+			if (!parsed.ok) {
+				errors.push(...parsed.error);
 				continue;
 			}
-			if (target.thinkingLevel !== undefined && !isThinkingLevel(target.thinkingLevel)) {
-				errors.push(`${targetPath}.thinkingLevel is invalid`);
-				continue;
-			}
-			const thinking = target.thinkingLevel ? { thinkingLevel: target.thinkingLevel } : {};
-			if (typeof target.served === "string" && hasServed) {
-				if (!PROVIDER.test(target.served)) {
-					errors.push(`${targetPath}.served must be a provider name`);
-					continue;
-				}
-				parsedTargets[name] = Object.freeze({ kind: "served", provider: target.served, ...thinking });
-				continue;
-			}
-			const model = parseModelReference(String(target.model));
-			if (!model.ok) {
-				errors.push(`${targetPath}.model must be an exact provider/model reference`);
-				continue;
-			}
-			parsedTargets[name] = Object.freeze({ kind: "exact", model: model.value, ...thinking });
+			parsedTargets[name] = parsed.value;
 		}
 	}
 
@@ -405,10 +432,19 @@ function targetBinding(
 				}),
 			};
 		case "served": {
-			const model = request.served?.[target.provider];
-			if (!model) return { ok: false, error: { kind: "served-model-unknown", ruleId, provider: target.provider } };
+			const unknown = (reason: string): Result<ModelBinding, RoutingError> => ({
+				ok: false,
+				error: { kind: "served-model-unknown", ruleId, provider: target.provider, reason },
+			});
+			const probed = request.served?.[target.provider];
+			if (!probed) return unknown("it was not probed");
+			if (!probed.ok) return unknown(probed.error);
+			// The probe's key and its model must agree; a mis-keyed map is an error, not a route.
+			if (probed.value.provider !== target.provider) {
+				return unknown(`the probe returned ${canonicalModel(probed.value)}, a model of another provider`);
+			}
 			const thinkingLevel = target.thinkingLevel ?? request.parent?.thinkingLevel;
-			return { ok: true, value: Object.freeze({ model, ...(thinkingLevel ? { thinkingLevel } : {}) }) };
+			return { ok: true, value: Object.freeze({ model: probed.value, ...(thinkingLevel ? { thinkingLevel } : {}) }) };
 		}
 		default:
 			return assertNever(target);
@@ -460,15 +496,15 @@ export function resolveModelRoute(
 		};
 	}
 
-	if (winner.use.kind === "parent" && !request.parent) {
-		return { ok: false, error: { kind: "parent-unavailable", ruleId: winner.id } };
+	let effective: ModelBinding;
+	if (winner.use.kind === "parent") {
+		if (!request.parent) return { ok: false, error: { kind: "parent-unavailable", ruleId: winner.id } };
+		effective = request.parent;
+	} else {
+		const bound = targetBinding(policy.targets[winner.use.target], request, winner.id);
+		if (!bound.ok) return bound;
+		effective = bound.value;
 	}
-	const resolved = winner.use.kind === "parent"
-		? (request.parent ? { ok: true as const, value: request.parent } : undefined)
-		: targetBinding(policy.targets[winner.use.target], request, winner.id);
-	if (!resolved) return { ok: false, error: { kind: "parent-unavailable", ruleId: winner.id } };
-	if (!resolved.ok) return resolved;
-	const effective = resolved.value;
 	return {
 		ok: true,
 		value: Object.freeze({
@@ -491,7 +527,7 @@ export function routingErrorMessage(error: RoutingError): string {
 		case "parent-unavailable":
 			return `routing rule ${error.ruleId} requires an active parent model`;
 		case "served-model-unknown":
-			return `routing rule ${error.ruleId} routes to whatever ${error.provider} serves, but what it serves could not be determined`;
+			return `routing rule ${error.ruleId} routes to whatever ${error.provider} serves, but what it serves could not be determined: ${error.reason}`;
 		default:
 			return assertNever(error);
 	}

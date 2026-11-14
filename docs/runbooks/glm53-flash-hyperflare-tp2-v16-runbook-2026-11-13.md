@@ -52,7 +52,8 @@ adaptive verification, token embedding and vision tower in host memory.
 Image: `peterstorm/glm53-hyperflare:ac9136b-cu131`, built locally (no published
 image exists) from `glm53-v16-hyperflare/Dockerfile`, every input pinned
 (base images by digest, fork by commit, `uv.lock`/`Cargo.lock` `--locked`,
-rustc 1.97.0); labelled `ai.peterstorm.inference.hyperflare-commit`, which the
+rustc 1.97.0, `rustup-init` 1.29.3 by sha256); labelled
+`ai.peterstorm.inference.hyperflare-commit`, which the
 export and run scripts check.
 
 ## Procedure

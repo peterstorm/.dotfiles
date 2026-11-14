@@ -1,4 +1,4 @@
-import { parseModelReference, type ModelReference, type Result } from "./policy.js";
+import { parseModelReference, type ModelReference, type Result, type ServedModels } from "./policy.js";
 
 /**
  * What a provider serves right now, for policy targets of the form
@@ -16,14 +16,10 @@ export type ServedModelSource = Readonly<{
 	fetchJson: (url: string, headers: Readonly<Record<string, string>>) => Promise<unknown>;
 }>;
 
-export type ServedProbe = Readonly<{
-	served: Readonly<Record<string, ModelReference>>;
-	/** provider -> why its served model is unknown; routing reports it if a rule needed it. */
-	failures: Readonly<Record<string, string>>;
-}>;
-
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** Parse an OpenAI `/v1/models` body into the single model it lists. */
 export function servedModelId(body: unknown): Result<string, string> {
@@ -40,37 +36,36 @@ export function servedModelId(body: unknown): Result<string, string> {
 }
 
 async function probeOne(provider: string, source: ServedModelSource): Promise<Result<ModelReference, string>> {
-	const base = source.baseUrl(provider);
-	if (!base) return { ok: false, error: `provider ${provider} has no baseUrl in Pi's catalog` };
-	const key = await source.apiKey(provider);
-	if (!key) return { ok: false, error: `no API key for provider ${provider}` };
-	let body: unknown;
 	try {
-		body = await source.fetchJson(`${base.replace(/\/+$/, "")}/models`, { Authorization: `Bearer ${key}` });
+		const base = source.baseUrl(provider);
+		if (!base) return { ok: false, error: `provider ${provider} has no baseUrl in Pi's catalog` };
+		const key = await source.apiKey(provider);
+		if (!key) return { ok: false, error: `no API key for provider ${provider}` };
+		let body: unknown;
+		try {
+			body = await source.fetchJson(`${base.replace(/\/+$/, "")}/models`, { Authorization: `Bearer ${key}` });
+		} catch (error) {
+			return { ok: false, error: `cannot reach ${provider}: ${describe(error)}` };
+		}
+		const id = servedModelId(body);
+		if (!id.ok) return id;
+		if (!source.inCatalog(provider, id.value)) {
+			return { ok: false, error: `${provider} serves ${id.value}, which is not in Pi's catalog` };
+		}
+		return parseModelReference(`${provider}/${id.value}`);
 	} catch (error) {
-		return { ok: false, error: `cannot reach ${provider}: ${error instanceof Error ? error.message : String(error)}` };
+		// A failing `!command` key, catalog lookup or similar: recorded, never thrown.
+		return { ok: false, error: `cannot probe ${provider}: ${describe(error)}` };
 	}
-	const id = servedModelId(body);
-	if (!id.ok) return id;
-	if (!source.inCatalog(provider, id.value)) {
-		return { ok: false, error: `${provider} serves ${id.value}, which is not in Pi's catalog` };
-	}
-	return parseModelReference(`${provider}/${id.value}`);
 }
 
-/** Probe each provider once, concurrently; never throws. */
+/** Probe each provider once, concurrently. Never throws: every failure is a Result in the map. */
 export async function probeServedModels(
 	providers: readonly string[],
 	source: ServedModelSource,
-): Promise<ServedProbe> {
+): Promise<ServedModels> {
 	const results = await Promise.all(providers.map(async (provider) => [provider, await probeOne(provider, source)] as const));
-	const served: Record<string, ModelReference> = {};
-	const failures: Record<string, string> = {};
-	for (const [provider, result] of results) {
-		if (result.ok) served[provider] = result.value;
-		else failures[provider] = result.error;
-	}
-	return Object.freeze({ served: Object.freeze(served), failures: Object.freeze(failures) });
+	return Object.freeze(Object.fromEntries(results));
 }
 
 type ProbeRegistry = Readonly<{

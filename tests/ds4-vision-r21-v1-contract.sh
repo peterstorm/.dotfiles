@@ -12,7 +12,6 @@ RUN="$DIR/run-ds4-flash-vision-r21-v1.sh"
 SWITCH="$DIR/switch-ds4-flash-vision-r21-v1.sh"
 PROBE="$DIR/probe-ds4-flash-vision-r21-v1.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
-MODELS="$ROOT/pi/models.json"
 PATCH_SHA="800f7ad21304e8be633428ad0db4ef49839b75bff84071b84ef9f44c78042469"
 IMAGE="sha256:f5b3c70a39613bd2459bc186068e8e67720cf69b407a7c91b12a0585bf0ed183"
 REV="86f746b36186f0e567729a5c06a8c918caba82a9"
@@ -69,17 +68,10 @@ contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$SWITCH" 'any(. == "MODE=dspark") and any(. == "DSPARK_TOKENS=6")'
 contains "$PROBE" 'data:image/png;base64'
 contains "$CATALOG" 'ds4-flash-vision-infernal-invocation-cu133-r21-v1'
-# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
-# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
-# local models pi offers (scripts/inference/switch-primary.sh). This profile
-# stays launchable; restore its catalog entry from git history before pointing
-# pi at it.
-if ! jq -e --argjson ids '["deepseek-v4-flash-vision"]' \
-  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
-  "$MODELS" >/dev/null; then
-  echo "FAIL: pi/models.json offers deepseek-v4-flash-vision, which left the catalog with the primaries switch" >&2
-  exit 1
-fi
+# Retired from Pi's catalog with the primaries switch (2026-11-14); still launchable.
+# shellcheck source=tests/lib/pi-catalog.sh
+source "$ROOT/tests/lib/pi-catalog.sh"
+assert_not_in_pi_catalog deepseek-v4-flash-vision
 
 contains "$OVERLAY/ds4-vision-r21.patch" 'class DeepseekV4VisionTransformer'
 contains "$OVERLAY/ds4-vision-r21.patch" 'class DeepseekV4VisionMultiModalProcessor'

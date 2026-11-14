@@ -7,7 +7,7 @@
 #   - serve:  flare-cli/target/release/flare run (pure Rust + the package)
 # Every input is pinned: base images by digest, the fork by full commit,
 # Python deps by the fork's uv.lock (--locked), Rust deps by Cargo.lock
-# (--locked), rustc by version. The FlashInfer patches are the fork's own
+# (--locked), rustc by version, rustup-init by version and sha256. The FlashInfer patches are the fork's own
 # tp3-patches/, byte-identical (git blob ids) to the recipe folder's copy.
 FROM ghcr.io/astral-sh/uv:0.11.29@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc AS uv
 
@@ -17,6 +17,8 @@ ARG FORK_REPO=https://github.com/AzallazA/spark-local-inference.git
 ARG FORK_TAG=hyperflare-glm-20261112
 ARG FORK_COMMIT=ac9136b02c7c523f12d6e628e9d94f41006312ea
 ARG RUST_VERSION=1.97.0
+ARG RUSTUP_VERSION=1.29.3
+ARG RUSTUP_INIT_SHA256=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
@@ -30,8 +32,16 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:/usr/local/cuda/bin:$PATH \
     CUDA_HOME=/usr/local/cuda UV_PYTHON_INSTALL_DIR=/opt/uv-python UV_LINK_MODE=copy \
     UV_CACHE_DIR=/tmp/uv-cache
-RUN curl -sSf https://sh.rustup.rs \
-      | sh -s -- -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
+# rustup-init itself is a pinned artifact: an exact release from the versioned
+# archive, checked against its sha256 before it runs (never a piped, floating
+# installer script). rustup then verifies the toolchain against the channel
+# manifest.
+RUN curl -sSfo /tmp/rustup-init \
+      "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
+    && echo "$RUSTUP_INIT_SHA256  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
+    && rm /tmp/rustup-init \
     && rustc --version | grep -q "^rustc $RUST_VERSION "
 
 WORKDIR /opt/flare

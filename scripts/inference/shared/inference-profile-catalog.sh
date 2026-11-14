@@ -37,16 +37,18 @@ INFERENCE_PROFILE_CONTAINERS=(
 # one source that runtime exposes without a key: the ds4-native bridge (:8010),
 # the Hyperflare bridge (:8011), or vLLM/SGLang's own /metrics. An unknown
 # runtime fails closed (status 1) rather than being treated as idle.
+# A model-labelled bridge answers only while its own engine owns :8000
+# (503 otherwise), so the first one that answers names the runtime.
+_inference_bridge_inflight() {
+  local url="$1" prefix="$2" text
+  text="$(curl -fsS --connect-timeout 2 --max-time 5 "$url" 2>/dev/null)" || return 1
+  awk -v pattern="^${prefix}requests_(running|waiting)[{]" '$0 ~ pattern {sum += $NF} END {print sum + 0}' <<<"$text"
+}
+
 inference_active_requests() {
   local text
-  if text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8010/metrics 2>/dev/null)"; then
-    awk '/^ds4:requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
-    return 0
-  fi
-  if text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8011/metrics 2>/dev/null)"; then
-    awk '/^hyperflare:requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
-    return 0
-  fi
+  _inference_bridge_inflight http://127.0.0.1:8010/metrics 'ds4:' && return 0
+  _inference_bridge_inflight http://127.0.0.1:8011/metrics 'hyperflare:' && return 0
   text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/metrics)" || return 1
   grep -Eq '^(vllm:num_requests_running|sglang:num_running_reqs)\{' <<<"$text" || return 1
   awk '/^(vllm:num_requests_(running|waiting)|sglang:num_(running|queue)_reqs)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"

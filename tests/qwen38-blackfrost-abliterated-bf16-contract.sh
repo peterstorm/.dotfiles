@@ -7,7 +7,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOWNLOAD="$ROOT/scripts/inference/qwen38/download-qwen38-27b-blackfrost-abliterated-bf16.sh"
 MANIFEST="$ROOT/scripts/inference/qwen38/qwen38-27b-blackfrost-abliterated-bf16-v1.manifest"
 RUNTIME="$ROOT/scripts/inference/qwen38/run-qwen38-27b-blackfrost-abliterated-bf16-vllm.sh"
-PI_MODELS="$ROOT/pi/models.json"
 TARGET_REV="9d85770e5eb602322b4bceef55beda357e0bd0ca"
 MANIFEST_SHA256="5fb7e9d4daf9c9be6616a5026b704c34de31cb046a2ea6f72bf65c8007899a6c"
 IMAGE_DIGEST="sha256:3578c1fa6a9676e1de068b9d75c777cc865d251fadfbe6175ae82278739c6674"
@@ -92,16 +91,9 @@ if grep -Eq -- '^[[:space:]]*--api-key([=[:space:]]|$)' "$RUNTIME"; then
   fail "runtime exposes the API key through process arguments"
 fi
 
-# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
-# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
-# local models pi offers (scripts/inference/switch-primary.sh). This profile
-# stays launchable; restore its catalog entry from git history before pointing
-# pi at it.
-if ! jq -e --argjson ids '["qwen3.8-27b-blackfrost-abliterated"]' \
-  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
-  "$PI_MODELS" >/dev/null; then
-  echo "FAIL: pi/models.json offers qwen3.8-27b-blackfrost-abliterated, which left the catalog with the primaries switch" >&2
-  exit 1
-fi
+# Retired from Pi's catalog with the primaries switch (2026-11-14); still launchable.
+# shellcheck source=tests/lib/pi-catalog.sh
+source "$ROOT/tests/lib/pi-catalog.sh"
+assert_not_in_pi_catalog qwen3.8-27b-blackfrost-abliterated
 
 printf 'PASS: Blackfrost abliterated Qwen3.8-27B BF16 profile is pinned, LAN-served, and credential-safe\n'

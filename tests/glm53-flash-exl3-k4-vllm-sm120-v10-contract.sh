@@ -197,17 +197,10 @@ contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v10'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v11'
 contains "$RUNBOOK" 'ef5f2fcb25d16abdcd800ff70b158e077780f2cb550a0ebf5bd1fe12e9f44553'
 
-# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
-# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
-# local models pi offers (scripts/inference/switch-primary.sh). This profile
-# stays launchable; restore its catalog entry from git history before pointing
-# pi at it.
-if ! jq -e --argjson ids '["glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10"]' \
-  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
-  "$PI_MODELS" >/dev/null; then
-  echo "FAIL: pi/models.json offers glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10, which left the catalog with the primaries switch" >&2
-  exit 1
-fi
+# Retired from Pi's catalog with the primaries switch (2026-11-14); still launchable.
+# shellcheck source=tests/lib/pi-catalog.sh
+source "$ROOT/tests/lib/pi-catalog.sh"
+assert_not_in_pi_catalog glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10
 
 assert_invalid_preflight() {
   local expected="$1"

@@ -88,24 +88,15 @@ while IFS= read -r arm; do
   fi
 done < <(selected_arms)
 
-# Local arms are measurable only if every child runs on the arm's exact selector.
-# The first rule that can apply to a local parent (parentClass local or
-# unconstrained) must give children either the parent itself, or the model the
-# provider serves now with the parent's thinking level (a served target with no
-# pinned thinkingLevel). The two are the same selector during a run, because
-# run-arm.sh refuses to start unless the arm's own profile is the one serving.
-# verify-run-models.sh still proves each child ran on the selector, so a routing
-# regression voids the run instead of passing silently.
+# Local arms are measurable only if every child runs on the arm's exact selector
+# (scripts/local-selector-invariant.jq states the predicate). The parent and the
+# served model are the same selector during a run, because run-arm.sh refuses to
+# start unless the arm's own profile is the one serving. verify-run-models.sh
+# still proves each child ran on the selector, so a routing regression voids the
+# run instead of passing silently.
 ROUTING="$ROOT/pi/model-routing.json"
-jq -e '
-  . as $policy
-  | [$policy.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)] as $local
-  | ($local | length > 0) and ($local[0].when == {"parentClass": "local"}) and (
-      $local[0].use == {"kind": "parent"} or
-      ($local[0].use.kind == "named" and
-        ($policy.targets[$local[0].use.target] | type == "object" and (.served | type == "string") and .thinkingLevel == null))
-    )
-' "$ROUTING" >/dev/null || fail "Pi routing does not bind local children to the parent selector"
+jq -e -f "$BENCH_DIR/scripts/local-selector-invariant.jq" "$ROUTING" >/dev/null \
+  || fail "Pi routing does not bind local children to the parent selector"
 
 reference_frs="$(mktemp)"
 test_frs="$(mktemp)"

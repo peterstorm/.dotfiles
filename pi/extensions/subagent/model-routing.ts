@@ -5,21 +5,21 @@ import {
 	parseModelReference,
 	resolveModelRoute,
 	routingErrorMessage,
+	servedProviders,
 	type ModelBinding,
-	type ModelReference,
 	type ModelRoutingPolicy,
+	type ServedModels,
 	type Result,
 	type RoutingDecision,
 } from "../model-routing/policy.js";
+import { probeServedModels, type ServedModelSource } from "../model-routing/served.js";
 
 export type SubagentRoutingSnapshot = Readonly<{
 	policy: ModelRoutingPolicy;
 	policyDigest: string;
 	parent?: ModelBinding;
-	/** provider -> model it serves, probed once per tool call (model-routing/served.ts). */
-	served?: Readonly<Record<string, ModelReference>>;
-	/** provider -> why the probe could not tell; surfaced when a rule needed it. */
-	servedFailures?: Readonly<Record<string, string>>;
+	/** provider -> the model it serves or why that is unknown, probed once per tool call (model-routing/served.ts). */
+	served?: ServedModels;
 }>;
 
 export type RoutingAudit = Readonly<{
@@ -36,6 +36,26 @@ export type ResolvedSubagentRoute = Readonly<{
 	args: readonly string[];
 	audit: RoutingAudit;
 }>;
+
+/**
+ * The one routing snapshot for a subagent tool call: probes exactly the providers a
+ * rule's served target needs, once, so every task in a parallel batch or chain gets
+ * the same answer even if the primary switches mid-call.
+ */
+export async function buildRoutingSnapshot(
+	loaded: Readonly<{ policy: ModelRoutingPolicy; digest: string }>,
+	parent: ModelBinding | undefined,
+	source: ServedModelSource,
+): Promise<SubagentRoutingSnapshot> {
+	const providers = servedProviders(loaded.policy);
+	const served = providers.length > 0 ? await probeServedModels(providers, source) : undefined;
+	return Object.freeze({
+		policy: loaded.policy,
+		policyDigest: loaded.digest,
+		...(parent ? { parent } : {}),
+		...(served ? { served } : {}),
+	});
+}
 
 export function parentBinding(
 	model: Readonly<{ provider: string; id: string }> | undefined,
@@ -78,12 +98,7 @@ export function resolveSubagentRoute(
 		},
 		snapshot.policyDigest,
 	);
-	if (!routed.ok) {
-		const reason = routed.error.kind === "served-model-unknown"
-			? snapshot.servedFailures?.[routed.error.provider]
-			: undefined;
-		return { ok: false, error: reason ? `${routingErrorMessage(routed.error)}: ${reason}` : routingErrorMessage(routed.error) };
-	}
+	if (!routed.ok) return { ok: false, error: routingErrorMessage(routed.error) };
 	const decision = routed.value;
 	const usesDeclaration = decision.kind === "declared";
 	const args = usesDeclaration

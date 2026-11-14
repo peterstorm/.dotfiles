@@ -3,7 +3,8 @@
 #
 # There is no published image: the recipe ships source, not binaries. The
 # Dockerfile in glm53-v16-hyperflare/ pins every input (base images by digest,
-# the fork by full commit, uv.lock/Cargo.lock --locked, rustc by version), so
+# the fork by full commit, uv.lock/Cargo.lock --locked, rustc by version,
+# rustup-init by version and sha256), so
 # this is a reproducible local build rather than a floating one. The image is
 # tagged by fork commit and CUDA version and labelled with the commit; the
 # export and run scripts refuse an image whose label differs.

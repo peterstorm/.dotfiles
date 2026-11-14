@@ -15,7 +15,6 @@ FIXTURE="$ROOT/tests/fixtures/qwen38-flash-next/D2.md"
 RUN="$ROOT/scripts/inference/qwen38/run-qwen38-flash-next-fp8-vllm-v1.sh"
 SWITCH="$ROOT/scripts/inference/qwen38/switch-qwen38-flash-next-profile-v1.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
-PI_MODELS="$ROOT/pi/models.json"
 
 contains() {
   local file="$1" text="$2"
@@ -96,17 +95,10 @@ contains "$PROBE" 'top_logprobs: 20'
 contains "$PROBE" 'determinism probe requires an idle engine'
 contains "$PROBE" 'greedy prefill is byte-identical across $ITERATIONS runs'
 contains "$CATALOG" 'qwen38-flash-next-fp8-vllm-v1'
-# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
-# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
-# local models pi offers (scripts/inference/switch-primary.sh). This profile
-# stays launchable; restore its catalog entry from git history before pointing
-# pi at it.
-if ! jq -e --argjson ids '["qwen3.8-flash-next-fp8"]' \
-  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
-  "$PI_MODELS" >/dev/null; then
-  echo "FAIL: pi/models.json offers qwen3.8-flash-next-fp8, which left the catalog with the primaries switch" >&2
-  exit 1
-fi
+# Retired from Pi's catalog with the primaries switch (2026-11-14); still launchable.
+# shellcheck source=tests/lib/pi-catalog.sh
+source "$ROOT/tests/lib/pi-catalog.sh"
+assert_not_in_pi_catalog qwen3.8-flash-next-fp8
 
 set +e
 output="$(MAX_NUM_SEQS=5 bash "$RUN" --preflight 2>&1)"

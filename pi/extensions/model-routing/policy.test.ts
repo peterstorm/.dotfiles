@@ -242,11 +242,19 @@ describe("served targets", () => {
 				{ id: "cloud-children", when: { parentClass: "cloud" }, use: { kind: "named", target: "local" } },
 			],
 		});
-	const served = (id: string) => {
-		const model = parseModelReference(`desktop-vllm/${id}`);
+	const served = (id: string, provider = "desktop-vllm") => {
+		const model = parseModelReference(`${provider}/${id}`);
 		if (!model.ok) throw new Error(model.error);
-		return { "desktop-vllm": model.value };
+		return { "desktop-vllm": { ok: true as const, value: model.value } };
 	};
+	const parseTargetOnly = (target: unknown) =>
+		parseModelRoutingPolicy({
+			schemaVersion: 1,
+			defaultClass: "cloud",
+			modelClasses: { local: ["desktop-vllm/*"] },
+			targets: { local: target },
+			rules: [],
+		});
 
 	it("parses a served target and lists the providers the shell must probe", () => {
 		const policy = servedPolicy({ served: "desktop-vllm", thinkingLevel: "high" });
@@ -256,14 +264,8 @@ describe("served targets", () => {
 	});
 
 	it("rejects a target that names both an exact model and a served provider, or neither", () => {
-		for (const target of [{ model: "desktop-vllm/x", served: "desktop-vllm" }, { thinkingLevel: "high" }, { served: "" }]) {
-			const parsed = parseModelRoutingPolicy({
-				schemaVersion: 1,
-				defaultClass: "cloud",
-				modelClasses: { local: ["desktop-vllm/*"] },
-				targets: { local: target },
-				rules: [],
-			});
+		for (const target of [{ model: "desktop-vllm/x", served: "desktop-vllm" }, { thinkingLevel: "high" }]) {
+			const parsed = parseTargetOnly(target);
 			expect(parsed.ok).toBe(false);
 			if (parsed.ok) continue;
 			expect(parsed.error.join("\n")).toContain("targets.local must name exactly one of model or served");
@@ -309,10 +311,75 @@ describe("served targets", () => {
 		);
 		expect(result).toEqual({
 			ok: false,
-			error: { kind: "served-model-unknown", ruleId: "cloud-children", provider: "desktop-vllm" },
+			error: { kind: "served-model-unknown", ruleId: "cloud-children", provider: "desktop-vllm", reason: "it was not probed" },
 		});
 		if (result.ok) return;
 		expect(routingErrorMessage(result.error)).toContain("desktop-vllm");
+	});
+
+	it("carries the probe's failure reason into the routing error", () => {
+		const result = resolveModelRoute(
+			servedPolicy(),
+			{
+				parent: binding("openai-codex", "gpt-5.6-sol", "high"),
+				workload: "subagent",
+				served: { "desktop-vllm": { ok: false, error: "cannot reach desktop-vllm: connect ECONNREFUSED" } },
+			},
+			"digest",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(routingErrorMessage(result.error)).toContain("ECONNREFUSED");
+	});
+
+	it("refuses a probed model of another provider instead of routing to it", () => {
+		const result = resolveModelRoute(
+			servedPolicy(),
+			{ parent: binding("openai-codex", "gpt-5.6-sol", "high"), workload: "subagent", served: served("gpt-5.6-sol", "openai-codex") },
+			"digest",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.error.kind).toBe("served-model-unknown");
+		expect(routingErrorMessage(result.error)).toContain("another provider");
+	});
+
+	it("omits the thinking level when neither the target nor the parent has one", () => {
+		const result = resolveModelRoute(
+			servedPolicy(),
+			{ parent: { model: binding("desktop-vllm", "warmind-1017-native").model }, workload: "subagent", served: served("warmind-1017-native") },
+			"digest",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.effective).toEqual(binding("desktop-vllm", "warmind-1017-native"));
+	});
+
+	it("probes only providers a rule actually routes to", () => {
+		const policy = parsePolicy({
+			targets: { unused: { served: "llama.cpp" }, local: { served: "desktop-vllm" } },
+			rules: [{ id: "local-children", when: { parentClass: "local" }, use: { kind: "named", target: "local" } }],
+		});
+		expect(servedProviders(policy)).toEqual(["desktop-vllm"]);
+	});
+
+	it("rejects malformed served providers and mixed malformed fields field by field", () => {
+		const cases: ReadonlyArray<readonly [unknown, string]> = [
+			[{ served: "desktop-vllm/x" }, "targets.local.served must be a provider name"],
+			[{ served: "*" }, "targets.local.served must be a provider name"],
+			[{ served: "" }, "targets.local.served must be a provider name"],
+			[{ served: 5 }, "targets.local.served must be a provider name"],
+			[{ served: "desktop-vllm", thinkingLevel: "bogus" }, "targets.local.thinkingLevel is invalid"],
+			[{ model: 5 }, "targets.local.model must be an exact provider/model reference"],
+			[{ model: "desktop-vllm/x", served: "   " }, "targets.local.served must be a provider name"],
+			[{ model: 5, served: "desktop-vllm" }, "targets.local.model must be an exact provider/model reference"],
+		];
+		for (const [target, message] of cases) {
+			const parsed = parseTargetOnly(target);
+			expect(parsed.ok).toBe(false);
+			if (parsed.ok) continue;
+			expect(parsed.error.join("\n")).toContain(message);
+		}
 	});
 
 	it("leaves exact targets independent of the served model", () => {

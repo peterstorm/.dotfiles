@@ -18,13 +18,23 @@
   },
   "rules": [
     {
-      "id": "local-children-use-served",
+      "id": "local-desktop-children-use-served",
       "when": {
-        "parentClass": "local"
+        "parentClass": "local",
+        "parentModel": "desktop-vllm/*"
       },
       "use": {
         "kind": "named",
         "target": "served"
+      }
+    },
+    {
+      "id": "other-local-children-inherit-parent",
+      "when": {
+        "parentClass": "local"
+      },
+      "use": {
+        "kind": "parent"
       }
     },
     {

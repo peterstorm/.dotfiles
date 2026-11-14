@@ -99,28 +99,34 @@ require_metrics_bridge() {
   echo "METRICS BRIDGE: :8011 reports $EXPECTED_MODEL"
 }
 
+# Runs with errexit suppressed (it sits in an `if ! … ||` chain), so every step
+# is checked explicitly and a failure names the step; success is printed only
+# after the receipt is actually in place.
 report_boot_receipt() {
   local logs image_id started_at package receipt_dir receipt_tmp capacity_lines
-  logs="$(docker logs "$TARGET" 2>&1)" || return 1
-  image_id="$(docker inspect "$TARGET" --format '{{.Image}}')" || return 1
-  started_at="$(docker inspect "$TARGET" --format '{{.State.StartedAt}}')" || return 1
-  package="$(docker inspect "$TARGET" --format '{{index .Config.Labels "ai.peterstorm.inference.package"}}')" || return 1
+  receipt_failed() { echo "error: boot receipt: $1" >&2; [ -z "${receipt_tmp:-}" ] || rm -f "$receipt_tmp"; return 1; }
+  logs="$(docker logs "$TARGET" 2>&1)" || { receipt_failed "docker logs $TARGET failed"; return 1; }
+  image_id="$(docker inspect "$TARGET" --format '{{.Image}}')" || { receipt_failed "docker inspect (image) failed"; return 1; }
+  started_at="$(docker inspect "$TARGET" --format '{{.State.StartedAt}}')" || { receipt_failed "docker inspect (start time) failed"; return 1; }
+  package="$(docker inspect "$TARGET" --format '{{index .Config.Labels "ai.peterstorm.inference.package"}}')" \
+    || { receipt_failed "docker inspect (package label) failed"; return 1; }
   # Recipe: "Plan cache. per GPU: 86.56 GiB loaded · 7.71 GiB cache budget" and
   # "Allocate cache. 15.4 GiB · 2231808 KV tokens · ..." at TP2.
-  capacity_lines="$(grep -E 'Plan cache\.|Allocate cache\.|Start server\.' <<<"$logs" | tail -n 6)"
+  capacity_lines="$(grep -E 'Plan cache\.|Allocate cache\.|Start server\.' <<<"$logs" | tail -n 6 || true)"
   receipt_dir="$(dirname "$BOOT_RECEIPT")"
-  install -d -m 700 "$receipt_dir"
-  receipt_tmp="$(mktemp "$receipt_dir/.v16-boot-receipt.XXXXXX")"
+  install -d -m 700 "$receipt_dir" || { receipt_failed "cannot create $receipt_dir"; return 1; }
+  receipt_tmp="$(mktemp "$receipt_dir/.v16-boot-receipt.XXXXXX")" || { receipt_failed "cannot create a temporary file in $receipt_dir"; return 1; }
   {
     printf 'container=%s\nmodel=%s\npackage=%s\nstarted_at=%s\nimage=%s\n' \
       "$TARGET" "$EXPECTED_MODEL" "$package" "$started_at" "$image_id"
     printf '%s\n' '--- capacity lines ---'
     printf '%s\n' "${capacity_lines:-<none captured>}"
-  } >"$receipt_tmp"
-  chmod 600 "$receipt_tmp"
-  mv -f "$receipt_tmp" "$BOOT_RECEIPT"
+  } >"$receipt_tmp" || { receipt_failed "cannot write $receipt_tmp"; return 1; }
+  chmod 600 "$receipt_tmp" || { receipt_failed "cannot chmod $receipt_tmp"; return 1; }
+  mv -f "$receipt_tmp" "$BOOT_RECEIPT" || { receipt_failed "cannot move the receipt to $BOOT_RECEIPT"; return 1; }
   printf 'BOOT RECEIPT: %s (model=%s, package=%s)\n' "$BOOT_RECEIPT" "$EXPECTED_MODEL" "$package"
   [ -n "$capacity_lines" ] || echo "WARNING: no capacity line captured; inspect docker logs $TARGET" >&2
+  return 0
 }
 
 promote_restart_policy() {

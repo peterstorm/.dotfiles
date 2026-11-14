@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { parseModelReference, parseModelRoutingPolicy } from "../model-routing/policy";
-import { bindingArguments, parentBinding, resolveSubagentRoute } from "./model-routing";
+import type { ServedModelSource } from "../model-routing/served";
+import { bindingArguments, buildRoutingSnapshot, parentBinding, resolveSubagentRoute } from "./model-routing";
 
 function policy() {
 	const parsed = parseModelRoutingPolicy({
@@ -141,7 +142,7 @@ describe("subagent model routing adapter", () => {
 		if (!glm.ok) throw new Error(glm.error);
 
 		const routed = resolveSubagentRoute(
-			{ policy: parsed.value, policyDigest: "abc", parent, served: { "desktop-vllm": glm.value }, servedFailures: {} },
+			{ policy: parsed.value, policyDigest: "abc", parent, served: { "desktop-vllm": { ok: true, value: glm.value } } },
 			loomAgent,
 		);
 		expect(routed.ok).toBe(true);
@@ -153,8 +154,7 @@ describe("subagent model routing adapter", () => {
 				policy: parsed.value,
 				policyDigest: "abc",
 				parent,
-				served: {},
-				servedFailures: { "desktop-vllm": "cannot reach desktop-vllm: connect ECONNREFUSED" },
+				served: { "desktop-vllm": { ok: false, error: "cannot reach desktop-vllm: connect ECONNREFUSED" } },
 			},
 			loomAgent,
 		);
@@ -162,6 +162,41 @@ describe("subagent model routing adapter", () => {
 		if (down.ok) return;
 		expect(down.error).toContain("all-children-local");
 		expect(down.error).toContain("ECONNREFUSED");
+	});
+
+	it("builds one snapshot per tool call: one probe for a whole batch, none without a served rule", async () => {
+		let probes = 0;
+		const source: ServedModelSource = {
+			baseUrl: () => "http://desktop:8000/v1",
+			apiKey: async () => "key",
+			inCatalog: () => true,
+			fetchJson: async () => {
+				probes++;
+				return { data: [{ id: "glm-5.3-flash-hyperflare-tp2-v16" }] };
+			},
+		};
+		const servedPolicy = parseModelRoutingPolicy({
+			schemaVersion: 1,
+			defaultClass: "cloud",
+			modelClasses: { local: ["desktop-vllm/*"] },
+			targets: { local: { served: "desktop-vllm" } },
+			rules: [{ id: "all-children-local", when: {}, use: { kind: "named", target: "local" } }],
+		});
+		if (!servedPolicy.ok) throw new Error(servedPolicy.error.join("\n"));
+
+		const snapshot = await buildRoutingSnapshot({ policy: servedPolicy.value, digest: "d" }, undefined, source);
+		const batch = ["code-reviewer", "planner", "worker"].map((name) =>
+			resolveSubagentRoute(snapshot, { name, model: undefined, modelProfile: undefined }));
+		expect(probes).toBe(1);
+		expect(batch.map((route) => (route.ok ? route.value.audit.effective : route.error))).toEqual([
+			"desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16",
+			"desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16",
+			"desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16",
+		]);
+
+		const plain = await buildRoutingSnapshot({ policy: policy(), digest: "d" }, undefined, source);
+		expect(probes).toBe(1);
+		expect(plain.served).toBeUndefined();
 	});
 
 	it("does not parse an opaque declaration before applying a local override", () => {

@@ -29,9 +29,9 @@ import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 import { loadModelRoutingPolicy } from "../model-routing/config.js";
-import { servedProviders } from "../model-routing/policy.js";
-import { probeServedModels, servedModelSourceFromRegistry } from "../model-routing/served.js";
+import { servedModelSourceFromRegistry } from "../model-routing/served.js";
 import {
+	buildRoutingSnapshot,
 	parentBinding,
 	resolveSubagentRoute,
 	type ResolvedSubagentRoute,
@@ -53,7 +53,7 @@ import {
 import { runRpcAgent } from "./rpc-launcher.js";
 
 const MAX_PARALLEL_TASKS = 8;
-const MAX_CONCURRENCY = 4;
+const MAX_CONCURRENCY = 8;
 const COLLAPSED_ITEM_COUNT = 10;
 
 function formatTokens(count: number): string {
@@ -89,72 +89,87 @@ function formatUsageStats(
 	return parts.join(" ");
 }
 
+const shortenPath = (p: string) => {
+	const home = os.homedir();
+	return p.startsWith(home) ? `~${p.slice(home.length)}` : p;
+};
+
+type ToolCallFormatter = (
+	args: Record<string, unknown>,
+	themeFg: (color: ThemeColor, text: string) => string,
+) => string;
+
+// Total over the open tool-name domain: known tools get a named formatter and
+// every other tool falls through to a JSON preview.
+const TOOL_CALL_FORMATTERS: Record<string, ToolCallFormatter> = {
+	bash: (args, themeFg) => {
+		const command = (args.command as string) || "...";
+		const preview = command.length > 60 ? `${command.slice(0, 60)}...` : command;
+		return themeFg("muted", "$ ") + themeFg("toolOutput", preview);
+	},
+	read: (args, themeFg) => {
+		const rawPath = (args.file_path || args.path || "...") as string;
+		const filePath = shortenPath(rawPath);
+		const offset = args.offset as number | undefined;
+		const limit = args.limit as number | undefined;
+		let text = themeFg("accent", filePath);
+		if (offset !== undefined || limit !== undefined) {
+			const startLine = offset ?? 1;
+			const endLine = limit !== undefined ? startLine + limit - 1 : "";
+			text += themeFg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
+		}
+		return themeFg("muted", "read ") + text;
+	},
+	write: (args, themeFg) => {
+		const rawPath = (args.file_path || args.path || "...") as string;
+		const filePath = shortenPath(rawPath);
+		const content = (args.content || "") as string;
+		const lines = content.split("\n").length;
+		let text = themeFg("muted", "write ") + themeFg("accent", filePath);
+		if (lines > 1) text += themeFg("dim", ` (${lines} lines)`);
+		return text;
+	},
+	edit: (args, themeFg) => {
+		const rawPath = (args.file_path || args.path || "...") as string;
+		return themeFg("muted", "edit ") + themeFg("accent", shortenPath(rawPath));
+	},
+	ls: (args, themeFg) => {
+		const rawPath = (args.path || ".") as string;
+		return themeFg("muted", "ls ") + themeFg("accent", shortenPath(rawPath));
+	},
+	find: (args, themeFg) => {
+		const pattern = (args.pattern || "*") as string;
+		const rawPath = (args.path || ".") as string;
+		return themeFg("muted", "find ") + themeFg("accent", pattern) + themeFg("dim", ` in ${shortenPath(rawPath)}`);
+	},
+	grep: (args, themeFg) => {
+		const pattern = (args.pattern || "") as string;
+		const rawPath = (args.path || ".") as string;
+		return (
+			themeFg("muted", "grep ") +
+			themeFg("accent", `/${pattern}/`) +
+			themeFg("dim", ` in ${shortenPath(rawPath)}`)
+		);
+	},
+};
+
+function formatUnknownToolCall(
+	toolName: string,
+	args: Record<string, unknown>,
+	themeFg: (color: ThemeColor, text: string) => string,
+): string {
+	const argsStr = JSON.stringify(args);
+	const preview = argsStr.length > 50 ? `${argsStr.slice(0, 50)}...` : argsStr;
+	return themeFg("accent", toolName) + themeFg("dim", ` ${preview}`);
+}
+
 function formatToolCall(
 	toolName: string,
 	args: Record<string, unknown>,
 	themeFg: (color: ThemeColor, text: string) => string,
 ): string {
-	const shortenPath = (p: string) => {
-		const home = os.homedir();
-		return p.startsWith(home) ? `~${p.slice(home.length)}` : p;
-	};
-
-	switch (toolName) {
-		case "bash": {
-			const command = (args.command as string) || "...";
-			const preview = command.length > 60 ? `${command.slice(0, 60)}...` : command;
-			return themeFg("muted", "$ ") + themeFg("toolOutput", preview);
-		}
-		case "read": {
-			const rawPath = (args.file_path || args.path || "...") as string;
-			const filePath = shortenPath(rawPath);
-			const offset = args.offset as number | undefined;
-			const limit = args.limit as number | undefined;
-			let text = themeFg("accent", filePath);
-			if (offset !== undefined || limit !== undefined) {
-				const startLine = offset ?? 1;
-				const endLine = limit !== undefined ? startLine + limit - 1 : "";
-				text += themeFg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
-			}
-			return themeFg("muted", "read ") + text;
-		}
-		case "write": {
-			const rawPath = (args.file_path || args.path || "...") as string;
-			const filePath = shortenPath(rawPath);
-			const content = (args.content || "") as string;
-			const lines = content.split("\n").length;
-			let text = themeFg("muted", "write ") + themeFg("accent", filePath);
-			if (lines > 1) text += themeFg("dim", ` (${lines} lines)`);
-			return text;
-		}
-		case "edit": {
-			const rawPath = (args.file_path || args.path || "...") as string;
-			return themeFg("muted", "edit ") + themeFg("accent", shortenPath(rawPath));
-		}
-		case "ls": {
-			const rawPath = (args.path || ".") as string;
-			return themeFg("muted", "ls ") + themeFg("accent", shortenPath(rawPath));
-		}
-		case "find": {
-			const pattern = (args.pattern || "*") as string;
-			const rawPath = (args.path || ".") as string;
-			return themeFg("muted", "find ") + themeFg("accent", pattern) + themeFg("dim", ` in ${shortenPath(rawPath)}`);
-		}
-		case "grep": {
-			const pattern = (args.pattern || "") as string;
-			const rawPath = (args.path || ".") as string;
-			return (
-				themeFg("muted", "grep ") +
-				themeFg("accent", `/${pattern}/`) +
-				themeFg("dim", ` in ${shortenPath(rawPath)}`)
-			);
-		}
-		default: {
-			const argsStr = JSON.stringify(args);
-			const preview = argsStr.length > 50 ? `${argsStr.slice(0, 50)}...` : argsStr;
-			return themeFg("accent", toolName) + themeFg("dim", ` ${preview}`);
-		}
-	}
+	const formatter = TOOL_CALL_FORMATTERS[toolName];
+	return formatter ? formatter(args, themeFg) : formatUnknownToolCall(toolName, args, themeFg);
 }
 
 interface UsageStats {
@@ -238,6 +253,38 @@ function getDisplayItems(messages: Message[]): DisplayItem[] {
 		}
 	}
 	return items;
+}
+
+function addExpandedResultSection(
+	container: Container,
+	r: SingleResult,
+	header: string,
+	themeFg: (color: ThemeColor, text: string) => string,
+	mdTheme: ReturnType<typeof getMarkdownTheme>,
+): void {
+	const rIcon = r.exitCode === 0 ? themeFg("success", "✓") : themeFg("error", "✗");
+	const displayItems = getDisplayItems(r.messages);
+	const finalOutput = getFinalOutput(r.messages);
+
+	container.addChild(new Spacer(1));
+	container.addChild(new Text(`${themeFg("muted", header) + themeFg("accent", r.agent)} ${rIcon}`, 0, 0));
+	container.addChild(new Text(themeFg("muted", "Task: ") + themeFg("dim", r.task), 0, 0));
+
+	for (const item of displayItems) {
+		if (item.type === "toolCall") {
+			container.addChild(
+				new Text(themeFg("muted", "→ ") + formatToolCall(item.name, item.args, themeFg), 0, 0),
+			);
+		}
+	}
+
+	if (finalOutput) {
+		container.addChild(new Spacer(1));
+		container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
+	}
+
+	const usage = formatUsageStats(r.usage, r.model);
+	if (usage) container.addChild(new Text(themeFg("dim", usage), 0, 0));
 }
 
 async function mapWithConcurrencyLimit<TIn, TOut>(
@@ -910,17 +957,11 @@ export default function (pi: ExtensionAPI) {
 			routingPolicyDigest = loadedRouting.value.digest;
 			// Probe served targets once per call, so every task in a parallel batch or
 			// chain lands on the same model even if the primary switches mid-call.
-			const probed = await probeServedModels(
-				servedProviders(loadedRouting.value.policy),
+			const routingSnapshot = await buildRoutingSnapshot(
+				loadedRouting.value,
+				parentBinding(ctx.model, ctx.thinkingLevel),
 				servedModelSourceFromRegistry(ctx.modelRegistry),
 			);
-			const routingSnapshot: SubagentRoutingSnapshot = Object.freeze({
-				policy: loadedRouting.value.policy,
-				policyDigest: loadedRouting.value.digest,
-				parent: parentBinding(ctx.model, ctx.thinkingLevel),
-				served: probed.served,
-				servedFailures: probed.failures,
-			});
 
 			if ((agentScope === "project" || agentScope === "both") && confirmProjectAgents && ctx.hasUI) {
 				const requestedAgentNames = new Set<string>();
@@ -1302,41 +1343,7 @@ export default function (pi: ExtensionAPI) {
 					);
 
 					for (const r of details.results) {
-						const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
-						const displayItems = getDisplayItems(r.messages);
-						const finalOutput = getFinalOutput(r.messages);
-
-						container.addChild(new Spacer(1));
-						container.addChild(
-							new Text(
-								`${theme.fg("muted", `─── Step ${r.step}: `) + theme.fg("accent", r.agent)} ${rIcon}`,
-								0,
-								0,
-							),
-						);
-						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", r.task), 0, 0));
-
-						// Show tool calls
-						for (const item of displayItems) {
-							if (item.type === "toolCall") {
-								container.addChild(
-									new Text(
-										theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme)),
-										0,
-										0,
-									),
-								);
-							}
-						}
-
-						// Show final output as markdown
-						if (finalOutput) {
-							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
-						}
-
-						const stepUsage = formatUsageStats(r.usage, r.model);
-						if (stepUsage) container.addChild(new Text(theme.fg("dim", stepUsage), 0, 0));
+						addExpandedResultSection(container, r, `─── Step ${r.step}: `, theme.fg.bind(theme), mdTheme);
 					}
 
 					const usageStr = formatUsageStats(aggregateUsage(details.results));
@@ -1371,11 +1378,9 @@ export default function (pi: ExtensionAPI) {
 				const successCount = details.results.filter((r) => r.exitCode === 0).length;
 				const failCount = details.results.filter((r) => r.exitCode > 0).length;
 				const isRunning = running > 0;
-				const icon = isRunning
-					? theme.fg("warning", "⏳")
-					: failCount > 0
-						? theme.fg("warning", "◐")
-						: theme.fg("success", "✓");
+				let icon = theme.fg("success", "✓");
+				if (isRunning) icon = theme.fg("warning", "⏳");
+				else if (failCount > 0) icon = theme.fg("warning", "◐");
 				const status = isRunning
 					? `${successCount + failCount}/${details.results.length} done, ${running} running`
 					: `${successCount}/${details.results.length} tasks`;
@@ -1391,37 +1396,7 @@ export default function (pi: ExtensionAPI) {
 					);
 
 					for (const r of details.results) {
-						const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
-						const displayItems = getDisplayItems(r.messages);
-						const finalOutput = getFinalOutput(r.messages);
-
-						container.addChild(new Spacer(1));
-						container.addChild(
-							new Text(`${theme.fg("muted", "─── ") + theme.fg("accent", r.agent)} ${rIcon}`, 0, 0),
-						);
-						container.addChild(new Text(theme.fg("muted", "Task: ") + theme.fg("dim", r.task), 0, 0));
-
-						// Show tool calls
-						for (const item of displayItems) {
-							if (item.type === "toolCall") {
-								container.addChild(
-									new Text(
-										theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme)),
-										0,
-										0,
-									),
-								);
-							}
-						}
-
-						// Show final output as markdown
-						if (finalOutput) {
-							container.addChild(new Spacer(1));
-							container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
-						}
-
-						const taskUsage = formatUsageStats(r.usage, r.model);
-						if (taskUsage) container.addChild(new Text(theme.fg("dim", taskUsage), 0, 0));
+						addExpandedResultSection(container, r, "─── ", theme.fg.bind(theme), mdTheme);
 					}
 
 					const usageStr = formatUsageStats(aggregateUsage(details.results));
@@ -1435,12 +1410,9 @@ export default function (pi: ExtensionAPI) {
 				// Collapsed view (or still running)
 				let text = `${icon} ${theme.fg("toolTitle", theme.bold("parallel "))}${theme.fg("accent", status)}`;
 				for (const r of details.results) {
-					const rIcon =
-						r.exitCode === -1
-							? theme.fg("warning", "⏳")
-							: r.exitCode === 0
-								? theme.fg("success", "✓")
-								: theme.fg("error", "✗");
+					let rIcon = theme.fg("error", "✗");
+					if (r.exitCode === -1) rIcon = theme.fg("warning", "⏳");
+					else if (r.exitCode === 0) rIcon = theme.fg("success", "✓");
 					const displayItems = getDisplayItems(r.messages);
 					text += `\n\n${theme.fg("muted", "─── ")}${theme.fg("accent", r.agent)} ${rIcon}`;
 					if (displayItems.length === 0)

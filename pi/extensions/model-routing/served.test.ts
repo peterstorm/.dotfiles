@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { probeServedModels, servedModelId, type ServedModelSource } from "./served";
+import { afterEach, describe, expect, it } from "bun:test";
+import { probeServedModels, servedModelId, servedModelSourceFromRegistry, type ServedModelSource } from "./served";
 
 const modelsBody = (...ids: string[]) => ({ object: "list", data: ids.map((id) => ({ id, object: "model" })) });
 
@@ -10,6 +10,12 @@ const fakeSource = (overrides: Partial<ServedModelSource> = {}): ServedModelSour
 	fetchJson: async () => modelsBody("glm-5.3-flash-hyperflare-tp2-v16"),
 	...overrides,
 });
+
+const failureOf = (result: Awaited<ReturnType<typeof probeServedModels>>, provider: string): string => {
+	const entry = result[provider];
+	if (!entry) return `${provider}: not probed`;
+	return entry.ok ? `${provider}: unexpectedly served ${entry.value.id}` : entry.error;
+};
 
 describe("served model id", () => {
 	it("reads the one model an OpenAI /v1/models list names", () => {
@@ -33,31 +39,94 @@ describe("probing served models", () => {
 			},
 		}));
 		expect(requested).toEqual({ url: "http://192.168.0.80:8000/v1/models", auth: "Bearer key" });
-		expect(result.failures).toEqual({});
-		expect(result.served["desktop-vllm"]?.id).toBe("warmind-1017-native");
-		expect(result.served["desktop-vllm"]?.provider).toBe("desktop-vllm");
+		const entry = result["desktop-vllm"];
+		expect(entry?.ok).toBe(true);
+		if (!entry?.ok) return;
+		expect(entry.value.id).toBe("warmind-1017-native");
+		expect(entry.value.provider).toBe("desktop-vllm");
 	});
 
 	it("records why a provider could not be probed instead of guessing", async () => {
-		const cases: ReadonlyArray<readonly [string, Partial<ServedModelSource>, string]> = [
-			["unreachable", { fetchJson: async () => { throw new Error("connect ECONNREFUSED"); } }, "ECONNREFUSED"],
-			["not in catalog", { fetchJson: async () => modelsBody("unlisted-model") }, "not in Pi's catalog"],
-			["ambiguous", { fetchJson: async () => modelsBody("a", "b") }, "exactly one"],
-			["no key", { apiKey: async () => undefined }, "no API key"],
+		const cases: ReadonlyArray<readonly [Partial<ServedModelSource>, string]> = [
+			[{ fetchJson: async () => { throw new Error("connect ECONNREFUSED"); } }, "ECONNREFUSED"],
+			[{ fetchJson: async () => modelsBody("unlisted-model") }, "not in Pi's catalog"],
+			[{ fetchJson: async () => modelsBody("a", "b") }, "exactly one"],
+			[{ apiKey: async () => undefined }, "no API key"],
 		];
-		for (const [name, overrides, reason] of cases) {
-			const result = await probeServedModels(["desktop-vllm"], fakeSource(overrides));
-			expect(result.served["desktop-vllm"]).toBeUndefined();
-			expect(result.failures["desktop-vllm"] ?? `${name}: no failure`).toContain(reason);
+		for (const [overrides, reason] of cases) {
+			expect(failureOf(await probeServedModels(["desktop-vllm"], fakeSource(overrides)), "desktop-vllm")).toContain(reason);
 		}
-		const unknown = await probeServedModels(["nowhere"], fakeSource());
-		expect(unknown.failures.nowhere).toContain("no baseUrl");
+		expect(failureOf(await probeServedModels(["nowhere"], fakeSource()), "nowhere")).toContain("no baseUrl");
 	});
 
-	it("probes nothing when no rule needs a served model", async () => {
+	it("never throws: a rejecting key command or catalog lookup is a recorded failure", async () => {
+		const keyFails = await probeServedModels(["desktop-vllm"], fakeSource({
+			apiKey: async () => { throw new Error("ssh: connect to host desktop: timed out"); },
+		}));
+		expect(failureOf(keyFails, "desktop-vllm")).toContain("timed out");
+		const catalogFails = await probeServedModels(["desktop-vllm"], fakeSource({
+			inCatalog: () => { throw new Error("catalog unavailable"); },
+		}));
+		expect(failureOf(catalogFails, "desktop-vllm")).toContain("catalog unavailable");
+	});
+
+	it("probes nothing when no provider is needed", async () => {
 		let calls = 0;
 		const result = await probeServedModels([], fakeSource({ fetchJson: async () => { calls++; return modelsBody("x"); } }));
 		expect(calls).toBe(0);
-		expect(result).toEqual({ served: {}, failures: {} });
+		expect(result).toEqual({});
+	});
+});
+
+describe("registry adapter against a live HTTP stub", () => {
+	const servers: Array<{ stop: (force?: boolean) => void }> = [];
+	afterEach(() => {
+		for (const server of servers.splice(0)) server.stop(true);
+	});
+
+	const serve = (handler: (request: Request) => Response | Promise<Response>) => {
+		const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: handler });
+		servers.push(server);
+		return `http://127.0.0.1:${server.port}/v1`;
+	};
+
+	const registry = (baseUrl: string, catalog: readonly string[] = ["glm-5.3-flash-hyperflare-tp2-v16"]) => ({
+		getAll: () => [{ provider: "cloud" }, { provider: "desktop-vllm", baseUrl }],
+		find: (provider: string, id: string) => (provider === "desktop-vllm" && catalog.includes(id) ? { id } : undefined),
+		getApiKeyForProvider: async (provider: string) => (provider === "desktop-vllm" ? "sekrit" : undefined),
+	});
+
+	it("sends the key, finds the provider's baseUrl, and maps the served model", async () => {
+		let auth: string | null = null;
+		const base = serve((request) => {
+			auth = request.headers.get("authorization");
+			return Response.json(modelsBody("glm-5.3-flash-hyperflare-tp2-v16"));
+		});
+		const result = await probeServedModels(["desktop-vllm"], servedModelSourceFromRegistry(registry(base)));
+		expect(auth).toBe("Bearer sekrit");
+		expect(result["desktop-vllm"]).toEqual({
+			ok: true,
+			value: expect.objectContaining({ provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16" }),
+		});
+	});
+
+	it("turns an HTTP error into a recorded failure", async () => {
+		const base = serve(() => new Response("nope", { status: 500 }));
+		const result = await probeServedModels(["desktop-vllm"], servedModelSourceFromRegistry(registry(base)));
+		expect(failureOf(result, "desktop-vllm")).toContain("HTTP 500");
+	});
+
+	it("gives up on a stalled server within the timeout", async () => {
+		const base = serve(() => new Promise<Response>(() => {}));
+		const started = Date.now();
+		const result = await probeServedModels(["desktop-vllm"], servedModelSourceFromRegistry(registry(base), 150));
+		expect(Date.now() - started).toBeLessThan(2000);
+		expect(failureOf(result, "desktop-vllm")).toContain("cannot reach desktop-vllm");
+	});
+
+	it("refuses a served model that is missing from Pi's catalog", async () => {
+		const base = serve(() => Response.json(modelsBody("something-else")));
+		const result = await probeServedModels(["desktop-vllm"], servedModelSourceFromRegistry(registry(base)));
+		expect(failureOf(result, "desktop-vllm")).toContain("not in Pi's catalog");
 	});
 });

@@ -105,8 +105,9 @@ read_active() {
   if [ "$glm" = 0 ] && [ "$ds41" = 0 ]; then echo both; return; fi
   if [ "$glm" = 0 ]; then echo glm; return; fi
   if [ "$ds41" = 0 ]; then
-    primary_of_served "$(container_label "$DS41_CONTAINER" ai.peterstorm.inference.served-model)" | grep . \
-      || echo "other:$DS41_CONTAINER (unrecognised served model)"
+    local served
+    served="$(ds41_served_primary)"
+    echo "${served:-other:$DS41_CONTAINER (unrecognised served model)}"
     return
   fi
   for container in "${INFERENCE_PROFILE_CONTAINERS[@]}"; do
@@ -118,9 +119,15 @@ read_active() {
   echo none
 }
 
+# The primary the ds41 container serves (or last served), from the label its
+# launcher sets; empty when the label is missing or unrecognised.
+ds41_served_primary() {
+  primary_of_served "$(container_label "$DS41_CONTAINER" ai.peterstorm.inference.served-model)"
+}
+
 read_last_ds41() {
   local primary
-  primary="$(primary_of_served "$(container_label "$DS41_CONTAINER" ai.peterstorm.inference.served-model)")"
+  primary="$(ds41_served_primary)"
   echo "${primary:-warmind}"
 }
 
@@ -137,14 +144,24 @@ read_last() {
 }
 
 # Returns 1 (does not exit) so the rollback path can still run after a timeout.
+# Only a numeric reading can prove the GPUs free: a failed or empty nvidia-smi
+# keeps polling (callers run this with errexit suppressed, where an empty value
+# would otherwise compare as 0 MiB).
+GPU_FREE_TIMEOUT_SECONDS="${GPU_FREE_TIMEOUT_SECONDS:-90}"
+GPU_POLL_SECONDS="${GPU_POLL_SECONDS:-3}"
 wait_for_free_gpus() {
-  local deadline=$((SECONDS + 90)) used
+  local deadline=$((SECONDS + GPU_FREE_TIMEOUT_SECONDS)) used last="no reading"
   while ((SECONDS < deadline)); do
-    used="$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | sort -n | tail -1 | tr -d ' ')"
-    ((used <= 1024)) && return 0
-    sleep 3
+    used="$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | sort -n | tail -1 | tr -d ' ')" || used=""
+    if [[ "$used" =~ ^[0-9]+$ ]]; then
+      ((used <= 1024)) && return 0
+      last="${used} MiB in use"
+    else
+      last="nvidia-smi gave no reading"
+    fi
+    sleep "$GPU_POLL_SECONDS"
   done
-  echo "error: GPU memory was not released within 90 s after stopping the previous primary" >&2
+  echo "error: GPUs not free within ${GPU_FREE_TIMEOUT_SECONDS} s after stopping the previous primary (${last})" >&2
   return 1
 }
 
@@ -172,24 +189,29 @@ report() {
   echo "pi:      pi --model desktop-vllm/$served"
 }
 
+# Returns non-zero on failure (main exits), so the sequencing is testable with
+# stubbed effects (tests/switch-primary-unit.sh).
 switch_to() {
   local target="$1" active="$2"
   if [ "$target" = glm ]; then
-    start_primary glm
+    # The GLM switcher gates, quiesces, accepts and rolls back by itself.
+    start_primary glm || return 1
     report glm
-    return
+    return 0
   fi
   # To ds41: gate on idle, stop what serves, launch, and on failure bring the
   # previous primary back with its own launcher.
-  [ "$active" = none ] || inference_require_idle_endpoint
-  stop_primary "$active"
+  if [ "$active" != none ]; then
+    inference_require_idle_endpoint || return 1
+  fi
+  stop_primary "$active" || { echo "error: could not stop $active; nothing was started" >&2; return 1; }
   if ! wait_for_free_gpus || ! start_primary "$target"; then
     echo "error: $target failed to start; restoring $active" >&2
     if [ "$active" != none ]; then
       wait_for_free_gpus || true
       start_primary "$active" || echo "error: rollback to $active failed too; nothing serves" >&2
     fi
-    exit 1
+    return 1
   fi
   report "$target"
 }
@@ -210,7 +232,9 @@ main() {
   last="$(read_last)"
   last_ds41="$(read_last_ds41)"
   if [ "$request" = status ]; then
-    echo "active:     $active$([ "$active" = none ] || [[ "$active" == other:* ]] || [ "$active" = both ] || echo " ($(served_of_primary "$active"))")"
+    local suffix=""
+    case "$active" in glm | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
+    echo "active:     $active$suffix"
     echo "last:       $last"
     echo "toggle ->   $(primary_decide toggle "$active" "$last" "$last_ds41")"
     return 0
@@ -219,7 +243,7 @@ main() {
   decision="$(primary_decide "$request" "$active" "$last" "$last_ds41")"
   case "$decision" in
     noop:*) report "${decision#noop:}"; echo "(already the primary; nothing to do)" ;;
-    start:*) echo "switching: $active -> ${decision#start:}"; switch_to "${decision#start:}" "$active" ;;
+    start:*) echo "switching: $active -> ${decision#start:}"; switch_to "${decision#start:}" "$active" || exit 1 ;;
     error:*) die "${decision#error:}" ;;
     *) die "internal: unexpected decision '$decision'" ;;
   esac

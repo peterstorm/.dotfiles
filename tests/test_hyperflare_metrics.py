@@ -5,7 +5,11 @@ No network, no engine, no GPU. The cross-module test feeds the bridge's own
 exposition through the ledger recorder's parser, so the two stay one contract.
 """
 
+import http.server
 import importlib.util
+import json
+import tempfile
+import threading
 import pathlib
 import unittest
 
@@ -154,6 +158,88 @@ class LedgerContractTest(unittest.TestCase):
     def test_raw_flare_exposition_is_not_a_ledger_schema(self):
         # :8000 itself must not be double-counted alongside the bridge on :8011.
         self.assertIsNone(record.parse_counters(FLARE))
+
+
+class StubEngine:
+    """A throwaway HTTP server standing in for whatever owns :8000."""
+
+    def __init__(self, routes):
+        self.routes = routes  # path -> (status, body); missing path -> 404
+        self.seen = []
+        stub = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                stub.seen.append((self.path, self.headers.get("Authorization")))
+                status, body = stub.routes.get(self.path, (404, ""))
+                payload = body.encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+class SourceShellTest(unittest.TestCase):
+    """The 503 mapping the recorder and the switcher rely on."""
+
+    def setUp(self):
+        self.key = tempfile.NamedTemporaryFile("w", delete=False)
+        self.key.write("secret-key\n")
+        self.key.close()
+
+    def tearDown(self):
+        pathlib.Path(self.key.name).unlink()
+
+    def scrape(self, routes):
+        engine = StubEngine(routes)
+        try:
+            return bridge.Source(engine.url, pathlib.Path(self.key.name)).scrape(), engine.seen
+        finally:
+            engine.close()
+
+    def test_hyperflare_engine_is_translated_and_only_models_is_authenticated(self):
+        (status, body), seen = self.scrape({"/metrics": (200, FLARE), "/v1/models": (200, json.dumps(MODELS))})
+        self.assertEqual(status, 200)
+        self.assertIn('hyperflare:model_info{model_name="glm-5.3-flash-hyperflare-tp2-v16"} 1', body)
+        self.assertEqual(dict(seen), {"/metrics": None, "/v1/models": "Bearer secret-key"})
+
+    def test_another_runtime_on_8000_is_503_without_sending_the_key(self):
+        (status, body), seen = self.scrape({"/metrics": (200, 'vllm:prompt_tokens_total{model_name="q"} 1\n')})
+        self.assertEqual(status, 503)
+        self.assertIn("not a Hyperflare server", body)
+        self.assertEqual([path for path, _ in seen], ["/metrics"])
+
+    def test_rejected_key_and_bad_models_body_are_503(self):
+        for models in [(401, "unauthorized"), (200, "not json"), (200, json.dumps({"data": []}))]:
+            (status, body), _ = self.scrape({"/metrics": (200, FLARE), "/v1/models": models})
+            self.assertEqual(status, 503, models)
+            self.assertTrue(body.startswith("# hyperflare bridge:"), body)
+
+    def test_unreachable_engine_is_503(self):
+        engine = StubEngine({})
+        url = engine.url
+        engine.close()
+        status, body = bridge.Source(url, pathlib.Path(self.key.name)).scrape()
+        self.assertEqual(status, 503)
+        self.assertIn("URLError", body)
+
+    def test_log_state_distinguishes_503_reasons(self):
+        self.assertNotEqual(
+            bridge.log_state(503, "# hyperflare bridge: URLError: refused\n"),
+            bridge.log_state(503, "# hyperflare bridge: HTTPError: HTTP Error 401\n"),
+        )
+        self.assertEqual(bridge.log_state(200, "a"), bridge.log_state(200, "b"))
 
 
 if __name__ == "__main__":

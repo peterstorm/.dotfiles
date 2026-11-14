@@ -7,8 +7,8 @@
 # vision). No overlay, no derived image, no local checkpoint: the contract
 # proves, without Docker or a GPU, that the pull/run/switch scripts pin the
 # upstream deployment facts (image ref, preset, served model id, memory
-# contract, cache plan, workstation gates, transactional promotion), that the
-# Pi catalog and routing policy carry the exact same ids, and that the
+# contract, cache plan, workstation gates, transactional promotion), that Pi
+# no longer offers the id (retired with the primaries switch), and that the
 # vendored upstream doc is the version the profile was built against.
 # shellcheck disable=SC2016
 set -euo pipefail
@@ -187,46 +187,17 @@ lacks "$SWITCH" 'VLLM_B12X_FP8_KV'
 # --- catalog carries the container -------------------------------------------
 contains "$CATALOG" "$CONTAINER"
 
-# --- Pi catalog and routing carry the exact same ids --------------------------
-jq -e --arg id "$SERVED_MODEL" '
-  .providers["desktop-vllm"].models | any(.id == $id)
-' "$PI_MODELS" >/dev/null || {
-  echo "FAIL: pi/models.json lacks $SERVED_MODEL" >&2
-  exit 1
-}
-jq -e --arg id "$SERVED_MODEL" '
-  (.providers["desktop-vllm"].models[] | select(.id == $id)) as $m
-  | ($m.contextWindow == 350000)
-  and ($m.input | index("image") != null)
-  and ($m.input | index("text") != null)
-  and ($m.reasoning == true)
-  and ($m.compat.thinkingFormat == "deepseek")
-  and ($m.compat.supportsDeveloperRole == false)
-' "$PI_MODELS" >/dev/null || {
-  echo "FAIL: pi/models.json $SERVED_MODEL entry does not match the v14 contract" >&2
-  exit 1
-}
-jq -e '
-  .targets["glm-v14"].model == "desktop-vllm/glm-5.3-flash-spark-tp2-v14"
-  and .targets["glm-v14"].thinkingLevel == "max"
-' "$PI_ROUTING" >/dev/null || {
-  echo "FAIL: pi/model-routing.json lacks the glm-v14 exact target" >&2
-  exit 1
-}
-jq -e '
-  .rules | any(
-    .id == "glm-v14-subagents-use-max"
-    and .when.parentModel == "desktop-vllm/glm-5.3-flash-spark-tp2-v14"
-    and .use.target == "glm-v14"
-  )
-' "$PI_ROUTING" >/dev/null || {
-  echo "FAIL: pi/model-routing.json lacks the glm-v14 subagent rule" >&2
-  exit 1
-}
+# --- Pi no longer offers the id; the README keeps its context facts ----------
+# Retired from Pi's catalog with the primaries switch (2026-11-14); still
+# launchable. Pi routes children by parent class and served model, so no
+# routing rule names this id (the glm-v14 pin left with served routing).
+# shellcheck source=tests/lib/pi-catalog.sh
+source "$ROOT/tests/lib/pi-catalog.sh"
+assert_not_in_pi_catalog "$SERVED_MODEL"
+lacks "$PI_ROUTING" "$SERVED_MODEL"
 contains "$PI_README" "$SERVED_MODEL"
 contains "$PI_README" '983,040'
 contains "$PI_README" '350,000'
-contains "$PI_README" 'glm-v14'
 
 # --- runbook stays coherent ---------------------------------------------------
 contains "$RUNBOOK" "$SERVED_MODEL"

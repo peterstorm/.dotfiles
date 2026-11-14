@@ -68,6 +68,12 @@ grep -Eq '^FROM nvidia/cuda:13\.1\.1-devel-ubuntu24\.04@sha256:[0-9a-f]{64}$' "$
   fail "CUDA base image is not digest-pinned 13.1.1-devel"
 grep -Eq '^FROM ghcr\.io/astral-sh/uv:0\.11\.29@sha256:[0-9a-f]{64} AS uv$' "$DOCKERFILE" ||
   fail "uv image is not digest-pinned 0.11.29"
+# The Rust installer is a versioned, checksummed artifact, never a piped script.
+contains "$DOCKERFILE" 'ARG RUSTUP_VERSION=1.29.3'
+grep -Eq '^ARG RUSTUP_INIT_SHA256=[0-9a-f]{64}$' "$DOCKERFILE" || fail "rustup-init is not sha256-pinned"
+contains "$DOCKERFILE" 'https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init'
+contains "$DOCKERFILE" 'echo "$RUSTUP_INIT_SHA256  /tmp/rustup-init" | sha256sum -c -'
+absent "$DOCKERFILE" 'sh.rustup.rs'
 for script in "$BUILD" "$EXPORT" "$RUN"; do
   contains "$script" "IMAGE=\"$IMAGE\""
   contains "$script" "HYPERFLARE_COMMIT=\"$FORK_COMMIT\""

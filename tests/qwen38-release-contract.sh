@@ -7,7 +7,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
 DOWNLOAD="$ROOT/scripts/inference/qwen38/download-qwen38-27b.sh"
 DOC="$ROOT/docs/runbooks/new-desktop-install.md"
-PI_MODELS="$ROOT/pi/models.json"
 IMAGE="vllm/vllm-openai:qwen38"
 DIGEST="sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e"
 MODEL_REV="1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -77,16 +76,9 @@ contains "$DOC" "$IMAGE"
 contains "$DOC" "$DIGEST"
 contains "$DOC" "$MODEL_REV"
 
-# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
-# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
-# local models pi offers (scripts/inference/switch-primary.sh). This profile
-# stays launchable; restore its catalog entry from git history before pointing
-# pi at it.
-if ! jq -e --argjson ids '["qwen3.8-27b"]' \
-  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
-  "$PI_MODELS" >/dev/null; then
-  echo "FAIL: pi/models.json offers qwen3.8-27b, which left the catalog with the primaries switch" >&2
-  exit 1
-fi
+# Retired from Pi's catalog with the primaries switch (2026-11-14); still launchable.
+# shellcheck source=tests/lib/pi-catalog.sh
+source "$ROOT/tests/lib/pi-catalog.sh"
+assert_not_in_pi_catalog qwen3.8-27b
 
 printf 'PASS: Qwen3.8 BF16 release and Pi model contracts are internally consistent\n'

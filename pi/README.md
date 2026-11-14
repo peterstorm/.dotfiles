@@ -511,11 +511,13 @@ nested Pi workloads. Provider names, endpoint URLs, and model prices are never u
 guess whether a model is local.
 
 **Children run on whatever local model is served right now.** The policy classifies
-`desktop-vllm/*` as local and routes to a *served* target instead of a fixed id:
+`desktop-vllm/*` (and `llama.cpp/*`) as local; desktop-vllm parents route to a *served* target
+instead of a fixed id:
 
 | Active parent | Subagent launch binding |
 |---|---|
-| Local model (either primary, even one that is not the served one) | The model desktop-vllm serves now, at the **parent's** thinking level |
+| desktop-vllm model (any of the three primaries, even one that is not the served one) | The model desktop-vllm serves now, at the **parent's** thinking level (`local-desktop-children-use-served`) |
+| Any other local model (e.g. `llama.cpp/*`) | The local parent itself (`other-local-children-inherit-parent`): desktop-vllm's served model says nothing about it |
 | Cloud model, agent `worker` | The cloud parent itself (`cloud-workers-use-parent`) |
 | Any other cloud or unknown model | The model desktop-vllm serves now, at `high` |
 

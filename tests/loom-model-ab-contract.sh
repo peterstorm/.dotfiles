@@ -202,17 +202,23 @@ if grep -Eq -- 'curl .*Authorization: Bearer' "$RUN"; then
 fi
 
 # A local parent's children must run on the arm's selector: the parent itself, or
-# the served model at the parent's thinking level (no pinned thinkingLevel). Same
-# predicate as verify-harness.sh, which gates every attended run.
-jq -e '
-  . as $policy
-  | [$policy.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)] as $local
-  | ($local | length > 0) and ($local[0].when == {"parentClass": "local"}) and (
-      $local[0].use == {"kind": "parent"} or
-      ($local[0].use.kind == "named" and
-        ($policy.targets[$local[0].use.target] | type == "object" and (.served | type == "string") and .thinkingLevel == null))
-    )
-' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing does not keep local children on the arm's selector"
+# the served model at the parent's thinking level. verify-harness.sh gates every
+# attended run with the same predicate file; each mutation below must break it.
+LOCAL_SELECTOR="$BENCH/scripts/local-selector-invariant.jq"
+jq -e -f "$LOCAL_SELECTOR" "$ROOT/pi/model-routing.json" >/dev/null \
+  || fail "Pi routing does not keep local children on the arm's selector"
+contains "$VERIFY" 'local-selector-invariant.jq'
+while IFS= read -r mutation; do
+  if jq "$mutation" "$ROOT/pi/model-routing.json" | jq -e -f "$LOCAL_SELECTOR" >/dev/null; then
+    fail "local-selector predicate accepts a policy that moves local children: $mutation"
+  fi
+done <<'MUTATIONS'
+.targets.served.thinkingLevel = "high"
+.targets.served = {"model": "desktop-vllm/pinned-id"}
+.rules |= map(if .when.parentClass == "local" and .use.kind == "parent" then .use = {"kind": "named", "target": "served-high"} else . end)
+.rules |= map(select(.when.parentClass == "cloud"))
+.rules += [{"id": "any-worker-declared", "when": {"agent": "worker"}, "use": {"kind": "declared"}}]
+MUTATIONS
 
 # Only arms whose model is still offered by Pi can run (pi/models.json lists the
 # primaries since 2026-11-14); retired arms keep their recorded runs, and

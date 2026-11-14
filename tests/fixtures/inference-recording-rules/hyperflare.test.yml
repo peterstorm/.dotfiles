@@ -1,0 +1,141 @@
+# promtool unit tests for the Hyperflare block of
+# k8s/argocd-homelab/monitoring/templates/inference-recording-rules.yaml.
+# Run by tests/inference-recording-rules-promtool.sh, which renders the Helm
+# template to rules.yml beside this file.
+rule_files:
+  - rules.yml
+evaluation_interval: 15s
+
+tests:
+  # A busy GLM v16: every counter moves at a steady rate, 15 s scrapes.
+  - interval: 15s
+    input_series:
+      - series: 'hyperflare:prompt_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+150x60'
+      - series: 'hyperflare:prompt_tokens_cached_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+60x60'
+      - series: 'hyperflare:generation_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+75x60'
+      - series: 'hyperflare:requests_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+1x60'
+      - series: 'hyperflare:requests_running{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '2x60'
+      - series: 'hyperflare:requests_waiting{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '1x60'
+      - series: 'hyperflare:kv_cache_usage_ratio{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0.25x60'
+      # 15 rounds offer a draft per scrape, 30 drafts are accepted of 60 verified.
+      - series: 'hyperflare:spec_draft_rounds_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+15x60'
+      - series: 'hyperflare:spec_accepted_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+30x60'
+      - series: 'hyperflare:spec_draft_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+60x60'
+      - series: 'hyperflare:first_response_median_seconds{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0.8x60'
+    promql_expr_test:
+      # Counters pass through, gaining only the engine label.
+      - expr: inference:prompt_tokens_total
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:prompt_tokens_total{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 6000
+      - expr: inference:generation_tokens_total
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:generation_tokens_total{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 3000
+      - expr: inference:request_success_total
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:request_success_total{engine="hyperflare",finished_reason="completed",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 40
+      - expr: inference:num_requests_running
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:num_requests_running{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 2
+      - expr: inference:num_requests_waiting
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:num_requests_waiting{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 1
+      - expr: inference:kv_cache_usage_ratio
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:kv_cache_usage_ratio{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 0.25
+      # 60 cached of 150 prompt tokens per scrape.
+      - expr: inference:prefix_cache_hit_ratio
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:prefix_cache_hit_ratio{calculation="token_weighted_5m",engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 0.4
+      # 1 + 30 accepted / 15 rounds: the bonus token is counted, like vLLM.
+      - expr: inference:spec_accept_length
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:spec_accept_length{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 3
+      # 30 accepted of 60 verified draft positions.
+      - expr: inference:spec_accept_rate
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:spec_accept_rate{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 0.5
+      - expr: inference:spec_verify_calls_total
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:spec_verify_calls_total{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 600
+      - expr: inference:spec_num_draft_tokens
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:spec_num_draft_tokens{engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 2400
+      - expr: inference:first_response_median_seconds
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:first_response_median_seconds{calculation="server_rolling_median",engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 0.8
+      # Hyperflare exports no latency histograms; the TTFT panel must not invent one.
+      - expr: inference:time_to_first_token_seconds_bucket
+        eval_time: 10m
+        exp_samples: []
+
+  # An idle engine: no prompt tokens and no drafts in the window. Ratios are
+  # absent (not 0, not NaN), so dashboards show "no data" rather than a fake 0 %.
+  - interval: 15s
+    input_series:
+      - series: 'hyperflare:prompt_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '500x60'
+      - series: 'hyperflare:prompt_tokens_cached_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '200x60'
+      - series: 'hyperflare:spec_draft_rounds_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '90x60'
+      - series: 'hyperflare:spec_accepted_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '120x60'
+      - series: 'hyperflare:spec_draft_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '240x60'
+    promql_expr_test:
+      - expr: inference:prefix_cache_hit_ratio
+        eval_time: 10m
+        exp_samples: []
+      - expr: inference:spec_accept_length
+        eval_time: 10m
+        exp_samples: []
+      - expr: inference:spec_accept_rate
+        eval_time: 10m
+        exp_samples: []
+
+  # No cache hits at all while busy: the hit ratio is a real 0, not absent.
+  - interval: 15s
+    input_series:
+      - series: 'hyperflare:prompt_tokens_total{job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+        values: '0+150x60'
+    promql_expr_test:
+      - expr: inference:prefix_cache_hit_ratio
+        eval_time: 10m
+        exp_samples:
+          - labels: 'inference:prefix_cache_hit_ratio{calculation="token_weighted_5m",engine="hyperflare",job="hyperflare",instance="desktop:8011",model_name="glm-5.3-flash-hyperflare-tp2-v16"}'
+            value: 0

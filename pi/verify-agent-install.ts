@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createAgentSession, getAgentDir, ModelRuntime, parseFrontmatter, SessionManager } from "@earendil-works/pi-coding-agent";
 import { loadModelRoutingPolicy } from "./extensions/model-routing/config";
-import { parseModelReference, resolveModelRoute } from "./extensions/model-routing/policy";
+import { parseModelReference, resolveModelRoute, type ServedModels } from "./extensions/model-routing/policy";
 import { discoverAgents, resolvePackageAgentDirs } from "./extensions/subagent/agents";
 
 const requiredPanelAgents = [
@@ -40,7 +40,7 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const field = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
-const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value.map((item: unknown) => item) : []);
+const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
 
 type CatalogModel = Readonly<{
   id?: string;
@@ -137,17 +137,18 @@ if (resolve(dirname(routingLink), readlinkSync(routingLink)) !== expectedRouting
 
 const loadedRouting = loadModelRoutingPolicy(agentDir);
 if (!loadedRouting.ok) fail(`invalid model routing policy: ${loadedRouting.error.message}`);
-// The local catalog is exactly the two primaries' three served ids: WARMIND and
+// The local catalog is exactly the three primaries' served ids: WARMIND and
 // stock DeepSeek-V4.1-Flash-1017 on ds4-native, and GLM-5.3 v16 on Hyperflare.
 const primaryModels = [
   "warmind-1017-native",
   "deepseek-v4.1-flash-native",
   "glm-5.3-flash-hyperflare-tp2-v16",
 ] as const;
-const deepSeekModel = parseModelReference("desktop-vllm/warmind-1017-native");
+const warmindModel = parseModelReference("desktop-vllm/warmind-1017-native");
 const glmModel = parseModelReference("desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16");
 const cloudModel = parseModelReference("openai-codex/gpt-5.6-sol");
-if (!deepSeekModel.ok || !glmModel.ok || !cloudModel.ok) {
+const llamaCppModel = parseModelReference("llama.cpp/local-model");
+if (!warmindModel.ok || !glmModel.ok || !cloudModel.ok || !llamaCppModel.ok) {
   fail("verification model references are invalid");
 }
 // Routing follows whatever desktop-vllm serves now. The shell probes that once per
@@ -155,10 +156,10 @@ if (!deepSeekModel.ok || !glmModel.ok || !cloudModel.ok) {
 // deterministically for both primaries regardless of which one is live.
 const reviewer = { workload: "subagent", profile: "general-review", agent: "code-reviewer" } as const;
 const declaredCloud = { model: cloudModel.value, thinkingLevel: "high" as const };
-const servedAs = (model: typeof glmModel.value) => ({ "desktop-vllm": model });
+const servedAs = (model: typeof glmModel.value): ServedModels => ({ "desktop-vllm": { ok: true, value: model } });
 const routeTo = (
   parent: Parameters<typeof resolveModelRoute>[1]["parent"],
-  served: ReturnType<typeof servedAs> | undefined,
+  served: ServedModels | undefined,
   agent: string = reviewer.agent,
 ) => resolveModelRoute(
   loadedRouting.value.policy,
@@ -183,14 +184,21 @@ const expectRoute = (
 // A local parent's children follow the served model, keeping the parent's effort,
 // even when the parent session is pinned to the other primary.
 expectRoute(
-  routeTo({ model: deepSeekModel.value, thinkingLevel: "max" }, servedAs(glmModel.value)),
+  routeTo({ model: warmindModel.value, thinkingLevel: "max" }, servedAs(glmModel.value)),
   { provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16", thinkingLevel: "max" },
   "a WARMIND-pinned parent's child does not follow the served GLM",
 );
 expectRoute(
-  routeTo({ model: glmModel.value, thinkingLevel: "low" }, servedAs(deepSeekModel.value)),
+  routeTo({ model: glmModel.value, thinkingLevel: "low" }, servedAs(warmindModel.value)),
   { provider: "desktop-vllm", id: "warmind-1017-native", thinkingLevel: "low" },
   "a GLM-pinned parent's child does not follow the served WARMIND",
+);
+// Only desktop-vllm parents follow what desktop-vllm serves; another local
+// provider's children stay on their parent, whatever the desktop is serving.
+expectRoute(
+  routeTo({ model: llamaCppModel.value, thinkingLevel: "medium" }, servedAs(glmModel.value)),
+  { provider: "llama.cpp", id: "local-model", thinkingLevel: "medium" },
+  "a llama.cpp parent's child does not stay on its parent",
 );
 // A cloud parent's children run locally on the served model at high effort...
 expectRoute(
@@ -208,6 +216,18 @@ expectRoute(
 const blind = routeTo({ model: cloudModel.value, thinkingLevel: "high" }, undefined);
 if (blind.ok || blind.error.kind !== "served-model-unknown") {
   fail("routing without a served model does not fail closed");
+}
+// A failed probe fails closed too, and the refusal carries the probe's reason.
+const unreachable = routeTo(
+  { model: cloudModel.value, thinkingLevel: "high" },
+  { "desktop-vllm": { ok: false, error: "cannot reach desktop-vllm: connect ECONNREFUSED" } },
+);
+if (
+  unreachable.ok ||
+  unreachable.error.kind !== "served-model-unknown" ||
+  !JSON.stringify(unreachable.error).includes("ECONNREFUSED")
+) {
+  fail(`routing after a failed probe does not fail closed with its reason: ${JSON.stringify(unreachable)}`);
 }
 
 const desktopProvider = field(field(readJson(modelsLink), "providers"), "desktop-vllm");

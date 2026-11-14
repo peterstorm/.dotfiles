@@ -248,9 +248,15 @@ class Source:
             return 503, f"# hyperflare bridge: {type(error).__name__}: {error}\n"
 
 
+def log_state(status: int, body: str) -> tuple[int, str]:
+    """What a transition is: the status plus, for a 503, its reason (a refused
+    connection becoming a rejected key is a new state even though both are 503)."""
+    return (status, "ok" if status == 200 else body.strip()[:200])
+
+
 class Handler(BaseHTTPRequestHandler):
     source: Source
-    last_status = None
+    last_state = None
 
     def do_GET(self):  # noqa: N802 (http.server's spelling)
         if self.path.split("?", 1)[0] != "/metrics":
@@ -258,10 +264,11 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         status, body = self.source.scrape()
-        if status != Handler.last_status:
-            # Log transitions only (engine appeared / went away), not every scrape.
-            sys.stderr.write(f"hyperflare-metrics: {status} {body.strip()[:200] if status != 200 else 'ok'}\n")
-            Handler.last_status = status
+        state = log_state(status, body)
+        if state != Handler.last_state:
+            # Log transitions only (engine appeared, went away, or failed for a new reason).
+            sys.stderr.write(f"hyperflare-metrics: {state[0]} {state[1]}\n")
+            Handler.last_state = state
         payload = body.encode()
         self.send_response(status)
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
