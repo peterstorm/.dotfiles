@@ -84,6 +84,10 @@ grep -Eq '^IMAGE="python@sha256:[0-9a-f]{64}"$' "$DL" || fail "download image is
 contains "$EXPORT" 'download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify'
 contains "$EXPORT" '-v "$CKPT_HOST:/ckpt/glm53-fp4-local:ro"'
 contains "$EXPORT" '--ulimit memlock=-1'
+# b12x's io_uring weight loader: headers in the image, syscalls allowed.
+contains "$EXPORT" '--security-opt seccomp=unconfined'
+contains "$RUN" '--security-opt seccomp=unconfined'
+contains "$DOCKERFILE" 'liburing-dev'
 contains "$RUN" "CHECKPOINT=\"$REPO@$REVISION\""
 
 # Package: produced by the export receipt, consumed by name@version only.
