@@ -2,7 +2,8 @@
 # Download the NVIDIA GLM-5.3-Flash FP4-Local checkpoint the v16 Hyperflare
 # profile exports from.
 #
-# ~178 GB (166 GiB, 40 shards), pinned to the revision the upstream recipe
+# ~178 GB (177,519,525,044 bytes: 40 numbered shards + model-inputscales +
+# tensors/native-QB, 42 files in the index), pinned to the revision the upstream recipe
 # (AzallazA/RTX-PRO-6000-TP3-Inference-Recipes, "GLM-5.3-Flash
 # Hyperflare-tp3-20261112") measured. Unlike the vLLM profiles this is a plain
 # --local-dir checkout, not a hub cache: Hyperflare names the exported model
@@ -42,7 +43,7 @@ case "$MODE" in
 esac
 
 verify_checkpoint() {
-  local marker shards bytes receipt_tmp
+  local marker shards missing bytes receipt_tmp
   [ -r "$CKPT_HOST/.download-complete" ] || {
     echo "error: $CKPT_HOST/.download-complete is missing; the download has not completed" >&2
     return 1
@@ -56,12 +57,20 @@ verify_checkpoint() {
     echo "error: config.json or model.safetensors.index.json missing in $CKPT_HOST" >&2
     return 1
   }
-  shards="$(find "$CKPT_HOST" -maxdepth 1 -name '*.safetensors' | wc -l)"
+  # The index is the manifest: 40 numbered shards plus model-inputscales and
+  # tensors/native-QB (42 files). Every file it names must exist.
+  shards="$(find "$CKPT_HOST" -maxdepth 1 -name "model-*-of-000$EXPECTED_SHARDS.safetensors" | wc -l)"
   [ "$shards" -eq "$EXPECTED_SHARDS" ] || {
-    echo "error: $shards safetensors shards in $CKPT_HOST, expected $EXPECTED_SHARDS" >&2
+    echo "error: $shards numbered shards in $CKPT_HOST, expected $EXPECTED_SHARDS" >&2
     return 1
   }
-  bytes="$(du -sb "$CKPT_HOST" | cut -f1)"
+  missing="$(jq -r '.weight_map | [.[]] | unique | .[]' "$CKPT_HOST/model.safetensors.index.json" \
+    | while read -r file; do [ -f "$CKPT_HOST/$file" ] || printf '%s\n' "$file"; done)"
+  [ -z "$missing" ] || {
+    echo "error: index names files missing from $CKPT_HOST: $(head -3 <<<"$missing" | tr '\n' ' ')" >&2
+    return 1
+  }
+  bytes="$(du -sb --exclude=.cache "$CKPT_HOST" | cut -f1)"
   install -d -m 700 "$(dirname "$RECEIPT")"
   receipt_tmp="$(mktemp "$(dirname "$RECEIPT")/.v16-checkpoint.XXXXXX")"
   printf 'repo=%s\nrevision=%s\npath=%s\nshards=%s\nbytes=%s\n' \
