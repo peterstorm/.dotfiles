@@ -90,6 +90,11 @@ contains "$DOCKERFILE" 'usermod -d /flare-home ubuntu'
 contains "$EXPORT" '[ "$(id -u)" = 1000 ]'
 contains "$RUN" '[ "$(id -u)" = 1000 ]'
 contains "$RUN" '.cache/flare/cores/models/'
+# Trust is pinned to the export's own key, never a wildcard.
+contains "$RUN" 'SIGNING_KEY_FINGERPRINT="f2bca6f9fd072391b10fc6fbd7c2cafd2e0e518fde57e0b05f2d48a22ef1e052"'
+contains "$RUN" '--dangerously-approve-key "$SIGNING_KEY_FINGERPRINT"'
+contains "$RUN" '--dangerously-accept-publisher local-development'
+contains "$RUNBOOK" 'f2bca6f9'
 # b12x's io_uring weight loader: headers in the image, syscalls allowed.
 contains "$EXPORT" '--security-opt seccomp=unconfined'
 contains "$RUN" '--security-opt seccomp=unconfined'

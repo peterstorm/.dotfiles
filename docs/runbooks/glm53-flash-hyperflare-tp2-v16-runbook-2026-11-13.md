@@ -67,10 +67,25 @@ export and run scripts check.
    memory; the Wi-Fi link (~22 MB/s) is the bottleneck either way.
 3. **Export** (needs **both GPUs idle** — stop the serving profile first; the
    script never stops anything): `export-glm53-flash-hyperflare-tp2-v16.sh`.
-   First export on this box runs with a cold kernel-tuning cache (recipe: 22 min
-   warm, 33 min first GLM export; longer here). If tuning runs out of VRAM, the
+   First export on this box (2026-11-14, package `glm53-fp4-local@gb202-tp2-202611141415`):
+   ~45 min wall — weights 101 s, graph catalog 56/56 in 77 s, cold kernel tuning
+   1,144 s (1,176 kernels), core write 323 s. If tuning runs out of VRAM, the
    recipe's fix is one `CONC=4` export to fill the tuning cache, then the release
    `CONC=8` export. `VISION=0` gives the text-only package (+7.2% KV).
+   Image prerequisites the recipe host had and the first exports lacked:
+   `liburing-dev` + `seccomp=unconfined` (b12x's io_uring weight loader) and
+   `ninja-build` (graph-catalog extensions).
+
+   **Signing trust.** The export signs the core with a local development key it
+   mints in `flare-home/.config/flare`. Unattended serving needs that key approved
+   and the `local-development` publisher accepted, which also accepts the
+   checkpoint's NVIDIA Open Model Agreement. The operator accepted on 2026-11-14;
+   the run script pins exactly fingerprint
+   `f2bca6f9fd072391b10fc6fbd7c2cafd2e0e518fde57e0b05f2d48a22ef1e052` (sha256 of
+   the ed25519 public key). A re-export that mints a new key fails closed until
+   the pin is updated. **Home directory:** the Rust `flare` CLI finds its store
+   via `getpwuid`, the Python exporter via `$HOME`; the image points uid 1000's
+   home at `/flare-home` and the scripts run only as uid 1000.
 4. **Serve**: `switch-glm53-hyperflare-tp2-v16.sh start` — preflight, runtime-neutral
    idle gate (ds4 bridge :8010, Hyperflare bridge :8011, or vLLM/SGLang :8000),
    quiesce, launch at `--restart no`, accept (health, authenticated exact model

@@ -39,6 +39,7 @@ FLARE_HOME="$ROOT_HOST/flare-home"
 PACKAGE_RECEIPT="$ROOT_HOST/package-v16.txt"
 PREFIX_CACHE="${PREFIX_CACHE:-16G}"
 SCHEDULER="${SCHEDULER:-interactive}"
+SIGNING_KEY_FINGERPRINT="f2bca6f9fd072391b10fc6fbd7c2cafd2e0e518fde57e0b05f2d48a22ef1e052"
 MODE="${1:---launch}"
 
 case "$MODE" in
@@ -96,6 +97,13 @@ FLARE_ARGS=(
   --prefix-cache-memory "$PREFIX_CACHE" --mtp-draft-tokens 5
   --scheduler-policy "$SCHEDULER"
   --api-key-file /run/inference/api-key
+  # Unattended first use needs explicit trust. This is the local development
+  # signing key the v16 export generated in flare-home/.config/flare
+  # (sha256 of its ed25519 public key); the operator accepted the namespace
+  # and with it the checkpoint's NVIDIA Open Model Agreement on 2026-11-14.
+  # A re-export that mints a new key fails closed here until re-pinned.
+  --dangerously-approve-key "$SIGNING_KEY_FINGERPRINT"
+  --dangerously-accept-publisher local-development
 )
 
 if [ "$MODE" = --preflight ]; then
