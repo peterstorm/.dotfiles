@@ -6,16 +6,21 @@
 
   home.keyboard = null;
 
-  # Binaries the multimedia key bindings in xmonad.hs spawn. The role owns the
-  # WM experience, so it installs the tools those bindings depend on, keeping
-  # the bindings self-contained on every machine that loads this role:
+  # Binaries the bindings in xmonad.hs spawn. The role owns the WM experience,
+  # so it installs the tools those bindings depend on, keeping the bindings
+  # self-contained on every machine that loads this role:
   #   - pamixer: volume/mute via the Pulse API (this stack is PipeWire with
   #     pipewire-pulse; amixer would hit the kernel ALSA mixer — wrong layer)
+  #   - ncpamixer: the M-M1-a mixer. A stream's own volume is a separate gain
+  #     stage from the sink volume pamixer moves, so a stream left low is
+  #     invisible to the volume keys and looks like a maxed laptop that is
+  #     still quiet. The mixer is the only place that gain shows up, and the
+  #     binding is useless without the binary.
   #   - brightnessctl: backlight via the systemd-logind API — no udev rules or
   #     setuid wrapper needed (programs.light was removed from nixpkgs)
   #   - playerctl: MPRIS media keys (controls firefox/spotify/mpv — whatever
   #     is playing, not one hardcoded player)
-  home.packages = with pkgs; [ pamixer brightnessctl playerctl ];
+  home.packages = with pkgs; [ pamixer ncpamixer brightnessctl playerctl ];
 
   xsession = {
     enable = true;
