@@ -6,6 +6,8 @@ import {
 	parseModelReference,
 	parseModelRoutingPolicy,
 	resolveModelRoute,
+	routingErrorMessage,
+	servedProviders,
 	type ModelRoutingPolicy,
 } from "./policy";
 
@@ -222,6 +224,104 @@ describe("model route resolution", () => {
 				workload: "subagent",
 				profile: "scout",
 			},
+			"digest",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.effective).toEqual(binding("openai-codex", "gpt-5.4-mini", "medium"));
+	});
+});
+
+describe("served targets", () => {
+	const declared = binding("openai-codex", "gpt-5.6-sol", "high");
+	const servedPolicy = (target: Record<string, unknown> = { served: "desktop-vllm" }) =>
+		parsePolicy({
+			targets: { local: target },
+			rules: [
+				{ id: "local-children", when: { parentClass: "local" }, use: { kind: "named", target: "local" } },
+				{ id: "cloud-children", when: { parentClass: "cloud" }, use: { kind: "named", target: "local" } },
+			],
+		});
+	const served = (id: string) => {
+		const model = parseModelReference(`desktop-vllm/${id}`);
+		if (!model.ok) throw new Error(model.error);
+		return { "desktop-vllm": model.value };
+	};
+
+	it("parses a served target and lists the providers the shell must probe", () => {
+		const policy = servedPolicy({ served: "desktop-vllm", thinkingLevel: "high" });
+		expect(policy.targets.local).toEqual({ kind: "served", provider: "desktop-vllm", thinkingLevel: "high" });
+		expect(servedProviders(policy)).toEqual(["desktop-vllm"]);
+		expect(servedProviders(parsePolicy())).toEqual([]);
+	});
+
+	it("rejects a target that names both an exact model and a served provider, or neither", () => {
+		for (const target of [{ model: "desktop-vllm/x", served: "desktop-vllm" }, { thinkingLevel: "high" }, { served: "" }]) {
+			const parsed = parseModelRoutingPolicy({
+				schemaVersion: 1,
+				defaultClass: "cloud",
+				modelClasses: { local: ["desktop-vllm/*"] },
+				targets: { local: target },
+				rules: [],
+			});
+			expect(parsed.ok).toBe(false);
+			if (parsed.ok) continue;
+			expect(parsed.error.join("\n")).toContain("targets.local must name exactly one of model or served");
+		}
+	});
+
+	it("routes a cloud parent's child to whatever model the provider serves now", () => {
+		for (const id of ["glm-5.3-flash-hyperflare-tp2-v16", "warmind-1017-native"]) {
+			const result = resolveModelRoute(
+				servedPolicy({ served: "desktop-vllm", thinkingLevel: "high" }),
+				{ parent: binding("openai-codex", "gpt-5.6-sol", "low"), declared, workload: "subagent", served: served(id) },
+				"digest",
+			);
+			expect(result.ok).toBe(true);
+			if (!result.ok) continue;
+			expect(result.value.kind).toBe("override");
+			expect(result.value.effective).toEqual(binding("desktop-vllm", id, "high"));
+		}
+	});
+
+	it("follows the served model even when a local parent is pinned to the other one", () => {
+		const result = resolveModelRoute(
+			servedPolicy(),
+			{
+				parent: binding("desktop-vllm", "warmind-1017-native", "max"),
+				declared,
+				workload: "subagent",
+				served: served("glm-5.3-flash-hyperflare-tp2-v16"),
+			},
+			"digest",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		// No thinking level on the target: the parent's effort carries over.
+		expect(result.value.effective).toEqual(binding("desktop-vllm", "glm-5.3-flash-hyperflare-tp2-v16", "max"));
+	});
+
+	it("fails closed when the shell could not tell what is served", () => {
+		const result = resolveModelRoute(
+			servedPolicy(),
+			{ parent: binding("openai-codex", "gpt-5.6-sol", "high"), declared, workload: "subagent" },
+			"digest",
+		);
+		expect(result).toEqual({
+			ok: false,
+			error: { kind: "served-model-unknown", ruleId: "cloud-children", provider: "desktop-vllm" },
+		});
+		if (result.ok) return;
+		expect(routingErrorMessage(result.error)).toContain("desktop-vllm");
+	});
+
+	it("leaves exact targets independent of the served model", () => {
+		const policy = parsePolicy({
+			rules: [{ id: "fast", when: { parentClass: "cloud" }, use: { kind: "named", target: "fast" } }],
+		});
+		const result = resolveModelRoute(
+			policy,
+			{ parent: binding("openai-codex", "gpt-5.6-sol", "high"), workload: "subagent", served: served("anything") },
 			"digest",
 		);
 		expect(result.ok).toBe(true);

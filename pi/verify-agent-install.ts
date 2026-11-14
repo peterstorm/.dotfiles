@@ -150,72 +150,64 @@ const cloudModel = parseModelReference("openai-codex/gpt-5.6-sol");
 if (!deepSeekModel.ok || !glmModel.ok || !cloudModel.ok) {
   fail("verification model references are invalid");
 }
-const deepSeekBinding = {
-  model: deepSeekModel.value,
-  thinkingLevel: "max" as const,
+// Routing follows whatever desktop-vllm serves now. The shell probes that once per
+// subagent call; here the probe's answer is fixed input, so the policy is checked
+// deterministically for both primaries regardless of which one is live.
+const reviewer = { workload: "subagent", profile: "general-review", agent: "code-reviewer" } as const;
+const declaredCloud = { model: cloudModel.value, thinkingLevel: "high" as const };
+const servedAs = (model: typeof glmModel.value) => ({ "desktop-vllm": model });
+const routeTo = (
+  parent: Parameters<typeof resolveModelRoute>[1]["parent"],
+  served: ReturnType<typeof servedAs> | undefined,
+  agent: string = reviewer.agent,
+) => resolveModelRoute(
+  loadedRouting.value.policy,
+  { ...reviewer, agent, parent, declared: declaredCloud, ...(served ? { served } : {}) },
+  loadedRouting.value.digest,
+);
+const expectRoute = (
+  route: ReturnType<typeof routeTo>,
+  expected: Readonly<{ provider: string; id: string; thinkingLevel: string }>,
+  message: string,
+): void => {
+  if (
+    !route.ok ||
+    route.value.kind !== "override" ||
+    route.value.effective?.model.provider !== expected.provider ||
+    route.value.effective?.model.id !== expected.id ||
+    route.value.effective?.thinkingLevel !== expected.thinkingLevel
+  ) {
+    fail(`${message}: ${JSON.stringify(route.ok ? route.value.effective : route.error)}`);
+  }
 };
-const localRoute = resolveModelRoute(
-  loadedRouting.value.policy,
-  {
-    parent: deepSeekBinding,
-    declared: {
-      model: cloudModel.value,
-      thinkingLevel: "high",
-    },
-    workload: "subagent",
-    profile: "general-review",
-    agent: "code-reviewer",
-  },
-  loadedRouting.value.digest,
+// A local parent's children follow the served model, keeping the parent's effort,
+// even when the parent session is pinned to the other primary.
+expectRoute(
+  routeTo({ model: deepSeekModel.value, thinkingLevel: "max" }, servedAs(glmModel.value)),
+  { provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16", thinkingLevel: "max" },
+  "a WARMIND-pinned parent's child does not follow the served GLM",
 );
-if (!localRoute.ok) fail(`cannot resolve local subagent route: ${localRoute.error.kind}`);
-if (
-  localRoute.value.kind !== "override" ||
-  localRoute.value.effective?.model.provider !== "desktop-vllm" ||
-  localRoute.value.effective?.model.id !== "warmind-1017-native" ||
-  localRoute.value.effective?.thinkingLevel !== "max"
-) {
-  fail("local parent does not override a subagent's declared cloud binding");
-}
-const glmRoute = resolveModelRoute(
-  loadedRouting.value.policy,
-  {
-    parent: { model: glmModel.value, thinkingLevel: "low" },
-    declared: { model: cloudModel.value, thinkingLevel: "high" },
-    workload: "subagent",
-    profile: "general-review",
-    agent: "code-reviewer",
-  },
-  loadedRouting.value.digest,
+expectRoute(
+  routeTo({ model: glmModel.value, thinkingLevel: "low" }, servedAs(deepSeekModel.value)),
+  { provider: "desktop-vllm", id: "warmind-1017-native", thinkingLevel: "low" },
+  "a GLM-pinned parent's child does not follow the served WARMIND",
 );
-if (
-  !glmRoute.ok ||
-  glmRoute.value.kind !== "override" ||
-  glmRoute.value.effective?.model.provider !== "desktop-vllm" ||
-  glmRoute.value.effective?.model.id !== "glm-5.3-flash-hyperflare-tp2-v16" ||
-  glmRoute.value.effective?.thinkingLevel !== "low"
-) {
-  fail("GLM v16 is not classified as a local parent for nested workloads");
-}
-const cloudRoute = resolveModelRoute(
-  loadedRouting.value.policy,
-  {
-    parent: { model: cloudModel.value, thinkingLevel: "high" },
-    declared: { model: cloudModel.value, thinkingLevel: "high" },
-    workload: "subagent",
-    profile: "architecture-finalize",
-    agent: "architecture-agent",
-  },
-  loadedRouting.value.digest,
+// A cloud parent's children run locally on the served model at high effort...
+expectRoute(
+  routeTo({ model: cloudModel.value, thinkingLevel: "xhigh" }, servedAs(glmModel.value)),
+  { provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16", thinkingLevel: "high" },
+  "a cloud parent's child is not routed to the served local model at high",
 );
-if (
-  !cloudRoute.ok ||
-  cloudRoute.value.kind !== "declared" ||
-  cloudRoute.value.effective?.model.provider !== "openai-codex" ||
-  cloudRoute.value.effective?.model.id !== "gpt-5.6-sol" ||
-  cloudRoute.value.effective?.thinkingLevel !== "high"
-) {
-  fail("cloud parent does not preserve a subagent's declared cloud binding");
+// ...except its workers, which stay on the cloud parent.
+expectRoute(
+  routeTo({ model: cloudModel.value, thinkingLevel: "xhigh" }, servedAs(glmModel.value), "worker"),
+  { provider: "openai-codex", id: "gpt-5.6-sol", thinkingLevel: "xhigh" },
+  "a cloud parent's worker does not stay on the parent",
+);
+// Not knowing what is served is an error, never a silent fallback.
+const blind = routeTo({ model: cloudModel.value, thinkingLevel: "high" }, undefined);
+if (blind.ok || blind.error.kind !== "served-model-unknown") {
+  fail("routing without a served model does not fail closed");
 }
 
 const desktopProvider = field(field(readJson(modelsLink), "providers"), "desktop-vllm");

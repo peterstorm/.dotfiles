@@ -201,33 +201,28 @@ if grep -Eq -- 'curl .*Authorization: Bearer' "$RUN"; then
   fail "run-arm puts its bearer token in argv"
 fi
 
+# A local parent's children must run on the arm's selector: the parent itself, or
+# the served model at the parent's thinking level (no pinned thinkingLevel). Same
+# predicate as verify-harness.sh, which gates every attended run.
 jq -e '
-  [.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)]
-  | .[0] == {"id": "local-workloads-use-parent", "when": {"parentClass": "local"}, "use": {"kind": "parent"}}
-' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing does not make local children inherit the parent"
+  . as $policy
+  | [$policy.rules[] | select(.when.parentClass == "local" or .when.parentClass == null)] as $local
+  | ($local | length > 0) and ($local[0].when == {"parentClass": "local"}) and (
+      $local[0].use == {"kind": "parent"} or
+      ($local[0].use.kind == "named" and
+        ($policy.targets[$local[0].use.target] | type == "object" and (.served | type == "string") and .thinkingLevel == null))
+    )
+' "$ROOT/pi/model-routing.json" >/dev/null || fail "Pi routing does not keep local children on the arm's selector"
 
+# Only arms whose model is still offered by Pi can run (pi/models.json lists the
+# primaries since 2026-11-14); retired arms keep their recorded runs, and
+# verify-harness.sh checks a run's arms through BENCH_ARMS.
 jq -e '
-  any(.providers["desktop-vllm"].models[];
-    .id == "deepseek-v4.1-flash" and
-    .contextWindow == 262144 and
-    .thinkingLevelMap.max == "max") and
   any(.providers["desktop-vllm"].models[];
     .id == "deepseek-v4.1-flash-native" and
     .contextWindow == 262144 and
-    .thinkingLevelMap.max == "max") and
-  any(.providers["desktop-vllm"].models[];
-    .id == "deepseek-v4-flash-vision" and
-    .contextWindow == 312000 and
-    .thinkingLevelMap.max == "max") and
-  any(.providers["desktop-vllm"].models[];
-    .id == "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11" and
-    .contextWindow == 359000 and
-    .thinkingLevelMap.max == "max") and
-  any(.providers["desktop-vllm"].models[];
-    .id == "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10" and
-    .contextWindow == 359000 and
     .thinkingLevelMap.max == "max")
-' "$PI_MODELS" >/dev/null || fail "Pi lacks a compatible GLM benchmark model"
+' "$PI_MODELS" >/dev/null || fail "Pi lacks the ds41-native benchmark model"
 
 # Pi package entries may be objects ({source, extensions}); the memory guard
 # must read their source rather than crash, and must fail closed either way.

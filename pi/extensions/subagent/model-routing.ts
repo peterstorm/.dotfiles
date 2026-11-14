@@ -6,6 +6,7 @@ import {
 	resolveModelRoute,
 	routingErrorMessage,
 	type ModelBinding,
+	type ModelReference,
 	type ModelRoutingPolicy,
 	type Result,
 	type RoutingDecision,
@@ -15,6 +16,10 @@ export type SubagentRoutingSnapshot = Readonly<{
 	policy: ModelRoutingPolicy;
 	policyDigest: string;
 	parent?: ModelBinding;
+	/** provider -> model it serves, probed once per tool call (model-routing/served.ts). */
+	served?: Readonly<Record<string, ModelReference>>;
+	/** provider -> why the probe could not tell; surfaced when a rule needed it. */
+	servedFailures?: Readonly<Record<string, string>>;
 }>;
 
 export type RoutingAudit = Readonly<{
@@ -69,10 +74,16 @@ export function resolveSubagentRoute(
 			workload: "subagent",
 			profile: agent.modelProfile,
 			agent: agent.name,
+			served: snapshot.served,
 		},
 		snapshot.policyDigest,
 	);
-	if (!routed.ok) return { ok: false, error: routingErrorMessage(routed.error) };
+	if (!routed.ok) {
+		const reason = routed.error.kind === "served-model-unknown"
+			? snapshot.servedFailures?.[routed.error.provider]
+			: undefined;
+		return { ok: false, error: reason ? `${routingErrorMessage(routed.error)}: ${reason}` : routingErrorMessage(routed.error) };
+	}
 	const decision = routed.value;
 	const usesDeclaration = decision.kind === "declared";
 	const args = usesDeclaration

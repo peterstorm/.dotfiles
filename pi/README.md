@@ -510,59 +510,52 @@ a real behavioural difference from the stock `qwen3.8-27b` entry.
 nested Pi workloads. Provider names, endpoint URLs, and model prices are never used to
 guess whether a model is local.
 
-The policy classifies `desktop-vllm/*` as local and applies this invariant:
+**Children run on whatever local model is served right now.** The policy classifies
+`desktop-vllm/*` as local and routes to a *served* target instead of a fixed id:
 
 | Active parent | Subagent launch binding |
 |---|---|
-| Explicitly classified local model | Exact parent model and thinking level |
-| Cloud model | Agent's declared `model:` binding |
-| Unknown/unclassified model | Agent's declared `model:` binding |
-
-An agent without `model:` retains Pi's configured child default under cloud/unknown
-parents, but follows the parent under a local parent. The one deliberate override:
-under a local parent, **every** child — including Loom's calibrated declarations
-such as `openai-codex/gpt-5.6-sol:high` — inherits the parent's exact model and
-thinking level. Loom's own model guard is reconciled to this: it proves the
-synced render and spawn scope, and defers the effective Pi binding to this
-launcher policy (Claude Code spawns still require the declared binding exactly).
-No Loom source or generated agent file needs routing-specific changes.
-
-Every child receives one routing decision snapshotted at the beginning of its parent tool
-call. Parallel tasks and chains therefore cannot drift if `/model` changes concurrently.
-Local overrides launch with one exact `--model` plus `--thinking` pair and no cloud
-fallback list. Routing policy parse failures stop before spawn, while declared model
-expressions remain opaque so Pi can resolve aliases and colon-bearing model IDs. Tool-result
-details retain the declared binding, effective binding, rule ID, parent
-class, and SHA-256 policy digest for auditability.
-
-Rules can select by `parentClass`, `parentModel`, `workload`, Loom `model-profile`, and
-agent name. Every additional selector increases specificity; the most-specific matching
-rule wins. Equal-specificity rules that could match the same request are rejected. The
-tracked policy publishes `qwen` and `glm` as named exact targets beside parent inheritance:
+| Local model (either primary, even one that is not the served one) | The model desktop-vllm serves now, at the **parent's** thinking level |
+| Cloud model, agent `worker` | The cloud parent itself (`cloud-workers-use-parent`) |
+| Any other cloud or unknown model | The model desktop-vllm serves now, at `high` |
 
 ```json
 {
   "targets": {
-    "qwen": {
-      "model": "desktop-vllm/qwen3.8-27b",
-      "thinkingLevel": "xhigh"
-    },
-    "glm-v13": {
-      "model": "desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13",
-      "thinkingLevel": "max"
-    },
-    "glm-v14": {
-      "model": "desktop-vllm/glm-5.3-flash-spark-tp2-v14",
-      "thinkingLevel": "max"
-    }
+    "served": { "served": "desktop-vllm" },
+    "served-high": { "served": "desktop-vllm", "thinkingLevel": "high" }
   }
 }
 ```
 
-A `declared` target preserves an agent declaration, `parent` uses the snapshotted parent
-binding, and `named` chooses one configured exact target. Add a more-specific rule referring
-to `qwen` or `glm` when a workload should intentionally differ from its parent; do not embed
-model IDs in extension code.
+A target names exactly one of `model` (a fixed `provider/id`) or `served` (a provider). The
+policy stays pure: once per `subagent` tool call the extension asks each provider a rule
+depends on for `GET {baseUrl}/models` (with the provider's catalog key), requires exactly
+one model that is in Pi's catalog, and passes that answer into routing as data
+(`model-routing/served.ts`). A served target without `thinkingLevel` inherits the
+parent's; with one, it is pinned (cloud efforts such as `xhigh` do not exist on the local
+models). If the probe fails, routing fails before spawn with the reason ("cannot reach
+desktop-vllm: …") — there is no silent fallback to a stale id. Children therefore follow
+`scripts/inference/switch-primary.sh` without any config change, and get the served model's
+own catalog limits (GLM's 1M context, WARMIND's 262K).
+
+Every child receives one routing decision snapshotted at the beginning of its parent tool
+call: the served-model probe happens once there, so parallel tasks and chains cannot drift
+if `/model` changes or the primary switches mid-call. Overrides launch with one exact
+`--model` plus `--thinking` pair and no fallback list. Policy parse failures stop before
+spawn, while declared model expressions remain opaque so Pi can resolve aliases and
+colon-bearing model IDs. Tool-result details retain the declared binding, effective
+binding, rule ID, parent class, and SHA-256 policy digest for auditability. Loom's own model
+guard defers the effective Pi binding to this launcher policy (Claude Code spawns still
+require the declared binding exactly); no Loom source or generated agent file needs
+routing-specific changes.
+
+Rules can select by `parentClass`, `parentModel`, `workload`, Loom `model-profile`, and
+agent name. Every additional selector increases specificity; the most-specific matching
+rule wins. Equal-specificity rules that could match the same request are rejected. A
+`declared` target preserves an agent declaration, `parent` uses the snapshotted parent
+binding, and `named` chooses a configured exact or served target. Do not embed model IDs
+in extension code.
 
 Cortex already preserves its declared cheap cloud extraction target for known cloud
 providers and reuses unknown/custom active models, including both desktop providers; DeepSeek's

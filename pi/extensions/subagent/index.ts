@@ -29,6 +29,8 @@ import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 import { loadModelRoutingPolicy } from "../model-routing/config.js";
+import { servedProviders } from "../model-routing/policy.js";
+import { probeServedModels, servedModelSourceFromRegistry } from "../model-routing/served.js";
 import {
 	parentBinding,
 	resolveSubagentRoute,
@@ -799,12 +801,10 @@ export async function runSingleAgent(
 			markAborted("Subagent was aborted");
 			return currentResult;
 		}
-		if ((currentResult.protocolErrors?.length ?? 0) > 0) {
+		const [firstProtocolError] = currentResult.protocolErrors ?? [];
+		if (firstProtocolError !== undefined) {
 			currentResult.exitCode = 1;
-			appendDiagnostic(
-				currentResult,
-				`Subagent emitted malformed JSON protocol output: ${currentResult.protocolErrors![0]}`,
-			);
+			appendDiagnostic(currentResult, `Subagent emitted malformed JSON protocol output: ${firstProtocolError}`);
 		}
 		return currentResult;
 	} finally {
@@ -908,10 +908,18 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 			routingPolicyDigest = loadedRouting.value.digest;
+			// Probe served targets once per call, so every task in a parallel batch or
+			// chain lands on the same model even if the primary switches mid-call.
+			const probed = await probeServedModels(
+				servedProviders(loadedRouting.value.policy),
+				servedModelSourceFromRegistry(ctx.modelRegistry),
+			);
 			const routingSnapshot: SubagentRoutingSnapshot = Object.freeze({
 				policy: loadedRouting.value.policy,
 				policyDigest: loadedRouting.value.digest,
 				parent: parentBinding(ctx.model, ctx.thinkingLevel),
+				served: probed.served,
+				servedFailures: probed.failures,
 			});
 
 			if ((agentScope === "project" || agentScope === "both") && confirmProjectAgents && ctx.hasUI) {

@@ -7,15 +7,24 @@
       "llama.cpp/*"
     ]
   },
-  "targets": {},
+  "targets": {
+    "served": {
+      "served": "desktop-vllm"
+    },
+    "served-high": {
+      "served": "desktop-vllm",
+      "thinkingLevel": "high"
+    }
+  },
   "rules": [
     {
-      "id": "local-children-inherit-parent",
+      "id": "local-children-use-served",
       "when": {
         "parentClass": "local"
       },
       "use": {
-        "kind": "parent"
+        "kind": "named",
+        "target": "served"
       }
     },
     {
@@ -27,6 +36,16 @@
       },
       "use": {
         "kind": "parent"
+      }
+    },
+    {
+      "id": "cloud-children-use-served",
+      "when": {
+        "parentClass": "cloud"
+      },
+      "use": {
+        "kind": "named",
+        "target": "served-high"
       }
     }
   ]

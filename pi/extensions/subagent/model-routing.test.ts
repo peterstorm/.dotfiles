@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseModelRoutingPolicy } from "../model-routing/policy";
+import { parseModelReference, parseModelRoutingPolicy } from "../model-routing/policy";
 import { bindingArguments, parentBinding, resolveSubagentRoute } from "./model-routing";
 
 function policy() {
@@ -125,6 +125,43 @@ describe("subagent model routing adapter", () => {
 			expect(routed.value.audit.declared).toBe(model);
 			expect(routed.value.audit.effective).toBe(model);
 		}
+	});
+
+	it("launches children on the model the provider serves now, with the probe's reason on failure", () => {
+		const parsed = parseModelRoutingPolicy({
+			schemaVersion: 1,
+			defaultClass: "cloud",
+			modelClasses: { local: ["desktop-vllm/*"] },
+			targets: { local: { served: "desktop-vllm" } },
+			rules: [{ id: "all-children-local", when: {}, use: { kind: "named", target: "local" } }],
+		});
+		if (!parsed.ok) throw new Error(parsed.error.join("\n"));
+		const parent = parentBinding({ provider: "desktop-vllm", id: "warmind-1017-native" }, "high");
+		const glm = parseModelReference("desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16");
+		if (!glm.ok) throw new Error(glm.error);
+
+		const routed = resolveSubagentRoute(
+			{ policy: parsed.value, policyDigest: "abc", parent, served: { "desktop-vllm": glm.value }, servedFailures: {} },
+			loomAgent,
+		);
+		expect(routed.ok).toBe(true);
+		if (!routed.ok) return;
+		expect(routed.value.args).toEqual(["--model", "desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16", "--thinking", "high"]);
+
+		const down = resolveSubagentRoute(
+			{
+				policy: parsed.value,
+				policyDigest: "abc",
+				parent,
+				served: {},
+				servedFailures: { "desktop-vllm": "cannot reach desktop-vllm: connect ECONNREFUSED" },
+			},
+			loomAgent,
+		);
+		expect(down.ok).toBe(false);
+		if (down.ok) return;
+		expect(down.error).toContain("all-children-local");
+		expect(down.error).toContain("ECONNREFUSED");
 	});
 
 	it("does not parse an opaque declaration before applying a local override", () => {

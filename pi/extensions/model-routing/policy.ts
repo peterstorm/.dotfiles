@@ -3,6 +3,7 @@ import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const MODEL_PATTERN = /^[^/\s]+\/(?:\*|[^\s*]+)$/;
 const MODEL_REFERENCE = /^[^/\s]+\/[^\s*]+$/;
+const PROVIDER = /^[^/\s*]+$/;
 
 export type Result<T, E> =
 	| Readonly<{ ok: true; value: T }>
@@ -21,10 +22,25 @@ export type ModelBinding = Readonly<{
 	thinkingLevel?: ModelThinkingLevel;
 }>;
 
+/** A fixed model: always this provider/id. */
 export type ExactTarget = Readonly<{
+	kind: "exact";
 	model: ModelReference;
 	thinkingLevel?: ModelThinkingLevel;
 }>;
+
+/**
+ * Whatever model `provider` serves right now. The policy cannot know that; the
+ * shell probes the provider once per routing snapshot and passes the answer in
+ * `RoutingRequest.served`. Without a pinned thinking level the parent's carries over.
+ */
+export type ServedTarget = Readonly<{
+	kind: "served";
+	provider: string;
+	thinkingLevel?: ModelThinkingLevel;
+}>;
+
+export type PolicyTarget = ExactTarget | ServedTarget;
 
 export type RuleSelector = Readonly<{
 	parentClass?: string;
@@ -50,7 +66,7 @@ export type ModelRoutingPolicy = Readonly<{
 	schemaVersion: 1;
 	defaultClass: string;
 	modelClasses: Readonly<Record<string, readonly string[]>>;
-	targets: Readonly<Record<string, ExactTarget>>;
+	targets: Readonly<Record<string, PolicyTarget>>;
 	rules: readonly RoutingRule[];
 }>;
 
@@ -62,6 +78,8 @@ export type RoutingRequest = Readonly<{
 	workload: string;
 	profile?: string;
 	agent?: string;
+	/** provider -> the model it serves now, as probed by the shell (see servedProviders). */
+	served?: Readonly<Record<string, ModelReference>>;
 }>;
 
 type RoutingDecisionBase = Readonly<{
@@ -78,7 +96,8 @@ export type RoutingDecision =
 export type RoutingError =
 	| Readonly<{ kind: "ambiguous-model-class"; model: string; classes: readonly string[] }>
 	| Readonly<{ kind: "ambiguous-rule"; ruleIds: readonly string[] }>
-	| Readonly<{ kind: "parent-unavailable"; ruleId: string }>;
+	| Readonly<{ kind: "parent-unavailable"; ruleId: string }>
+	| Readonly<{ kind: "served-model-unknown"; ruleId: string; provider: string }>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
@@ -238,7 +257,7 @@ export function parseModelRoutingPolicy(raw: unknown): PolicyParseResult {
 		}
 	}
 
-	const parsedTargets: Record<string, ExactTarget> = {};
+	const parsedTargets: Record<string, PolicyTarget> = {};
 	if (!isRecord(raw.targets)) {
 		errors.push("targets must be an object");
 	} else {
@@ -249,24 +268,32 @@ export function parseModelRoutingPolicy(raw: unknown): PolicyParseResult {
 				errors.push(`${targetPath} must be an object`);
 				continue;
 			}
-			errors.push(...unknownFields(target, ["model", "thinkingLevel"], targetPath));
-			if (typeof target.model !== "string") {
-				errors.push(`${targetPath}.model must be a model reference`);
-				continue;
-			}
-			const model = parseModelReference(target.model);
-			if (!model.ok) {
-				errors.push(`${targetPath}.model must be an exact provider/model reference`);
+			errors.push(...unknownFields(target, ["model", "served", "thinkingLevel"], targetPath));
+			const hasModel = typeof target.model === "string";
+			const hasServed = typeof target.served === "string" && target.served.trim() !== "";
+			if (hasModel === hasServed) {
+				errors.push(`${targetPath} must name exactly one of model or served`);
 				continue;
 			}
 			if (target.thinkingLevel !== undefined && !isThinkingLevel(target.thinkingLevel)) {
 				errors.push(`${targetPath}.thinkingLevel is invalid`);
 				continue;
 			}
-			parsedTargets[name] = Object.freeze({
-				model: model.value,
-				...(target.thinkingLevel ? { thinkingLevel: target.thinkingLevel } : {}),
-			});
+			const thinking = target.thinkingLevel ? { thinkingLevel: target.thinkingLevel } : {};
+			if (typeof target.served === "string" && hasServed) {
+				if (!PROVIDER.test(target.served)) {
+					errors.push(`${targetPath}.served must be a provider name`);
+					continue;
+				}
+				parsedTargets[name] = Object.freeze({ kind: "served", provider: target.served, ...thinking });
+				continue;
+			}
+			const model = parseModelReference(String(target.model));
+			if (!model.ok) {
+				errors.push(`${targetPath}.model must be an exact provider/model reference`);
+				continue;
+			}
+			parsedTargets[name] = Object.freeze({ kind: "exact", model: model.value, ...thinking });
 		}
 	}
 
@@ -362,6 +389,47 @@ function ruleMatches(rule: RoutingRule, request: RoutingRequest, parentClass: st
 	return true;
 }
 
+/** The binding a named target stands for, given what the shell probed. */
+function targetBinding(
+	target: PolicyTarget,
+	request: RoutingRequest,
+	ruleId: string,
+): Result<ModelBinding, RoutingError> {
+	switch (target.kind) {
+		case "exact":
+			return {
+				ok: true,
+				value: Object.freeze({
+					model: target.model,
+					...(target.thinkingLevel ? { thinkingLevel: target.thinkingLevel } : {}),
+				}),
+			};
+		case "served": {
+			const model = request.served?.[target.provider];
+			if (!model) return { ok: false, error: { kind: "served-model-unknown", ruleId, provider: target.provider } };
+			const thinkingLevel = target.thinkingLevel ?? request.parent?.thinkingLevel;
+			return { ok: true, value: Object.freeze({ model, ...(thinkingLevel ? { thinkingLevel } : {}) }) };
+		}
+		default:
+			return assertNever(target);
+	}
+}
+
+/** Providers whose served model some rule depends on: the shell probes exactly these. */
+export function servedProviders(policy: ModelRoutingPolicy): readonly string[] {
+	const providers = new Set<string>();
+	for (const rule of policy.rules) {
+		if (rule.use.kind !== "named") continue;
+		const target = policy.targets[rule.use.target];
+		if (target?.kind === "served") providers.add(target.provider);
+	}
+	return Object.freeze([...providers].sort());
+}
+
+const assertNever = (value: never): never => {
+	throw new Error(`unreachable: ${JSON.stringify(value)}`);
+};
+
 export function resolveModelRoute(
 	policy: ModelRoutingPolicy,
 	request: RoutingRequest,
@@ -395,10 +463,12 @@ export function resolveModelRoute(
 	if (winner.use.kind === "parent" && !request.parent) {
 		return { ok: false, error: { kind: "parent-unavailable", ruleId: winner.id } };
 	}
-	const effective = winner.use.kind === "parent"
-		? request.parent
-		: policy.targets[winner.use.target];
-	if (!effective) return { ok: false, error: { kind: "parent-unavailable", ruleId: winner.id } };
+	const resolved = winner.use.kind === "parent"
+		? (request.parent ? { ok: true as const, value: request.parent } : undefined)
+		: targetBinding(policy.targets[winner.use.target], request, winner.id);
+	if (!resolved) return { ok: false, error: { kind: "parent-unavailable", ruleId: winner.id } };
+	if (!resolved.ok) return resolved;
+	const effective = resolved.value;
 	return {
 		ok: true,
 		value: Object.freeze({
@@ -420,5 +490,9 @@ export function routingErrorMessage(error: RoutingError): string {
 			return `routing rules are ambiguous: ${error.ruleIds.join(", ")}`;
 		case "parent-unavailable":
 			return `routing rule ${error.ruleId} requires an active parent model`;
+		case "served-model-unknown":
+			return `routing rule ${error.ruleId} routes to whatever ${error.provider} serves, but what it serves could not be determined`;
+		default:
+			return assertNever(error);
 	}
 }
