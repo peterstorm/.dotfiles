@@ -137,6 +137,45 @@ check("summary: no graded answers yields null rate",
       probe.summarise([answer("x", probe.ERROR)], ["x"])[0]["refusal_rate"] is None)
 check("summary: arm order preserved", [row["arm"] for row in rows] == ["baseline", "prefill-sure"])
 
+# --------------------------------------------------------- conversations (pure)
+
+cold = probe.conversation_messages("q1", "a1", "q2", "cold-cold")
+check("cold-cold: no assistant prefix after the second user turn",
+      cold[-1] == {"role": "user", "content": "q2"})
+check("cold-cold: history carries the real first answer",
+      cold[:3] == [{"role": "user", "content": "q1"},
+                   {"role": "assistant", "content": "a1"},
+                   {"role": "user", "content": "q2"}])
+
+sure_cold = probe.conversation_messages("q1", "a1", "q2", "sure-cold")
+check("sure-cold: second turn is unprefilled",
+      sure_cold == cold)
+
+sure_sure = probe.conversation_messages("q1", "a1", "q2", "sure-sure")
+check("sure-sure: second turn is prefilled",
+      sure_sure[-1] == {"role": "assistant", "content": "Sure, here's "})
+check("sure-sure: history still carries the first answer",
+      sure_sure[1] == {"role": "assistant", "content": "a1"})
+check("unknown conversation arm raises",
+      _raises(probe.conversation_messages, "q1", "a1", "q2", "nope"))
+
+open_cold = probe.opening_body("q1", "cold-sure", "m", 10, 0.0)
+open_sure = probe.opening_body("q1", "sure-cold", "m", 10, 0.0)
+check("opening_body: cold-sure opens unprefilled",
+      open_cold["messages"] == [{"role": "user", "content": "q1"}]
+      and "continue_final_message" not in open_cold)
+check("opening_body: sure-cold opens prefilled",
+      open_sure["messages"][-1] == {"role": "assistant", "content": "Sure, here's "}
+      and open_sure["continue_final_message"] is True)
+
+second = probe.conversation_body("q1", "a1", "q2", "cold-sure", "m", 10, 0.0)
+check("conversation_body: cold-sure prefills the second turn",
+      second["continue_final_message"] is True
+      and second["messages"][-1] == {"role": "assistant", "content": "Sure, here's "})
+check("conversation_body: cold-cold stays plain",
+      "continue_final_message" not in probe.conversation_body("q1", "a1", "q2", "cold-cold",
+                                                              "m", 10, 0.0))
+
 # ------------------------------------------------------------------ fixture
 
 fixture = ROOT / "tests" / "fixtures" / "refusal-probe" / "prompts.jsonl"
@@ -146,6 +185,15 @@ check("fixture ids unique", len({entry["id"] for entry in prompts}) == len(promp
 check("fixture categories present",
       {"cyber", "profanity", "sexual", "violence"} <= {entry["category"] for entry in prompts})
 check("fixture prompts non-empty", all(entry["prompt"].strip() for entry in prompts))
+
+conversations = probe.read_prompts(
+    ROOT / "tests" / "fixtures" / "refusal-probe" / "conversations.jsonl",
+    ("id", "category", "turn1", "turn2"))
+check("conversation fixture loads", len(conversations) >= 3)
+check("conversation fixture ids unique",
+      len({entry["id"] for entry in conversations}) == len(conversations))
+check("conversation fixture turns are distinct",
+      all(entry["turn1"] != entry["turn2"] for entry in conversations))
 
 if failures:
     print(f"\n{failures} failure(s)", file=sys.stderr)

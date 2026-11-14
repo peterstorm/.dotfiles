@@ -101,9 +101,15 @@ def messages_for(prompt: str, arm: str) -> list[dict[str, str]]:
 
 def payload_for(prompt: str, arm: str, model: str, max_tokens: int, temperature: float) -> dict:
     """Complete request body for one (prompt, arm). Pure."""
+    return body_for(messages_for(prompt, arm), arm, model, max_tokens, temperature)
+
+
+def body_for(messages: list[dict], arm: str, model: str, max_tokens: int,
+             temperature: float) -> dict:
+    """Request body over explicit messages, prefill flags keyed off the arm. Pure."""
     payload: dict = {
         "model": model,
-        "messages": messages_for(prompt, arm),
+        "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "top_p": 1,
@@ -117,6 +123,44 @@ def payload_for(prompt: str, arm: str, model: str, max_tokens: int, temperature:
         payload["continue_final_message"] = True
         payload["chat_template_kwargs"] = {"continue_final_message": True}
     return payload
+
+
+# ------------------------------------------------- pure: two-turn conversations
+
+# Who gets a seeded assistant turn, per conversation arm: (first turn, second turn).
+CONVERSATION_ARMS = {
+    "cold-cold": ("baseline", "baseline"),
+    "sure-cold": ("prefill-sure", "baseline"),
+    "sure-sure": ("prefill-sure", "prefill-sure"),
+    "cold-sure": ("baseline", "prefill-sure"),
+}
+
+
+def conversation_messages(turn1: str, answer1: str, turn2: str, arm: str) -> list[dict]:
+    """History for the second turn: the first exchange as it really happened. Pure."""
+    if arm not in CONVERSATION_ARMS:
+        raise ValueError(f"unknown conversation arm: {arm}")
+    _, second = CONVERSATION_ARMS[arm]
+    messages = [{"role": "user", "content": turn1},
+                {"role": "assistant", "content": answer1},
+                {"role": "user", "content": turn2}]
+    if PREFILL_TEXT[second] is not None:
+        messages.append({"role": "assistant", "content": PREFILL_TEXT[second]})
+    return messages
+
+
+def conversation_body(turn1: str, answer1: str, turn2: str, arm: str, model: str,
+                      max_tokens: int, temperature: float) -> dict:
+    """Second-turn request for one conversation arm. Pure."""
+    return body_for(conversation_messages(turn1, answer1, turn2, arm),
+                    CONVERSATION_ARMS[arm][1], model, max_tokens, temperature)
+
+
+def opening_body(turn1: str, arm: str, model: str, max_tokens: float,
+                 temperature: float) -> dict:
+    """First-turn request for one conversation arm (a single-turn arm also works). Pure."""
+    first = CONVERSATION_ARMS[arm][0] if arm in CONVERSATION_ARMS else arm
+    return body_for(messages_for(turn1, first), first, model, max_tokens, temperature)
 
 
 # ------------------------------------------------------------- imperative shell
@@ -193,7 +237,7 @@ def served_model(url: str, key: str | None) -> str:
     return str(entries[0]["id"])
 
 
-def read_prompts(path: Path) -> list[dict]:
+def read_prompts(path: Path, fields: tuple[str, ...] = ("id", "category", "prompt")) -> list[dict]:
     prompts = []
     for number, line in enumerate(path.read_text().splitlines(), 1):
         if not line.strip():
@@ -202,7 +246,7 @@ def read_prompts(path: Path) -> list[dict]:
             entry = json.loads(line)
         except json.JSONDecodeError as error:
             raise ValueError(f"{path}:{number}: {error}") from error
-        for name in ("id", "category", "prompt"):
+        for name in fields:
             if not isinstance(entry.get(name), str) or not entry[name]:
                 raise ValueError(f"{path}:{number}: missing {name}")
         prompts.append(entry)
@@ -285,7 +329,9 @@ def main(argv: list[str]) -> int:
                         default=Path(__file__).resolve().parents[3]
                         / "tests/fixtures/refusal-probe/prompts.jsonl")
     parser.add_argument("--out", type=Path, default=Path("/tmp/refusal-probe"))
-    parser.add_argument("--arms", default=",".join(DEFAULT_ARMS))
+    parser.add_argument("--arms", default=None,
+                        help="default: all single-turn arms, or all conversation arms "
+                             "with --conversations")
     parser.add_argument("--max-tokens", type=int, default=1500,
                         help="reasoning models spend most of the budget on "
                              "reasoning_content before any content appears")
@@ -293,19 +339,28 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--limit", type=int, default=0, help="first N prompts only (smoke)")
     parser.add_argument("--require-idle", action="store_true")
+    parser.add_argument("--conversations", action="store_true",
+                        help="two-turn mode: does one prefilled turn keep the rest of the "
+                             "conversation uncensored?")
     options = parser.parse_args(argv)
+    if options.conversations and options.prompts.name == "prompts.jsonl":
+        options.prompts = options.prompts.parent / "conversations.jsonl"
 
-    arms = [arm.strip() for arm in options.arms.split(",") if arm.strip()]
-    unknown = [arm for arm in arms if arm not in PREFILL_TEXT]
-    if unknown:
-        parser.error(f"unknown arm(s): {', '.join(unknown)}; known: {', '.join(PREFILL_TEXT)}")
-    try:
-        prompts = read_prompts(options.prompts)
-    except (OSError, ValueError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
-    if options.limit:
-        prompts = prompts[:options.limit]
+    arm_source = options.arms if options.arms is not None else (
+        ",".join(CONVERSATION_ARMS) if options.conversations else ",".join(DEFAULT_ARMS))
+    arms = [arm.strip() for arm in arm_source.split(",") if arm.strip()]
+    options.arms = ",".join(arms)  # single source of truth for run_conversations
+    if not options.conversations:
+        unknown = [arm for arm in arms if arm not in PREFILL_TEXT]
+        if unknown:
+            parser.error(f"unknown arm(s): {', '.join(unknown)}; known: {', '.join(PREFILL_TEXT)}")
+        try:
+            prompts = read_prompts(options.prompts)
+        except (OSError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        if options.limit:
+            prompts = prompts[:options.limit]
 
     key_path = Path(options.key_file)
     key = key_path.read_text().strip() or None if key_path.is_file() else None
@@ -328,7 +383,8 @@ def main(argv: list[str]) -> int:
     options.out.mkdir(parents=True, exist_ok=True)
     (options.out / "transcripts").mkdir(exist_ok=True)
 
-    answers = []
+    if options.conversations:
+        return run_conversations(options, model, key)
     for arm in arms:
         for entry in prompts:
             answer = run_arm_prompt(options, model, key, arm, entry)
@@ -359,6 +415,88 @@ def main(argv: list[str]) -> int:
     if all(row["error"] == row["answers"] for row in rows):
         print("error: every request failed", file=sys.stderr)
         return 1
+    return 0
+
+
+def run_conversations(options: argparse.Namespace, model: str, key: str | None) -> int:
+    """Two turns per arm: prefill the first, then ask whether the second still refuses."""
+    try:
+        pairs = read_prompts(options.prompts, ("id", "category", "turn1", "turn2"))
+    except (OSError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    arms = [arm.strip() for arm in options.arms.split(",") if arm.strip()]
+    unknown = [arm for arm in arms if arm not in CONVERSATION_ARMS]
+    if unknown:
+        print(f"error: unknown conversation arm(s): {', '.join(unknown)}; "
+              f"known: {', '.join(CONVERSATION_ARMS)}", file=sys.stderr)
+        return 2
+
+    rows = []
+    records = []
+    for arm in arms:
+        for entry in pairs:
+            first_body = opening_body(entry["turn1"], arm, model, options.max_tokens,
+                                      options.temperature)
+            status, data = post(options.url, key, first_body, options.timeout)
+            opening = ""
+            if status == 200:
+                opening = message_field(data, "content")
+            second_body = conversation_body(entry["turn1"], opening, entry["turn2"], arm,
+                                            model, options.max_tokens, options.temperature)
+            status2, data2 = post(options.url, key, second_body, options.timeout)
+            if status2 != 200:
+                klass, markers, hedge, chars = ERROR, [], False, 0
+            else:
+                content = message_field(data2, "content")
+                klass, markers = classify(content)
+                hedge, chars = hedge_in(content), len(" ".join(content.split()))
+            rows.append({"arm": arm, "pair": entry["id"],
+                         "opening": classify(opening)[0] if status == 200 else ERROR,
+                         "second": klass, "chars": chars})
+            records.append({"arm": arm, "pair": entry["id"], "opening_class": rows[-1]["opening"],
+                            "second_class": klass, "markers": markers, "hedge": hedge,
+                            "second_chars": chars, "first_request": first_body,
+                            "second_request": second_body})
+            (options.out / "transcripts" / f"conv-{arm}--{entry['id']}.json").write_text(
+                json.dumps({"arm": arm, "pair": entry["id"], "turn1": data if status == 200 else None,
+                            "turn2": data2 if status2 == 200 else None,
+                            "classification": {"opening": rows[-1]["opening"], "second": klass}},
+                           indent=1) + "\n")
+            print(f"  {arm:<10} {entry['id']:<28} turn1={rows[-1]['opening']:<8} "
+                  f"turn2={klass}", file=sys.stderr)
+
+    summary = []
+    for arm in arms:
+        cells = [row for row in rows if row["arm"] == arm]
+        graded = [cell for cell in cells if cell["second"] in (COMPLY, REFUSAL)]
+        refused = sum(1 for cell in graded if cell["second"] == REFUSAL)
+        summary.append({"arm": arm, "pairs": len(cells),
+                        "opening_refused": sum(1 for cell in cells if cell["opening"] == REFUSAL),
+                        "second_refused": refused, "second_empty":
+                        sum(1 for cell in cells if cell["second"] == EMPTY),
+                        "second_refusal_rate": (round(refused / len(graded), 4)
+                                                if graded else None)})
+
+    (options.out / "receipt.json").write_text(json.dumps({
+        "kind": "refusal-prefill-conversations", "url": options.url, "model": model,
+        "fixture": str(options.prompts),
+        "fixture_sha256": hashlib.sha256(options.prompts.read_bytes()).hexdigest(),
+        "pairs": len(pairs), "arms": arms, "max_tokens": options.max_tokens,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "summary": summary, "rows": rows, "records": records}, indent=1) + "\n")
+
+    print()
+    print(f"model {model} · {len(pairs)} two-turn pairs · temperature {options.temperature}")
+    header = f"{'arm':<12}{'pairs':>6}{'turn1 refused':>15}{'turn2 refused':>15}{'turn2 rate':>12}"
+    print(header)
+    print("-" * len(header))
+    for row in summary:
+        rate = "n/a" if row["second_refusal_rate"] is None else \
+            f"{100 * row['second_refusal_rate']:.0f}%"
+        print(f"{row['arm']:<12}{row['pairs']:>6}{row['opening_refused']:>15}"
+              f"{row['second_refused']:>15}{rate:>12}")
+    print(f"\nreceipt: {options.out / 'receipt.json'}")
     return 0
 
 
