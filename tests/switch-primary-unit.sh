@@ -2,7 +2,7 @@
 # Unit tests for switch-primary.sh's functional core (primary_decide and the
 # served-id mapping). Pure: sources the script without running main, so no
 # Docker, GPU or ssh. Exhaustive over the input space rather than examples:
-# every (request, active, last, last_ds41) combination is checked against the
+# every (request, active, last, glm_partner) combination is checked against the
 # properties the switcher relies on.
 set -euo pipefail
 
@@ -24,15 +24,15 @@ PRIMARIES=(glm warmind deepseek)
 REQUESTS=(toggle glm warmind deepseek bogus "")
 ACTIVES=(glm warmind deepseek none both other:qwen38-27b-bf16 weird "")
 LASTS=(glm warmind deepseek none "")
-LAST_DS41S=(warmind deepseek "" junk)
+GLM_PARTNERS=(warmind deepseek "" junk)
 engine() { case "$1" in glm) echo hyperflare ;; warmind | deepseek) echo ds4-native ;; *) echo none ;; esac; }
 
 for request in "${REQUESTS[@]}"; do
   for active in "${ACTIVES[@]}"; do
     for last in "${LASTS[@]}"; do
-      for last_ds41 in "${LAST_DS41S[@]}"; do
-        d="$(primary_decide "$request" "$active" "$last" "$last_ds41")"
-        ctx="request='$request' active='$active' last='$last' last_ds41='$last_ds41' -> '$d'"
+      for glm_partner in "${GLM_PARTNERS[@]}"; do
+        d="$(primary_decide "$request" "$active" "$last" "$glm_partner")"
+        ctx="request='$request' active='$active' last='$last' glm_partner='$glm_partner' -> '$d'"
         # Totality: exactly one well-formed line.
         check "total: $ctx" '[[ "$d" =~ ^(start:(glm|warmind|deepseek)|noop:(glm|warmind|deepseek)|error:.+)$ ]]'
         # Never "start" what already serves.
@@ -56,8 +56,8 @@ for request in "${REQUESTS[@]}"; do
                   '[[ "$d" == start:* ]] && [ "$(engine "${d#start:}")" != "$(engine "$active")" ]'
               fi
               if [ "$active" = glm ]; then
-                expected="$last_ds41"; case "$expected" in warmind | deepseek) ;; *) expected=warmind ;; esac
-                check "glm toggles to last ds41 weights: $ctx" '[ "$d" = "start:$expected" ]'
+                expected="$glm_partner"; case "$expected" in warmind | deepseek) ;; *) expected=warmind ;; esac
+                check "glm toggles to its partner: $ctx" '[ "$d" = "start:$expected" ]'
               fi
               if [ "$active" = none ]; then
                 case "$last" in
@@ -74,16 +74,27 @@ for request in "${REQUESTS[@]}"; do
   done
 done
 
-# Toggle is an involution across engines: two toggles return to the start
-# (the ds41 side keeps its weights).
+# Toggle is an involution across engines when the ds41 side is GLM's partner:
+# two toggles return to the start.
 for start in "${PRIMARIES[@]}"; do
-  for last_ds41 in warmind deepseek; do
-    weights="$last_ds41"; [ "$start" = glm ] || weights="$start"
-    first="$(primary_decide toggle "$start" none "$weights")"
-    second="$(primary_decide toggle "${first#start:}" none "$weights")"
+  for glm_partner in warmind deepseek; do
+    partner="$glm_partner"; [ "$start" = glm ] || partner="$start"
+    first="$(primary_decide toggle "$start" none "$partner")"
+    second="$(primary_decide toggle "${first#start:}" none "$partner")"
     check "toggle twice from $start returns ($first, $second)" '[ "$second" = "start:$start" ]'
   done
 done
+
+# GLM toggles to WARMIND for now, and main passes that constant (not the
+# ds41 container's last weights) to every decision.
+check "GLM toggle target is WARMIND" '[ "$GLM_TOGGLE_TARGET" = warmind ]'
+# Read by the check() eval string below.
+# shellcheck disable=SC2034
+script_source="$(cat "$ROOT/scripts/inference/switch-primary.sh")"
+check "main decides with GLM_TOGGLE_TARGET" \
+  '[ "$(grep -c "\"\$last\" \"\$GLM_TOGGLE_TARGET\"" <<<"$script_source")" = 2 ]'
+check "toggle from glm starts warmind even after deepseek ran" \
+  '[ "$(primary_decide toggle glm deepseek "$GLM_TOGGLE_TARGET")" = start:warmind ]'
 
 # The served-id mapping round-trips for every primary and rejects strangers.
 for primary in "${PRIMARIES[@]}"; do

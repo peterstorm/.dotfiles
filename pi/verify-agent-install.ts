@@ -200,11 +200,11 @@ expectRoute(
   { provider: "llama.cpp", id: "local-model", thinkingLevel: "medium" },
   "a llama.cpp parent's child does not stay on its parent",
 );
-// A cloud parent's children run locally on the served model at high effort...
+// A cloud parent's children run locally on the served model at max effort...
 expectRoute(
   routeTo({ model: cloudModel.value, thinkingLevel: "xhigh" }, servedAs(glmModel.value)),
-  { provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16", thinkingLevel: "high" },
-  "a cloud parent's child is not routed to the served local model at high",
+  { provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16", thinkingLevel: "max" },
+  "a cloud parent's child is not routed to the served local model at max",
 );
 // ...except its workers, which stay on the cloud parent.
 expectRoute(
@@ -249,7 +249,7 @@ const expectedContext: Readonly<Record<(typeof primaryModels)[number], number>> 
 for (const id of primaryModels) {
   const model = localModels.find((entry) => entry.id === id);
   if (!model) fail(`desktop-vllm is missing ${id}`);
-  if (model.defaultThinkingLevel !== "high") fail(`${id} does not declare high as its model default`);
+  if (model.defaultThinkingLevel !== "max") fail(`${id} does not declare max as its model default`);
   for (const level of ["low", "high", "max"] as const) {
     if (model.thinkingLevelMap[level] !== level) fail(`${id} does not expose the ${level} reasoning contract`);
   }
@@ -270,9 +270,9 @@ copyFileSync(join(agentDir, "settings.json"), join(runtimeAgentDir, "settings.js
 // Two fixtures in the isolated catalog. The cross-capability check needs a model
 // that cannot think (upstream's built-in catalog rotates). The model-local-default
 // checks need a model whose default differs from the global one; every local
-// primary defaults to the global "high", so that model is declared here too.
+// primary defaults to the global "max", so that model (default "high") is declared here.
 const nonThinkingFixture = "verify-fixture/no-thinking";
-const maxDefaultFixture = "verify-fixture/max-default";
+const modelDefaultFixture = "verify-fixture/high-default";
 // A thinking model with no model-local default, standing in for "any cloud model"
 // (Gemini 3.1 Flash Lite, the previous stand-in, left the built-in catalog too).
 const plainFixture = "verify-fixture/plain";
@@ -299,10 +299,10 @@ writeFileSync(
           maxTokens: 1024,
           cost: fixtureCost,
         }, {
-          id: "max-default",
-          name: "Verification fixture with a max model default",
+          id: "high-default",
+          name: "Verification fixture with a high model default",
           reasoning: true,
-          defaultThinkingLevel: "max",
+          defaultThinkingLevel: "high",
           thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
           input: ["text"],
           contextWindow: 8192,
@@ -332,7 +332,7 @@ for (const credentialFile of ["auth.json", "models-store.json"]) {
 function runtimeThinkingLevel(
   extraArgs: readonly string[],
   includeModel: boolean = true,
-  model: string = maxDefaultFixture,
+  model: string = modelDefaultFixture,
 ): string | undefined {
   const result = spawnSync(
     "pi",
@@ -455,9 +455,9 @@ async function thinkingAfterCycle(options: Readonly<{
 }
 
 try {
-  if (runtimeThinkingLevel([]) !== "max") fail("a model's max model default is not applied at startup");
-  if (runtimeThinkingLevel([], true, "desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16") !== "high") {
-    fail("GLM v16 does not start at its high model default");
+  if (runtimeThinkingLevel([]) !== "high") fail("a model's high model default is not applied at startup");
+  if (runtimeThinkingLevel([], true, "desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16") !== "max") {
+    fail("GLM v16 does not start at its max model default");
   }
   if (settingsThinkingLevel(join(runtimeAgentDir, "settings.json")) !== installedThinkingLevel) {
     fail("a model default mutated Pi's global cloud-model thinking default");
@@ -465,24 +465,24 @@ try {
   if (runtimeThinkingLevel(["--thinking", "low"]) !== "low") {
     fail("a model default overwrites an explicit child thinking level");
   }
-  if (runtimeThinkingLevel(["--models", `${maxDefaultFixture}:low`], false) !== "low") {
+  if (runtimeThinkingLevel(["--models", `${modelDefaultFixture}:low`], false) !== "low") {
     fail("a model default overwrites a scoped model's explicit thinking level");
   }
   if (runtimeThinkingLevel([
     "--models",
-    `${maxDefaultFixture},openai-codex/gpt-5.6-sol:low`,
-  ], false) !== "max") {
+    `${modelDefaultFixture},openai-codex/gpt-5.6-sol:low`,
+  ], false) !== "high") {
     fail("another scoped model's thinking pin suppresses a model default");
   }
   const crossCapability = await thinkingAfterCycle({
     startModel: nonThinkingFixture,
-    models: `${nonThinkingFixture},${maxDefaultFixture}`,
+    models: `${nonThinkingFixture},${modelDefaultFixture}`,
     expectedProvider: "verify-fixture",
-    expectedModel: "max-default",
+    expectedModel: "high-default",
     thinkingLevel: "low",
   });
   if (
-    crossCapability.model !== maxDefaultFixture ||
+    crossCapability.model !== modelDefaultFixture ||
     crossCapability.thinkingLevel !== "low"
   ) {
     fail("model cycling does not restore an explicit preference after startup clamping");
@@ -493,8 +493,8 @@ try {
   if (!isRecord(isolatedSettings)) fail(`${isolatedSettingsPath} is not a settings object`);
   writeFileSync(isolatedSettingsPath, JSON.stringify({ ...isolatedSettings, defaultThinkingLevel: "low" }, null, 2));
   const afterModelDefault = await thinkingAfterCycle({
-    startModel: maxDefaultFixture,
-    models: `${maxDefaultFixture},${plainFixture}`,
+    startModel: modelDefaultFixture,
+    models: `${modelDefaultFixture},${plainFixture}`,
     expectedProvider: "verify-fixture",
     expectedModel: "plain",
   });

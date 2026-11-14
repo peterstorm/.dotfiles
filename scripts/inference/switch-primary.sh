@@ -6,7 +6,7 @@
 #   deepseek  deepseek-v4.1-flash-native        ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
 #
 # Usage: switch-primary.sh [toggle|glm|warmind|deepseek|status]   (default: toggle)
-#   toggle    GLM <-> the ds41 model that last ran (WARMIND if none has); with
+#   toggle    GLM -> GLM_TOGGLE_TARGET (WARMIND), WARMIND or DeepSeek -> GLM; with
 #             nothing running, bring back whichever primary stopped last
 #   glm|warmind|deepseek
 #             make that one the primary (no-op if it already is)
@@ -27,6 +27,9 @@ DS41_CONTAINER="ds41-1017-native"
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
 SERVING_HOST="desktop"
+# Where toggle goes from GLM: WARMIND for now (2026-11-14). Set it to deepseek to toggle to
+# stock DeepSeek-V4.1 instead; `switch-primary.sh deepseek` reaches it either way.
+GLM_TOGGLE_TARGET="warmind"
 
 # --- functional core -------------------------------------------------------
 
@@ -47,16 +50,16 @@ served_of_primary() {
   esac
 }
 
-# primary_decide REQUEST ACTIVE LAST LAST_DS41 -> exactly one line:
+# primary_decide REQUEST ACTIVE LAST GLM_PARTNER -> exactly one line:
 #   start:<glm|warmind|deepseek> | noop:<primary> | error:<reason>
 #   REQUEST    toggle | glm | warmind | deepseek
 #   ACTIVE     glm | warmind | deepseek | none | both | other:<container>
 #   LAST       glm | warmind | deepseek | none   (the primary that stopped most recently)
-#   LAST_DS41  warmind | deepseek                (weights the ds41 container last served)
+#   GLM_PARTNER warmind | deepseek              (the ds41 primary toggle starts from GLM)
 # Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
-  local request="$1" active="$2" last="$3" last_ds41="$4"
-  case "$last_ds41" in warmind | deepseek) ;; *) last_ds41=warmind ;; esac
+  local request="$1" active="$2" last="$3" glm_partner="$4"
+  case "$glm_partner" in warmind | deepseek) ;; *) glm_partner=warmind ;; esac
   case "$active" in
     both) echo "error:both primary engines are running; stop one by hand"; return ;;
     other:*) echo "error:${active#other:} holds the GPUs; stop it before switching primaries"; return ;;
@@ -66,7 +69,7 @@ primary_decide() {
   case "$request" in
     toggle)
       case "$active" in
-        glm) echo "start:$last_ds41" ;;
+        glm) echo "start:$glm_partner" ;;
         warmind | deepseek) echo "start:glm" ;;
         none)
           case "$last" in
@@ -217,7 +220,7 @@ switch_to() {
 }
 
 main() {
-  local request="${1:-toggle}" active last last_ds41 decision
+  local request="${1:-toggle}" active last decision
   if [ "$(hostname)" != "$SERVING_HOST" ]; then
     local tty=()
     [ -t 0 ] && tty=(-t)
@@ -230,17 +233,16 @@ main() {
 
   active="$(read_active)"
   last="$(read_last)"
-  last_ds41="$(read_last_ds41)"
   if [ "$request" = status ]; then
     local suffix=""
     case "$active" in glm | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
     echo "active:     $active$suffix"
     echo "last:       $last"
-    echo "toggle ->   $(primary_decide toggle "$active" "$last" "$last_ds41")"
+    echo "toggle ->   $(primary_decide toggle "$active" "$last" "$GLM_TOGGLE_TARGET")"
     return 0
   fi
 
-  decision="$(primary_decide "$request" "$active" "$last" "$last_ds41")"
+  decision="$(primary_decide "$request" "$active" "$last" "$GLM_TOGGLE_TARGET")"
   case "$decision" in
     noop:*) report "${decision#noop:}"; echo "(already the primary; nothing to do)" ;;
     start:*) echo "switching: $active -> ${decision#start:}"; switch_to "${decision#start:}" "$active" || exit 1 ;;

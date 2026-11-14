@@ -14,7 +14,7 @@ export const SWITCH_REQUESTS = ["toggle", "glm", "warmind", "deepseek", "status"
 export type SwitchRequest = (typeof SWITCH_REQUESTS)[number];
 
 const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
-	toggle: "GLM <-> the DeepSeek-V4.1 model that last ran",
+	toggle: "GLM -> WARMIND; WARMIND or DeepSeek -> GLM",
 	glm: "GLM-5.3 v16 on Hyperflare",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",

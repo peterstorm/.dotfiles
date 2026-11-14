@@ -11,9 +11,9 @@
     "served": {
       "served": "desktop-vllm"
     },
-    "served-high": {
+    "served-max": {
       "served": "desktop-vllm",
-      "thinkingLevel": "high"
+      "thinkingLevel": "max"
     }
   },
   "rules": [
@@ -55,7 +55,7 @@
       },
       "use": {
         "kind": "named",
-        "target": "served-high"
+        "target": "served-max"
       }
     }
   ]

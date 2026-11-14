@@ -9,7 +9,7 @@
           "id": "glm-5.3-flash-hyperflare-tp2-v16",
           "name": "GLM-5.3 Flash Hyperflare TP2 v16 (NVIDIA FP4-Local, hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.2M KV, 1M ctx, vision)",
           "reasoning": true,
-          "defaultThinkingLevel": "high",
+          "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
             "minimal": null,
             "low": "low",
@@ -42,7 +42,7 @@
           "id": "deepseek-v4.1-flash-native",
           "name": "DeepSeek-V4.1-Flash-1017 released MXFP4 on ds4-native (Exact, TP2, Experts streamed from NVMe, DSpark, 256K ctx, conversations kept as KV checkpoints) behind Project Maya's server",
           "reasoning": true,
-          "defaultThinkingLevel": "high",
+          "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
             "minimal": null,
             "low": "low",
@@ -74,7 +74,7 @@
           "id": "warmind-1017-native",
           "name": "WARMIND-1017 (jcartu's abliterated DeepSeek-V4.1-Flash-1017: 132 dense tensors re-written, Experts and Engram DeepSeek's) on ds4-native (TP2, Experts streamed from NVMe, DSpark, 256K ctx, conversations kept as KV checkpoints) behind Project Maya's server",
           "reasoning": true,
-          "defaultThinkingLevel": "high",
+          "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
             "minimal": null,
             "low": "low",

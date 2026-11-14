@@ -239,7 +239,8 @@ jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg 
            "--ram-records", $ram, "--prior", $profile, "--ram-policy", $ram_policy, "--sweep-min", $sweep,
            "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots],
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
-    sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "high",
+    # A request that names no effort gets max (Maya accepts none/low/high/max); pi always names one.
+    sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "max",
     # No thinking cap of its own (Maya defaults to 32,768): reasoning is bounded by the room left for
     # the reply, less the quarter Maya keeps for the answer so a reply never ends with no answer.
     thinking_budget: 262144,

@@ -8,7 +8,7 @@
     "../../dev/claude-plugins/cortex",
     "../../dev/claude-plugins/obsidian"
   ],
-  "defaultThinkingLevel": "high",
+  "defaultThinkingLevel": "max",
   "theme": "dark",
   "hideThinkingBlock": false
 }

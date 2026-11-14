@@ -157,11 +157,17 @@ with the three **primary** models, served by two engines that take turns on port
 - `desktop-vllm/deepseek-v4.1-flash-native` — stock DeepSeek-V4.1-Flash-1017 at released precision on the same engine; only the Backbone differs.
 - `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, full 1,048,576-token context per request, vision. GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
 
+Thinking defaults to **max** everywhere (2026-11-14): each primary's `defaultThinkingLevel`,
+Pi's global `defaultThinkingLevel` (cloud models start at `max` too; Home Manager copies
+`settings.json` into `~/.pi/agent` on activation), the `served-max` target for a cloud parent's children, and the ds41 engine's server-side
+`reasoning_effort` for requests that name none. Choose less per session with `Shift+Tab` or a
+`:low`/`:high` suffix; reclaw pins `:medium` on purpose (`roles/reclaw/default.nix`).
+
 Switch the primary with `scripts/inference/switch-primary.sh` (from any machine; off
 `desktop` it re-runs itself there over ssh):
 
 ```bash
-scripts/inference/switch-primary.sh            # toggle GLM <-> the ds41 model that last ran
+scripts/inference/switch-primary.sh            # toggle: GLM -> WARMIND, WARMIND or DeepSeek -> GLM
 scripts/inference/switch-primary.sh glm        # or warmind / deepseek: exactly that one
 scripts/inference/switch-primary.sh status
 ```
@@ -537,13 +543,13 @@ instead of a fixed id:
 | desktop-vllm model (any of the three primaries, even one that is not the served one) | The model desktop-vllm serves now, at the **parent's** thinking level (`local-desktop-children-use-served`) |
 | Any other local model (e.g. `llama.cpp/*`) | The local parent itself (`other-local-children-inherit-parent`): desktop-vllm's served model says nothing about it |
 | Cloud model, agent `worker` | The cloud parent itself (`cloud-workers-use-parent`) |
-| Any other cloud or unknown model | The model desktop-vllm serves now, at `high` |
+| Any other cloud or unknown model | The model desktop-vllm serves now, at `max` (`served-max`) |
 
 ```json
 {
   "targets": {
     "served": { "served": "desktop-vllm" },
-    "served-high": { "served": "desktop-vllm", "thinkingLevel": "high" }
+    "served-max": { "served": "desktop-vllm", "thinkingLevel": "max" }
   }
 }
 ```

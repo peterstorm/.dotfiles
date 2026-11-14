@@ -215,7 +215,7 @@ while IFS= read -r mutation; do
 done <<'MUTATIONS'
 .targets.served.thinkingLevel = "high"
 .targets.served = {"model": "desktop-vllm/pinned-id"}
-.rules |= map(if .when.parentClass == "local" and .use.kind == "parent" then .use = {"kind": "named", "target": "served-high"} else . end)
+.rules |= map(if .when.parentClass == "local" and .use.kind == "parent" then .use = {"kind": "named", "target": "served-max"} else . end)
 .rules |= map(select(.when.parentClass == "cloud"))
 .rules += [{"id": "any-worker-declared", "when": {"agent": "worker"}, "use": {"kind": "declared"}}]
 MUTATIONS
@@ -572,8 +572,10 @@ grep -Fq '7 exchanges, 2 error(s), 3 warning(s)' <<<"$interview_report" \
   || fail "interview answer did not print the judgement line verbatim"
 [[ "$(bash "$INTERVIEW" "$interview_sandbox" answer 14)" == "$SHELL_NO" ]] \
   || fail "interview answer did not print topic 14 verbatim"
-bash "$INTERVIEW" "$interview_sandbox" suggest 'Errors: what shape? (Error-handling philosophy)' \
-  | grep -Fq 'TAGGED' || fail "interview suggest did not bind a tagged topic"
+# Capture, then match: piping into `grep -q` under pipefail fails whenever grep
+# exits at the first match while the helper is still writing (SIGPIPE).
+suggest_output="$(bash "$INTERVIEW" "$interview_sandbox" suggest 'Errors: what shape? (Error-handling philosophy)')"
+grep -Fq 'TAGGED' <<<"$suggest_output" || fail "interview suggest did not bind a tagged topic"
 
 rm "$interview_sandbox/interview.md"
 status=0
@@ -584,7 +586,8 @@ bash "$INTERVIEW" "$interview_sandbox" log 'Errors: what shape? (Observability)'
   == 'None in the core. Effects are returned as values for the shell to act on.' ]] \
   || fail "interview log did not print the chosen scripted answer"
 bash "$INTERVIEW" "$interview_sandbox" log 'Retries: what happens on retry?' judgement >/dev/null
-bash "$INTERVIEW" "$interview_sandbox" check | grep -Fq '2 exchanges, 0 error(s), 0 warning(s)' \
+recheck_output="$(bash "$INTERVIEW" "$interview_sandbox" check)"
+grep -Fq '2 exchanges, 0 error(s), 0 warning(s)' <<<"$recheck_output" \
   || fail "interview log did not write a log its own check accepts"
 grep -Fq '**Q2.** Retries: what happens on retry?' "$interview_sandbox/interview.md" \
   || fail "interview log did not number exchanges consecutively"

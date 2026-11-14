@@ -96,7 +96,7 @@ export and run scripts check.
    profile set.
 5. **Switching primaries** (GLM v16, WARMIND and stock DeepSeek-V4.1 are the
    primaries since 2026-11-14): `scripts/inference/switch-primary.sh` toggles GLM
-   and the ds41 model that last ran; `… glm|warmind|deepseek` picks one; `… status`
+   to WARMIND (`GLM_TOGGLE_TARGET`) and either ds41 model back to GLM; `… glm|warmind|deepseek` picks one; `… status`
    reports. It idle-gates :8000, stops the active engine through its own launcher,
    starts the other, and restores the previous primary if the start fails.
 
