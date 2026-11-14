@@ -172,6 +172,24 @@ whatever is loaded, so a pinned session keeps working across a switch — with i
 entry's limits, which is why the default is WARMIND (262K, safe on either engine)
 rather than GLM's 1M entry. The switcher prints the id that matches what now serves.
 
+From inside Pi, `/switch` does the same and moves the session along
+(`extensions/primary-switch/`):
+
+```text
+/switch                 toggle, like the script with no argument
+/switch glm             or warmind / deepseek: exactly that one
+/switch status          what serves now, and what toggle would do
+```
+
+It waits for the current turn to finish (the cutover is idle-gated), runs
+`switch-primary.sh` (whose gates, acceptance and rollback apply unchanged), reads the
+served id from the script's `PRIMARY:` report, polls `desktop-vllm`'s `/v1/models` every
+3 s until that id is served (up to 5 min), then selects `desktop-vllm/<id>` for this
+session. The id comes from the script, so the extension keeps no copy of the primaries
+table. Progress shows in the footer; a failed stage (`script`, `report`, `serve`,
+`model`) is reported with its reason and leaves the session model unchanged. With the
+primary already serving it is a no-op on desktop that still moves the session onto it.
+
 Every other local profile (DeepSeek V4 Flash and Vision, the GLM-5.3 v10–v15 vLLM
 builds, Qwen3.8 27B/Blackfrost/Flash-Next, the Maya EXL3 DeepSeek-V4.1) left the
 catalog on 2026-11-14. Their launchers and runbooks stay, and their contracts assert

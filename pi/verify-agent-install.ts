@@ -622,6 +622,16 @@ const obsidianCommand = commandsResult.stdout.split("\n").flatMap((line) => {
   }
 })[0];
 if (!obsidianCommand) fail("the obsidian-vault skill is not registered as /skill:obsidian-vault");
+const registeredCommands = commandsResult.stdout.split("\n").flatMap((line) => {
+  try {
+    const response: unknown = parseJson(line);
+    if (text(field(response, "command")) !== "get_commands") return [];
+    return list(field(field(response, "data"), "commands")).map((command) => text(field(command, "name")) ?? "");
+  } catch {
+    return [];
+  }
+});
+if (!registeredCommands.includes("switch")) fail("the primary-switch extension does not register /switch");
 const expectedObsidianSkill = resolve(
   process.env.HOME ?? "",
   "dev/claude-plugins/obsidian/skills/obsidian-vault/SKILL.md",

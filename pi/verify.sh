@@ -41,6 +41,7 @@ if [ "${1:-}" = "--tests" ]; then
   bun test \
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \
+    "$here/extensions/primary-switch" \
     "$here/extensions/creative-project-scope/index.test.ts" \
     "$here/root-extensions.test.ts" \
     "$here/tests/reload-runtime.test.ts" \
