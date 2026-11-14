@@ -69,13 +69,17 @@ contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$SWITCH" 'any(. == "MODE=dspark") and any(. == "DSPARK_TOKENS=6")'
 contains "$PROBE" 'data:image/png;base64'
 contains "$CATALOG" 'ds4-flash-vision-infernal-invocation-cu133-r21-v1'
-jq -e '
-  .providers["desktop-vllm"].models[] |
-  select(.id == "deepseek-v4-flash-vision") |
-  .input == ["text", "image"] and
-  .contextWindow == 312000 and
-  .compat.thinkingFormat == "deepseek"
-' "$MODELS" >/dev/null || fail "Pi DS4 Vision model contract differs"
+# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
+# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
+# local models pi offers (scripts/inference/switch-primary.sh). This profile
+# stays launchable; restore its catalog entry from git history before pointing
+# pi at it.
+if ! jq -e --argjson ids '["deepseek-v4-flash-vision"]' \
+  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
+  "$MODELS" >/dev/null; then
+  echo "FAIL: pi/models.json offers deepseek-v4-flash-vision, which left the catalog with the primaries switch" >&2
+  exit 1
+fi
 
 contains "$OVERLAY/ds4-vision-r21.patch" 'class DeepseekV4VisionTransformer'
 contains "$OVERLAY/ds4-vision-r21.patch" 'class DeepseekV4VisionMultiModalProcessor'

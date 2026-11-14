@@ -92,21 +92,16 @@ if grep -Eq -- '^[[:space:]]*--api-key([=[:space:]]|$)' "$RUNTIME"; then
   fail "runtime exposes the API key through process arguments"
 fi
 
-jq -e '
-  .providers."desktop-vllm".models | any(
-    .id == "qwen3.8-27b-blackfrost-abliterated" and
-    .reasoning == true and
-    .defaultThinkingLevel == "xhigh" and
-    .input == ["text", "image"] and
-    .contextWindow == 262144 and
-    .maxTokens == 32768 and
-    .compat.supportsDeveloperRole == false and
-    .compat.requiresReasoningContentOnAssistantMessages == true and
-    .compat.thinkingFormat == "chat-template" and
-    .compat.chatTemplateKwargs.enable_thinking == {"$var": "thinking.enabled"} and
-    .compat.chatTemplateKwargs.preserve_thinking == true
-  )
-' "$PI_MODELS" >/dev/null ||
-  fail "Pi's desktop-vllm catalog does not expose the Blackfrost abliterated Qwen model"
+# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
+# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
+# local models pi offers (scripts/inference/switch-primary.sh). This profile
+# stays launchable; restore its catalog entry from git history before pointing
+# pi at it.
+if ! jq -e --argjson ids '["qwen3.8-27b-blackfrost-abliterated"]' \
+  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
+  "$PI_MODELS" >/dev/null; then
+  echo "FAIL: pi/models.json offers qwen3.8-27b-blackfrost-abliterated, which left the catalog with the primaries switch" >&2
+  exit 1
+fi
 
 printf 'PASS: Blackfrost abliterated Qwen3.8-27B BF16 profile is pinned, LAN-served, and credential-safe\n'

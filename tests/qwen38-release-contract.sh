@@ -77,34 +77,16 @@ contains "$DOC" "$IMAGE"
 contains "$DOC" "$DIGEST"
 contains "$DOC" "$MODEL_REV"
 
-jq -e '
-  .providers."desktop-vllm" as $provider |
-  ($provider.apiKey | contains("~/.config/qwen38/api-key")) and
-  ($provider.models | any(
-    .id == "deepseek-v4-flash" and .compat.thinkingFormat == "deepseek"
-  )) and
-  ($provider.models | any(
-    .id == "qwen3.8-27b" and
-    .defaultThinkingLevel == "xhigh" and
-    .contextWindow == 262144 and
-    .input == ["text", "image"] and
-    .thinkingLevelMap == {
-      "off": null,
-      "minimal": null,
-      "low": "low",
-      "medium": null,
-      "high": null,
-      "xhigh": "xhigh",
-      "max": null
-    } and
-    .compat.supportsDeveloperRole == false and
-    .compat.thinkingFormat == "chat-template" and
-    .compat.chatTemplateKwargs == {
-      "enable_thinking": {"$var": "thinking.enabled"},
-      "preserve_thinking": true,
-      "reasoning_effort": {"$var": "thinking.effort", "omitWhenOff": true}
-    }
-  ))
-' "$PI_MODELS" >/dev/null || fail "Pi's desktop-vllm catalog does not expose the Qwen native-template contract"
+# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
+# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
+# local models pi offers (scripts/inference/switch-primary.sh). This profile
+# stays launchable; restore its catalog entry from git history before pointing
+# pi at it.
+if ! jq -e --argjson ids '["qwen3.8-27b"]' \
+  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
+  "$PI_MODELS" >/dev/null; then
+  echo "FAIL: pi/models.json offers qwen3.8-27b, which left the catalog with the primaries switch" >&2
+  exit 1
+fi
 
 printf 'PASS: Qwen3.8 BF16 release and Pi model contracts are internally consistent\n'

@@ -32,6 +32,64 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+// Wire decoders. Every JSON document this verifier reads (catalog, settings, Pi's
+// RPC lines) is bound as unknown and narrowed here; nothing is cast.
+const parseJson = (raw: string): unknown => JSON.parse(raw);
+const readJson = (path: string): unknown => parseJson(readFileSync(path, "utf8"));
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const field = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
+const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value.map((item: unknown) => item) : []);
+
+type CatalogModel = Readonly<{
+  id?: string;
+  defaultThinkingLevel?: string;
+  thinkingLevelMap: Readonly<Record<string, unknown>>;
+  contextWindow?: number;
+  supportsDeveloperRole: unknown;
+  thinkingFormat?: string;
+}>;
+const catalogModel = (raw: unknown): CatalogModel => {
+  const levels = field(raw, "thinkingLevelMap");
+  const context = field(raw, "contextWindow");
+  return {
+    id: text(field(raw, "id")),
+    defaultThinkingLevel: text(field(raw, "defaultThinkingLevel")),
+    thinkingLevelMap: isRecord(levels) ? levels : {},
+    contextWindow: typeof context === "number" ? context : undefined,
+    supportsDeveloperRole: field(field(raw, "compat"), "supportsDeveloperRole"),
+    thinkingFormat: text(field(field(raw, "compat"), "thinkingFormat")),
+  };
+};
+
+type RpcResponse = Readonly<{
+  type?: string;
+  command?: string;
+  data?: Readonly<{
+    thinkingLevel?: string;
+    model?: Readonly<{ provider?: string; id?: string }>;
+  }>;
+}>;
+const rpcResponse = (raw: unknown): RpcResponse => {
+  const data = field(raw, "data");
+  const model = field(data, "model");
+  return {
+    type: text(field(raw, "type")),
+    command: text(field(raw, "command")),
+    data: isRecord(data)
+      ? {
+        thinkingLevel: text(field(data, "thinkingLevel")),
+        model: isRecord(model)
+          ? { provider: text(field(model, "provider")), id: text(field(model, "id")) }
+          : undefined,
+      }
+      : undefined,
+  };
+};
+const settingsThinkingLevel = (path: string): string | undefined =>
+  text(field(readJson(path), "defaultThinkingLevel"));
+
 const agentDir = getAgentDir();
 const userAgentsDir = join(agentDir, "agents");
 
@@ -79,10 +137,17 @@ if (resolve(dirname(routingLink), readlinkSync(routingLink)) !== expectedRouting
 
 const loadedRouting = loadModelRoutingPolicy(agentDir);
 if (!loadedRouting.ok) fail(`invalid model routing policy: ${loadedRouting.error.message}`);
-const deepSeekModel = parseModelReference("desktop-vllm/deepseek-v4-flash");
-const blackfrostModel = parseModelReference("desktop-vllm/qwen3.8-27b-blackfrost-abliterated");
+// The local catalog is exactly the two primaries' three served ids: WARMIND and
+// stock DeepSeek-V4.1-Flash-1017 on ds4-native, and GLM-5.3 v16 on Hyperflare.
+const primaryModels = [
+  "warmind-1017-native",
+  "deepseek-v4.1-flash-native",
+  "glm-5.3-flash-hyperflare-tp2-v16",
+] as const;
+const deepSeekModel = parseModelReference("desktop-vllm/warmind-1017-native");
+const glmModel = parseModelReference("desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16");
 const cloudModel = parseModelReference("openai-codex/gpt-5.6-sol");
-if (!deepSeekModel.ok || !blackfrostModel.ok || !cloudModel.ok) {
+if (!deepSeekModel.ok || !glmModel.ok || !cloudModel.ok) {
   fail("verification model references are invalid");
 }
 const deepSeekBinding = {
@@ -107,15 +172,15 @@ if (!localRoute.ok) fail(`cannot resolve local subagent route: ${localRoute.erro
 if (
   localRoute.value.kind !== "override" ||
   localRoute.value.effective?.model.provider !== "desktop-vllm" ||
-  localRoute.value.effective?.model.id !== "deepseek-v4-flash" ||
+  localRoute.value.effective?.model.id !== "warmind-1017-native" ||
   localRoute.value.effective?.thinkingLevel !== "max"
 ) {
   fail("local parent does not override a subagent's declared cloud binding");
 }
-const blackfrostRoute = resolveModelRoute(
+const glmRoute = resolveModelRoute(
   loadedRouting.value.policy,
   {
-    parent: { model: blackfrostModel.value, thinkingLevel: "xhigh" },
+    parent: { model: glmModel.value, thinkingLevel: "low" },
     declared: { model: cloudModel.value, thinkingLevel: "high" },
     workload: "subagent",
     profile: "general-review",
@@ -124,13 +189,13 @@ const blackfrostRoute = resolveModelRoute(
   loadedRouting.value.digest,
 );
 if (
-  !blackfrostRoute.ok ||
-  blackfrostRoute.value.kind !== "override" ||
-  blackfrostRoute.value.effective?.model.provider !== "desktop-vllm" ||
-  blackfrostRoute.value.effective?.model.id !== "qwen3.8-27b-blackfrost-abliterated" ||
-  blackfrostRoute.value.effective?.thinkingLevel !== "xhigh"
+  !glmRoute.ok ||
+  glmRoute.value.kind !== "override" ||
+  glmRoute.value.effective?.model.provider !== "desktop-vllm" ||
+  glmRoute.value.effective?.model.id !== "glm-5.3-flash-hyperflare-tp2-v16" ||
+  glmRoute.value.effective?.thinkingLevel !== "low"
 ) {
-  fail("Blackfrost Qwen is not classified as a local parent for nested workloads");
+  fail("GLM v16 is not classified as a local parent for nested workloads");
 }
 const cloudRoute = resolveModelRoute(
   loadedRouting.value.policy,
@@ -153,118 +218,62 @@ if (
   fail("cloud parent does not preserve a subagent's declared cloud binding");
 }
 
-const modelsConfig = JSON.parse(readFileSync(modelsLink, "utf8")) as {
-  providers?: Record<
-    string,
-    {
-      baseUrl?: string;
-      models?: Array<{
-        id?: string;
-        defaultThinkingLevel?: string;
-        thinkingLevelMap?: Record<string, string | null>;
-        contextWindow?: number;
-        compat?: {
-          supportsDeveloperRole?: boolean;
-          supportsReasoningEffort?: boolean;
-          supportsStrictMode?: boolean;
-          thinkingFormat?: string;
-          chatTemplateKwargs?: Record<string, unknown>;
-        };
-      }>;
-    }
-  >;
-};
-const desktopProvider = modelsConfig.providers?.["desktop-vllm"];
-const deepSeek = desktopProvider?.models?.find((model) => model.id === "deepseek-v4-flash");
-const qwen = desktopProvider?.models?.find((model) => model.id === "qwen3.8-27b");
-const blackfrost = desktopProvider?.models?.find(
-  (model) => model.id === "qwen3.8-27b-blackfrost-abliterated",
-);
-if (desktopProvider?.baseUrl !== "http://192.168.0.80:8000/v1") {
+const desktopProvider = field(field(readJson(modelsLink), "providers"), "desktop-vllm");
+if (text(field(desktopProvider, "baseUrl")) !== "http://192.168.0.80:8000/v1") {
   fail("desktop-vllm does not target the workstation's OpenAI-compatible endpoint");
 }
-if (!deepSeek) fail("desktop-vllm is missing deepseek-v4-flash");
-if (deepSeek.defaultThinkingLevel !== "max") fail("deepseek-v4-flash does not declare max as its model default");
-for (const level of ["low", "high", "max"] as const) {
-  if (deepSeek.thinkingLevelMap?.[level] !== level) {
-    fail(`deepseek-v4-flash does not expose the ${level} reasoning contract`);
+const localModels = list(field(desktopProvider, "models")).map(catalogModel);
+const localIds = localModels.map((model) => model.id ?? "").sort();
+if (JSON.stringify(localIds) !== JSON.stringify([...primaryModels].sort())) {
+  fail(`desktop-vllm must list exactly the primaries ${primaryModels.join(", ")}; found ${localIds.join(", ")}`);
+}
+// Both engines answer any model id with whatever is loaded, so a pinned id keeps
+// working across a primary switch; the entries differ only in context and input.
+const expectedContext: Readonly<Record<(typeof primaryModels)[number], number>> = {
+  "warmind-1017-native": 262_144,
+  "deepseek-v4.1-flash-native": 262_144,
+  "glm-5.3-flash-hyperflare-tp2-v16": 1_048_576,
+};
+for (const id of primaryModels) {
+  const model = localModels.find((entry) => entry.id === id);
+  if (!model) fail(`desktop-vllm is missing ${id}`);
+  if (model.defaultThinkingLevel !== "high") fail(`${id} does not declare high as its model default`);
+  for (const level of ["low", "high", "max"] as const) {
+    if (model.thinkingLevelMap[level] !== level) fail(`${id} does not expose the ${level} reasoning contract`);
   }
-}
-if (!qwen) fail("desktop-vllm is missing qwen3.8-27b");
-if (qwen.defaultThinkingLevel !== "xhigh") fail("qwen3.8-27b does not declare xhigh as its model default");
-if (qwen.contextWindow !== 262_144) fail("qwen3.8-27b does not declare its native 262K context");
-for (const level of ["low", "medium", "xhigh"] as const) {
-  if (qwen.thinkingLevelMap?.[level] !== level) {
-    fail(`qwen3.8-27b does not expose the ${level} reasoning contract`);
+  for (const level of ["minimal", "medium", "xhigh"] as const) {
+    if (model.thinkingLevelMap[level] !== null) fail(`${id} does not hide unsupported ${level} reasoning`);
   }
-}
-for (const level of ["off", "minimal", "high", "max"] as const) {
-  if (qwen.thinkingLevelMap?.[level] !== null) {
-    fail(`qwen3.8-27b does not hide unsupported ${level} reasoning`);
+  if (model.supportsDeveloperRole !== false || model.thinkingFormat !== "deepseek") {
+    fail(`${id} does not use the system-role reasoning_content contract both engines serve`);
   }
-}
-if (qwen.compat?.supportsDeveloperRole !== false || qwen.compat.thinkingFormat !== "chat-template") {
-  fail("qwen3.8-27b does not use its system-role native chat template contract");
-}
-const qwenTemplate = qwen.compat.chatTemplateKwargs;
-if (
-  JSON.stringify(qwenTemplate?.enable_thinking) !== JSON.stringify({ $var: "thinking.enabled" }) ||
-  qwenTemplate?.preserve_thinking !== true ||
-  JSON.stringify(qwenTemplate?.reasoning_effort) !==
-    JSON.stringify({ $var: "thinking.effort", omitWhenOff: true })
-) {
-  fail("qwen3.8-27b does not map Pi reasoning levels into Qwen chat-template kwargs");
-}
-// The Blackfrost checkpoint is a weight-level derivative of Qwen3.8-27B, so it
-// serves the same chat template and must expose the same reasoning contract as
-// the stock entry — only the served id differs.
-if (!blackfrost) fail("desktop-vllm is missing qwen3.8-27b-blackfrost-abliterated");
-if (blackfrost.defaultThinkingLevel !== "xhigh") {
-  fail("qwen3.8-27b-blackfrost-abliterated does not declare xhigh as its model default");
-}
-if (blackfrost.contextWindow !== 262_144) {
-  fail("qwen3.8-27b-blackfrost-abliterated does not declare its native 262K context");
-}
-for (const level of ["low", "xhigh"] as const) {
-  if (blackfrost.thinkingLevelMap?.[level] !== level) {
-    fail(`qwen3.8-27b-blackfrost-abliterated does not expose the ${level} reasoning contract`);
+  if (model.contextWindow !== expectedContext[id]) {
+    fail(`${id} declares ${model.contextWindow} context, expected ${expectedContext[id]}`);
   }
-}
-for (const level of ["off", "minimal", "medium", "high", "max"] as const) {
-  if (blackfrost.thinkingLevelMap?.[level] !== null) {
-    fail(`qwen3.8-27b-blackfrost-abliterated does not hide unsupported ${level} reasoning`);
-  }
-}
-const blackfrostTemplate = blackfrost.compat?.chatTemplateKwargs;
-if (
-  blackfrost.compat?.supportsDeveloperRole !== false ||
-  blackfrost.compat?.thinkingFormat !== "chat-template" ||
-  JSON.stringify(blackfrostTemplate?.enable_thinking) !==
-    JSON.stringify({ $var: "thinking.enabled" }) ||
-  blackfrostTemplate?.preserve_thinking !== true ||
-  JSON.stringify(blackfrostTemplate?.reasoning_effort) !==
-    JSON.stringify({ $var: "thinking.effort", omitWhenOff: true })
-) {
-  fail("qwen3.8-27b-blackfrost-abliterated does not map Pi reasoning into Qwen chat-template kwargs");
 }
 
 const runtimeAgentDir = mkdtempSync(join(tmpdir(), "pi-routing-verify-"));
-const installedSettings = JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8")) as {
-  defaultThinkingLevel?: string;
-};
+const installedThinkingLevel = settingsThinkingLevel(join(agentDir, "settings.json"));
 copyFileSync(join(agentDir, "settings.json"), join(runtimeAgentDir, "settings.json"));
-// The cross-capability check needs a model that cannot think. Upstream's built-in catalog rotates
-// (Gemini 2.0 Flash, the previous fixture, was dropped), so declare one in the isolated catalog.
+// Two fixtures in the isolated catalog. The cross-capability check needs a model
+// that cannot think (upstream's built-in catalog rotates). The model-local-default
+// checks need a model whose default differs from the global one; every local
+// primary defaults to the global "high", so that model is declared here too.
 const nonThinkingFixture = "verify-fixture/no-thinking";
-const installedCatalog = JSON.parse(readFileSync(modelsLink, "utf8")) as {
-  providers?: Record<string, unknown>;
-};
+const maxDefaultFixture = "verify-fixture/max-default";
+// A thinking model with no model-local default, standing in for "any cloud model"
+// (Gemini 3.1 Flash Lite, the previous stand-in, left the built-in catalog too).
+const plainFixture = "verify-fixture/plain";
+const installedCatalog = readJson(modelsLink);
+const installedProviders = field(installedCatalog, "providers");
+if (!isRecord(installedCatalog) || !isRecord(installedProviders)) fail(`${modelsLink} has no providers object`);
+const fixtureCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 writeFileSync(
   join(runtimeAgentDir, "models.json"),
   JSON.stringify({
     ...installedCatalog,
     providers: {
-      ...installedCatalog.providers,
+      ...installedProviders,
       "verify-fixture": {
         baseUrl: "http://127.0.0.1:9/v1",
         api: "openai-completions",
@@ -276,7 +285,26 @@ writeFileSync(
           input: ["text"],
           contextWindow: 8192,
           maxTokens: 1024,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          cost: fixtureCost,
+        }, {
+          id: "max-default",
+          name: "Verification fixture with a max model default",
+          reasoning: true,
+          defaultThinkingLevel: "max",
+          thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
+          input: ["text"],
+          contextWindow: 8192,
+          maxTokens: 1024,
+          cost: fixtureCost,
+          compat: { supportsDeveloperRole: false, supportsReasoningEffort: true, thinkingFormat: "deepseek" },
+        }, {
+          id: "plain",
+          name: "Verification fixture that thinks with no model default",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 8192,
+          maxTokens: 1024,
+          cost: fixtureCost,
         }],
       },
     },
@@ -289,19 +317,10 @@ for (const credentialFile of ["auth.json", "models-store.json"]) {
   if (existsSync(source)) copyFileSync(source, join(runtimeAgentDir, credentialFile));
 }
 
-type RpcResponse = Readonly<{
-  type?: string;
-  command?: string;
-  data?: {
-    thinkingLevel?: string;
-    model?: { provider?: string; id?: string };
-  };
-}>;
-
 function runtimeThinkingLevel(
   extraArgs: readonly string[],
   includeModel: boolean = true,
-  model: string = "desktop-vllm/deepseek-v4-flash",
+  model: string = maxDefaultFixture,
 ): string | undefined {
   const result = spawnSync(
     "pi",
@@ -328,11 +347,7 @@ function runtimeThinkingLevel(
   }
   for (const line of result.stdout.split("\n")) {
     try {
-      const event = JSON.parse(line) as {
-        type?: string;
-        command?: string;
-        data?: { thinkingLevel?: string };
-      };
+      const event = rpcResponse(parseJson(line));
       if (event.type === "response" && event.command === "get_state") return event.data?.thinkingLevel;
     } catch {
       // Extensions may write non-protocol diagnostics; ignore those lines.
@@ -380,7 +395,7 @@ async function thinkingAfterCycle(options: Readonly<{
   }> = [];
   const acceptLine = (line: string): void => {
     try {
-      const response = JSON.parse(line) as RpcResponse;
+      const response = rpcResponse(parseJson(line));
       if (response.type !== "response") return;
       const index = waiters.findIndex((waiter) => waiter.command === response.command);
       if (index < 0) return;
@@ -428,64 +443,56 @@ async function thinkingAfterCycle(options: Readonly<{
 }
 
 try {
-  if (runtimeThinkingLevel([]) !== "max") fail("DeepSeek does not start at its max model default");
-  if (runtimeThinkingLevel([], true, "desktop-vllm/qwen3.8-27b") !== "xhigh") {
-    fail("Qwen does not start at its xhigh model default");
+  if (runtimeThinkingLevel([]) !== "max") fail("a model's max model default is not applied at startup");
+  if (runtimeThinkingLevel([], true, "desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16") !== "high") {
+    fail("GLM v16 does not start at its high model default");
   }
-  const settingsAfterModelDefault = JSON.parse(readFileSync(join(runtimeAgentDir, "settings.json"), "utf8")) as {
-    defaultThinkingLevel?: string;
-  };
-  if (settingsAfterModelDefault.defaultThinkingLevel !== installedSettings.defaultThinkingLevel) {
-    fail("DeepSeek's model default mutated Pi's global cloud-model thinking default");
+  if (settingsThinkingLevel(join(runtimeAgentDir, "settings.json")) !== installedThinkingLevel) {
+    fail("a model default mutated Pi's global cloud-model thinking default");
   }
   if (runtimeThinkingLevel(["--thinking", "low"]) !== "low") {
-    fail("DeepSeek model default overwrites an explicit child thinking level");
+    fail("a model default overwrites an explicit child thinking level");
   }
-  if (runtimeThinkingLevel(["--models", "desktop-vllm/deepseek-v4-flash:low"], false) !== "low") {
-    fail("DeepSeek model default overwrites a scoped model's explicit thinking level");
+  if (runtimeThinkingLevel(["--models", `${maxDefaultFixture}:low`], false) !== "low") {
+    fail("a model default overwrites a scoped model's explicit thinking level");
   }
   if (runtimeThinkingLevel([
     "--models",
-    "desktop-vllm/deepseek-v4-flash,openai-codex/gpt-5.6-sol:low",
+    `${maxDefaultFixture},openai-codex/gpt-5.6-sol:low`,
   ], false) !== "max") {
-    fail("another scoped model's thinking pin suppresses DeepSeek's model default");
+    fail("another scoped model's thinking pin suppresses a model default");
   }
   const crossCapability = await thinkingAfterCycle({
     startModel: nonThinkingFixture,
-    models: `${nonThinkingFixture},desktop-vllm/deepseek-v4-flash`,
-    expectedProvider: "desktop-vllm",
-    expectedModel: "deepseek-v4-flash",
+    models: `${nonThinkingFixture},${maxDefaultFixture}`,
+    expectedProvider: "verify-fixture",
+    expectedModel: "max-default",
     thinkingLevel: "low",
   });
   if (
-    crossCapability.model !== "desktop-vllm/deepseek-v4-flash" ||
+    crossCapability.model !== maxDefaultFixture ||
     crossCapability.thinkingLevel !== "low"
   ) {
     fail("model cycling does not restore an explicit preference after startup clamping");
   }
 
   const isolatedSettingsPath = join(runtimeAgentDir, "settings.json");
-  const lowBaseline = {
-    ...JSON.parse(readFileSync(isolatedSettingsPath, "utf8")) as Record<string, unknown>,
-    defaultThinkingLevel: "low",
-  };
-  writeFileSync(isolatedSettingsPath, JSON.stringify(lowBaseline, null, 2));
+  const isolatedSettings = readJson(isolatedSettingsPath);
+  if (!isRecord(isolatedSettings)) fail(`${isolatedSettingsPath} is not a settings object`);
+  writeFileSync(isolatedSettingsPath, JSON.stringify({ ...isolatedSettings, defaultThinkingLevel: "low" }, null, 2));
   const afterModelDefault = await thinkingAfterCycle({
-    startModel: "desktop-vllm/deepseek-v4-flash",
-    models: "desktop-vllm/deepseek-v4-flash,google/gemini-3.1-flash-lite",
-    expectedProvider: "google",
-    expectedModel: "gemini-3.1-flash-lite",
+    startModel: maxDefaultFixture,
+    models: `${maxDefaultFixture},${plainFixture}`,
+    expectedProvider: "verify-fixture",
+    expectedModel: "plain",
   });
   if (
-    afterModelDefault.model !== "google/gemini-3.1-flash-lite" ||
+    afterModelDefault.model !== plainFixture ||
     afterModelDefault.thinkingLevel !== "low"
   ) {
-    fail("leaving DeepSeek does not restore the cloud baseline thinking preference");
+    fail("leaving a model with its own default does not restore the cloud baseline thinking preference");
   }
-  const settingsAfterCycle = JSON.parse(readFileSync(isolatedSettingsPath, "utf8")) as {
-    defaultThinkingLevel?: string;
-  };
-  if (settingsAfterCycle.defaultThinkingLevel !== "low") {
+  if (settingsThinkingLevel(isolatedSettingsPath) !== "low") {
     fail("model-default cycling mutated Pi's global thinking preference");
   }
 } finally {
@@ -512,7 +519,7 @@ try {
       parentId: null,
       timestamp: new Date().toISOString(),
       provider: "desktop-vllm",
-      modelId: "deepseek-v4-flash",
+      modelId: "warmind-1017-native",
     }),
     JSON.stringify({
       type: "thinking_level_change",
@@ -542,13 +549,13 @@ try {
   );
   const resumedThinking = resumed.stdout.split("\n").flatMap((line) => {
     try {
-      const response = JSON.parse(line) as { data?: { thinkingLevel?: string } };
-      return response.data?.thinkingLevel ? [response.data.thinkingLevel] : [];
+      const thinking = rpcResponse(parseJson(line)).data?.thinkingLevel;
+      return thinking ? [thinking] : [];
     } catch {
       return [];
     }
   })[0];
-  if (resumedThinking !== "low") fail("resumed DeepSeek session did not preserve its saved thinking level");
+  if (resumedThinking !== "low") fail("resumed WARMIND session did not preserve its saved thinking level");
 
   const modelRuntime = await ModelRuntime.create({
     authPath: join(agentDir, "auth.json"),
@@ -563,7 +570,7 @@ try {
     sessionManager: SessionManager.open(sessionFile),
     thinkingPreference: { kind: "pinned", level: "low" },
   });
-  const cloud = modelRuntime.getModel("google", "gemini-3.1-flash-lite");
+  const cloud = modelRuntime.getModel("openai-codex", "gpt-5.6-sol");
   if (!cloud) fail("cannot find cloud model for resumed SDK pin verification");
   await resumedSession.session.setModel(cloud);
   if (resumedSession.session.thinkingLevel !== "low") {
@@ -591,19 +598,13 @@ if (commandsResult.error || commandsResult.status !== 0) {
 }
 const obsidianCommand = commandsResult.stdout.split("\n").flatMap((line) => {
   try {
-    const response = JSON.parse(line) as {
-      type?: string;
-      command?: string;
-      data?: {
-        commands?: Array<{
-          name?: string;
-          sourceInfo?: { path?: string };
-          path?: string;
-        }>;
-      };
-    };
-    if (response.type !== "response" || response.command !== "get_commands") return [];
-    return response.data?.commands?.filter((command) => command.name === "skill:obsidian-vault") ?? [];
+    const response: unknown = parseJson(line);
+    if (text(field(response, "type")) !== "response" || text(field(response, "command")) !== "get_commands") return [];
+    return list(field(field(response, "data"), "commands"))
+      .filter((command) => text(field(command, "name")) === "skill:obsidian-vault")
+      .map((command) => ({
+        path: text(field(field(command, "sourceInfo"), "path")) ?? text(field(command, "path")),
+      }));
   } catch {
     return [];
   }
@@ -613,7 +614,7 @@ const expectedObsidianSkill = resolve(
   process.env.HOME ?? "",
   "dev/claude-plugins/obsidian/skills/obsidian-vault/SKILL.md",
 );
-const installedObsidianSkill = obsidianCommand.sourceInfo?.path ?? obsidianCommand.path;
+const installedObsidianSkill = obsidianCommand.path;
 if (!installedObsidianSkill || resolve(installedObsidianSkill) !== expectedObsidianSkill) {
   fail(
     `obsidian-vault resolves to ${installedObsidianSkill ?? "an unknown path"}, ` +
@@ -716,7 +717,8 @@ if (designer) {
 }
 
 process.stdout.write(
-  `Pi install verified: DeepSeek/Qwen model catalog and local-aware routing, Obsidian skill, ${discovered.length} agents, ` +
+  `Pi install verified: primary local catalog (WARMIND, DeepSeek-V4.1 native, GLM v16) and local-aware routing, ` +
+    `Obsidian skill, ${discovered.length} agents, ` +
     `${packageAgentDirs.length} package agent dir(s), ${renderedAgents.size} current Loom render(s), ` +
     `panel roster available.\n`,
 );

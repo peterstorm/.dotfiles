@@ -93,8 +93,11 @@ export and run scripts check.
    (`~/.local/state/glm53/flash-hyperflare-tp2-v16-boot-receipt.txt`, Plan/Allocate
    cache lines), promote to `unless-stopped`; any failure restores the previous
    profile set.
-5. **Back to ds41**: `switch-glm53-hyperflare-tp2-v16.sh stop`, then
-   `docker start ds41-1017-native` (ds41-native has no switcher of its own).
+5. **Switching primaries** (GLM v16, WARMIND and stock DeepSeek-V4.1 are the
+   primaries since 2026-11-14): `scripts/inference/switch-primary.sh` toggles GLM
+   and the ds41 model that last ran; `… glm|warmind|deepseek` picks one; `… status`
+   reports. It idle-gates :8000, stops the active engine through its own launcher,
+   starts the other, and restores the previous primary if the start fails.
 
 ## Monitoring
 

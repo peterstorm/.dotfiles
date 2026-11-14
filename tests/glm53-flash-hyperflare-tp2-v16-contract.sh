@@ -125,8 +125,9 @@ absent "$RUN" 'VLLM_API_KEY=$VLLM_API_KEY'
 # Switcher: transactional, runtime-neutral idle gate, bridge is acceptance.
 contains "$SWITCH" "TARGET=\"$CONTAINER\""
 contains "$SWITCH" "EXPECTED_MODEL=\"$SERVED_MODEL\""
-contains "$SWITCH" 'http://127.0.0.1:8010/metrics'
-contains "$SWITCH" 'http://127.0.0.1:8011/metrics'
+contains "$CATALOG" 'http://127.0.0.1:8010/metrics'
+contains "$CATALOG" 'http://127.0.0.1:8011/metrics'
+contains "$SWITCH" 'inference_require_idle_endpoint'
 contains "$SWITCH" 'require_metrics_bridge'
 contains "$SWITCH" 'promote_restart_policy'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
@@ -147,5 +148,14 @@ contains "$RUNBOOK" 'PREFIX_CACHE'
 contains "$RUNBOOK" '400 W'
 contains "$RUNBOOK" 'TP2'
 contains "$RUNBOOK" 'ds41-1017-maya-exl35'
+contains "$RUNBOOK" 'switch-primary.sh'
+
+# The primaries switch: its pure decision core, and the catalog it serves.
+bash "$ROOT/tests/switch-primary-unit.sh" >/dev/null || fail "switch-primary decision core failed its unit tests"
+contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER\""
+jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
+  "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the three primaries"
+jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-native"' "$ROOT/pi/settings.json" >/dev/null ||
+  fail "pi's default model must be a primary (warmind-1017-native)"
 
 echo "GLM-5.3 v16 Hyperflare TP2 contract: PASS"

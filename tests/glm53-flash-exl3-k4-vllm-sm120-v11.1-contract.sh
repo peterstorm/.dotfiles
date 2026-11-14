@@ -196,16 +196,19 @@ contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v10'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v11'
 contains "$CATALOG" 'glm53-flash-exl3-k4-vllm-sm120-v11.1'
-contains "$PI_README" 'desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1'
+contains "$PI_README" 'the GLM-5.3 v10–v15 vLLM'
 
-jq -e '
-  .providers["desktop-vllm"].models[] |
-  select(.id == "glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1") |
-  .input == ["text", "image"] and
-  .contextWindow == 359000 and
-  .defaultThinkingLevel == "max" and
-  .compat.thinkingFormat == "deepseek"
-' "$PI_MODELS" >/dev/null
+# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
+# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
+# local models pi offers (scripts/inference/switch-primary.sh). This profile
+# stays launchable; restore its catalog entry from git history before pointing
+# pi at it.
+if ! jq -e --argjson ids '["glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1"]' \
+  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
+  "$PI_MODELS" >/dev/null; then
+  echo "FAIL: pi/models.json offers glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1, which left the catalog with the primaries switch" >&2
+  exit 1
+fi
 
 # --- preflight refuses every invalid shape before touching Docker -----------
 assert_invalid_preflight() {

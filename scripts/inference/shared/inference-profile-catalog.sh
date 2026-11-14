@@ -33,6 +33,43 @@ INFERENCE_PROFILE_CONTAINERS=(
   ds41-1017-native
 )
 
+# In-flight (running + waiting) requests on whatever owns :8000, read from the
+# one source that runtime exposes without a key: the ds4-native bridge (:8010),
+# the Hyperflare bridge (:8011), or vLLM/SGLang's own /metrics. An unknown
+# runtime fails closed (status 1) rather than being treated as idle.
+inference_active_requests() {
+  local text
+  if text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8010/metrics 2>/dev/null)"; then
+    awk '/^ds4:requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
+    return 0
+  fi
+  if text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8011/metrics 2>/dev/null)"; then
+    awk '/^hyperflare:requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
+    return 0
+  fi
+  text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/metrics)" || return 1
+  grep -Eq '^(vllm:num_requests_running|sglang:num_running_reqs)\{' <<<"$text" || return 1
+  awk '/^(vllm:num_requests_(running|waiting)|sglang:num_(running|queue)_reqs)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
+}
+
+# Refuse a cutover unless :8000 reports zero in-flight requests three times
+# over ~6 s (a request arriving between samples is caught by the next one).
+inference_require_idle_endpoint() {
+  local delay active
+  for delay in 0 3 3; do
+    sleep "$delay"
+    active="$(inference_active_requests)" || {
+      echo "error: cannot read in-flight requests of the active profile; refusing cutover" >&2
+      return 1
+    }
+    if [ "$active" != 0 ]; then
+      echo "error: $active request(s) are running or waiting; refusing cutover" >&2
+      return 1
+    fi
+  done
+  echo "IDLE GATE: no running or waiting requests across three samples"
+}
+
 inference_profile_containers_except() {
   local excluded="${1:-}" container
   for container in "${INFERENCE_PROFILE_CONTAINERS[@]}"; do

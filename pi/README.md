@@ -151,27 +151,32 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers one OpenAI-compatible provider on the `desktop` workstation
-with fifteen selectable models:
+with the three **primary** models, served by two engines that take turns on port 8000:
 
-- `desktop-vllm/deepseek-v4-flash`
-- `desktop-vllm/deepseek-v4-flash-vision`
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v10` (DCP2 candidate, fixed 3.5 GiB/GPU KV; v11 rollback target)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11` (upstream-core-port r2: native FP8 KV, vision, thinking-disable honoured)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v11.1` (upstream-core-port r2.1: v11 plus the admission deadlock fix — r2 wedges once a long session heads the waiting queue)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v12` (upstream-core-port r2.1 + Spark TP2 port: SM120 disjoint-batch BMM, Mamba null-gap cleanup, graph-memory double-count fix, cublas 4 MiB workspace)
-- `desktop-vllm/glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-v13` (upstream-core-port r2.1 + Spark TP2 port + grammar redesign: PR #52477 fixed-width stride fixes the structured-output + MTP3 crash, upstream #53046/#55455 hardening — **GLM rollback target**; v11.1 is v13's rollback target)
-- `desktop-vllm/glm-5.3-flash-spark-tp2-v14` (upstream karmic-kraken-beta image with PRESET=glm53-spark-tp2: TP2/DCP2, MTP3, fixed 3996 MiB/GPU FP8 KV, vision — superseded by v15 on 2026-10-16 and its checkpoint deleted for disk space, so re-download before reuse; the server resolved 983,040 tokens but the catalog caps sessions at 350,000 so parallel subagent slots fit the shared KV budget)
-- `desktop-vllm/glm-5.3-flash-qad2-tp2-v15` (karmic-kraken-beta-20261015.2 by digest, qad2 NVFP4/MXFP8 CSF checkpoint, lil-serve preset glm53-tp2: TP2/DCP2, MTP3, eight slots, fixed 7296 MiB/GPU FP8 KV = 1,844,162 tokens, 1M context, vision, server-default effort high — served until 2026-10-21; its checkpoint was deleted on 2026-11-13 for v16, so re-download before reuse; the catalog caps sessions at 524,288)
-- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` (NVIDIA Hyperflare, AzallazA fork `hyperflare-glm-20261112`, serving `nvidia/GLM-5.3-Flash-FP4-Local` as the recipe's TP2/DCP2 package: 8 slots, MTP 5 with adaptive verification, ~2.2M KV tokens, full 1,048,576-token context per request, vision, `interactive` scheduler — **switchable GLM profile**, not the default: `glm53/switch-glm53-hyperflare-tp2-v16.sh start`; GLM always thinks, `reasoning_effort` `low`/`high` select that effort and anything else gives max; runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`)
-- `desktop-vllm/deepseek-v4.1-flash` (DeepSeek-V4.1-Flash-1017, LibertAIDAI EXL3 3.5 bpw + DeepSeek's Engram tables, on Project Maya `b3fa99e` = v1.1.21 + the conversation-slot PR #356: TP2, DSpark drafter, 262,144-token context, vision, four conversations parked so an agent's parent and workers stop re-reading each other's prompts — the served profile from 2026-10-21 until ds4-native took over in November; the EXL3 pack and its Engram tables were deleted on 2026-11-13 (retired; `download-ds41-1017-maya-exl35.sh` restores ~444 GB); context doubled from 131,072 on 2026-10-22)
-- `desktop-vllm/deepseek-v4.1-flash-native` (the same model at released precision on ds4-native behind Maya's server: Exact, Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM — launch `WEIGHTS=deepseek ds41-1017-native/run-ds41-1017-native.sh`)
-- `desktop-vllm/warmind-1017-native` (jcartu's abliterated WARMIND-1017 on the same engine and server: only the Backbone differs — **served profile** since 2026-11-06 and the launcher's default — `ds41-1017-native/run-ds41-1017-native.sh`; it comes back with Docker at boot)
-- `desktop-vllm/qwen3.8-27b`
-- `desktop-vllm/qwen3.8-27b-blackfrost-abliterated`
-- `desktop-vllm/qwen3.8-flash-next-fp8`
+- `desktop-vllm/warmind-1017-native` — jcartu's abliterated WARMIND-1017 on ds4-native behind Maya's server: Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM. **Pi's default model.**
+- `desktop-vllm/deepseek-v4.1-flash-native` — stock DeepSeek-V4.1-Flash-1017 at released precision on the same engine; only the Backbone differs.
+- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, full 1,048,576-token context per request, vision. GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
 
-Every model alternates on port 8000; exactly one serves at a time. Select the entry
-matching whichever launcher is running.
+Switch the primary with `scripts/inference/switch-primary.sh` (from any machine; off
+`desktop` it re-runs itself there over ssh):
+
+```bash
+scripts/inference/switch-primary.sh            # toggle GLM <-> the ds41 model that last ran
+scripts/inference/switch-primary.sh glm        # or warmind / deepseek: exactly that one
+scripts/inference/switch-primary.sh status
+```
+
+It refuses to cut over while :8000 has requests in flight, and brings the previous
+primary back if the new one fails to start. Both engines answer **any** model id with
+whatever is loaded, so a pinned session keeps working across a switch — with its
+entry's limits, which is why the default is WARMIND (262K, safe on either engine)
+rather than GLM's 1M entry. The switcher prints the id that matches what now serves.
+
+Every other local profile (DeepSeek V4 Flash and Vision, the GLM-5.3 v10–v15 vLLM
+builds, Qwen3.8 27B/Blackfrost/Flash-Next, the Maya EXL3 DeepSeek-V4.1) left the
+catalog on 2026-11-14. Their launchers and runbooks stay, and their contracts assert
+the ids are absent; restore an entry from git history before pointing Pi at one. The
+sections below are the history of those profiles.
 
 Every launcher synchronizes the DeepSeek, Qwen, and GLM key
 files to one endpoint credential, so switching models, runtimes, or ports does

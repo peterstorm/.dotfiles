@@ -193,21 +193,17 @@ grep -Eq "^[[:space:]]+$CONTAINER\$" "$CATALOG" \
   || { echo "FAIL: $CATALOG lacks $CONTAINER" >&2; exit 1; }
 
 # --- Pi catalog carries the exact id with the client-side context cap ---------
-jq -e --arg id "$SERVED_MODEL" '
-  [.providers["desktop-vllm"].models[] | select(.id == $id)] as $m
-  | ($m | length) == 1
-  and ($m[0].contextWindow == 524288)
-  and ($m[0].input | index("image") != null)
-  and ($m[0].input | index("text") != null)
-  and ($m[0].reasoning == true)
-  and ($m[0].thinkingLevelMap.high == "high")
-  and ($m[0].thinkingLevelMap.max == "max")
-  and ($m[0].compat.thinkingFormat == "deepseek")
-  and ($m[0].compat.supportsDeveloperRole == false)
-' "$PI_MODELS" >/dev/null || {
-  echo "FAIL: pi/models.json $SERVED_MODEL entry does not match the v15 contract" >&2
+# Removed from pi's catalog on 2026-11-14: the primaries (warmind-1017-native,
+# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
+# local models pi offers (scripts/inference/switch-primary.sh). This profile
+# stays launchable; restore its catalog entry from git history before pointing
+# pi at it.
+if ! jq -e --argjson ids '["glm-5.3-flash-qad2-tp2-v15"]' \
+  '[.providers["desktop-vllm"].models[].id] as $have | all($ids[]; . as $id | $have | index($id) | not)' \
+  "$PI_MODELS" >/dev/null; then
+  echo "FAIL: pi/models.json offers glm-5.3-flash-qad2-tp2-v15, which left the catalog with the primaries switch" >&2
   exit 1
-}
+fi
 contains "$PI_README" "$SERVED_MODEL"
 contains "$PI_README" '1,844,162'
 contains "$PI_README" '524,288'
