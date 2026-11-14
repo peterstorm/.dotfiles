@@ -63,6 +63,7 @@ echo "Exporting (VISION=$VISION CONC=$CONC) — log: $LOG"
 docker run --rm --name "$NAME" \
   --gpus all --ipc host --shm-size 32g \
   --ulimit memlock=-1 --ulimit stack=67108864:67108864 \
+  --security-opt seccomp=unconfined \
   --user "$(id -u):$(id -g)" \
   -e HOME=/flare-home -e CUDA_HOME=/usr/local/cuda \
   -e CKPT=/ckpt/glm53-fp4-local -e VISION="$VISION" -e CONC="$CONC" \

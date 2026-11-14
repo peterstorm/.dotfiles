@@ -159,6 +159,7 @@ docker run -d --init \
   --ipc host \
   --ulimit memlock=-1 \
   --ulimit stack=67108864:67108864 \
+  --security-opt seccomp=unconfined \
   --user "$(id -u):$(id -g)" \
   -e HOME=/flare-home \
   -v "$FLARE_HOME:/flare-home" \

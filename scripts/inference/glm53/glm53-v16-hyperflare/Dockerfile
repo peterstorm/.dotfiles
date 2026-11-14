@@ -51,6 +51,15 @@ RUN SP="$(.venv/bin/python -c 'import flashinfer, pathlib; print(pathlib.Path(fl
     && bash tp3-tools/make-b12x-overlay.sh /opt/flare/.b12x-overlay \
     && .venv/bin/ignition export --help >/dev/null
 
+# b12x's checkpoint loader JIT-builds an io_uring batch executor at weight load
+# and refuses without liburing headers ("io_uring bounce support is
+# unavailable", first export 2026-11-14). Its own layer so the uv/cargo layers
+# above stay cached. The containers also need seccomp=unconfined: Docker's
+# default profile blocks io_uring_setup/enter/register.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends liburing-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 LABEL ai.peterstorm.inference.profile=glm53-flash-hyperflare-tp2-v16 \
       ai.peterstorm.inference.hyperflare-commit=$FORK_COMMIT \
       ai.peterstorm.inference.cuda=13.1.1
