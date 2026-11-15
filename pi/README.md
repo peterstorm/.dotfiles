@@ -9,6 +9,7 @@ pi/
 ├── agents/           # Generic agents this repo owns (→ linked per file)
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
 │   ├── creative-project-scope/ # Trusted ~/dev/creative subtree resources
+│   ├── glm-guard/    # Keeps a served GLM's reasoning from poisoning its own context
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   ├── global-instructions.ts  # Standalone extension
@@ -151,11 +152,12 @@ into it.
 ## Local AI Workstation
 
 `models.json` registers one OpenAI-compatible provider on the `desktop` workstation
-with the three **primary** models, served by two engines that take turns on port 8000:
+with the four **primary** models, served by two engines that take turns on port 8000:
 
 - `desktop-vllm/warmind-1017-native` — jcartu's abliterated WARMIND-1017 on ds4-native behind Maya's server: Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM. **Pi's default model.**
 - `desktop-vllm/deepseek-v4.1-flash-native` — stock DeepSeek-V4.1-Flash-1017 at released precision on the same engine; only the Backbone differs.
-- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, full 1,048,576-token context per request, vision. GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
+- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, vision. The engine serves a 1,048,576-token context but the catalog caps it at **400K** (2026-11-15: at 1M both GLM builds spiral into degenerate reasoning, so Pi compacts earlier). GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
+- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-uncensored` — the `uncensored` primary (variant `uncensored`, since 2026-11-15): dealignai's GLM-5.3-Flash-UNCENSORED-NVFP4 (`745aac2f`, the refusal edit in every layer, experts included) converted by `scripts/inference/glm53/glm53-uncensored-convert.py` into v16's storage formats — dense FP8, slab-CSF expert scales with the gate/up globals folded, and v16's vision tower, expert input scales and chat template — so it fits v16's GPU budget (2,271,744 KV tokens against v16's 2,240,000). Same engine, flags, 400K catalog cap and vision as v16. On the 21-prompt refusal probe it refused none at default effort (four answers ran out of the probe's 4K-token cap mid-thinking) and one at low effort (a request for copyrighted lyrics), against v16's 3 and the retired `cyber-hybrid-bf16`'s 6. Reached by name only: `toggle` never lands on it. It replaced the CYBERSECURITY splices (`cyber-hybrid`, `cyber-hybrid-bf16`), retired the same day. Build and rationale in the runbook's *Variant: uncensored* section.
 
 Thinking defaults to **max** everywhere (2026-11-14): each primary's `defaultThinkingLevel`,
 Pi's global `defaultThinkingLevel` (cloud models start at `max` too; Home Manager copies
@@ -167,8 +169,8 @@ Switch the primary with `scripts/inference/switch-primary.sh` (from any machine;
 `desktop` it re-runs itself there over ssh):
 
 ```bash
-scripts/inference/switch-primary.sh            # toggle: GLM -> WARMIND, WARMIND or DeepSeek -> GLM
-scripts/inference/switch-primary.sh glm        # or warmind / deepseek: exactly that one
+scripts/inference/switch-primary.sh            # toggle: GLM or uncensored -> WARMIND, WARMIND or DeepSeek -> GLM
+scripts/inference/switch-primary.sh glm        # or uncensored / warmind / deepseek: exactly that one
 scripts/inference/switch-primary.sh status
 ```
 
@@ -176,14 +178,14 @@ It refuses to cut over while :8000 has requests in flight, and brings the previo
 primary back if the new one fails to start. Both engines answer **any** model id with
 whatever is loaded, so a pinned session keeps working across a switch — with its
 entry's limits, which is why the default is WARMIND (262K, safe on either engine)
-rather than GLM's 1M entry. The switcher prints the id that matches what now serves.
+rather than GLM's 400K entry. The switcher prints the id that matches what now serves.
 
 From inside Pi, `/switch` does the same and moves the session along
 (`extensions/primary-switch/`):
 
 ```text
 /switch                 toggle, like the script with no argument
-/switch glm             or warmind / deepseek: exactly that one
+/switch glm             or uncensored / warmind / deepseek: exactly that one
 /switch status          what serves now, and what toggle would do
 ```
 
@@ -195,6 +197,41 @@ session. The id comes from the script, so the extension keeps no copy of the pri
 table. Progress shows in the footer; a failed stage (`script`, `report`, `serve`,
 `model`) is reported with its reason and leaves the session model unchanged. With the
 primary already serving it is a no-op on desktop that still moves the session onto it.
+
+### glm-guard: GLM thinking that cannot run away (`extensions/glm-guard/`)
+
+GLM-5.3 on Hyperflare has no thinking off-switch, and the package's chat template defaults
+`clear_thinking` to **false**, so every earlier turn's reasoning is replayed into each new prompt.
+A model that thinks long (dealignai's tunes think about twice as long as upstream) then
+fills its own context with its old reasoning (51-62% of the prompt in the failing sessions) and
+degenerates into a loop. The symptom varies (`ih-ih-ih`, `= their = their`, `= = = =`); the
+precondition does not. A replay of the failing turns on the live server (same prompt, same seeds),
+measured on the retired CYBERSECURITY hybrid that produced them:
+
+| turn | as Pi sent it | with `clear_thinking` |
+|---|---|---|
+| 259, 216,539 tokens | 8/8 loops | 0/8, prompt 106,550 tokens |
+| 96, 141,101 tokens | 8/16 spirals | 0/16, prompt 53,858 tokens |
+| 96, cleared then padded back to 133,652 tokens | n/a | 0/8 (so it is the reasoning, not the length) |
+
+The `uncensored` build that replaced it held both turns 0/8 as Pi sent them; `clear_thinking` still
+halved its prompt (259: 216,539 → 106,550 tokens; 96: 141,101 → 53,858) and its median thinking
+(259: 12,686 → 5,702 characters), so the guard stays on for it.
+
+A `before_provider_request` hook asks the server which model it is serving (the primaries share
+one port and answer to any model id, so a session pinned to WARMIND can be talking to the uncensored GLM;
+the answer is cached for 30 s) and, for a GLM:
+
+- every GLM: a thinking-off request (`--thinking off`) is raised to `reasoning_effort: low`;
+- the tuned build (`uncensored`): `chat_template_kwargs.clear_thinking: true`, and a
+  `thinking_token_budget` by effort (low 2,048, high 4,096, max 8,192; from the p95/p99 of 1,468
+  real thinking blocks). Hyperflare closes the reasoning at the budget and the model then answers.
+
+It never overrides a field the request already sets, fails open (an unreachable server leaves the
+request untouched) and `PI_GLM_GUARD=off` disables it. A session picks it up on `/reload`; the first
+request afterwards re-prefills the shorter prompt once. `clear_thinking` clears reasoning from
+*earlier user turns*; reasoning inside the current tool chain stays, and a budget bounds a runaway
+thinking block without preventing it. Probe and evidence: `scripts/inference/shared/probe-glm-drift.py`.
 
 Every other local profile (DeepSeek V4 Flash and Vision, the GLM-5.3 v10–v15 vLLM
 builds, Qwen3.8 27B/Blackfrost/Flash-Next, the Maya EXL3 DeepSeek-V4.1) left the
@@ -563,7 +600,7 @@ parent's; with one, it is pinned (cloud efforts such as `xhigh` do not exist on 
 models). If the probe fails, routing fails before spawn with the reason ("cannot reach
 desktop-vllm: …") — there is no silent fallback to a stale id. Children therefore follow
 `scripts/inference/switch-primary.sh` without any config change, and get the served model's
-own catalog limits (GLM's 1M context, WARMIND's 262K).
+own catalog limits (GLM's 400K cap, WARMIND's 262K).
 
 A parallel `subagent` call names at most 8 tasks and runs up to 8 at once
 (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY` in `extensions/subagent/index.ts`; separate knobs).

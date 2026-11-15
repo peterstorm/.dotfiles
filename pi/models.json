@@ -7,7 +7,7 @@
       "models": [
         {
           "id": "glm-5.3-flash-hyperflare-tp2-v16",
-          "name": "GLM-5.3 Flash Hyperflare TP2 v16 (NVIDIA FP4-Local, hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.2M KV, 1M ctx, vision)",
+          "name": "GLM-5.3 Flash Hyperflare TP2 v16 (NVIDIA FP4-Local, hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.2M KV, 400K ctx cap, vision)",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
@@ -22,7 +22,40 @@
             "text",
             "image"
           ],
-          "contextWindow": 1048576,
+          "contextWindow": 400000,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
+          "id": "glm-5.3-flash-hyperflare-tp2-uncensored",
+          "name": "GLM-5.3 Flash uncensored on Hyperflare TP2 (dealignai UNCENSORED-NVFP4 converted into v16's storage: FP8 dense, CSF expert scales, v16's vision tower; hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.3M KV, 400K ctx cap, vision)",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 400000,
           "maxTokens": 32768,
           "cost": {
             "input": 0,

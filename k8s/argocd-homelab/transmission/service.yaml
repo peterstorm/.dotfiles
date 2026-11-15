@@ -4,9 +4,20 @@ metadata:
   name: transmission
 spec:
   type: ClusterIP
+  externalIPs:
+    - 192.168.0.29
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 9091
+      protocol: TCP
+    - name: socks
+      port: 1080
+      targetPort: 1080
+      protocol: TCP
+    - name: http-proxy
+      port: 3128
+      targetPort: 3128
       protocol: TCP
   selector:
     app: transmission

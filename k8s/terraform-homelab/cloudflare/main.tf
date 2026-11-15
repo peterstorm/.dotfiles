@@ -72,6 +72,7 @@ locals {
     "prowlarr",
     "overseerr",
     "transmission",
+    "artex",
   ]
 }
 

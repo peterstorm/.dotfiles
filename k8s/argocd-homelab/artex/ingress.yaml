@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: artex
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - artex.peterstorm.io
+      secretName: artex-tls
+  rules:
+    - host: artex.peterstorm.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: artex
+                port:
+                  number: 8787

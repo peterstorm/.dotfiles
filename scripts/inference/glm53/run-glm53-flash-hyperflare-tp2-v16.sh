@@ -21,6 +21,12 @@
 # floating "latest"), the served model id, and the fail-closed workstation
 # gates. Transactional shape as for v15: --restart no here; the switcher
 # promotes to unless-stopped only after an accepted boot.
+#
+# VARIANT (default v16) selects which exported checkpoint this serves; its
+# package receipt, container, served id and checkpoint directory all derive from
+# it (hyperflare-variants.sh). VARIANT=uncensored serves dealignai's UNCENSORED
+# build, converted into v16's storage formats, with exactly v16's flags: same
+# declarations, same package shape.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,15 +34,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
 source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
+# shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
+source "$SCRIPT_DIR/hyperflare-variants.sh"
 
 IMAGE="peterstorm/glm53-hyperflare:ac9136b-cu131"
 HYPERFLARE_COMMIT="ac9136b02c7c523f12d6e628e9d94f41006312ea"
 CHECKPOINT="nvidia/GLM-5.3-Flash-FP4-Local@76348ddb2be2e35e39ecfc00e75dc07703f4f3d5"
-NAME="glm53-flash-hyperflare-tp2-v16"
-SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
+# MODEL is the checkpoint directory Hyperflare exported (and its model name), derived from VARIANT.
+VARIANT="${VARIANT:-v16}"
+MODEL="$(hyperflare_resolve_model "$VARIANT")" || exit 2
+NAME="$(hyperflare_variant_container "$VARIANT")"
+SERVED_MODEL="$(hyperflare_variant_served "$VARIANT")"
+CHECKPOINT_LABEL="$(hyperflare_variant_provenance "$VARIANT" "$CHECKPOINT")"
 ROOT_HOST="${ROOT_HOST:-/models/glm53-hyperflare}"
 FLARE_HOME="$ROOT_HOST/flare-home"
-PACKAGE_RECEIPT="$ROOT_HOST/package-v16.txt"
+PACKAGE_RECEIPT="$ROOT_HOST/package-$VARIANT.txt"
 PREFIX_CACHE="${PREFIX_CACHE:-16G}"
 SCHEDULER="${SCHEDULER:-interactive}"
 SIGNING_KEY_FINGERPRINT="f2bca6f9fd072391b10fc6fbd7c2cafd2e0e518fde57e0b05f2d48a22ef1e052"
@@ -74,12 +86,12 @@ label="$(docker image inspect "$IMAGE" \
 # The package is whatever the last successful export recorded — parsed once,
 # then checked against the store, so a typo or a deleted version fails here.
 [ -r "$PACKAGE_RECEIPT" ] || {
-  echo "error: no package receipt at $PACKAGE_RECEIPT; run scripts/inference/glm53/export-glm53-flash-hyperflare-tp2-v16.sh" >&2
+  echo "error: no package receipt at $PACKAGE_RECEIPT; run VARIANT=$VARIANT scripts/inference/glm53/export-glm53-flash-hyperflare-tp2-v16.sh" >&2
   exit 1
 }
 PACKAGE="$(sed -n 's/^package=//p' "$PACKAGE_RECEIPT")"
-[[ "$PACKAGE" =~ ^glm53-fp4-local@gb202-tp2-[0-9]+$ ]] || {
-  echo "error: package receipt names '$PACKAGE', expected glm53-fp4-local@gb202-tp2-<timestamp>" >&2
+[[ "$PACKAGE" =~ ^"$MODEL"@gb202-tp2-[0-9]+$ ]] || {
+  echo "error: package receipt names '$PACKAGE', expected $MODEL@gb202-tp2-<timestamp>" >&2
   exit 1
 }
 # The fork stores exports as "cores" (config key core_cache; EXPORT.md's
@@ -98,16 +110,18 @@ FLARE_ARGS=(
   --scheduler-policy "$SCHEDULER"
   --api-key-file /run/inference/api-key
   # Unattended first use needs explicit trust. This is the local development
-  # signing key the v16 export generated in flare-home/.config/flare
-  # (sha256 of its ed25519 public key); the operator accepted the namespace
-  # and with it the checkpoint's NVIDIA Open Model Agreement on 2026-11-14.
-  # A re-export that mints a new key fails closed here until re-pinned.
+  # signing key the v16 export generated in flare-home/.config/flare, which
+  # every later export from the same flare-home (uncensored included) is
+  # signed with (sha256 of its ed25519 public key); the operator accepted the
+  # namespace and with it the checkpoint's NVIDIA Open Model Agreement on
+  # 2026-11-14. A re-export that mints a new key fails closed here until
+  # re-pinned.
   --dangerously-approve-key "$SIGNING_KEY_FINGERPRINT"
   --dangerously-accept-publisher local-development
 )
 
 if [ "$MODE" = --preflight ]; then
-  echo "GLM-5.3 v16 Hyperflare TP2 preflight: PASS (image $HYPERFLARE_COMMIT, package $PACKAGE)"
+  echo "GLM-5.3 $VARIANT Hyperflare TP2 preflight: PASS (image $HYPERFLARE_COMMIT, package $PACKAGE)"
   echo "Launch: flare ${FLARE_ARGS[*]}"
   exit 0
 fi
@@ -148,7 +162,7 @@ done
 
 inference_remove_container_if_present "$NAME"
 if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
-  echo "error: host port 8000 is already listening; use the v16 switcher to replace the active profile" >&2
+  echo "error: host port 8000 is already listening; use switch-primary.sh to replace the active profile" >&2
   exit 1
 fi
 
@@ -161,10 +175,10 @@ docker run -d --init \
   --restart no \
   --stop-timeout 120 \
   --name "$NAME" \
-  --label ai.peterstorm.inference.profile=glm53-flash-hyperflare-tp2-v16 \
+  --label ai.peterstorm.inference.profile="$NAME" \
   --label ai.peterstorm.inference.engine=hyperflare \
   --label ai.peterstorm.inference.hyperflare-commit="$HYPERFLARE_COMMIT" \
-  --label ai.peterstorm.inference.checkpoint="$CHECKPOINT" \
+  --label ai.peterstorm.inference.checkpoint="$CHECKPOINT_LABEL" \
   --label ai.peterstorm.inference.package="$PACKAGE" \
   --label ai.peterstorm.inference.parallelism=tp2-dcp2 \
   --label ai.peterstorm.inference.speculation=mtp5-adaptive \

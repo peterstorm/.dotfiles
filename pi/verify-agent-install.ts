@@ -138,12 +138,14 @@ if (resolve(dirname(routingLink), readlinkSync(routingLink)) !== expectedRouting
 
 const loadedRouting = loadModelRoutingPolicy(agentDir);
 if (!loadedRouting.ok) fail(`invalid model routing policy: ${loadedRouting.error.message}`);
-// The local catalog is exactly the three primaries' served ids: WARMIND and
-// stock DeepSeek-V4.1-Flash-1017 on ds4-native, and GLM-5.3 v16 on Hyperflare.
+// The local catalog is exactly the four primaries' served ids: WARMIND and
+// stock DeepSeek-V4.1-Flash-1017 on ds4-native, and GLM-5.3 v16 and its
+// uncensored build (dealignai's UNCENSORED in v16's storage, variant uncensored) on Hyperflare.
 const primaryModels = [
   "warmind-1017-native",
   "deepseek-v4.1-flash-native",
   "glm-5.3-flash-hyperflare-tp2-v16",
+  "glm-5.3-flash-hyperflare-tp2-uncensored",
 ] as const;
 const warmindModel = parseModelReference("desktop-vllm/warmind-1017-native");
 const glmModel = parseModelReference("desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16");
@@ -251,7 +253,10 @@ if (JSON.stringify(localIds) !== JSON.stringify([...primaryModels].sort())) {
 const expectedContext: Readonly<Record<(typeof primaryModels)[number], number>> = {
   "warmind-1017-native": 262_144,
   "deepseek-v4.1-flash-native": 262_144,
-  "glm-5.3-flash-hyperflare-tp2-v16": 1_048_576,
+  // Capped at 400K in the catalog (2026-11-15): at the engine's full 1M both GLM builds spiral into
+  // degenerate reasoning, so Pi must compact well before that.
+  "glm-5.3-flash-hyperflare-tp2-v16": 400_000,
+  "glm-5.3-flash-hyperflare-tp2-uncensored": 400_000,
 };
 for (const id of primaryModels) {
   const model = localModels.find((entry) => entry.id === id);
@@ -746,7 +751,7 @@ if (designer) {
 }
 
 process.stdout.write(
-  `Pi install verified: primary local catalog (WARMIND, DeepSeek-V4.1 native, GLM v16) and local-aware routing, ` +
+  `Pi install verified: primary local catalog (WARMIND, DeepSeek-V4.1 native, GLM v16, GLM uncensored) and local-aware routing, ` +
     `Obsidian skill, ${discovered.length} agents, ` +
     `${packageAgentDirs.length} package agent dir(s), ${renderedAgents.size} current Loom render(s), ` +
     `panel roster available.\n`,

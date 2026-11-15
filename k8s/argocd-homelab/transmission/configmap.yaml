@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: egress-proxy-cfg
+data:
+  3proxy.cfg: |
+    # SOCKS5 + HTTP egress riding the transmission NordVPN tunnel.
+    # No auth: reachable only from the LAN, cluster and loopback nets.
+    allow * 127.0.0.0/8,10.0.0.0/8,192.168.0.0/16
+    nscache 65536
+    socks -p1080
+    proxy -p3128

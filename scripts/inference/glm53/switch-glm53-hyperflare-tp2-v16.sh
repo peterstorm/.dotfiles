@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Safely start/stop the GLM-5.3 v16 Hyperflare TP2 profile.
+# Safely start/stop a GLM-5.3 Hyperflare TP2 profile: v16 by default, or the
+# uncensored build with VARIANT=uncensored (hyperflare-variants.sh derives the
+# container, served id, receipt and checkpoint from the variant, and the run
+# script reads the same exported VARIANT). switch-primary.sh calls this for the
+# `glm` and `uncensored` primaries.
 # The rollback target is whatever profile set was running before (normally
 # ds41-1017-native). The v15 qad2 checkpoint was deleted on 2026-11-13 to make
 # room for the FP4-Local checkpoint and the Hyperflare package, so v15 needs
 # its download before it can serve again.
 # Launch is transactional at restart=no; only a fully accepted boot (healthy,
-# authenticated, exact model id, bridge on :8011 translating) is promoted to
-# restart=unless-stopped.
+# authenticated, exact model id, the asked-for word decoded, bridge on :8011 translating)
+# is promoted to restart=unless-stopped.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,14 +18,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
 source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
+# shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
+source "$SCRIPT_DIR/hyperflare-variants.sh"
 
-TARGET="glm53-flash-hyperflare-tp2-v16"
-EXPECTED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
+# Exported: the run script this starts must serve the same variant.
+VARIANT="${VARIANT:-v16}"
+hyperflare_resolve_model "$VARIANT" >/dev/null || exit 2
+export VARIANT
+TARGET="$(hyperflare_variant_container "$VARIANT")"
+EXPECTED_MODEL="$(hyperflare_variant_served "$VARIANT")"
 RUN="$SCRIPT_DIR/run-glm53-flash-hyperflare-tp2-v16.sh"
 # The package carries compiled kernels and captured graphs; the recipe
 # measured ~30 s launch-to-ready at TP2. 15 minutes covers a cold page cache.
 STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-900}"
-BOOT_RECEIPT="${BOOT_RECEIPT:-$HOME/.local/state/glm53/flash-hyperflare-tp2-v16-boot-receipt.txt}"
+BOOT_RECEIPT="${BOOT_RECEIPT:-$HOME/.local/state/glm53/flash-hyperflare-tp2-$VARIANT-boot-receipt.txt}"
 MODE="${1:-status}"
 
 if ! [[ "$STARTUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -84,6 +94,62 @@ wait_for_target() {
   return 1
 }
 
+# generation_verdict HTTP_CODE BODY -> exactly one line, ok:<tokens> or error:<reason>.
+# Pure. Health, /v1/models and the bridge all answer before a single token is
+# decoded; on 2026-11-15 the first cyber-hybrid-bf16 package passed all three while
+# every request failed with "prepared model reported device error 1" (non-finite
+# logits). Only a generated token proves the model serves -- and only the asked-for
+# word proves it decodes sense: the second package (donor tensors fetched from a
+# shifted range) generated fluent multilingual token salad and passed a token count.
+generation_verdict() {
+  local code="$1" body="$2" verdict
+  if [ "$code" != 200 ]; then
+    echo "error:HTTP $code: $(jq -r '.error.message // empty' <<<"$body" 2>/dev/null | head -c 200)"
+    return
+  fi
+  verdict="$(jq -r '
+    (.usage.completion_tokens // 0) as $n
+    | (.choices[0].message // {}) as $m
+    | ([$m.content, $m.reasoning_content] | map(select(type == "string")) | join(" ")) as $text
+    | if ($n | type) != "number" or $n < 1 or ($text | test("^\\s*$")) then
+        "error:the reply carries no generated tokens"
+      elif ($text | test("\\bready\\b"; "i")) then "ok:\($n)"
+      else "error:the reply is not the asked-for word (incoherent decode?): \($text | gsub("\\s+"; " ") | .[0:120])"
+      end
+  ' <<<"$body" 2>/dev/null)" || verdict=""
+  echo "${verdict:-error:the reply carries no generated tokens}"
+}
+
+# A short, low-effort completion against the exact served id: acceptance fails
+# unless the model decodes the asked-for word (v16 answers "ready" in 10-16
+# tokens; 64 leaves a longer thinker room). The key reaches curl through its
+# stdin config, never argv.
+GENERATION_TIMEOUT_SECONDS="${GENERATION_TIMEOUT_SECONDS:-180}"
+require_generation() {
+  local key escaped_key request response code verdict
+  inference_resolve_client_keyfile || { echo "error: no synchronized API key for the generation check" >&2; return 1; }
+  key="$(<"$INFERENCE_CLIENT_KEYFILE")"
+  escaped_key="${key//\\/\\\\}"
+  escaped_key="${escaped_key//\"/\\\"}"
+  request="$(jq -cn --arg model "$EXPECTED_MODEL" '{model: $model, max_tokens: 64, reasoning_effort: "low",
+    messages: [{role: "user", content: "Reply with the single word: ready"}]}')"
+  response="$({
+    printf 'url = "http://127.0.0.1:8000/v1/chat/completions"\n'
+    printf 'header = "Authorization: Bearer %s"\n' "$escaped_key"
+    printf 'header = "Content-Type: application/json"\n'
+    printf 'connect-timeout = 2\nmax-time = %s\n' "$GENERATION_TIMEOUT_SECONDS"
+  } | curl --silent --show-error --config - --data "$request" --write-out '\n%{http_code}')" || {
+    echo "error: generation check could not reach :8000" >&2
+    return 1
+  }
+  code="${response##*$'\n'}"
+  verdict="$(generation_verdict "$code" "${response%$'\n'*}")"
+  case "$verdict" in
+    ok:*) echo "GENERATES: $EXPECTED_MODEL decoded ${verdict#ok:} token(s)" ;;
+    *) echo "error: $EXPECTED_MODEL does not generate: ${verdict#error:}" >&2; return 1 ;;
+  esac
+}
+
 # The bridge is part of acceptance: a profile the dashboards and the ledger
 # cannot see is not done.
 require_metrics_bridge() {
@@ -115,7 +181,7 @@ report_boot_receipt() {
   capacity_lines="$(grep -E 'Plan cache\.|Allocate cache\.|Start server\.' <<<"$logs" | tail -n 6 || true)"
   receipt_dir="$(dirname "$BOOT_RECEIPT")"
   install -d -m 700 "$receipt_dir" || { receipt_failed "cannot create $receipt_dir"; return 1; }
-  receipt_tmp="$(mktemp "$receipt_dir/.v16-boot-receipt.XXXXXX")" || { receipt_failed "cannot create a temporary file in $receipt_dir"; return 1; }
+  receipt_tmp="$(mktemp "$receipt_dir/.$VARIANT-boot-receipt.XXXXXX")" || { receipt_failed "cannot create a temporary file in $receipt_dir"; return 1; }
   {
     printf 'container=%s\nmodel=%s\npackage=%s\nstarted_at=%s\nimage=%s\n' \
       "$TARGET" "$EXPECTED_MODEL" "$package" "$started_at" "$image_id"
@@ -175,6 +241,7 @@ case "$MODE" in
     for container in "${previous[@]}"; do
       if [ "$container" = "$TARGET" ]; then
         wait_for_target
+        require_generation
         require_metrics_bridge
         report_boot_receipt
         promote_restart_policy
@@ -194,14 +261,15 @@ case "$MODE" in
       stopped+=("$container")
     done
     if ! "$RUN" --launch; then
-      echo "error: Hyperflare v16 launch failed; restoring previous profile set" >&2
+      echo "error: Hyperflare $VARIANT launch failed; restoring previous profile set" >&2
       restore_profiles "${previous[@]}" || true
       exit 1
     fi
-    if ! wait_for_target || ! require_metrics_bridge || ! report_boot_receipt || ! promote_restart_policy; then
+    if ! wait_for_target || ! require_generation || ! require_metrics_bridge || ! report_boot_receipt \
+       || ! promote_restart_policy; then
       docker logs --tail 200 "$TARGET" >&2 || true
       inference_quiesce_failed_container "$TARGET" || true
-      echo "error: Hyperflare v16 acceptance failed; restoring previous profile set" >&2
+      echo "error: Hyperflare $VARIANT acceptance failed; restoring previous profile set" >&2
       restore_profiles "${previous[@]}" || true
       exit 1
     fi

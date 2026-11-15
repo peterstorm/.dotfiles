@@ -3,11 +3,15 @@
 #
 # v16 serves nvidia/GLM-5.3-Flash-FP4-Local through NVIDIA Hyperflare (the
 # AzallazA fork at hyperflare-glm-20261112) as the recipe's TP2/DCP2 package.
+# The uncensored variant serves dealignai's UNCENSORED build converted into
+# v16's storage formats, through the same launchers (VARIANT), as the
+# uncensored primary. The cyber-hybrid variants were retired on 2026-11-15.
 # The contract proves, without Docker or a GPU, that the build/download/
 # export/run/switch scripts agree on every pin (fork commit, checkpoint
-# revision, image tag, package naming, served id), that the vendored recipe
+# revision, image tag, package naming, served id), that every name derives from
+# the one variant table, that the vendored recipe
 # scripts are byte-identical to upstream's, that the monitoring bridge and
-# the Pi catalog carry the profile, and that the runbook records the
+# the Pi catalog carry the profiles, and that the runbook records the
 # decisions that differ from the recipe's test system.
 # shellcheck disable=SC2016
 set -euo pipefail
@@ -21,6 +25,7 @@ DL="$GLM/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh"
 EXPORT="$GLM/export-glm53-flash-hyperflare-tp2-v16.sh"
 RUN="$GLM/run-glm53-flash-hyperflare-tp2-v16.sh"
 SWITCH="$GLM/switch-glm53-hyperflare-tp2-v16.sh"
+VARIANTS="$GLM/hyperflare-variants.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 PI_MODELS="$ROOT/pi/models.json"
 RUNBOOK="$ROOT/docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md"
@@ -32,6 +37,8 @@ REPO="nvidia/GLM-5.3-Flash-FP4-Local"
 REVISION="76348ddb2be2e35e39ecfc00e75dc07703f4f3d5"
 SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
 CONTAINER="glm53-flash-hyperflare-tp2-v16"
+UNCENSORED_SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-uncensored"
+UNCENSORED_CONTAINER="glm53-flash-hyperflare-tp2-uncensored"
 # git blob ids of the recipe folder's files at recipe commit 9a57f78e.
 EXPORT_BLOB="f2bcc006e3b63c0add107396bfe8f85f4832e502"
 SERVE_BLOB="a7fa2172a9e327070db43444c1d2094aef143315"
@@ -40,13 +47,43 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 contains() { grep -Fq -- "$2" "$1" || fail "${1#"$ROOT"/} is missing: $2"; }
 absent() { ! grep -Fq -- "$2" "$1" || fail "${1#"$ROOT"/} must not contain: $2"; }
 
-for file in "$DOCKERFILE" "$BUILD" "$DL" "$EXPORT" "$RUN" "$SWITCH" "$RUNBOOK"; do
+for file in "$DOCKERFILE" "$BUILD" "$DL" "$EXPORT" "$RUN" "$SWITCH" "$VARIANTS" "$RUNBOOK"; do
   [ -f "$file" ] || fail "missing ${file#"$ROOT"/}"
 done
 for script in "$BUILD" "$DL" "$EXPORT" "$RUN" "$SWITCH"; do
   [ -x "$script" ] || fail "${script#"$ROOT"/} is not executable"
   bash -n "$script"
 done
+bash -n "$VARIANTS"
+
+# One variant table is the source of every name. v16's are the strings this contract has
+# always pinned; uncensored's are what switch-primary.sh, Pi's catalog and the vault carry.
+# No launcher keeps its own copy, and none takes a checkpoint directory beside the variant
+# (a free MODEL next to VARIANT could name a checkpoint the receipt does not).
+# shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
+source "$VARIANTS"
+[ "$(hyperflare_variant_model v16)" = glm53-fp4-local ] || fail "v16 must export the glm53-fp4-local checkpoint"
+[ "$(hyperflare_variant_container v16)" = "$CONTAINER" ] || fail "v16's container drifted from $CONTAINER"
+[ "$(hyperflare_variant_served v16)" = "$SERVED_MODEL" ] || fail "v16's served id drifted from $SERVED_MODEL"
+[ "$(hyperflare_variant_model uncensored)" = glm53-uncensored ] || fail "uncensored must export the glm53-uncensored checkpoint"
+[ "$(hyperflare_variant_container uncensored)" = "$UNCENSORED_CONTAINER" ] || fail "the uncensored primary's container drifted from $UNCENSORED_CONTAINER"
+[ "$(hyperflare_variant_served uncensored)" = "$UNCENSORED_SERVED_MODEL" ] || fail "the uncensored primary's served id drifted from $UNCENSORED_SERVED_MODEL"
+# The cyber-hybrid variants were retired on 2026-11-15 (hyperflare-variants-unit pins them
+# unknown); their containers left the catalog too.
+absent "$CATALOG" 'glm53-flash-hyperflare-tp2-cyber-hybrid'
+# A built checkpoint is exported only with the receipt its builder wrote (the variant table names it).
+contains "$EXPORT" 'if BUILD_RECEIPT="$(hyperflare_variant_build_receipt "$VARIANT")"; then'
+absent "$EXPORT" 'hybrid-receipt.json'
+for script in "$EXPORT" "$RUN" "$SWITCH"; do
+  contains "$script" 'source "$SCRIPT_DIR/hyperflare-variants.sh"'
+  contains "$script" 'VARIANT="${VARIANT:-v16}"'
+done
+for script in "$EXPORT" "$RUN"; do
+  contains "$script" 'MODEL="$(hyperflare_resolve_model "$VARIANT")" || exit 2'
+  absent "$script" 'MODEL="${MODEL:-'
+done
+contains "$SWITCH" 'hyperflare_resolve_model "$VARIANT" >/dev/null || exit 2'
+contains "$SWITCH" 'export VARIANT'
 
 # Vendored recipe scripts are upstream's bytes.
 [ "$(git -C "$ROOT" hash-object "$OVERLAY/export-glm-tp2.sh")" = "$EXPORT_BLOB" ] ||
@@ -88,7 +125,7 @@ contains "$DL" 'HF_HUB_DISABLE_XET=1'
 contains "$DL" '--memory "$MEMORY_CAP"'
 grep -Eq '^IMAGE="python@sha256:[0-9a-f]{64}"$' "$DL" || fail "download image is not digest-pinned"
 contains "$EXPORT" 'download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify'
-contains "$EXPORT" '-v "$CKPT_HOST:/ckpt/glm53-fp4-local:ro"'
+contains "$EXPORT" '-v "$CKPT_HOST:/ckpt/$MODEL:ro"'
 contains "$EXPORT" '--ulimit memlock=-1'
 # flare (Rust) finds its store via getpwuid, the exporter (Python) via $HOME:
 # uid 1000's passwd home must be the mounted /flare-home, and only uid 1000 runs.
@@ -106,15 +143,19 @@ contains "$EXPORT" '--security-opt seccomp=unconfined'
 contains "$RUN" '--security-opt seccomp=unconfined'
 contains "$DOCKERFILE" 'liburing-dev ninja-build'
 contains "$RUN" "CHECKPOINT=\"$REPO@$REVISION\""
+# A tune names its donor next to the base, in the container's checkpoint label.
+contains "$RUN" 'CHECKPOINT_LABEL="$(hyperflare_variant_provenance "$VARIANT" "$CHECKPOINT")"'
+contains "$RUN" '--label ai.peterstorm.inference.checkpoint="$CHECKPOINT_LABEL"'
+contains "$RUN" '--label ai.peterstorm.inference.profile="$NAME"'
 
 # Package: produced by the export receipt, consumed by name@version only.
-contains "$EXPORT" 'PACKAGE_RECEIPT="$ROOT_HOST/package-v16.txt"'
-contains "$RUN" 'PACKAGE_RECEIPT="$ROOT_HOST/package-v16.txt"'
-contains "$RUN" '^glm53-fp4-local@gb202-tp2-[0-9]+$'
+contains "$EXPORT" 'PACKAGE_RECEIPT="$ROOT_HOST/package-$VARIANT.txt"'
+contains "$RUN" 'PACKAGE_RECEIPT="$ROOT_HOST/package-$VARIANT.txt"'
+contains "$RUN" '^"$MODEL"@gb202-tp2-[0-9]+$'
 
 # Serve flags: the recipe's TP2 serve plus our port/host/id/key.
-contains "$RUN" "SERVED_MODEL=\"$SERVED_MODEL\""
-contains "$RUN" "NAME=\"$CONTAINER\""
+contains "$RUN" 'SERVED_MODEL="$(hyperflare_variant_served "$VARIANT")"'
+contains "$RUN" 'NAME="$(hyperflare_variant_container "$VARIANT")"'
 contains "$RUN" '--gpus 0,1 --host 0.0.0.0 --port 8000'
 contains "$RUN" '--prefix-cache-memory "$PREFIX_CACHE" --mtp-draft-tokens 5'
 contains "$RUN" '--scheduler-policy "$SCHEDULER"'
@@ -129,23 +170,32 @@ contains "$RUN" 'comfyui.service is active'
 absent "$RUN" 'VLLM_API_KEY=$VLLM_API_KEY'
 
 # Switcher: transactional, runtime-neutral idle gate, bridge is acceptance.
-contains "$SWITCH" "TARGET=\"$CONTAINER\""
-contains "$SWITCH" "EXPECTED_MODEL=\"$SERVED_MODEL\""
+contains "$SWITCH" 'TARGET="$(hyperflare_variant_container "$VARIANT")"'
+contains "$SWITCH" 'EXPECTED_MODEL="$(hyperflare_variant_served "$VARIANT")"'
 contains "$CATALOG" 'http://127.0.0.1:8010/metrics'
 contains "$CATALOG" 'http://127.0.0.1:8011/metrics'
 contains "$SWITCH" 'inference_require_idle_endpoint'
 contains "$SWITCH" 'require_metrics_bridge'
+# Acceptance decodes a token: health, /v1/models and the bridge all answer for a
+# package whose every request fails (2026-11-15, the first cyber-hybrid-bf16).
+contains "$SWITCH" 'if ! wait_for_target || ! require_generation || ! require_metrics_bridge'
 contains "$SWITCH" 'promote_restart_policy'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" "  $CONTAINER"
+contains "$CATALOG" "  $UNCENSORED_CONTAINER"
 
 # Monitoring and client catalog.
 contains "$DESKTOP" 'systemd.services.hyperflare-metrics'
 jq -e --arg id "$SERVED_MODEL" '
   .providers["desktop-vllm"].models
   | map(select(.id == $id))
-  | length == 1 and .[0].contextWindow == 1048576 and (.[0].input | index("image") != null)
-' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $SERVED_MODEL with 1M context and image input"
+  | length == 1 and .[0].contextWindow == 400000 and (.[0].input | index("image") != null)
+' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $SERVED_MODEL with its 400K context cap and image input"
+jq -e --arg id "$UNCENSORED_SERVED_MODEL" '
+  .providers["desktop-vllm"].models
+  | map(select(.id == $id))
+  | length == 1 and .[0].contextWindow == 400000 and (.[0].input | index("image") != null)
+' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $UNCENSORED_SERVED_MODEL with its 400K context cap and image input"
 
 # Runbook records the decisions that differ from the recipe's test system.
 contains "$RUNBOOK" "$FORK_COMMIT"
@@ -155,13 +205,24 @@ contains "$RUNBOOK" '400 W'
 contains "$RUNBOOK" 'TP2'
 contains "$RUNBOOK" 'ds41-1017-maya-exl35'
 contains "$RUNBOOK" 'switch-primary.sh'
+contains "$RUNBOOK" 'Variant: uncensored'
+contains "$RUNBOOK" 'hyperflare-variants.sh'
 
 # The primaries switch: its pure decision core, and the catalog it serves.
 bash "$ROOT/tests/switch-primary-unit.sh" >/dev/null || fail "switch-primary decision core failed its unit tests"
 bash "$ROOT/tests/switch-glm53-hyperflare-receipt-unit.sh" >/dev/null || fail "v16 boot receipt failed its unit tests"
+bash "$ROOT/tests/hyperflare-variants-unit.sh" >/dev/null || fail "the Hyperflare variant table failed its unit tests"
+# Exports run detached from a committed snapshot, with preflight before any stop.
+[ -x "$GLM/launch-glm53-export.sh" ] || fail "scripts/inference/glm53/launch-glm53-export.sh is not executable"
+bash "$ROOT/tests/glm53-stop-and-export-unit.sh" >/dev/null || fail "the stop-and-export driver failed its unit tests"
+bash "$ROOT/tests/glm53-launch-export-unit.sh" >/dev/null || fail "the export launcher failed its unit tests"
+contains "$RUNBOOK" 'launch-glm53-export.sh'
 contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER\""
-jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
-  "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the three primaries"
+contains "$ROOT/scripts/inference/switch-primary.sh" "UNCENSORED_CONTAINER=\"$UNCENSORED_CONTAINER\""
+contains "$ROOT/scripts/inference/switch-primary.sh" "uncensored) echo $UNCENSORED_SERVED_MODEL ;;"
+contains "$ROOT/scripts/inference/switch-primary.sh" 'VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start'
+jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-uncensored","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
+  "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the four primaries"
 jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-native"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's default model must be a primary (warmind-1017-native)"
 
@@ -170,7 +231,7 @@ jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-nat
 # the ds41 engine's own default for requests that name no effort.
 jq -e '.defaultThinkingLevel == "max"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's global defaultThinkingLevel must be max"
-jq -e '[.providers["desktop-vllm"].models[].defaultThinkingLevel] | length == 3 and all(. == "max")' \
+jq -e '[.providers["desktop-vllm"].models[].defaultThinkingLevel] | length == 4 and all(. == "max")' \
   "$PI_MODELS" >/dev/null || fail "every primary must default to max thinking"
 jq -e '.targets["served-max"] == {"served": "desktop-vllm", "thinkingLevel": "max"}
   and any(.rules[]; .when.parentClass == "cloud" and .use.target == "served-max")' \
