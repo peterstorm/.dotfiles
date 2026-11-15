@@ -76,7 +76,8 @@ spec:
             - containerPort: 3128
           volumeMounts:
             - name: egress-proxy-cfg
-              mountPath: /conf
+              mountPath: /etc/3proxy/3proxy.cfg
+              subPath: 3proxy.cfg
       volumes:
         - name: config
           hostPath:
