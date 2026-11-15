@@ -157,7 +157,11 @@
         # defaultThinkingLevel in ~/.pi/agent/settings.json, which interactive
         # sessions share; it went max on 2026-11-03 20:02 UTC and every scheduled
         # run inherited it (5-30x slower, per-skill timeouts tripped).
-        RECLAW_PI_MODEL = "claude-sonnet-5.5:medium";
+        # 2026-11-14: claude-opus-5.5 at :high (same github-copilot provider), per user request.
+        RECLAW_PI_MODEL = "claude-opus-5.5:high";
+        # 2026-11-14: scheduled skills run on sonnet at :medium (provider shared with chat) —
+        # only chat (RECLAW_PI_MODEL) gets opus. Use :low for fast, simple skills if timeouts bite.
+        RECLAW_PI_SCHEDULED_MODEL = "claude-sonnet-5.5:medium";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
