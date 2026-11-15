@@ -57,7 +57,7 @@ spec:
             - name: ARTEX_LLM_BASE_URL
               value: http://192.168.0.80:8000/v1
             - name: ARTEX_LLM_MODEL
-              value: glm-5.3-flash-hyperflare-tp2-cyber-hybrid
+              value: glm-5.3-flash-hyperflare-tp2-v16
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
