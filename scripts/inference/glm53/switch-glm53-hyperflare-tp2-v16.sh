@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Safely start/stop a GLM-5.3 Hyperflare TP2 profile: v16 by default, or the
-# CYBERSECURITY hybrid with VARIANT=cyber-hybrid (hyperflare-variants.sh derives
+# Safely start/stop a GLM-5.3 Hyperflare TP2 profile: v16 by default, or a
+# CYBERSECURITY hybrid with VARIANT=cyber-hybrid[-bf16] (hyperflare-variants.sh derives
 # the container, served id, receipt and checkpoint from the variant, and the run
 # script reads the same exported VARIANT). switch-primary.sh calls this for the
 # `glm` and `cyber` primaries.
@@ -9,8 +9,8 @@
 # room for the FP4-Local checkpoint and the Hyperflare package, so v15 needs
 # its download before it can serve again.
 # Launch is transactional at restart=no; only a fully accepted boot (healthy,
-# authenticated, exact model id, bridge on :8011 translating) is promoted to
-# restart=unless-stopped.
+# authenticated, exact model id, a generated token, bridge on :8011 translating)
+# is promoted to restart=unless-stopped.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,6 +92,55 @@ wait_for_target() {
   done
   echo "error: $TARGET did not serve authenticated model $EXPECTED_MODEL within ${STARTUP_TIMEOUT_SECONDS}s" >&2
   return 1
+}
+
+# generation_verdict HTTP_CODE BODY -> exactly one line, ok:<tokens> or error:<reason>.
+# Pure. Health, /v1/models and the bridge all answer before a single token is
+# decoded; on 2026-11-15 the first cyber-hybrid-bf16 package passed all three while
+# every request failed with "prepared model reported device error 1" (non-finite
+# logits). Only a generated token proves the model serves.
+generation_verdict() {
+  local code="$1" body="$2" tokens
+  if [ "$code" != 200 ]; then
+    echo "error:HTTP $code: $(jq -r '.error.message // empty' <<<"$body" 2>/dev/null | head -c 200)"
+    return
+  fi
+  tokens="$(jq -r '
+    (.usage.completion_tokens // 0) as $n
+    | (.choices[0].message // {}) as $m
+    | if ($n | type) == "number" and $n >= 1
+         and ((($m.content // "") + ($m.reasoning_content // "")) | length) > 0
+      then $n else empty end
+  ' <<<"$body" 2>/dev/null)" || tokens=""
+  if [ -n "$tokens" ]; then echo "ok:$tokens"; else echo "error:the reply carries no generated tokens"; fi
+}
+
+# A short, low-effort completion against the exact served id: acceptance fails
+# unless the model decodes. The key reaches curl through its stdin config, never argv.
+GENERATION_TIMEOUT_SECONDS="${GENERATION_TIMEOUT_SECONDS:-180}"
+require_generation() {
+  local key escaped_key request response code verdict
+  inference_resolve_client_keyfile || { echo "error: no synchronized API key for the generation check" >&2; return 1; }
+  key="$(<"$INFERENCE_CLIENT_KEYFILE")"
+  escaped_key="${key//\\/\\\\}"
+  escaped_key="${escaped_key//\"/\\\"}"
+  request="$(jq -cn --arg model "$EXPECTED_MODEL" '{model: $model, max_tokens: 32, reasoning_effort: "low",
+    messages: [{role: "user", content: "Reply with the single word: ready"}]}')"
+  response="$({
+    printf 'url = "http://127.0.0.1:8000/v1/chat/completions"\n'
+    printf 'header = "Authorization: Bearer %s"\n' "$escaped_key"
+    printf 'header = "Content-Type: application/json"\n'
+    printf 'connect-timeout = 2\nmax-time = %s\n' "$GENERATION_TIMEOUT_SECONDS"
+  } | curl --silent --show-error --config - --data "$request" --write-out '\n%{http_code}')" || {
+    echo "error: generation check could not reach :8000" >&2
+    return 1
+  }
+  code="${response##*$'\n'}"
+  verdict="$(generation_verdict "$code" "${response%$'\n'*}")"
+  case "$verdict" in
+    ok:*) echo "GENERATES: $EXPECTED_MODEL decoded ${verdict#ok:} token(s)" ;;
+    *) echo "error: $EXPECTED_MODEL does not generate: ${verdict#error:}" >&2; return 1 ;;
+  esac
 }
 
 # The bridge is part of acceptance: a profile the dashboards and the ledger
@@ -185,6 +234,7 @@ case "$MODE" in
     for container in "${previous[@]}"; do
       if [ "$container" = "$TARGET" ]; then
         wait_for_target
+        require_generation
         require_metrics_bridge
         report_boot_receipt
         promote_restart_policy
@@ -208,7 +258,8 @@ case "$MODE" in
       restore_profiles "${previous[@]}" || true
       exit 1
     fi
-    if ! wait_for_target || ! require_metrics_bridge || ! report_boot_receipt || ! promote_restart_policy; then
+    if ! wait_for_target || ! require_generation || ! require_metrics_bridge || ! report_boot_receipt \
+       || ! promote_restart_policy; then
       docker logs --tail 200 "$TARGET" >&2 || true
       inference_quiesce_failed_container "$TARGET" || true
       echo "error: Hyperflare $VARIANT acceptance failed; restoring previous profile set" >&2

@@ -2,8 +2,10 @@
 # Unit test for report_boot_receipt in switch-glm53-hyperflare-tp2-v16.sh: the
 # switcher calls it with errexit suppressed, so every failing step must return
 # non-zero with a named error, print no "BOOT RECEIPT:" line, leave no temporary
-# file and keep any previous receipt; the success path writes the receipt.
-# docker, mktemp, chmod and mv are stubbed; no container or GPU is touched.
+# file and keep any previous receipt; the success path writes the receipt. Also
+# the generation acceptance (generation_verdict, require_generation): a model that
+# answers health and /v1/models but cannot decode a token must fail acceptance.
+# docker, mktemp, chmod, mv and curl are stubbed; no container or GPU is touched.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -86,6 +88,65 @@ if [ "$status" -ne 0 ] || [ "$out" != "$expected_line" ] \
   failures=$((failures + 1))
   echo "FAIL success: status=$status out=$out" >&2
 fi
+
+# --- generation acceptance ---------------------------------------------------
+# generation_verdict is pure; require_generation runs it on a stubbed curl. The
+# 500 body is the one the first cyber-hybrid-bf16 package answered every request with.
+expect_verdict() {
+  local label="$1" code="$2" body="$3" expected="$4" got
+  cases=$((cases + 1))
+  got="$(generation_verdict "$code" "$body")"
+  if [ "$got" != "$expected" ]; then
+    failures=$((failures + 1))
+    echo "FAIL verdict $label: got '$got', expected '$expected'" >&2
+  fi
+}
+device_error='{"error":{"type":"server_error","message":"prepared model reported device error 1","param":null,"code":"server_error"}}'
+expect_verdict "content" 200 '{"choices":[{"message":{"content":"ready"}}],"usage":{"completion_tokens":5}}' "ok:5"
+expect_verdict "reasoning only (GLM thinks first)" 200 \
+  '{"choices":[{"message":{"content":null,"reasoning_content":"The user"}}],"usage":{"completion_tokens":32}}' "ok:32"
+expect_verdict "device error" 500 "$device_error" "error:HTTP 500: prepared model reported device error 1"
+expect_verdict "zero tokens" 200 '{"choices":[{"message":{"content":""}}],"usage":{"completion_tokens":0}}' \
+  "error:the reply carries no generated tokens"
+expect_verdict "tokens counted but no text" 200 '{"choices":[{"message":{}}],"usage":{"completion_tokens":3}}' \
+  "error:the reply carries no generated tokens"
+expect_verdict "not JSON" 200 'upstream connect error' "error:the reply carries no generated tokens"
+expect_verdict "no answer body" 502 '' "error:HTTP 502: "
+
+keyfile="$sandbox/key"
+printf 'k3y"secret\\x' >"$keyfile"
+inference_resolve_client_keyfile() { INFERENCE_CLIENT_KEYFILE="$keyfile"; }
+curl_body="" curl_code="" curl_rc=0
+curl() {
+  printf '%s\n' "$@" >"$sandbox/curl-argv"
+  cat >"$sandbox/curl-config"
+  [ "$curl_rc" = 0 ] || return "$curl_rc"
+  printf '%s\n%s' "$curl_body" "$curl_code"
+}
+expect_generation() {
+  local label="$1" expected_status="$2" expected_text="$3" status=0 out
+  cases=$((cases + 1))
+  out="$( (require_generation) 2>&1)" || status=$?
+  if [ "$status" != "$expected_status" ] || [[ "$out" != *"$expected_text"* ]]; then
+    failures=$((failures + 1))
+    echo "FAIL generation $label: status=$status out=$out" >&2
+  fi
+}
+curl_body='{"choices":[{"message":{"content":"ready"}}],"usage":{"completion_tokens":2}}' curl_code=200
+expect_generation "a decoding model passes" 0 "GENERATES: $EXPECTED_MODEL decoded 2 token(s)"
+cases=$((cases + 1))
+if grep -Fq 'secret' "$sandbox/curl-argv" || ! grep -Fq 'Bearer k3y\"secret\\x' "$sandbox/curl-config" \
+   || ! grep -Fq "\"model\":\"$EXPECTED_MODEL\"" "$sandbox/curl-argv"; then
+  failures=$((failures + 1))
+  echo "FAIL generation: the key must travel in curl's config (escaped), the exact served id in the request" >&2
+fi
+curl_body="$device_error" curl_code=500
+expect_generation "the device-error package fails acceptance" 1 "does not generate: HTTP 500: prepared model reported device error 1"
+curl_rc=7
+expect_generation "an unreachable endpoint fails acceptance" 1 "could not reach :8000"
+curl_rc=0
+inference_resolve_client_keyfile() { return 1; }
+expect_generation "no key fails acceptance" 1 "no synchronized API key"
 
 if [ "$failures" -ne 0 ]; then
   echo "switch-glm53 boot receipt unit: $failures of $cases cases FAILED" >&2

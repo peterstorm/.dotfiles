@@ -172,6 +172,9 @@ contains "$CATALOG" 'http://127.0.0.1:8010/metrics'
 contains "$CATALOG" 'http://127.0.0.1:8011/metrics'
 contains "$SWITCH" 'inference_require_idle_endpoint'
 contains "$SWITCH" 'require_metrics_bridge'
+# Acceptance decodes a token: health, /v1/models and the bridge all answer for a
+# package whose every request fails (2026-11-15, the first cyber-hybrid-bf16).
+contains "$SWITCH" 'if ! wait_for_target || ! require_generation || ! require_metrics_bridge'
 contains "$SWITCH" 'promote_restart_policy'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" "  $CONTAINER"
