@@ -387,7 +387,7 @@ def fetch_verdict(
     if not scores:
         raise ValueError("no staged tensors scored")
     ordered = sorted(scores)
-    median = ordered[len(ordered) // 2]
+    median = ordered[(len(ordered) - 1) // 2]  # lower median: an even sample never rounds a fetch up
     position = max(int(round(0.05 * (len(ordered) - 1))), 0)
     share = sum(1 for score in ordered if score >= 0.99) / len(ordered)
     return FetchVerdict(
