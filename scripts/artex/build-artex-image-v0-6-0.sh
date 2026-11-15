@@ -50,7 +50,7 @@ docker build --build-arg ARTEX_VERSION="$actual_tag" -t "$LOCAL_IMAGE" "$SRC"
 # scanner toolbox (nuclei/httpx/... -version) --
 echo "== verify =="
 stamp="$(docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
-  -c "grep -a -m1 -o '0\\.6\\.0' /app/artex" || true)"
+  -c "grep -a -o '0\\.6\\.0' /app/artex" | head -1)"
 [ "$stamp" = "0.6.0" ] || { echo "FAIL: binary does not carry the 0.6.0 stamp (got: ${stamp:-none})" >&2; exit 1; }
 echo "binary stamp: $stamp"
 docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
