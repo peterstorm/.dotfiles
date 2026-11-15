@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "loom-verification-manifest",
+  "checks": [
+    {
+      "id": "project:artex-repair-regression",
+      "scope": "wave",
+      "executable": "node",
+      "args": [
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=.loom/completion-reports/artex-repair-regression.xml",
+        "tests/artex-repair-regression.test.mjs"
+      ],
+      "cwd": ".",
+      "timeoutMs": 120000,
+      "report": {
+        "kind": "required-file",
+        "path": ".loom/completion-reports/artex-repair-regression.xml"
+      }
+    }
+  ]
+}

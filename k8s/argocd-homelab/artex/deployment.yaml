@@ -37,7 +37,12 @@ spec:
             - name: pgdata
               mountPath: /var/lib/postgresql/data
         - name: artex
-          image: ghcr.io/peterstorm/artex:sha-a13c68cb
+          # Digest pin, not the mutable tag: what runs IS the audited v0.6.0
+          # build (tag sha-a13c68cb, built by run 43685680995 from the audited
+          # checkout). A GHCR re-push of the tag cannot silently replace it;
+          # moving to a new build is a deliberate manifest change ArgoCD
+          # applies (and every image bump = the brief Recreate outage).
+          image: ghcr.io/peterstorm/artex@sha256:519e58f274b3a96cb16e83a43d30741c67e31443305ba17572ac11d8df9313b4
           ports:
             - containerPort: 8787
           env:
@@ -63,6 +68,14 @@ spec:
                 secretKeyRef:
                   name: artex-secrets
                   key: llm-api-key
+            # JWT signing keys: one 32-byte jwt.key minted at first boot
+            # (observed at bring-up), persisted on the artex-data PVC via the
+            # subPath mount below. The credential lifecycle rides the app-data
+            # volume by design: deleting artex-data (the rollback path) deletes
+            # the keys with it — every issued session invalidates, and the next
+            # boot must mint fresh keys. Regeneration-on-empty is upstream
+            # behavior, untested here; treat volume loss as a full re-login at
+            # minimum and verify boot health after any PVC rebuild.
             - name: ARTEX_JWT_KEY_DIR
               value: /app/keys
             # Login rate-limit trusts X-Forwarded-For from the two in-path

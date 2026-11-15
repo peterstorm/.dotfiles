@@ -20,8 +20,11 @@
 #   ARTX_SRC=~/dev/artex/src bash scripts/artex/build-artex-image-v0-6-0.sh
 set -euo pipefail
 
-TAG="v0.6.0"
-FULL="a13c68cb7078d43b66fb398db3d610e513b6d77a"
+# The audited identity. ARTX_EXPECTED_TAG/ARTX_EXPECTED_SHA exist so the
+# regression test can point the same assert block at fixture repos; unset
+# (every real invocation, including the workflow) they are exactly these.
+TAG="${ARTX_EXPECTED_TAG:-v0.6.0}"
+FULL="${ARTX_EXPECTED_SHA:-a13c68cb7078d43b66fb398db3d610e513b6d77a}"
 SHORT="a13c68cb"
 LOCAL_IMAGE="peterstorm/artex:sha-$SHORT"
 SRC="${ARTX_SRC:-$PWD/artex-src}"
@@ -34,8 +37,16 @@ actual_tag="$(git -C "$SRC" describe --tags --exact-match 2>/dev/null || true)"
 actual_sha="$(git -C "$SRC" rev-parse HEAD 2>/dev/null || true)"
 [ "$actual_tag" = "$TAG" ]  || { echo "FAIL: $SRC is not exactly at $TAG (got: ${actual_tag:-none})" >&2; exit 1; }
 [ "$actual_sha" = "$FULL" ] || { echo "FAIL: $SRC HEAD is $actual_sha, expected $FULL" >&2; exit 1; }
-[ -z "$(git -C "$SRC" status --porcelain 2>/dev/null)" ] || { echo "FAIL: $SRC has uncommitted changes" >&2; exit 1; }
+# A failed probe is NOT a clean answer: capture the status and fail loudly,
+# or a corrupt/stale index would silently pass the bond (the -z "" inversion).
+status_out="$(git -C "$SRC" status --porcelain 2>/dev/null)" || {
+  echo "FAIL: cannot verify $SRC is clean: git status failed" >&2
+  exit 1
+}
+[ -z "$status_out" ] || { echo "FAIL: $SRC has uncommitted changes" >&2; exit 1; }
 echo "provenance: $SRC @ $actual_tag ($actual_sha) = the audited checkout"
+# Test seam: the regression test runs exactly this assert block, no docker.
+if [ "${ARTX_ASSERT_ONLY:-0}" = "1" ]; then exit 0; fi
 
 command -v docker >/dev/null 2>&1 || { echo "FAIL: docker not found" >&2; exit 1; }
 
@@ -44,16 +55,26 @@ echo "== docker build $LOCAL_IMAGE =="
 docker build --build-arg ARTEX_VERSION="$actual_tag" -t "$LOCAL_IMAGE" "$SRC"
 
 # --- verify: the binary carries the audited version stamp (ldflags
-# -X main.version, the same flags as the release binaries job — and build.sh
-# strips the leading v, so the string is 0.6.0, not v0.6.0; there is no
-# -version flag to call). The image's own RUN steps already verify the
-# scanner toolbox (nuclei/httpx/... -version) --
+# -X main.version, the same flags as the release binaries job — build.sh
+# strips the leading v, so the expected string is the tag minus v; there is
+# no -version flag to call).
 echo "== verify =="
+expected_stamp="${TAG#v}"
+stamp_pattern="$(printf '%s' "$expected_stamp" | sed 's/[.]/\\./g')"
+# Capture with the pipeline's failure neutralized: under pipefail the raw
+# assignment would exit before the guard below could print its diagnostic.
 stamp="$(docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
-  -c "grep -a -o '0\\.6\\.0' /app/artex" | head -1)"
-[ "$stamp" = "0.6.0" ] || { echo "FAIL: binary does not carry the 0.6.0 stamp (got: ${stamp:-none})" >&2; exit 1; }
+  -c "grep -a -o -- '$stamp_pattern' /app/artex" | head -1 || true)"
+[ "$stamp" = "$expected_stamp" ] || { echo "FAIL: binary does not carry the $expected_stamp stamp (got: ${stamp:-none})" >&2; exit 1; }
 echo "binary stamp: $stamp"
-docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
-  -c 'command -v nuclei httpx subfinder katana ffuf dalfox sqlmap bbot' | sort
+# The toolbox gate: one probe per tool. Multi-operand `command -v` exits 0
+# even when operands are missing, so a partially failed tool install must be
+# caught per tool, by name.
+toolbox_missing="$(docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
+  -c 'for t in nuclei httpx subfinder katana ffuf dalfox sqlmap bbot; do
+        command -v "$t" >/dev/null 2>&1 || echo "$t"
+      done')" || { echo "FAIL: scanner toolbox probe failed" >&2; exit 1; }
+[ -z "$toolbox_missing" ] || { echo "FAIL: scanner toolbox incomplete, missing: $(printf '%s ' $toolbox_missing)" >&2; exit 1; }
+echo "toolbox: all present"
 
 echo "done: $LOCAL_IMAGE"
