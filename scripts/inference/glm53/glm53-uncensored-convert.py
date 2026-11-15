@@ -8,9 +8,13 @@ loads only modelopt MIXED_PRECISION with a per-prefix ``quantized_layers`` table
 config is otherwise identical to NVIDIA's FP4-Local (v16), which this tool uses as the reference
 for every format decision:
 
-- routed experts keep dealignai's bytes, declared the way v16 declares that layer, minus v16's
-  compressed-scale encoding: layers 3-44 ``NVFP4`` with dealignai's calibrated input scales,
-  the MTP layer (45) ``W4A16_NVFP4``;
+- routed experts keep dealignai's bytes, every layer declared ``W4A16_NVFP4`` group 16. That is
+  the mode the recipe runs v16's experts in on SM120 anyway (bootstrap ``expert_activation``
+  auto -> a16; only v16's compressed-scale layout adds a calibrated A4 prefill). Declaring
+  ``NVFP4`` would put plain experts on the FP4-activation path, which fuses gate and up under one
+  global scale (``_expert_scales``) that dealignai's export does not share for most experts, so
+  their block scales would have to be re-rounded; W4A16 serves the released bytes exactly and
+  dealignai's calibrated input scales (model-input-scales.safetensors) go unused;
 - the projections Hyperflare refuses as plain BF16 -- q/k/v of every KDA block (the side-chain
   kernel needs the MXFP8 q/k/v group) and every MLA ``q_b_proj`` (``PreparedGlmMLA`` reads
   ``.out_features``) -- are re-encoded from dealignai's BF16 into the exact format and scale grid
@@ -63,7 +67,6 @@ hybrid = _sibling("glm_hybrid_checkpoint", "glm-hybrid-checkpoint.py")
 dense = _sibling("glm53_bf16_dense", "glm53-bf16-dense.py")
 
 INDEX = "model.safetensors.index.json"
-INPUT_SCALES = "model-input-scales.safetensors"
 VISION_SHARD = "tensors/visual-v16.safetensors"
 VISION_ROOT = "model.visual."
 RECEIPT = "convert-receipt.json"
@@ -146,10 +149,12 @@ def plan_requant(prefix: str, shard: str, source_meta: Mapping, base_meta: Mappi
     return Requant(prefix, shard, shape, storage.value, base_scale_meta["dtype"], expected)
 
 
-def expert_declarations(base_layers: Mapping[str, Mapping], source_names: set[str],
-                        input_scales: set[str]) -> dict[str, dict]:
-    """v16's routed-expert declarations without its compressed-scale encoding. A layer v16 runs
-    with FP4 activations (NVFP4) needs a calibrated input scale for every expert projection."""
+EXPERT_DECLARATION = {"quant_algo": "W4A16_NVFP4", "group_size": 16}
+
+
+def expert_declarations(base_layers: Mapping[str, Mapping], source_names) -> dict[str, dict]:
+    """Every routed-expert layer of the source as weight-only NVFP4 group 16 (see the module
+    docstring), each one a layer v16 also declares as NVFP4-family group 16 experts."""
     out = {}
     expert_layers = {name.split(".mlp.experts.")[0] + ".mlp.experts"
                      for name in source_names if ".mlp.experts." in name}
@@ -160,27 +165,8 @@ def expert_declarations(base_layers: Mapping[str, Mapping], source_names: set[st
         algo = base.get("quant_algo")
         if algo not in ("NVFP4", "W4A16_NVFP4") or base.get("group_size") != 16:
             raise ValueError(f"{prefix}: v16 declares {base}, expected NVFP4 or W4A16_NVFP4 group 16")
-        if algo == "NVFP4":
-            weights = [n for n in source_names
-                       if n.startswith(prefix + ".") and n.endswith(".weight")]
-            missing = [w for w in weights if w[: -len(".weight")] + ".input_scale" not in input_scales]
-            if missing:
-                raise ValueError(f"{prefix}: {len(missing)} expert projections lack an input scale, "
-                                 f"e.g. {missing[0]}")
-        out[prefix] = {"quant_algo": algo, "group_size": 16}
+        out[prefix] = dict(EXPERT_DECLARATION)
     return out
-
-
-def kept_input_scales(experts: Mapping[str, Mapping], input_scales: set[str]) -> set[str]:
-    """Input scales of layers that run FP4 activations; a W4A16 layer's are calibration residue."""
-    keep = set()
-    for name in input_scales:
-        prefix = name.split(".mlp.experts.")[0] + ".mlp.experts" if ".mlp.experts." in name else None
-        if prefix is None or prefix not in experts:
-            raise ValueError(f"{name}: an input scale for no declared expert layer")
-        if experts[prefix]["quant_algo"] == "NVFP4":
-            keep.add(name)
-    return keep
 
 
 def quantization_config(base_qc: Mapping, declarations: Mapping[str, Mapping]) -> dict:
@@ -243,8 +229,6 @@ class Plan:
     emptied: tuple[str, ...]            # rewritten shards left with no tensors: not written
     vision: tuple[tuple[str, str], ...]  # (tensor, v16 shard) for the vision shard
     drop_vision: int
-    input_scales_kept: int
-    input_scales_dropped: int
     quantization_config: dict
 
     def as_json(self) -> dict:
@@ -252,8 +236,7 @@ class Plan:
         return json.loads(json.dumps(asdict(self)))
 
 
-def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapping],
-              input_scale_names: set[str], source_config: Mapping,
+def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapping], source_config: Mapping,
               base_index: Mapping[str, str], base_headers: Mapping[str, Mapping], base_config: Mapping) -> Plan:
     """The whole conversion from parsed headers. ``*_headers`` map shard -> raw header."""
     mismatched = config_mismatches(source_config, base_config)
@@ -273,8 +256,7 @@ def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapp
         if base_layers.get(prefix) is None:
             raise ValueError(f"{prefix}: v16 does not declare it")
 
-    experts = expert_declarations(base_layers, set(source_index), input_scale_names)
-    kept = kept_input_scales(experts, input_scale_names)
+    experts = expert_declarations(base_layers, source_index)
     vision_source = {name for name in source_index if name.startswith(VISION_ROOT)}
     vision_base = sorted((name, shard) for name, shard in base_index.items() if name.startswith(VISION_ROOT))
     if {name for name, _ in vision_base if not name.endswith(("weight_scale", "weight_scale_2", "input_scale"))} \
@@ -293,8 +275,13 @@ def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapp
     rewrite = sorted({r.shard for r in requants} | {source_index[name] for name in vision_source})
     emptied = sorted(shard for shard in rewrite
                      if all(name in vision_source for name, owner in source_index.items() if owner == shard))
-    return Plan(tuple(requants), tuple(rewrite), tuple(emptied), tuple(vision_base), len(vision_source), len(kept),
-                len(input_scale_names) - len(kept), quantization_config(base_config["quantization_config"], declarations))
+    return Plan(tuple(requants), tuple(rewrite), tuple(emptied), tuple(vision_base), len(vision_source),
+                quantization_config(base_config["quantization_config"], declarations))
+
+
+def output_files(source_index: Mapping[str, str], plan: Plan) -> list[str]:
+    """The tensor files the output's index names: the source's, less the emptied, plus v16's vision."""
+    return sorted((set(source_index.values()) - set(plan.emptied)) | {VISION_SHARD})
 
 
 # --- I/O shell -------------------------------------------------------------------------
@@ -313,9 +300,7 @@ def load_headers(root: Path, files) -> dict[str, dict]:
 def plan_from_disk(source: Path, base: Path) -> Plan:
     source_index = read_json(source / INDEX)["weight_map"]
     base_index = read_json(base / INDEX)["weight_map"]
-    _, scales_header = dense.read_header(source / INPUT_SCALES)
-    return make_plan(source_index, load_headers(source, set(source_index.values())),
-                     {name for name in scales_header if name != "__metadata__"}, read_json(source / "config.json"),
+    return make_plan(source_index, load_headers(source, set(source_index.values())), read_json(source / "config.json"),
                      base_index, load_headers(base, set(base_index.values())), read_json(base / "config.json"))
 
 
@@ -414,15 +399,7 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
         vision_payloads[name] = read_tensor(base, shard, name)
     write_shard(out / VISION_SHARD, layout(vision_slots), vision_slots, None, vision_payloads)
 
-    # The input scales the declared FP4-activation layers use.
-    _, scales_header = dense.read_header(source / INPUT_SCALES)
-    keep = kept_input_scales(plan.quantization_config["quantized_layers"],
-                             {n for n in scales_header if n != "__metadata__"})
-    scale_slots = [Slot(n, m["dtype"], tuple(m["shape"]), "copy", *m["data_offsets"])
-                   for n, m in scales_header.items() if n in keep]
-    write_shard(out / INPUT_SCALES, layout(scale_slots), scale_slots, source / INPUT_SCALES, {})
-
-    files = sorted((set(source_index.values()) - set(plan.emptied)) | {VISION_SHARD, INPUT_SCALES})
+    files = output_files(source_index, plan)
     headers = load_headers(out, files)
     weight_map = {name: shard for shard in files for name in headers[shard] if name != "__metadata__"}
     (out / INDEX).write_text(json.dumps(
@@ -435,8 +412,7 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
     receipt = {"source": str(source), "source_marker": (source / ".download-complete").read_text().strip()
                if (source / ".download-complete").exists() else None,
                "base": str(base), "plan": plan.as_json() | {"quantization_config": "see config.json"},
-               "requant_metrics": metrics, "shards_rewritten": len(written), "vision_tensors": len(vision_slots),
-               "input_scales": len(scale_slots)}
+               "requant_metrics": metrics, "shards_rewritten": len(written), "vision_tensors": len(vision_slots)}
     (out / RECEIPT).write_text(json.dumps(receipt, indent=1))
     return receipt
 
@@ -448,7 +424,7 @@ def verify(source: Path, base: Path, out: Path, plan_path: Path) -> None:
     index = read_json(out / INDEX)
     files = dense.index_files(index)
     source_index = read_json(source / INDEX)["weight_map"]
-    expected = sorted((set(source_index.values()) - set(plan.emptied)) | {VISION_SHARD, INPUT_SCALES})
+    expected = output_files(source_index, plan)
     if files != expected:
         raise ValueError(f"index names files {sorted(set(files) ^ set(expected))[:3]} against the plan")
     headers = load_headers(out, files)
@@ -527,7 +503,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"plan: {len(plan.requants)} re-encoded, {len(plan.rewrite)} shards rewritten "
                   f"({len(plan.emptied)} emptied), "
                   f"{len(plan.vision)} vision tensors from v16 (replacing {plan.drop_vision}), "
-                  f"input scales {plan.input_scales_kept} kept / {plan.input_scales_dropped} dropped, "
                   f"{len(plan.quantization_config['quantized_layers'])} declarations")
         elif args.command == "build":
             receipt = build(args.source, args.base, args.out, args.plan, torch_quantizer())

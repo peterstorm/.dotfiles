@@ -122,6 +122,9 @@ def experts(layer: str, base: bool) -> list:
     return out
 
 
+INPUT_SCALES = "model-input-scales.safetensors"  # dealignai's calibration side file, outside the index
+
+
 def input_scales(layers) -> list:
     return [tensor(f"{layer}.0.{proj}.input_scale", "F32", [])
             for layer in layers for proj in ("gate_proj", "up_proj", "down_proj")]
@@ -166,7 +169,7 @@ def build_fixture(root: Path) -> tuple[Path, Path]:
         "model-00003-of-00004.safetensors": [tensor("lm_head.weight", "BF16", [16, 64])],
         VISION_SOURCE_SHARD: source_vision(),
     }, ARCH | {"quantization_config": SOURCE_QC}, metadata={"format": "pt"})
-    write_safetensors(source / mod.INPUT_SCALES, input_scales([NVFP4_LAYER, W4A16_LAYER]))
+    write_safetensors(source / INPUT_SCALES, input_scales([NVFP4_LAYER, W4A16_LAYER]))
     (source / "tokenizer.json").write_text('{"model": "bpe"}')
     (source / "chat_template.jinja").write_text("{{ messages }}")
     (source / "README.md").write_text("card")
@@ -229,27 +232,19 @@ def test_pure() -> None:
         {"dtype": "U8", "shape": [64, 2]}), "32-aligned")
 
     names = {f"{NVFP4_LAYER}.0.gate_proj.weight", f"{NVFP4_LAYER}.0.gate_proj.weight_scale",
-             f"{W4A16_LAYER}.0.gate_proj.weight"}
-    scales = {f"{NVFP4_LAYER}.0.gate_proj.input_scale", f"{W4A16_LAYER}.0.gate_proj.input_scale"}
-    decls = mod.expert_declarations(V16_LAYERS, names, scales)
-    check(decls == {NVFP4_LAYER: {"quant_algo": "NVFP4", "group_size": 16},
-                    W4A16_LAYER: {"quant_algo": "W4A16_NVFP4", "group_size": 16}},
-          "expert_declarations: v16's algorithm per layer, compressed-scale encoding dropped")
-    check_raises("expert_declarations: an FP4-activation layer needs every input scale",
-                 lambda: mod.expert_declarations(V16_LAYERS, names, {f"{W4A16_LAYER}.0.gate_proj.input_scale"}),
-                 "lack an input scale")
-    check(mod.expert_declarations(V16_LAYERS, {f"{W4A16_LAYER}.0.gate_proj.weight"}, set())
-          == {W4A16_LAYER: {"quant_algo": "W4A16_NVFP4", "group_size": 16}},
-          "expert_declarations: a W4A16 layer needs no input scale")
+             f"{W4A16_LAYER}.0.gate_proj.weight", f"{L}.0.self_attn.q_proj.weight"}
+    w4a16 = {"quant_algo": "W4A16_NVFP4", "group_size": 16}
+    check(mod.expert_declarations(V16_LAYERS, names) == {NVFP4_LAYER: w4a16, W4A16_LAYER: w4a16},
+          "expert_declarations: every routed layer weight-only NVFP4 group 16, whatever v16's activation format")
+    decls = mod.expert_declarations(V16_LAYERS, names)
+    decls[NVFP4_LAYER]["group_size"] = 32
+    check(mod.EXPERT_DECLARATION == w4a16 and mod.expert_declarations(V16_LAYERS, names)[NVFP4_LAYER] == w4a16,
+          "expert_declarations: each layer gets its own copy of the declaration")
     check_raises("expert_declarations: a layer v16 does not declare",
-                 lambda: mod.expert_declarations({}, names, scales), "declares no routed-expert format")
+                 lambda: mod.expert_declarations({}, names), "declares no routed-expert format")
     check_raises("expert_declarations: a v16 format other than NVFP4 group 16",
-                 lambda: mod.expert_declarations({**V16_LAYERS, NVFP4_LAYER: {"quant_algo": "MXFP8"}}, names, scales),
+                 lambda: mod.expert_declarations({**V16_LAYERS, NVFP4_LAYER: {"quant_algo": "MXFP8"}}, names),
                  "expected NVFP4")
-    check(mod.kept_input_scales(decls, scales) == {f"{NVFP4_LAYER}.0.gate_proj.input_scale"},
-          "kept_input_scales: the W4A16 layer's calibration residue is dropped")
-    check_raises("kept_input_scales: an input scale for no declared layer",
-                 lambda: mod.kept_input_scales(decls, {f"{L}.9.mlp.experts.0.up_proj.input_scale"}), "no declared")
 
     qc = mod.quantization_config(V16_QC, {"b": {"x": 1}, "a": {"y": 2}})
     check(qc["quantized_layers"] == {"a": {"y": 2}, "b": {"x": 1}} and qc["exclude_modules"] == []
@@ -293,13 +288,14 @@ def test_plan(source: Path, base: Path) -> None:
     check(len(plan.vision) == 5 and plan.drop_vision == 2
           and all(shard == "tensors/visual.safetensors" for _, shard in plan.vision),
           "plan: v16's five vision tensors replace the source's two")
-    check((plan.input_scales_kept, plan.input_scales_dropped) == (3, 3),
-          "plan: input scales kept for the NVFP4 layer, dropped for the W4A16 one")
     layers = plan.quantization_config["quantized_layers"]
     check(set(layers) == set(V16_LAYERS) - {f"{KDA}.o_proj"},
           "plan: declarations cover experts, re-encoded projections and vision; o_proj is BF16, undeclared")
-    check(layers[NVFP4_LAYER] == {"quant_algo": "NVFP4", "group_size": 16}
-          and layers[f"{KDA}.q_proj"] == V16_LAYERS[f"{KDA}.q_proj"], "plan: declarations as v16 writes them")
+    check(layers[NVFP4_LAYER] == layers[W4A16_LAYER] == {"quant_algo": "W4A16_NVFP4", "group_size": 16},
+          "plan: routed experts weight-only, even where v16 runs FP4 activations")
+    check(layers[f"{KDA}.q_proj"] == V16_LAYERS[f"{KDA}.q_proj"]
+          and layers["model.visual.blocks.0.attn.qkv"] == V16_LAYERS["model.visual.blocks.0.attn.qkv"],
+          "plan: re-encoded and vision declarations exactly as v16 writes them")
     as_json = plan.as_json()
     check(json.loads(json.dumps(as_json)) == as_json and as_json["requants"][0]["scale_shape"] == [64, 2],
           "plan: as_json is plain JSON, comparable with a reviewed plan file")
@@ -335,8 +331,10 @@ def test_plan_refusals(root: Path, source: Path, base: Path) -> None:
             lambda s, b: edit_config(b / "config.json",
                                      lambda c: c["quantization_config"]["quantized_layers"].pop(f"{MLA}.q_b_proj")),
             "does not declare")
-    mutated("an NVFP4 expert layer without its input scales",
-            lambda s, b: write_safetensors(s / mod.INPUT_SCALES, input_scales([W4A16_LAYER])), "lack an input scale")
+    mutated("an expert layer v16 does not have",
+            lambda s, b: edit_config(b / "config.json",
+                                     lambda c: c["quantization_config"]["quantized_layers"].pop(W4A16_LAYER)),
+            "declares no routed-expert format")
     mutated("vision towers that differ", lambda s, b: extra_vision(s), "vision towers")
 
 
@@ -365,15 +363,14 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
           and receipt["requant_metrics"][f"{MLA}.q_b_proj"] == {"storage": "block8", "rel_error": 0.02,
                                                                 "max_abs_error": 0.5},
           "build: the receipt records every re-encoding's error")
-    check(receipt["source_marker"] == "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc" and receipt["input_scales"] == 3
+    check(receipt["source_marker"] == "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc"
           and receipt["shards_rewritten"] == 2 and json.loads((out / mod.RECEIPT).read_text()) == receipt,
           "build: the receipt names the download and counts")
 
     index = json.loads((out / mod.INDEX).read_text())
     check(set(index["weight_map"].values()) == {"model-00001-of-00004.safetensors", "model-00002-of-00004.safetensors",
-                                                "model-00003-of-00004.safetensors", mod.VISION_SHARD,
-                                                mod.INPUT_SCALES},
-          "build: the index names the kept shards, v16's vision and the input scales")
+                                                "model-00003-of-00004.safetensors", mod.VISION_SHARD},
+          "build: the index names the kept shards and v16's vision")
     check(not (out / VISION_SOURCE_SHARD).exists(), "build: the emptied shard is not written")
     _, attn = mod.dense.read_header(out / "model-00001-of-00004.safetensors")
     check(list(attn) == ["__metadata__", f"{KDA}.q_proj.weight", f"{KDA}.q_proj.weight_scale",
@@ -385,9 +382,9 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
     check(mod.read_tensor(out, "model-00001-of-00004.safetensors", f"{KDA}.o_proj.weight")
           == mod.read_tensor(source, "model-00001-of-00004.safetensors", f"{KDA}.o_proj.weight"),
           "build: an untouched tensor in a rewritten shard keeps its bytes")
-    _, scales = mod.dense.read_header(out / mod.INPUT_SCALES)
-    check(set(scales) == {f"{NVFP4_LAYER}.0.{p}.input_scale" for p in ("gate_proj", "up_proj", "down_proj")},
-          "build: only the FP4-activation layer's input scales")
+    check(not (out / INPUT_SCALES).exists()
+          and not any(".mlp.experts." in n and n.endswith(".input_scale") for n in index["weight_map"]),
+          "build: weight-only experts carry no input scales")
     check((out / "model-00003-of-00004.safetensors").read_bytes()
           == (source / "model-00003-of-00004.safetensors").read_bytes(), "build: an untouched shard is copied whole")
     config = json.loads((out / "config.json").read_text())
