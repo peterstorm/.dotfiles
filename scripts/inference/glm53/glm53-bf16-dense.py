@@ -291,6 +291,10 @@ def build(base: Path, plan_path: Path, cache: Path, receipt_path: Path, out: Pat
     for leftover in sorted(base.iterdir()):
         if leftover.name.endswith(".safetensors") or leftover.name in ("config.json", "model.safetensors.index.json"):
             continue
+        if leftover.is_dir():
+            continue  # fetch residue (e.g. a .cache/); the checkpoint is its regular files
+        if not leftover.is_file():
+            raise ValueError(f"{leftover}: neither a regular file nor a directory; handle manually")
         ref_copy(leftover, out / leftover.name)
     receipt = json.loads(receipt_path.read_text())
     receipt["bf16"] = {"selected": len(selected), "prefixes": sorted(prefixes),
