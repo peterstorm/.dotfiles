@@ -44,6 +44,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 SAFETENSORS_ALIGN = 8
@@ -120,6 +121,65 @@ def scale_of(prefix: str) -> str:
     return f"{prefix}.weight_scale"
 
 
+@dataclass(frozen=True)
+class SourceRange:
+    """Where one donor BF16 tensor lives in its shard on the cyber repo.
+
+    ``begin``/``end`` are safetensors ``data_offsets`` -- relative to the shard's data section,
+    which starts at ``data_start`` (8 + header length). The fetch window is ``file_range``; a
+    data-relative range read as a file range lands ``data_start`` bytes early, inside the
+    previous tensor or the header, and yields plausible-looking garbage (the first BF16 builds
+    did exactly that: finite but gibberish output, or non-finite logits).
+    """
+
+    shard: str
+    begin: int
+    end: int
+    data_start: int
+
+    @property
+    def nbytes(self) -> int:
+        return self.end - self.begin
+
+    @property
+    def file_range(self) -> tuple[int, int]:
+        return (self.data_start + self.begin, self.data_start + self.end)
+
+
+def parse_source(tensor: str, raw: dict) -> SourceRange:
+    """A plan's source record as a SourceRange. A plan without ``data_start`` predates the
+    fix and named data-relative ranges only; it is refused, never fetched as file ranges."""
+    if "data_start" not in raw:
+        raise ValueError(f"{tensor}: plan source has no data_start; regenerate the plan")
+    if raw.get("dtype") != "BF16":
+        raise ValueError(f"{tensor}: plan source is {raw.get('dtype')}, expected BF16")
+    fields = {key: raw.get(key) for key in ("begin", "end", "data_start")}
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in fields.values()):
+        raise ValueError(f"{tensor}: plan source offsets are not integers: {fields}")
+    if not (0 <= fields["begin"] <= fields["end"]) or fields["data_start"] < 8:
+        raise ValueError(f"{tensor}: plan source offsets are impossible: {fields}")
+    if not isinstance(raw.get("shard"), str) or not raw["shard"]:
+        raise ValueError(f"{tensor}: plan source names no shard")
+    return SourceRange(raw["shard"], fields["begin"], fields["end"], fields["data_start"])
+
+
+def confirm_source(tensor: str, source: SourceRange, header_bytes: int, header: dict) -> SourceRange:
+    """Prove the plan's range is ``tensor`` in the donor shard's own header before any byte is
+    fetched: same data section start, the tensor present as BF16 at exactly these offsets."""
+    if 8 + header_bytes != source.data_start:
+        raise ValueError(f"{tensor}: {source.shard} data starts at {8 + header_bytes}, "
+                         f"the plan says {source.data_start}")
+    meta = header.get(tensor)
+    if meta is None:
+        raise ValueError(f"{tensor}: not in {source.shard}'s header")
+    if meta.get("dtype") != "BF16":
+        raise ValueError(f"{tensor}: {source.shard} stores it as {meta.get('dtype')}, expected BF16")
+    if list(meta.get("data_offsets", [])) != [source.begin, source.end]:
+        raise ValueError(f"{tensor}: {source.shard} has it at {meta.get('data_offsets')}, "
+                         f"the plan says {[source.begin, source.end]}")
+    return source
+
+
 def dequantizable(entry: dict, base_headers: dict[str, dict]) -> None:
     """Every selected prefix must have a scale to drop and an FP8 weight to replace."""
     prefix = prefix_of(entry["tensor"])
@@ -128,12 +188,12 @@ def dequantizable(entry: dict, base_headers: dict[str, dict]) -> None:
     stored = base_headers[entry["tensor"]]["dtype"]
     if stored != "F8_E4M3":
         raise ValueError(f"{prefix}: base weight is {stored}, expected F8_E4M3")
-    source = entry["source"]
+    source = parse_source(entry["tensor"], entry["source"])
     numel = 1
     for dim in entry["shape"]:
         numel *= dim
-    if source["end"] - source["begin"] != numel * 2:
-        raise ValueError(f"{prefix}: source BF16 range is {source['end'] - source['begin']} bytes, expected {numel * 2}")
+    if source.nbytes != numel * 2:
+        raise ValueError(f"{prefix}: source BF16 range is {source.nbytes} bytes, expected {numel * 2}")
 
 
 # --- pure core: safetensors header surgery ------------------------------------------
@@ -247,11 +307,18 @@ def _with_retries(operation, *, attempts: int = 5, base_delay: float = 1.0):
 
 
 def remote_bytes(repo: str, shard: str, begin: int, end: int) -> bytes:
+    """Bytes ``[begin, end)`` of the shard FILE (file-absolute offsets, header included)."""
     url = f"https://huggingface.co/{repo}/resolve/main/{shard}"
     payload = _with_retries(lambda: _range(url, begin, end, timeout=600))
     if len(payload) != end - begin:
         raise ValueError(f"{repo}/{shard}[{begin}:{end}]: got {len(payload)} bytes")
     return payload
+
+
+def remote_header(repo: str, shard: str) -> tuple[int, dict]:
+    """A shard's (header length, parsed JSON header), read through remote_bytes."""
+    (length,) = struct.unpack("<Q", remote_bytes(repo, shard, 0, 8))
+    return length, json.loads(remote_bytes(repo, shard, 8, 8 + length))
 
 
 def ref_copy(source: Path, target: Path) -> None:
@@ -261,24 +328,32 @@ def ref_copy(source: Path, target: Path) -> None:
         shutil.copy2(source, target)
 
 
-def cache_path(cache: Path, tensor: str) -> Path:
-    return cache / (tensor + ".bf16")
+def cache_path(cache: Path, tensor: str, source: SourceRange) -> Path:
+    """Keyed by the file range fetched, not the tensor alone: bytes cached from any other
+    window (the pre-data_start builds cached data-relative ones) are never picked up again."""
+    begin, end = source.file_range
+    return cache / f"{tensor}@{source.shard}@{begin}-{end}.bf16"
 
 
 def fetch_selected(plan: dict, cache: Path) -> dict[str, bytes]:
+    """Every selected tensor's donor bytes, each range first confirmed against its shard's
+    header (fetched once per shard), then read from the cache or the repo by file range."""
+    sources = {entry["tensor"]: parse_source(entry["tensor"], entry["source"])
+               for entry in plan["selected"]}
+    headers = {shard: remote_header(plan["cyber_repo"], shard)
+               for shard in sorted({source.shard for source in sources.values()})}
+    for tensor, source in sources.items():
+        confirm_source(tensor, source, *headers[source.shard])
     cache.mkdir(parents=True, exist_ok=True)
     payloads: dict[str, bytes] = {}
-    for entry in plan["selected"]:
-        name = entry["tensor"]
-        size = entry["source"]["end"] - entry["source"]["begin"]
-        target = cache_path(cache, name)
-        if target.exists() and target.stat().st_size == size:
-            payloads[name] = target.read_bytes()
+    for tensor, source in sources.items():
+        target = cache_path(cache, tensor, source)
+        if target.exists() and target.stat().st_size == source.nbytes:
+            payloads[tensor] = target.read_bytes()
             continue
-        payload = remote_bytes(plan["cyber_repo"], entry["source"]["shard"],
-                               entry["source"]["begin"], entry["source"]["end"])
+        payload = remote_bytes(plan["cyber_repo"], source.shard, *source.file_range)
         target.write_bytes(payload)
-        payloads[name] = payload
+        payloads[tensor] = payload
     return payloads
 
 
@@ -491,7 +566,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
             {"tensor": e["tensor"], "shard": e["shard"], "shape": e["shape"],
              "storage": e["storage"],
              "source": {"shard": e["source"]["shard"], "begin": e["source"]["begin"],
-                        "end": e["source"]["end"], "dtype": e["source"]["dtype"]}}
+                        "end": e["source"]["end"], "dtype": e["source"]["dtype"],
+                        "data_start": e["source"]["data_start"]}}
             for e in selected
         ],
     }, indent=1))

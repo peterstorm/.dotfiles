@@ -19,6 +19,7 @@ from pathlib import Path
 MODULE_PATH = Path(__file__).resolve().parent.parent / "scripts/inference/glm53/glm53-bf16-dense.py"
 spec = importlib.util.spec_from_file_location("bf16_dense", MODULE_PATH)
 mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod  # dataclasses resolve postponed annotations through sys.modules
 spec.loader.exec_module(mod)
 
 CHECKS = 0
@@ -155,35 +156,64 @@ def build_fixture(root: Path) -> dict:
         },
     }))
 
-    def entry(tensor, shard, shape, source_size, storage):
+    # The cyber repo's donor shards, real safetensors files the fake remote serves byte ranges
+    # of (as HTTP does: file-absolute). Each shard opens with a tensor that is not selected, so
+    # a data-relative range read as a file range lands in the header or that neighbour -- the
+    # bug that made the first BF16 builds generate gibberish.
+    donor = root / "donor"
+    donor.mkdir()
+    sources = {
+        "model.layers.40.self_attn.q_proj.weight": payload("src-q", 512),
+        "model.layers.39.self_attn.o_proj.weight": payload("src-o", 512),
+        "lm_head.weight": payload("src-h", 256),
+        "model.layers.40.mlp.shared_experts.down_proj.weight": payload("src-s", 256),
+        "model.layers.42.self_attn.k_proj.weight": payload("src-k", 256),
+        "model.layers.43.self_attn.q_b_proj.weight": payload("src-qb", 256),
+        "model.layers.38.self_attn.v_proj.weight": payload("src-v", 512),
+    }
+    donor_layout = {
+        "donor-00001.safetensors": [("model.embed_tokens.weight", "BF16", [64], payload("emb", 128)),
+                                    "model.layers.40.self_attn.q_proj.weight",
+                                    "model.layers.39.self_attn.o_proj.weight", "lm_head.weight"],
+        "donor-00002.safetensors": [("model.layers.40.input_layernorm.weight", "F32", [8], payload("ln", 32)),
+                                    "model.layers.40.mlp.shared_experts.down_proj.weight",
+                                    "model.layers.42.self_attn.k_proj.weight",
+                                    "model.layers.43.self_attn.q_b_proj.weight",
+                                    "model.layers.38.self_attn.v_proj.weight"],
+    }
+    donor_source: dict[str, dict] = {}
+    for shard, tensors in donor_layout.items():
+        rows = [t if isinstance(t, tuple) else (t, "BF16", [len(sources[t]) // 2], sources[t]) for t in tensors]
+        write_safetensors(donor / shard, rows, metadata={"format": "pt"})
+        length, header = mod.read_header(donor / shard)
+        for name in tensors:
+            if isinstance(name, str):
+                begin, end = header[name]["data_offsets"]
+                donor_source[name] = {"shard": shard, "begin": begin, "end": end, "dtype": "BF16",
+                                      "data_start": 8 + length}
+
+    def entry(tensor, shard, shape, storage):
         return {"tensor": tensor, "shard": shard, "begin": 0, "end": 0, "dtype": "F8_E4M3",
                 "shape": shape, "storage": storage, "action": "requant",
-                "source": {"shard": f"src-{tensor}.safetensors", "begin": 64,
-                           "end": 64 + source_size, "dtype": "BF16", "data_start": 64},
+                "source": donor_source[tensor],
                 "scale": {"tensor": tensor.replace(".weight", ".weight_scale"),
                           "shard": shard, "begin": 0, "end": 0, "dtype": "F32", "shape": []}}
 
     plan = {"base_repo": "base/repo", "cyber_repo": "cyber/repo", "stats": {}, "entries": [
-        entry("model.layers.40.self_attn.q_proj.weight", "model-00001-of-00004.safetensors", [8, 32], 512, "mx8"),
-        entry("model.layers.39.self_attn.o_proj.weight", "model-00002-of-00004.safetensors", [8, 32], 512, "mx8"),
-        entry("lm_head.weight", "model-00002-of-00004.safetensors", [16, 8], 256, "mx8"),
-        entry("model.layers.40.mlp.shared_experts.down_proj.weight", "model-00003-of-00004.safetensors", [8, 16], 256, "block8"),
-        entry("model.layers.42.self_attn.k_proj.weight", "model-00004-of-00004.safetensors", [8, 16], 256, "mx8"),
-        entry("model.layers.43.self_attn.q_b_proj.weight", "model-00004-of-00004.safetensors", [8, 16], 256, "mx8"),
-        dict(entry("model.layers.38.self_attn.v_proj.weight", "model-00002-of-00004.safetensors", [8, 32], 512, "mx8"),
+        entry("model.layers.40.self_attn.q_proj.weight", "model-00001-of-00004.safetensors", [8, 32], "mx8"),
+        entry("model.layers.39.self_attn.o_proj.weight", "model-00002-of-00004.safetensors", [8, 32], "mx8"),
+        entry("lm_head.weight", "model-00002-of-00004.safetensors", [16, 8], "mx8"),
+        entry("model.layers.40.mlp.shared_experts.down_proj.weight", "model-00003-of-00004.safetensors", [8, 16], "block8"),
+        entry("model.layers.42.self_attn.k_proj.weight", "model-00004-of-00004.safetensors", [8, 16], "mx8"),
+        entry("model.layers.43.self_attn.q_b_proj.weight", "model-00004-of-00004.safetensors", [8, 16], "mx8"),
+        dict(entry("model.layers.38.self_attn.v_proj.weight", "model-00002-of-00004.safetensors", [8, 32], "mx8"),
              action="copy"),
     ]}
     receipt = {"repos": {}, "stats": {}, "patched": [
         {"tensor": e["tensor"], "action": e["action"], "rel_error": 0.01, "max_abs_error": 0.01,
          "repaired": 0, "peak_ratio": 1.0} for e in plan["entries"]]}
 
-    sources = {
-        "model.layers.40.self_attn.q_proj.weight": payload("src-q", 512),
-        "model.layers.39.self_attn.o_proj.weight": payload("src-o", 512),
-        "lm_head.weight": payload("src-h", 256),
-        "model.layers.40.mlp.shared_experts.down_proj.weight": payload("src-s", 256),
-    }
-    return {"base": base, "plan": plan, "receipt": receipt, "sources": sources,
+    return {"base": base, "donor": donor, "plan": plan, "receipt": receipt, "sources": sources,
             "raw": {"q_w": q_w, "q_s": q_s, "o_w": o_w, "head_w": head_w, "sh_w": sh_w,
                     "expert": expert, "norm": norm, "gate": gate, "native": native}}
 
@@ -276,6 +306,51 @@ def test_dequantizable(fixture, root):
     short = json.loads(json.dumps(entry))
     short["source"]["end"] -= 2
     check_raises("short source range detected", lambda: mod.dequantizable(short, headers))
+    stale = json.loads(json.dumps(entry))
+    del stale["source"]["data_start"]
+    check_raises("a source without data_start (pre-fix plan) is refused at plan time",
+                 lambda: mod.dequantizable(stale, headers))
+
+
+def test_sources(fixture):
+    """A plan source is a SourceRange: data-relative offsets plus where the data section starts,
+    confirmed against the donor shard's own header before any byte is fetched."""
+    tensor = "lm_head.weight"
+    raw = fixture["plan"]["entries"][2]["source"]
+    source = mod.parse_source(tensor, raw)
+    length, header = mod.read_header(fixture["donor"] / raw["shard"])
+    check(source == mod.SourceRange(raw["shard"], raw["begin"], raw["end"], 8 + length),
+          "parse_source keeps shard, data-relative offsets and data_start")
+    check(source.file_range == (8 + length + raw["begin"], 8 + length + raw["end"]),
+          "file_range is data_start + data_offsets")
+    check(source.nbytes == 256, "nbytes is the tensor's span")
+    donor_bytes = (fixture["donor"] / raw["shard"]).read_bytes()
+    check(donor_bytes[slice(*source.file_range)] == fixture["sources"][tensor],
+          "the file range holds exactly the donor tensor")
+    check(donor_bytes[raw["begin"]:raw["end"]] != fixture["sources"][tensor],
+          "the data-relative range read from the file is NOT the tensor (the bug this guards)")
+    for label, mutation in (("no data_start", lambda r: r.pop("data_start")),
+                            ("data_start inside the length prefix", lambda r: r.update(data_start=4)),
+                            ("not BF16", lambda r: r.update(dtype="F8_E4M3")),
+                            ("string offset", lambda r: r.update(begin="0")),
+                            ("bool offset", lambda r: r.update(end=True)),
+                            ("negative begin", lambda r: r.update(begin=-2)),
+                            ("end before begin", lambda r: r.update(end=raw["begin"] - 2)),
+                            ("no shard", lambda r: r.update(shard=""))):
+        broken = dict(raw)
+        mutation(broken)
+        check_raises(f"parse_source refuses: {label}", lambda b=broken: mod.parse_source(tensor, b))
+
+    check(mod.confirm_source(tensor, source, length, header) == source,
+          "confirm_source returns the source the donor header agrees with")
+    shifted = mod.SourceRange(source.shard, source.begin + 2, source.end + 2, source.data_start)
+    for label, operation in (
+            ("a different data section start", lambda: mod.confirm_source(tensor, source, length + 8, header)),
+            ("offsets the header does not hold", lambda: mod.confirm_source(tensor, shifted, length, header)),
+            ("a tensor the shard lacks", lambda: mod.confirm_source("model.missing.weight", source, length, header)),
+            ("a non-BF16 donor tensor", lambda: mod.confirm_source(
+                tensor, source, length, {**header, tensor: {**header[tensor], "dtype": "F32"}}))):
+        check_raises(f"confirm_source refuses {label}", operation)
 
 
 def test_header_surgery():
@@ -341,24 +416,62 @@ def test_index_and_config(fixture):
 # --- build + verify end-to-end -------------------------------------------------------------
 
 def test_build_and_verify(root, fixture):
-    plan_bf16 = load_plan_bf16(root, fixture)
     saved_remote = mod.remote_bytes
-    calls = []
-    mod.remote_bytes = lambda repo, shard, begin, end: (calls.append((repo, shard)) or
-                                                        fixture["sources"][shard.replace("src-", "").removesuffix(".safetensors")]
-                                                        if False else _fake_remote(repo, shard, begin, end, fixture, calls))
+    calls: list[tuple[str, int, int]] = []
 
-    def _fake_remote(repo, shard, begin, end, fixture, calls):
-        calls.append((repo, shard))
-        for name, entry in ((e["tensor"], e) for e in fixture["plan"]["entries"]):
-            if entry["source"]["shard"] == shard:
-                expected = fixture["sources"][name]
-                if len(expected) == end - begin:
-                    return expected
-        raise ValueError(f"unexpected fetch {shard}")
+    def fake_remote(repo, shard, begin, end):
+        """The cyber repo over HTTP: file-absolute byte ranges of the donor shard files."""
+        if repo != "cyber/repo":
+            raise ValueError(f"fetch from {repo}, expected the cyber repo")
+        calls.append((shard, begin, end))
+        data = (fixture["donor"] / shard).read_bytes()
+        if not 0 <= begin <= end <= len(data):
+            raise ValueError(f"{shard}[{begin}:{end}] is outside the {len(data)}-byte file")
+        return data[begin:end]
 
+    mod.remote_bytes = fake_remote
+    try:
+        build_and_verify(root, fixture, calls)
+    finally:
+        mod.remote_bytes = saved_remote
+
+
+def build_and_verify(root, fixture, calls):
+    plan_bf16 = load_plan_bf16(root, fixture)
+    selected = {e["tensor"]: mod.parse_source(e["tensor"], e["source"])
+                for e in json.loads(plan_bf16.read_text())["selected"]}
     cache = root / "cache"
     out = root / "out"
+    header_reads = set()
+    for shard in {source.shard for source in selected.values()}:
+        length, _ = mod.read_header(fixture["donor"] / shard)
+        header_reads |= {(shard, 0, 8), (shard, 8, 8 + length)}
+
+    # A plan written before data_start existed is refused before anything is fetched or written.
+    stale_plan = json.loads(plan_bf16.read_text())
+    for entry in stale_plan["selected"]:
+        del entry["source"]["data_start"]
+    stale_path = root / "bf16-plan-stale.json"
+    stale_path.write_text(json.dumps(stale_plan))
+    check_raises("build refuses a plan without data_start",
+                 lambda: mod.build(fixture["base"], stale_path, cache, root / "hybrid-receipt.json", out))
+    check(not out.exists() and not calls, "the refused plan wrote nothing and fetched nothing")
+
+    # A plan whose range disagrees with the donor header is refused before any tensor byte moves.
+    lying_plan = json.loads(plan_bf16.read_text())
+    lying_plan["selected"][0]["source"]["begin"] += 2
+    lying_plan["selected"][0]["source"]["end"] += 2
+    lying_path = root / "bf16-plan-lying.json"
+    lying_path.write_text(json.dumps(lying_plan))
+    check_raises("build refuses a range the donor header does not hold",
+                 lambda: mod.build(fixture["base"], lying_path, cache, root / "hybrid-receipt.json", out))
+    check(not out.exists() and set(calls) <= header_reads, "only headers were read for the refused plan")
+    calls.clear()
+
+    # Bytes cached under the old tensor-only key (data-relative, wrong) are never reused.
+    cache.mkdir()
+    (cache / "lm_head.weight.bf16").write_bytes(b"\0" * 256)
+
     stats = mod.build(fixture["base"], plan_bf16, cache, root / "hybrid-receipt.json", out)
     check(stats["shards_rewritten"] == 3 and stats["shards_shared"] == 2,
           f"3 shards rewritten, 2 shared (got {stats})")
@@ -366,8 +479,16 @@ def test_build_and_verify(root, fixture):
           == (fixture["base"] / "tensors/native-QB.safetensors").read_bytes(),
           "the subdirectory shard the index names is carried, byte-identical")
     check(not (out / ".cache").exists(), "fetch residue directories are not carried")
-    check(len(calls) == 3, f"three source fetches (got {calls})")
-    mod.remote_bytes = saved_remote
+    data_fetches = sorted(call for call in calls if call not in header_reads)
+    check(data_fetches == sorted((s.shard, *s.file_range) for s in selected.values()),
+          f"one fetch per selected tensor, each at its file range (got {data_fetches})")
+    check(sorted(call for call in calls if call in header_reads) == sorted(header_reads),
+          "each donor shard's header is read once")
+    for tensor, source in selected.items():
+        check(mod.cache_path(cache, tensor, source).read_bytes() == fixture["sources"][tensor],
+              f"cache holds the donor tensor itself: {tensor}")
+    check((cache / "lm_head.weight.bf16").read_bytes() == b"\0" * 256,
+          "the old-key cache file is left alone, not read")
 
     _, q_header = mod.read_header(out / "model-00001-of-00004.safetensors")
     check(q_header["model.layers.40.self_attn.q_proj.weight"]["dtype"] == "BF16",
@@ -453,8 +574,9 @@ def test_build_and_verify(root, fixture):
     check(mod.index_files({"weight_map": {"a": "s2", "b": "tensors/q", "c": "s2"}}) == ["s2", "tensors/q"],
           "index_files: each named file once, sorted, subdirectories kept")
 
+    calls.clear()
     mod.verify(fixture["base"], plan_bf16, cache, out)
-    check(True, "verify passes on the built checkpoint")
+    check(set(calls) <= header_reads, "verify passes, re-reading only headers: the cache serves the bytes")
 
     # --- mutations on scratch copies of the OUTPUT ------------------------------------
     def mutate(action):
@@ -538,6 +660,7 @@ def main() -> int:
         test_selection(fixture)
         test_plan_holds(root, fixture)
         test_dequantizable(fixture, root)
+        test_sources(fixture)
         test_header_surgery()
         test_index_and_config(fixture)
         test_build_and_verify(root, fixture)
