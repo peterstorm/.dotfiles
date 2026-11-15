@@ -10,6 +10,11 @@ __pycache__/
 !.claude/state/.gitkeep
 .claude/reviews/
 
+# Loom verification manifest is tracked configuration; the rest of .loom is
+# runtime state and completion reports (not persisted)
+.loom/*
+!.loom/verification-manifest.json
+
 # Cortex plugin memory-extraction dumps (runtime, not persisted)
 .cortex_memory_extraction.json
 

@@ -3,8 +3,11 @@ name: build-artex-image
 # Build the ARTEX pentest-harness image from the audited upstream checkout
 # (BaaRai/ARTEX) and publish it to GHCR. WHAT is built is pinned by the
 # checked-in build script (tag v0.6.0 + full sha + clean worktree = the
-# 2026-11-15 planted-code/backdoor audit bond); this workflow only adds the
-# GHCR login (GITHUB_TOKEN, packages: write) and the publish step.
+# 2026-11-15 planted-code/backdoor audit bond). Beyond running that script,
+# this workflow adds: the runner's Docker data-root move onto /mnt, the GHCR
+# login (GITHUB_TOKEN, packages: write), an OPTIONAL Docker Hub login
+# (DOCKERHUB_USERNAME + DOCKERHUB_TOKEN — base-image pull rate limits), the
+# tag/publish step and the provenance run summary.
 #
 # No GPU, no CUDA: standard runner is plenty (npm ci + go build + pinned tool
 # downloads), so unlike the dflash2 workflows there is no swapfile step and no
@@ -50,6 +53,12 @@ jobs:
           sudo mkdir -p /mnt/docker
           echo '{"data-root":"/mnt/docker"}' | sudo tee /etc/docker/daemon.json
           sudo systemctl start docker
+          # The move must be observable: a stop that silently failed leaves
+          # the daemon on the old root, and this step would lie about success
+          # while the build slowly fills the small rootfs it was meant to spare.
+          actual_root="$(docker info -f '{{ .DockerRootDir }}')"
+          [ "$actual_root" = "/mnt/docker" ] || { echo "FAIL: docker data-root is $actual_root, expected /mnt/docker (did the stop/move actually take?)" >&2; exit 1; }
+          echo "docker data-root: $actual_root"
           df -h / /mnt
 
       - name: Log in to GHCR
@@ -90,6 +99,6 @@ jobs:
             echo '```'
             echo "$GHCR_IMAGE"
             echo "provenance: BaaRai/ARTEX @ v0.6.0 (a13c68cb7078d43b66fb398db3d610e513b6d77a)"
-            docker inspect --format 'digest: {{index .RepoDigests 0}}' "$GHCR_IMAGE" 2>/dev/null || true
+            docker inspect --format 'digest: {{index .RepoDigests 0}}' "$GHCR_IMAGE" 2>/dev/null || echo "digest: unavailable (inspect failed — the receipt must say so)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
