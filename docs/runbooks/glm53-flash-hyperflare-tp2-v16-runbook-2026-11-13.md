@@ -90,7 +90,9 @@ export and run scripts check.
 4. **Serve**: `switch-glm53-hyperflare-tp2-v16.sh start` — preflight, runtime-neutral
    idle gate (ds4 bridge :8010, Hyperflare bridge :8011, or vLLM/SGLang :8000),
    quiesce, launch at `--restart no`, accept (health, authenticated exact model
-   id, **bridge on :8011 reporting the model**), boot receipt
+   id, **a decoded reply that says the asked-for word** — "Reply with the single
+   word: ready", 64 tokens, `ready` in content or reasoning — and **the bridge on
+   :8011 reporting the model**), boot receipt
    (`~/.local/state/glm53/flash-hyperflare-tp2-v16-boot-receipt.txt`, Plan/Allocate
    cache lines), promote to `unless-stopped`; any failure restores the previous
    profile set.
@@ -140,18 +142,55 @@ FP8 (`kernel_fp8_prefixes`, recorded as `kept_fp8` in the plan): the KDA blocks'
 q/k/v (the side-chain kernel, forced on by the recipe export, needs MXFP8 q/k/v + BF16
 b/f_a) and every MLA `q_b_proj` (`PreparedGlmMLA` reads `.out_features`).
 
-- **Build**: `glm53-bf16-dense.py plan | build | verify` → 33 BF16 tensors, 14 kept FP8,
-  4 shards rewritten. `verify` checks every file the index names exists and that
+- **Build**: `glm53-bf16-dense.py plan | build | verify` → 33 BF16 tensors (2.19 GB),
+  14 kept FP8, 4 shards rewritten, 38 reflinked. `build` first reads each donor
+  shard's header and refuses any planned range the header does not hold
+  (`confirm_source`); `verify` checks every file the index names exists and that
   `total_size` equals the payload (Hyperflare's `inspect_indexed_checkpoint` refuses
-  otherwise); run that inspect in the image on the CPU before spending a GPU export.
+  otherwise). Then run that inspect in the image on the CPU before spending a GPU export:
+
+      docker run --rm --user 1000:1000 --entrypoint /opt/flare/.venv/bin/python3 -w /opt/flare \
+        -v /models/glm53-hyperflare/glm53-cyber-hybrid-bf16:/ckpt:ro peterstorm/glm53-hyperflare:ac9136b-cu131 \
+        -c 'from ignition.preparation.checkpoint import inspect_indexed_checkpoint as i; i("/ckpt"); print("ok")'
+
 - **Export**: `launch-glm53-export.sh cyber-hybrid-bf16` → package
-  `glm53-cyber-hybrid-bf16@gb202-tp2-202611150903`, 26 min (cold kernel tuning for the
-  BF16 shapes).
+  `glm53-cyber-hybrid-bf16@gb202-tp2-202611151057`, 10 min (warm kernel cache; the
+  first, cold export of the BF16 shapes took 26).
 - **Serve**: the `cyber` primary since 2026-11-15: `switch-primary.sh cyber` (or
   `/switch cyber`) serves container `glm53-flash-hyperflare-tp2-cyber-hybrid-bf16` as
   `glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16` (Pi's catalog entry replaced the
   original hybrid's). v16's package and container stay in place, so
-  `switch-primary.sh glm` is the rollback.
+  `switch-primary.sh glm` is the rollback. Smoke on `…1057`: acceptance `ready` in 5
+  tokens; "09:40 → 13:15 in minutes" → `215`; a 586-token SQL-injection explanation with
+  vulnerable and parameterized Python, `finish=stop`; `get_weather({"city":"Copenhagen"})`.
+
+### The shifted-fetch bug (2026-11-15)
+
+The first two packages were built from the wrong bytes. A safetensors header's
+`data_offsets` are relative to the data section, which starts at `8 + header length`
+(`data_start`). The hybrid plan records both; `glm53-bf16-dense.py plan` copied
+`begin`/`end` but dropped `data_start`, and the fetch sent them as HTTP file ranges. Every
+donor tensor came from 47–126 KiB early: the shard header and the previous tensor's tail,
+plausible BF16 values that pass any finiteness check.
+
+- `…202611150903` (all 33): loaded, then every request failed with HTTP 500 "prepared
+  model reported device error 1" (non-finite logits), while health, `/v1/models` and the
+  bridge all passed. Acceptance gained a generated-token check.
+- `…202611151034` (22 tensors in layers 40–44; `lm_head` and layer 45 held FP8 with
+  `--keep-fp8` to bisect): finite, passed the token check, and decoded fluent
+  multilingual token salad. Acceptance now requires the asked-for word.
+- Fix (`d74cd2f2`): the plan carries `data_start`, `parse_source` refuses a plan source
+  without it, `confirm_source` proves every range against the donor shard's own header
+  before a byte is fetched, and the cache is keyed by the file range (bytes cached from
+  the old window are never reused). The unit fixture now serves real safetensors files
+  by file range; reverting the fetch to data-relative ranges fails the suite.
+
+Kept on disk, not served, all built from shifted bytes (mostly reflinks of v16's shards;
+deleting one frees only its 4 rewritten shards): `glm53-cyber-hybrid-bf16.all33-nan`,
+`.r1-shifted`, `.qkv-bf16-superseded`; and in `/tmp/hybrid-work/bf16-cache` the 47
+pre-fix files named `<tensor>.bf16` (the fixed cache files are named
+`<tensor>@<shard>@<begin>-<end>.bf16`). Both broken packages were removed from the
+store (`flare models remove --clear-default`, `flare models gc`).
 
 ## Exporting while a primary serves: launch-glm53-export.sh (2026-11-15)
 

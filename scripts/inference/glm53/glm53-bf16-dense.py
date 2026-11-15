@@ -338,12 +338,12 @@ def cache_path(cache: Path, tensor: str, source: SourceRange) -> Path:
 def fetch_selected(plan: dict, cache: Path) -> dict[str, bytes]:
     """Every selected tensor's donor bytes, each range first confirmed against its shard's
     header (fetched once per shard), then read from the cache or the repo by file range."""
-    sources = {entry["tensor"]: parse_source(entry["tensor"], entry["source"])
+    planned = {entry["tensor"]: parse_source(entry["tensor"], entry["source"])
                for entry in plan["selected"]}
     headers = {shard: remote_header(plan["cyber_repo"], shard)
-               for shard in sorted({source.shard for source in sources.values()})}
-    for tensor, source in sources.items():
-        confirm_source(tensor, source, *headers[source.shard])
+               for shard in sorted({source.shard for source in planned.values()})}
+    sources = {tensor: confirm_source(tensor, source, *headers[source.shard])
+               for tensor, source in planned.items()}
     cache.mkdir(parents=True, exist_ok=True)
     payloads: dict[str, bytes] = {}
     for tensor, source in sources.items():
