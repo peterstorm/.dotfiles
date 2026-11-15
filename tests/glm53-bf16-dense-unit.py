@@ -258,11 +258,17 @@ def test_header_surgery():
 def test_index_and_config(fixture):
     index = {"metadata": {"total_size": 5}, "weight_map": {
         "lm_head.weight": "s0", "lm_head.weight_scale": "s0", "keep.weight": "s1"}}
-    rewritten = mod.rewrite_index(index, {"lm_head.weight_scale"})
+    index["metadata"]["note"] = "kept"
+    rewritten = mod.rewrite_index(index, {"lm_head.weight_scale"}, total_size=9)
     check("lm_head.weight_scale" not in rewritten["weight_map"], "scale dropped from the index")
     check(rewritten["weight_map"]["lm_head.weight"] == "s0", "weight keeps its shard")
     check(rewritten["weight_map"]["keep.weight"] == "s1", "unrelated tensors kept")
-    check(rewritten["metadata"] == {"total_size": 5}, "index metadata preserved")
+    check(rewritten["metadata"] == {"total_size": 9, "note": "kept"},
+          "total_size is the rewritten payload size; other metadata preserved")
+    check(index["metadata"]["total_size"] == 5, "input index not mutated")
+    check(mod.payload_bytes([{"__metadata__": {}, "a": {"data_offsets": [0, 4]}},
+                             {"b": {"data_offsets": [0, 6]}, "c": {"data_offsets": [6, 7]}}]) == 11,
+          "payload_bytes sums every tensor's span across shards, metadata excluded")
 
     config = json.loads((fixture["base"] / "config.json").read_text())
     patched = mod.patch_config(config, {"lm_head", "model.layers.40.self_attn.q_proj"})
@@ -356,6 +362,13 @@ def test_build_and_verify(root, fixture):
           "selected scales gone from the index")
     check(out_index["weight_map"]["model.layers.39.self_attn.o_proj.weight_scale"]
           == "model-00002-of-00004.safetensors", "unselected scale kept in the index")
+    # Hyperflare's inspect_indexed_checkpoint: total_size == sum of every tensor's bytes.
+    payload = sum(end - begin
+                  for shard in sorted(set(out_index["weight_map"].values()))
+                  for name, meta in mod.read_header(out / shard)[1].items() if name != "__metadata__"
+                  for begin, end in [meta["data_offsets"]])
+    check(out_index["metadata"]["total_size"] == payload,
+          f"index total_size is the output's payload bytes ({out_index['metadata']['total_size']} vs {payload})")
     out_config = json.loads((out / "config.json").read_text())
     check("lm_head" not in out_config["quantization_config"]["quantized_layers"],
           "lm_head de-declared")
@@ -417,6 +430,11 @@ def test_build_and_verify(root, fixture):
     def drop_subdir_shard(scratch):
         (scratch / "tensors/native-QB.safetensors").unlink()
 
+    def stale_total_size(scratch):
+        index = json.loads((scratch / "model.safetensors.index.json").read_text())
+        index["metadata"]["total_size"] = 1
+        (scratch / "model.safetensors.index.json").write_text(json.dumps(index))
+
     def overlap_offsets(scratch):
         shard = scratch / "model-00002-of-00004.safetensors"
         _, header = mod.read_header(shard)
@@ -438,6 +456,7 @@ def test_build_and_verify(root, fixture):
                           (tamper_shared, "tampered shared shard"),
                           (drop_shard, "missing shard"),
                           (drop_subdir_shard, "missing subdirectory shard"),
+                          (stale_total_size, "index total_size not the payload size"),
                           (overlap_offsets, "overlapping offsets"),
                           (wrong_shard_point, "wrong shard pointer")):
         check(mutate(action), f"verify catches: {label}")

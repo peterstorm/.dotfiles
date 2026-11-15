@@ -157,10 +157,19 @@ def index_files(index: dict) -> list[str]:
     return sorted(set(index["weight_map"].values()))
 
 
-def rewrite_index(index: dict, dropped: set[str]) -> dict:
-    """Forget dropped scale tensors; weights keep their shard names, offsets live in headers."""
+def payload_bytes(headers) -> int:
+    """Sum of every tensor's data span across safetensors headers: what an index's
+    metadata.total_size must equal (Hyperflare's inspect_indexed_checkpoint refuses otherwise)."""
+    return sum(meta["data_offsets"][1] - meta["data_offsets"][0]
+               for header in headers for name, meta in header.items() if name != "__metadata__")
+
+
+def rewrite_index(index: dict, dropped: set[str], total_size: int) -> dict:
+    """Forget dropped scale tensors and restate the payload size; weights keep their shard
+    names, offsets live in headers. BF16 doubles each selected weight and its scale is gone,
+    so the base's total_size is never the output's."""
     return {
-        "metadata": index.get("metadata", {}),
+        "metadata": {**index.get("metadata", {}), "total_size": total_size},
         "weight_map": {name: file for name, file in index["weight_map"].items() if name not in dropped},
     }
 
@@ -293,7 +302,8 @@ def build(base: Path, plan_path: Path, cache: Path, receipt_path: Path, out: Pat
                     stats["bytes_copied"] += len(chunk)
         stats["shards_rewritten"] += 1
 
-    new_index = rewrite_index(index, drop)
+    new_index = rewrite_index(index, drop,
+                              total_size=payload_bytes(read_header(out / shard)[1] for shard in shards))
     (out / "model.safetensors.index.json").write_text(json.dumps(new_index, indent=2))
     (out / "config.json").write_text(
         json.dumps(patch_config(json.loads((base / "config.json").read_text()), prefixes), indent=2))
@@ -348,6 +358,10 @@ def verify(base: Path, plan_path: Path, cache: Path, out: Path) -> None:
     missing = [f for f in index_files(out_index) if not (out / f).is_file()]
     if missing:
         raise ValueError(f"the output index names files that are not there: {missing}")
+    payload = payload_bytes(read_header(out / shard)[1] for shard in index_files(out_index))
+    if out_index.get("metadata", {}).get("total_size") != payload:
+        raise ValueError(f"index total_size {out_index.get('metadata', {}).get('total_size')} "
+                         f"is not the payload size {payload}")
 
     affected_shards = {entry["shard"] for entry in plan["selected"]}
     affected_shards |= {base_index["weight_map"][name] for name in drop
