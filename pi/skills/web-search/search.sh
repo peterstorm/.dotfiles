@@ -51,7 +51,13 @@ parse_ddg() {
 }
 
 # --- acquisition: the imperative shell -----------------------------------------------------
-hops="${SEARCH_HOPS:-direct}"
+# hop list: env wins; else the first line of the hops file (keeps Nord SOCKS credentials out
+# of git); else just this host.
+hops="${SEARCH_HOPS:-}"
+if [ -z "$hops" ] && [ -r "${SEARCH_HOPS_FILE:-$HOME/.config/web-search/hops}" ]; then
+  hops=$(head -1 "${SEARCH_HOPS_FILE:-$HOME/.config/web-search/hops}")
+fi
+hops="${hops:-direct}"
 curl_hop=()   # set by hop_arg for the current exit
 
 hop_arg() { # $1 = hop spec; fills curl_hop for fetch, or returns 1 for an unknown hop.

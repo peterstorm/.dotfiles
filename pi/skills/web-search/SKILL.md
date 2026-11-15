@@ -24,11 +24,13 @@ SEARCH_ENGINES=ddg ~/.dotfiles/pi/skills/web-search/search.sh "query"
 # Engines: SEARCH_ENGINES="brave,ddg" (default) — comma list, tried in order, stops at the
 # first engine that returns results. Space the search calls a few seconds apart if you can.
 
-# Rotate exits instead of waiting (at home — the SOCKS hop rides the transmission NordVPN
-# tunnel, LAN-reachable; see k8s/argocd-homelab/transmission/):
+# Rotate exits instead of waiting. Hop list: SEARCH_HOPS env var, else the first line of
+# ~/.config/web-search/hops, else "direct". Independent exits available: this host, the
+# transmission pod's NordVPN tunnel (LAN; see k8s/argocd-homelab/transmission/), and Nord's
+# se/us SOCKS5 endpoints.
 SEARCH_HOPS="direct,socks5h://192.168.0.29:1080" ~/.dotfiles/pi/skills/web-search/search.sh "query"
-# Hops: direct | ip:ADDR (bind a source address) | socks5h://… | http://… — comma list,
-# tried in order each pass. Default "direct". Off the LAN, drop the socks hop.
+# Hops: direct | ip:ADDR (bind a source address) | socks5h://user:pass@host:port | http://…
+# comma list, tried in order each pass. Credentials belong in the hops file, not the repo.
 
 # Fetch a page as plain text (default first 6000 chars)
 ~/.dotfiles/pi/skills/web-search/fetch.sh "https://example.com/article" [max-chars]
@@ -54,6 +56,11 @@ SEARCH_HOPS="direct,socks5h://192.168.0.29:1080" ~/.dotfiles/pi/skills/web-searc
   the household 90.184.68.248; rotates per reconnect) but a shared one: Brave answered 200
   through it at first test, and DuckDuckGo Lite 200 with 10 results while direct DDG served
   the 202 anomaly page (verified 2026-11-15). A rotation hop, not a guaranteed 200.
+- More independent exits: Nord's SOCKS5 endpoints take the same service credentials (k8s
+  secret `openvpn`, transmission namespace). se.socks.nordhold.net (185.236.42.35) and
+  us.socks.nordhold.net (165.231.222.254) answered Brave 200 and DDG 200+11 results on
+  2026-11-15; city-style hosts (amsterdam, london, …) did not resolve. The hop list lives
+  in ~/.config/web-search/hops (0600, outside git, one comma-separated line).
 - DuckDuckGo Lite rate-limits too: after heavy probing, direct answers 202 + the "anomaly"
   page with zero result-links. Both engines are IP-bucketed; the hop list is the escape.
 - Shop sites block the homelab IP (Pricerunner 403, Prisjagt/Proshop Cloudflare,
