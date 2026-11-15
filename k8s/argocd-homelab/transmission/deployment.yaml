@@ -69,6 +69,14 @@ spec:
               mountPath: /data
             - name: dev-tun
               mountPath: /dev/net/tun
+        - name: egress-proxy
+          image: 3proxy/3proxy:0.9.9.3.busybox
+          ports:
+            - containerPort: 1080
+            - containerPort: 3128
+          volumeMounts:
+            - name: egress-proxy-cfg
+              mountPath: /conf
       volumes:
         - name: config
           hostPath:
@@ -81,3 +89,6 @@ spec:
         - name: dev-tun
           hostPath:
             path: /dev/net/tun
+        - name: egress-proxy-cfg
+          configMap:
+            name: egress-proxy-cfg
