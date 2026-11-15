@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Unit checks for glm53-uncensored-convert.py: the pure plan, the fold, slab CSF, the shard layout,
-build, verify, and the claim that converting the converter's earlier output (v1) gives the bytes
-converting the download gives.
+build, verify, the claim that converting the converter's first output (v1) gives the bytes
+converting the download gives, and that a current output is a fixed point (converting it again,
+or converting the first v2 output with its draft layer unfolded, gives the same bytes).
 
 Runs on a synthetic dealignai-shaped source and a v16-shaped base in a temp directory. The
 quantizer port is a deterministic fake that records its calls; where torch is importable (the
@@ -134,11 +135,10 @@ V16_INPUTS = {"gate_proj": 0.0078125, "up_proj": 0.0078125, "down_proj": 0.03125
 CSF_ROWS, CSF_PACKED = 64, 32          # weight [64, 32] packs 64 FP4 columns: four E4M3 scales a row
 
 
-def scale_plane(seed: int) -> bytes:
+def scale_plane(seed: int, rows: int = CSF_ROWS, columns: int = 2 * CSF_PACKED // 16) -> bytes:
     """Normal-range E4M3 bytes (exactly halvable) spread so some rows need exceptions."""
-    columns = 2 * CSF_PACKED // 16
     return bytes(0x60 if (row + column + seed) % 11 == 0 else 0x30 + (row * 7 + column * 3 + seed) % 12
-                 for row in range(CSF_ROWS) for column in range(columns))
+                 for row in range(rows) for column in range(columns))
 
 
 def csf_experts_source() -> list:
@@ -163,12 +163,21 @@ def csf_experts_base() -> list:
     return out
 
 
+#: (gate, up, down) globals per draft-layer (W4A16) expert: up halved (c = 1.5), and globals already shared.
+DRAFT_GLOBALS = {0: (3.0, 2.0, 0.5), 1: (2.0, 2.0, 0.25)}
+DRAFT_ROWS = 32                        # weight [32, 16] packs 32 FP4 columns: two E4M3 scales a row
+
+
 def plain_experts(layer: str) -> list:
+    """The draft layer's experts as released (and as v16 holds them): plain planes, no input scales."""
     out = []
-    for projection in mod.PROJECTIONS:
-        prefix = f"{layer}.0.{projection}"
-        out += [tensor(f"{prefix}.weight", "U8", [32, 16]), tensor(f"{prefix}.weight_scale", "F8_E4M3", [32, 2]),
-                tensor(f"{prefix}.weight_scale_2", "F32", [])]
+    for number, globals_ in DRAFT_GLOBALS.items():
+        for index, projection in enumerate(mod.PROJECTIONS):
+            prefix = f"{layer}.{number}.{projection}"
+            out += [tensor(f"{prefix}.weight", "U8", [DRAFT_ROWS, 16]),
+                    tensor(f"{prefix}.weight_scale", "F8_E4M3", [DRAFT_ROWS, 2],
+                           scale_plane(50 + number * 3 + index, DRAFT_ROWS, 2)),
+                    f32(f"{prefix}.weight_scale_2", globals_[index])]
     return out
 
 
@@ -325,9 +334,9 @@ def test_pure() -> None:
                  lambda: mod.expert_declarations({**V16_LAYERS, CSF_LAYER: {"quant_algo": "NVFP4", "group_size": 16}},
                                                  names), "expected compressed NVFP4")
 
-    check(mod.csf_experts([f"{CSF_LAYER}.10.gate_proj.weight", f"{CSF_LAYER}.2.gate_proj.weight",
-                           f"{CSF_LAYER}.2.up_proj.weight", f"{W4A16_LAYER}.0.gate_proj.weight"], [CSF_LAYER])
-          == [f"{CSF_LAYER}.2", f"{CSF_LAYER}.10"], "csf_experts: the compressed layers' experts in numeric order")
+    check(mod.routed_experts([f"{CSF_LAYER}.10.gate_proj.weight", f"{CSF_LAYER}.2.gate_proj.weight",
+                              f"{CSF_LAYER}.2.up_proj.weight", f"{W4A16_LAYER}.0.gate_proj.weight"], [CSF_LAYER])
+          == [f"{CSF_LAYER}.2", f"{CSF_LAYER}.10"], "routed_experts: the given layers' experts in numeric order")
 
     def expert_meta(rows=64, packed=32, scale=None):
         source = {}
@@ -357,6 +366,54 @@ def test_pure() -> None:
                  "writes v16's")
     check_raises("check_csf_expert: a missing global", lambda: mod.check_csf_expert(
         "e", {k: v for k, v in source_meta.items() if k != "e.up_proj.weight_scale_2"}, base_meta), "one FP32 value")
+
+    def kept_meta(fixed_shape=(4, 48), exceptions=None, inputs=True):
+        """An expert as this tool writes it: codes, the CSF pair, a global and an input scale."""
+        meta = {}
+        for projection in mod.PROJECTIONS:
+            prefix = f"e.{projection}"
+            meta[f"{prefix}.weight"] = {"dtype": "U8", "shape": [64, 32]}
+            meta[f"{prefix}.weight_scale.{mod.CSF_FIXED}"] = {"dtype": "U8", "shape": list(fixed_shape)}
+            meta[f"{prefix}.weight_scale.{mod.CSF_EXCEPTIONS}"] = exceptions or {"dtype": "U32", "shape": [0]}
+            meta[f"{prefix}.weight_scale_2"] = {"dtype": "F32", "shape": []}
+            if inputs:
+                meta[f"{prefix}.input_scale"] = {"dtype": "F32", "shape": []}
+        return meta
+
+    mod.check_kept_expert("e", kept_meta())
+    check(True, "check_kept_expert: an expert in this tool's compressed form parses")
+    check_raises("check_kept_expert: a fixed stream of another plane's geometry",
+                 lambda: mod.check_kept_expert("e", kept_meta(fixed_shape=(4, 40))), "expected U8 [4, 48]")
+    check_raises("check_kept_expert: a two-dimensional exception stream",
+                 lambda: mod.check_kept_expert("e", kept_meta(exceptions={"dtype": "U32", "shape": [1, 1]})),
+                 "1-D U32")
+    check_raises("check_kept_expert: no input scales (this tool always writes them)",
+                 lambda: mod.check_kept_expert("e", kept_meta(inputs=False)), "e.gate_proj.input_scale")
+    mod.check_plain_expert("e", source_meta)
+    check(True, "check_plain_expert: a released expert without v16's input scales parses (the W4A16 layer)")
+
+    def layer(compressed, *metas, converted=False):
+        merged = {f"{n}.{key[2:]}": value for n, meta in enumerate(metas) for key, value in meta.items()}
+        experts = [str(n) for n in range(len(metas))]
+        base = {f"{n}.{p}.input_scale": {"dtype": "F32", "shape": []} for n in experts for p in mod.PROJECTIONS}
+        return mod.expert_layer("L", compressed, experts, merged, base, converted)
+
+    check(layer(True, source_meta, source_meta) == mod.ExpertLayer("L", mod.ENCODE, 2),
+          "expert_layer: released experts in a layer v16 compresses are encoded")
+    check(layer(True, kept_meta(), converted=True) == mod.ExpertLayer("L", mod.KEEP, 1),
+          "expert_layer: this tool's compressed experts are kept")
+    check(layer(False, source_meta) == mod.ExpertLayer("L", mod.FOLD, 1),
+          "expert_layer: released experts in a layer v16 keeps plain are folded in place")
+    check_raises("expert_layer: kept experts from a source without this tool's receipt",
+                 lambda: layer(True, kept_meta()), "nothing vouches")
+    check_raises("expert_layer: a half-converted layer",
+                 lambda: layer(True, source_meta, kept_meta(), converted=True), "mixes ['encode', 'keep']")
+    check_raises("expert_layer: compressed scales where v16 keeps them plain",
+                 lambda: layer(False, kept_meta(), converted=True), "keeps this layer's scales plain")
+    check_raises("expert_layer: a declared layer the source holds no experts of",
+                 lambda: mod.expert_layer("L", True, [], {}, {}, False), "holds none")
+    check_raises("ExpertLayer: a work the conversion does not know",
+                 lambda: mod.ExpertLayer("L", "copy", 1), "not a layer's work")
 
     qc = mod.quantization_config(V16_QC, {"b": {"x": 1}, "a": {"y": 2}})
     check(qc["quantized_layers"] == {"a": {"y": 2}, "b": {"x": 1}} and qc["exclude_modules"] == []
@@ -416,35 +473,42 @@ def test_e4m3_and_fold() -> None:
           "shift_table: refuses exactly the bytes E4M3 cannot move")
 
     for number, (gate, up, down) in GLOBALS.items():
-        fold = mod.fold_expert(gate, up, down, V16_INPUTS["down_proj"])
+        fold = mod.fold_expert(gate, up, down)
         expected = {0: ("up_proj", -1, 0.75), 1: ("gate_proj", -2, 1.0), 2: (None, 0, 1.0), 3: (None, 0, 0.75)}[number]
         check((fold.halved, fold.shift, fold.ratio) == expected, f"fold_expert: fixture expert {number} is {expected}")
-    fold = mod.fold_expert(1.0, 4.0, 0.5, 0.03125)
+    fold = mod.fold_expert(1.0, 4.0, 0.5)
     check(fold.global13 == 4.0 and fold.weight_global("gate_proj") == fold.weight_global("up_proj") == 4.0
           and fold.block_shift("gate_proj") == -2 and fold.block_shift("up_proj") == 0,
           "fold_expert: a gate halved twice carries a global four times its own")
-    fold = mod.fold_expert(3.0, 2.0, 0.5, 0.03125)
-    check(fold.global13 == 3.0 and fold.global2 == mod._f32(0.5 / 0.75) and fold.input2 == mod._f32(0.03125 * 0.75)
-          and fold.weight_global("down_proj") == fold.global2,
+    fold = mod.fold_expert(3.0, 2.0, 0.5)
+    check(fold.global13 == 3.0 and fold.global2 == mod._f32(0.5 / 0.75)
+          and fold.down_input(0.03125) == mod._f32(0.03125 * 0.75) and fold.weight_global("down_proj") == fold.global2,
           "fold_expert: down's global and input scale carry the ratio")
 
     grid = [mod._f32(v) for v in (1e-4, 0.0371, 0.1, 0.33, 0.5, 0.75, 1.0, 1.5, 2.0, 3.6, 7.0, 1234.5)]
     for gate in grid:
         for up in grid:
-            fold = mod.fold_expert(gate, up, 0.7, 0.01)
+            fold = mod.fold_expert(gate, up, 0.7)
             gate_factor = fold.global13 * 2.0 ** fold.block_shift("gate_proj") / gate
             up_factor = fold.global13 * 2.0 ** fold.block_shift("up_proj") / up
             if not (0.5 < fold.ratio <= 1.0 and gate_factor == 1.0 and abs(up_factor / fold.ratio - 1) < 1e-12
                     and fold.shift <= 0 and (fold.shift == 0) == (fold.halved is None)
-                    and abs(fold.global2 * fold.ratio / 0.7 - 1) < 1e-6 and abs(fold.input2 / fold.ratio / 0.01 - 1) < 1e-6):
+                    and abs(fold.global2 * fold.ratio / 0.7 - 1) < 1e-6
+                    and abs(fold.down_input(0.01) / fold.ratio / 0.01 - 1) < 1e-6):
                 check(False, f"fold_expert: gate {gate}, up {up} -> {fold}")
+            # Idempotence: the folded expert's globals (one gate/up value, down's) fold to themselves.
+            again = mod.fold_expert(fold.global13, fold.global13, fold.global2)
+            if (again.global13, again.global2, again.ratio, again.halved, again.shift) \
+                    != (fold.global13, fold.global2, 1.0, None, 0) or again.down_input(0.01) != mod._f32(0.01):
+                check(False, f"fold_expert: refolding gate {gate}, up {up} moved {again}")
     check(True, "fold_expert: over a grid of globals, gate exact, up times a ratio in (0.5, 1], down compensates, "
                 "only halvings")
+    check(True, "fold_expert: folding a fold's globals is the identity (a converted expert converts to itself)")
     for bad in (0.0, -1.0, math.inf, math.nan):
-        check_raises(f"fold_expert: refuses a global of {bad}", lambda bad=bad: mod.fold_expert(bad, 1.0, 1.0, 1.0),
+        check_raises(f"fold_expert: refuses a global of {bad}", lambda bad=bad: mod.fold_expert(bad, 1.0, 1.0),
                      "positive and finite")
-    check_raises("fold_expert: refuses a non-positive input scale", lambda: mod.fold_expert(1.0, 1.0, 1.0, 0.0),
-                 "positive and finite")
+        check_raises(f"Fold.down_input: refuses an input scale of {bad}",
+                     lambda bad=bad: mod.fold_expert(1.0, 1.0, 1.0).down_input(bad), "positive and finite")
 
 
 # --- slab CSF ------------------------------------------------------------------------------
@@ -527,8 +591,11 @@ def test_plan(source: Path, base: Path) -> None:
     check([r.prefix for r in plan.requants] == REQUANT_PREFIXES,
           "plan: every dense projection v16 declares is re-encoded, nothing else")
     check([r.storage for r in plan.requants] == ["mx8"] * 5 + ["block8"], "plan: each in v16's storage")
-    check(plan.encoded == () and plan.csf_layers == (CSF_LAYER,) and plan.csf_experts == len(GLOBALS),
-          "plan: nothing already encoded; the compressed layer's experts counted")
+    check(plan.encoded == () and plan.expert_layers == (mod.ExpertLayer(CSF_LAYER, mod.ENCODE, len(GLOBALS)),
+                                                        mod.ExpertLayer(W4A16_LAYER, mod.FOLD, len(DRAFT_GLOBALS))),
+          "plan: nothing already encoded; the compressed layer is encoded, the draft layer folded in place")
+    check(plan.layers(mod.ENCODE) == (CSF_LAYER,) and plan.layers(mod.KEEP) == ()
+          and plan.expert_count(mod.FOLD) == len(DRAFT_GLOBALS), "plan: layers and counts by work")
     check(plan.rewrite == ("model-00001-of-00005.safetensors", "model-00002-of-00005.safetensors",
                            "model-00003-of-00005.safetensors", VISION_SOURCE_SHARD), "plan: the untouched shard is reflinked")
     check(plan.emptied == (VISION_SOURCE_SHARD,), "plan: the vision-only shard is not written")
@@ -628,11 +695,15 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
     check(receipt["source_marker"] == "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc" and receipt["source_receipt"] is None
           and receipt["shards_rewritten"] == 3 and json.loads((out / mod.RECEIPT).read_text()) == receipt,
           "build: the receipt names the download and counts")
-    experts = receipt["experts"]
-    check(experts["compressed"] == 4 and experts["folded"] == {"None": 2, "up_proj": 1, "gate_proj": 1}
+    experts = receipt["experts"]["encoded"]
+    check(experts["experts"] == 4 and experts["halved"] == {"None": 2, "up_proj": 1, "gate_proj": 1}
           and experts["unchanged_globals"] == 1 and (experts["ratio_min"], experts["ratio_max"]) == (0.75, 1.0)
           and experts["plain_bytes"] == 4 * 3 * CSF_ROWS * 4 and experts["exceptions"] > 0,
-          "build: the receipt counts the folds, the ratios and the CSF streams")
+          "build: the receipt counts the encoded experts' folds, the ratios and the CSF streams")
+    draft = receipt["experts"]["folded_plain"]
+    check(draft["experts"] == 2 and draft["halved"] == {"None": 1, "up_proj": 1, "gate_proj": 0}
+          and draft["unchanged_globals"] == 1 and receipt["experts"]["kept"] == 0,
+          "build: the receipt counts the draft layer's folds, and no kept experts")
 
     index = json.loads((out / mod.INDEX).read_text())
     check(set(index["weight_map"].values()) == {"model-00001-of-00005.safetensors", "model-00002-of-00005.safetensors",
@@ -661,7 +732,7 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
           and experts_header[f"{first}.weight_scale.{mod.CSF_EXCEPTIONS}"]["dtype"] == "U32",
           "build: a compressed projection is its codes, the CSF pair, the folded global and v16's input scale")
     for number, (gate, up, down) in GLOBALS.items():
-        fold = mod.fold_expert(gate, up, down, V16_INPUTS["down_proj"])
+        fold = mod.fold_expert(gate, up, down)
         for projection in mod.PROJECTIONS:
             prefix = f"{CSF_LAYER}.{number}.{projection}"
             plane = mod.read_plane(source, json.loads((source / mod.INDEX).read_text())["weight_map"],
@@ -678,7 +749,8 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
             given = struct.unpack("<f", mod.read_tensor(out, "model-00002-of-00005.safetensors",
                                                          f"{prefix}.input_scale"))[0]
             check(stored == fold.weight_global(projection)
-                  and given == (fold.input2 if projection == "down_proj" else mod._f32(V16_INPUTS[projection])),
+                  and given == (fold.down_input(V16_INPUTS["down_proj"]) if projection == "down_proj"
+                                else mod._f32(V16_INPUTS[projection])),
                   f"build: expert {number} {projection} global and input scale are the fold's")
         # The dequantized product the kernel computes: gate exact, up times the ratio, down's global undoing it.
         planes = {p: mod.e4m3_value(mod.decode_csf_slab(
@@ -691,10 +763,26 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
               and abs(planes["up_proj"] * fold.global13 / (source_planes["up_proj"] * up) - fold.ratio) < 1e-12
               and abs(planes["down_proj"] * fold.global2 * fold.ratio / (source_planes["down_proj"] * down) - 1) < 1e-6,
               f"build: expert {number}'s effective scales: gate exact, up scaled by c', down compensated")
-    check(not any(n.startswith(f"{W4A16_LAYER}.") and n.endswith(".input_scale") for n in index["weight_map"])
-          and mod.read_tensor(out, "model-00002-of-00005.safetensors", f"{W4A16_LAYER}.0.up_proj.weight_scale")
-          == mod.read_tensor(source, "model-00002-of-00005.safetensors", f"{W4A16_LAYER}.0.up_proj.weight_scale"),
-          "build: the plain W4A16 layer is copied as released, without input scales")
+    check(not any(n.startswith(f"{W4A16_LAYER}.") and n.endswith(".input_scale") for n in index["weight_map"]),
+          "build: the plain W4A16 layer gains no input scales")
+    shard = "model-00002-of-00005.safetensors"
+    for number, (gate, up, down) in DRAFT_GLOBALS.items():
+        fold = mod.fold_expert(gate, up, down)
+        globals_ = {p: struct.unpack("<f", mod.read_tensor(out, shard, f"{W4A16_LAYER}.{number}.{p}.weight_scale_2"))[0]
+                    for p in mod.PROJECTIONS}
+        check(globals_["gate_proj"] == globals_["up_proj"] == fold.global13 and globals_["down_proj"] == fold.global2,
+              f"build: draft expert {number} has one gate/up global (the W4A16 path takes no paired gains)")
+        for index_, projection in enumerate(mod.PROJECTIONS):
+            name = f"{W4A16_LAYER}.{number}.{projection}.weight_scale"
+            source_plane = np.frombuffer(scale_plane(50 + number * 3 + index_, DRAFT_ROWS, 2), np.uint8).reshape(DRAFT_ROWS, 2)
+            check(mod.dense.read_header(out / shard)[1][name]["dtype"] == "F8_E4M3"
+                  and np.array_equal(mod.read_plane(out, index["weight_map"], name),
+                                     mod.shifted_scales(source_plane, fold.block_shift(projection))),
+                  f"build: draft expert {number} {projection} keeps a plain plane, moved by its fold")
+    up = {key: struct.unpack("<f", mod.read_tensor(root_, shard, f"{W4A16_LAYER}.0.up_proj.weight_scale_2"))[0]
+               * mod.e4m3_value(mod.read_tensor(root_, shard, f"{W4A16_LAYER}.0.up_proj.weight_scale")[0])
+          for key, root_ in (("out", out), ("source", source))}
+    check(up["out"] / up["source"] == 0.75, "build: draft expert 0's up computes c' = 0.75 times the released one")
     check(not (out / INPUT_SCALES).exists(), "build: dealignai's placeholder input scales are not carried")
     check((out / UNTOUCHED_SHARD).read_bytes() == (source / UNTOUCHED_SHARD).read_bytes(),
           "build: an untouched shard is copied whole")
@@ -774,6 +862,12 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
     mutant("down's input scale without the ratio",
            lambda d: patch_tensor(d, experts_shard, f"{CSF_LAYER}.0.down_proj.input_scale",
                                   struct.pack("<f", V16_INPUTS["down_proj"])), "folded value")
+    mutant("the draft layer's up global left as released (the v2 export failure)",
+           lambda d: patch_tensor(d, experts_shard, f"{W4A16_LAYER}.0.up_proj.weight_scale_2", struct.pack("<f", 2.0)),
+           "folded value")
+    mutant("the draft layer's up plane left unshifted",
+           lambda d: patch_tensor(d, experts_shard, f"{W4A16_LAYER}.0.up_proj.weight_scale",
+                                  scale_plane(50 + 1, DRAFT_ROWS, 2)), "moved by its fold")
     mutant("the emptied shard written after all",
            lambda d: shutil.copy(source / VISION_SOURCE_SHARD, d), "replaced vision tower")
     mutant("a missing side file", lambda d: (d / "tokenizer.json").unlink(), "tokenizer.json")
@@ -846,6 +940,85 @@ def test_v1_source_converts_like_the_download(root: Path, source: Path, base: Pa
                  lambda: mod.verify(v1, base, scratch, plan_path), "already in v16's storage")
 
 
+def same_checkpoint(a: Path, b: Path) -> bool:
+    """Same index (names, shards, total_size), same bytes for every tensor, same declarations."""
+    index_a, index_b = (json.loads((root / mod.INDEX).read_text()) for root in (a, b))
+    return (index_a == index_b
+            and all(mod.read_tensor(a, shard, name) == mod.read_tensor(b, shard, name)
+                    for name, shard in index_a["weight_map"].items())
+            and json.loads((a / "config.json").read_text()) == json.loads((b / "config.json").read_text()))
+
+
+def test_output_is_a_fixed_point(root: Path, source: Path, base: Path, out: Path) -> None:
+    """Converting this tool's output again changes no byte (idempotence), and an output whose draft
+    layer was left unfolded (the first v2 build, which Hyperflare refused at export) converts into
+    that fixed point -- the path the real checkpoint took once its source download was gone."""
+    plan = mod.plan_from_disk(out, base)
+    shard = "model-00002-of-00005.safetensors"
+    check(plan.requants == () and plan.encoded == tuple(sorted(REQUANT_PREFIXES))
+          and plan.expert_layers == (mod.ExpertLayer(CSF_LAYER, mod.KEEP, len(GLOBALS)),
+                                     mod.ExpertLayer(W4A16_LAYER, mod.FOLD, len(DRAFT_GLOBALS))),
+          "fixed point plan: every dense projection already v16's, compressed experts kept, the draft layer refolded")
+    check(plan.rewrite == (shard, mod.VISION_SHARD) and plan.emptied == (mod.VISION_SHARD,),
+          "fixed point plan: only the draft layer's shard and the vision shard are rewritten")
+    plan_path = root / "again-plan.json"
+    plan_path.write_text(json.dumps(plan.as_json()))
+    again, quantize = root / "again", FakeQuantizer()
+    receipt = mod.build(out, base, again, plan_path, quantize)
+    check(quantize.calls == [] and receipt["experts"]["kept"] == len(GLOBALS)
+          and receipt["experts"]["folded_plain"]["halved"] == {"None": 2, "up_proj": 0, "gate_proj": 0}
+          and receipt["experts"]["folded_plain"]["unchanged_globals"] == 2
+          and receipt["source_receipt"] == json.loads((out / mod.RECEIPT).read_text()),
+          "fixed point build: nothing re-encoded, every fold the identity, the receipt chains to the output")
+    check(same_checkpoint(again, out), "fixed point build: every tensor, the index and the config are the output's")
+    check(quiet(lambda: mod.main(["verify", "--source", str(out), "--base", str(base), "--plan", str(plan_path),
+                                  "--out", str(again)])) == 0, "fixed point build: verify passes against the output")
+
+    def copy_of(name: str, change) -> Path:
+        scratch = root / name
+        shutil.rmtree(scratch, ignore_errors=True)
+        shutil.copytree(out, scratch)
+        change(scratch)
+        return scratch
+
+    def unfold_draft(d: Path) -> None:
+        for name in (f"{W4A16_LAYER}.{n}.{p}.{s}" for n in DRAFT_GLOBALS for p in mod.PROJECTIONS
+                     for s in ("weight_scale", "weight_scale_2")):
+            patch_tensor(d, shard, name, mod.read_tensor(source, shard, name))
+
+    v2 = copy_of("v2", unfold_draft)
+    check_raises("verify catches: the v2 output's unfolded draft layer against its own plan",
+                 lambda: mod.verify(source, base, v2, root / "plan.json"), "moved by its fold")
+    v2_plan = root / "v2-plan.json"
+    v2_plan.write_text(json.dumps(mod.plan_from_disk(v2, base).as_json()))
+    fixed = root / "from-v2"
+    mod.build(v2, base, fixed, v2_plan, FakeQuantizer())
+    check(same_checkpoint(fixed, out), "v2 build: converting the unfolded output gives the fixed point")
+    check(quiet(lambda: mod.main(["verify", "--source", str(v2), "--base", str(base), "--plan", str(v2_plan),
+                                  "--out", str(fixed)])) == 0, "v2 build: verify passes against the v2 output")
+
+    unvouched = copy_of("unvouched", lambda d: (d / mod.RECEIPT).unlink())
+    check_raises("plan refuses: kept experts from a source without this tool's receipt",
+                 lambda: mod.plan_from_disk(unvouched, base), "nothing vouches")
+    paired = copy_of("paired", lambda d: patch_tensor(d, shard, f"{CSF_LAYER}.0.up_proj.weight_scale_2",
+                                                      struct.pack("<f", 9.0)))
+    paired_plan = root / "paired-plan.json"
+    paired_plan.write_text(json.dumps(mod.plan_from_disk(paired, base).as_json()))
+    check_raises("build refuses: a kept expert whose gate and up globals differ",
+                 lambda: mod.build(paired, base, root / "never-paired", paired_plan, FakeQuantizer()),
+                 "gate and up globals differ")
+    check(not (root / "never-paired").exists(), "build: a refusal from the source's values writes nothing")
+    check_raises("verify catches: a kept expert's global that is not the source's",
+                 lambda: mod.verify(out, base, paired, plan_path), "kept expert tensor is not the source's")
+    check_raises("verify catches: a kept expert's CSF stream that is not the source's (globals still one)",
+                 lambda: mod.verify(out, base, copy_of("kept-code", lambda d: patch_tensor(
+                     d, shard, f"{CSF_LAYER}.1.down_proj.weight_scale.{mod.CSF_FIXED}",
+                     bytes(CSF_ROWS // 16 * (16 + 32)))), plan_path), "kept expert tensor is not the source's")
+    # Source and output agree byte for byte, so only the loader's invariant itself can refuse.
+    check_raises("verify catches: unequal gate/up globals the source also carried",
+                 lambda: mod.verify(paired, base, paired, paired_plan), "gate and up globals differ")
+
+
 def test_torch_adapter() -> None:
     """The production quantizer, where the serving image provides torch."""
     try:
@@ -880,6 +1053,7 @@ def main() -> int:
         test_plan_refusals(root, source, base)
         out = test_build_and_verify(root, source, base)
         test_v1_source_converts_like_the_download(root, source, base, out)
+        test_output_is_a_fixed_point(root, source, base, out)
         test_torch_adapter()
     print(f"glm53-uncensored-convert unit: {CHECKS} checks passed")
     return 0

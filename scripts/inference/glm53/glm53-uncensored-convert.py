@@ -18,9 +18,10 @@ expert scales) was refused at export for 2.1 GiB per GPU. Per tensor:
   expert MLPs, lm_head) is re-encoded from dealignai's BF16 into the FP8 storage and scale grid v16
   stores for it (MXFP8 [1,32] or block FP8 128x128), and the error of each re-encoding is recorded.
   A projection the source already stores exactly that way is copied, so this tool's earlier output
-  (v1) is a complete source: its experts and BF16 tensors are dealignai's bytes and its FP8 ones
-  are what this tool's re-encoding writes, so converting it gives the bytes converting the download
-  gives (the unit test proves the equivalence on a fixture);
+  is a complete source. The first conversion (v1) kept dealignai's experts and BF16 tensors, and its
+  FP8 ones are what this tool's re-encoding writes, so converting it gives the bytes converting the
+  download gives. A current output is a fixed point: converting it again changes no byte. The
+  unit test proves both on a fixture;
 - the routed experts of every layer v16 compresses (3-44) keep dealignai's FP4 codes and block
   scales exactly, stored as v16 runs them: NVFP4 with lossless slab-CSF block scales (the encoding
   of b12x's ``encode_csf_source``, tensors ``weight_scale.nvfp4_csf_fixed``/``_exceptions``) and
@@ -32,7 +33,13 @@ expert scales) was refused at export for 2.1 GiB per GPU. Per tensor:
   clamp (|up| <= 10) computes as before; an up activation beyond it is clamped at 10/c' instead of
   10. dealignai's own expert input scales (model-input-scales.safetensors) are all 1.0, uncalibrated
   placeholders; v16's are used, down's multiplied by c' with its activations;
-- the draft layer's experts (45) stay plain W4A16 NVFP4, as v16 declares them;
+- the draft layer's experts (45) stay plain W4A16 NVFP4, as v16 declares them, with the same fold
+  (no input scales: that path computes in BF16). b12x prepares per-projection gate/up gains only
+  for NVFP4 A4 experts and refuses them for W4A16 ("paired FC1 gains require gated NVFP4 A4
+  preparation"); the first v2 export died there after loading every other layer;
+- an expert layer the source already holds in this form (this tool's output) is copied once its
+  gate and up globals are proven one, and only from a source carrying this tool's receipt: its
+  folded ratios cannot be recovered from the folded values, so the receipt is what vouches for them;
 - the vision tower is v16's (dealignai's card: vision is byte-identical to the base model; the
   recipe prepares every vision projection as a declared quantized linear);
 - norms, embeddings and everything else v16 stores unquantized stay as released;
@@ -238,35 +245,119 @@ def expert_declarations(base_layers: Mapping[str, Mapping], source_names) -> dic
     return out
 
 
-def csf_experts(names, csf_layers) -> list[str]:
-    """Every routed expert (``…experts.N``) of the compressed layers, in name order."""
-    layers = set(csf_layers)
+def routed_experts(names, layers) -> list[str]:
+    """Every routed expert (``…experts.N``) of the given layers, in layer then numeric order."""
+    layers = set(layers)
     pattern = re.compile(r"^(.*\.mlp\.experts)\.(\d+)\.gate_proj\.weight$")
     found = [(match.group(1), int(match.group(2))) for match in map(pattern.match, names)
              if match and match.group(1) in layers]
     return [f"{layer}.{number}" for layer, number in sorted(found)]
 
 
-def check_csf_expert(expert: str, source_meta: Mapping[str, Mapping], base_meta: Mapping[str, Mapping]) -> None:
-    """Parse one expert the compressed path will read: FP4 codes, E4M3 block scales on a plane the
-    slab encoding holds, FP32 globals in the source, and v16's FP32 input scales."""
-    def scalar(meta, name):
-        if meta is None or meta["dtype"] != "F32" or math.prod(meta["shape"]) != 1:
-            raise ValueError(f"{name}: expected one FP32 value")
+#: What the conversion does to one routed-expert layer.
+ENCODE = "encode"   # dealignai's plain experts in a layer v16 compresses: fold, then slab-CSF encode
+KEEP = "keep"       # already this tool's compressed form (its own output as the source): copy
+FOLD = "fold"       # plain experts in a layer v16 keeps plain (the W4A16 draft layer): fold in place
+EXPERT_WORKS = (ENCODE, KEEP, FOLD)
 
+
+@dataclass(frozen=True)
+class ExpertLayer:
+    """One routed-expert layer and the one work every expert in it takes."""
+
+    prefix: str
+    work: str               # ENCODE | KEEP | FOLD
+    experts: int
+
+    def __post_init__(self):
+        if self.work not in EXPERT_WORKS or self.experts <= 0:
+            raise ValueError(f"{self.prefix}: {self.work} over {self.experts} experts is not a layer's work")
+
+
+def _scalar(meta, name: str) -> None:
+    if meta is None or meta["dtype"] != "F32" or math.prod(meta["shape"]) != 1:
+        raise ValueError(f"{name}: expected one FP32 value")
+
+
+def _packed_weight(meta, prefix: str) -> tuple[int, int]:
+    """The [rows, columns] of a packed FP4 weight; columns counts FP4 values."""
+    if meta is None or meta["dtype"] != "U8" or len(meta["shape"]) != 2:
+        raise ValueError(f"{prefix}.weight: expected packed FP4 (2-D U8)")
+    rows, packed = meta["shape"]
+    return rows, 2 * packed
+
+
+def check_plain_expert(expert: str, source_meta: Mapping[str, Mapping]) -> None:
+    """Parse one expert as dealignai released it: FP4 codes, an E4M3 block scale per 16 values, an
+    FP32 global per projection, and no input scales (dealignai's are placeholders outside the index)."""
     for projection in PROJECTIONS:
         prefix = f"{expert}.{projection}"
-        weight, scale = source_meta.get(f"{prefix}.weight"), source_meta.get(f"{prefix}.weight_scale")
-        if weight is None or weight["dtype"] != "U8" or len(weight["shape"]) != 2:
-            raise ValueError(f"{prefix}.weight: expected packed FP4 (2-D U8)")
-        rows, packed = weight["shape"]
-        if scale is None or scale["dtype"] != "F8_E4M3" or list(scale["shape"]) != [rows, 2 * packed // 16]:
-            raise ValueError(f"{prefix}.weight_scale: expected E4M3 [{rows}, {2 * packed // 16}]")
-        csf_geometry(rows, 2 * packed // 16, prefix)
-        scalar(source_meta.get(f"{prefix}.weight_scale_2"), f"{prefix}.weight_scale_2")
-        scalar(base_meta.get(f"{prefix}.input_scale"), f"v16 {prefix}.input_scale")
+        rows, columns = _packed_weight(source_meta.get(f"{prefix}.weight"), prefix)
+        scale = source_meta.get(f"{prefix}.weight_scale")
+        if scale is None or scale["dtype"] != "F8_E4M3" or list(scale["shape"]) != [rows, columns // 16]:
+            raise ValueError(f"{prefix}.weight_scale: expected E4M3 [{rows}, {columns // 16}]")
+        _scalar(source_meta.get(f"{prefix}.weight_scale_2"), f"{prefix}.weight_scale_2")
         if f"{prefix}.input_scale" in source_meta:
             raise ValueError(f"{prefix}.input_scale: the source carries one; this tool writes v16's")
+
+
+def check_csf_expert(expert: str, source_meta: Mapping[str, Mapping], base_meta: Mapping[str, Mapping]) -> None:
+    """Parse one plain expert the compressed path will read: a plain expert whose block-scale planes
+    the slab encoding holds, with v16's FP32 input scales to take."""
+    check_plain_expert(expert, source_meta)
+    for projection in PROJECTIONS:
+        prefix = f"{expert}.{projection}"
+        rows, columns = _packed_weight(source_meta[f"{prefix}.weight"], prefix)
+        csf_geometry(rows, columns // 16, prefix)
+        _scalar(base_meta.get(f"{prefix}.input_scale"), f"v16 {prefix}.input_scale")
+
+
+def check_kept_expert(expert: str, source_meta: Mapping[str, Mapping]) -> None:
+    """Parse one expert this tool already wrote compressed: FP4 codes, a slab-CSF pair of the
+    plane's geometry, an FP32 global and an FP32 input scale per projection."""
+    for projection in PROJECTIONS:
+        prefix = f"{expert}.{projection}"
+        rows, columns = _packed_weight(source_meta.get(f"{prefix}.weight"), prefix)
+        csf_geometry(rows, columns // 16, prefix)
+        fixed = source_meta.get(f"{prefix}.weight_scale.{CSF_FIXED}")
+        exceptions = source_meta.get(f"{prefix}.weight_scale.{CSF_EXCEPTIONS}")
+        if fixed is None or fixed["dtype"] != "U8" or list(fixed["shape"]) != [rows // 16, 16 + 8 * columns // 16]:
+            raise ValueError(f"{prefix}.weight_scale.{CSF_FIXED}: expected U8 "
+                             f"[{rows // 16}, {16 + 8 * columns // 16}]")
+        if exceptions is None or exceptions["dtype"] != "U32" or len(exceptions["shape"]) != 1:
+            raise ValueError(f"{prefix}.weight_scale.{CSF_EXCEPTIONS}: expected a 1-D U32 stream")
+        _scalar(source_meta.get(f"{prefix}.weight_scale_2"), f"{prefix}.weight_scale_2")
+        _scalar(source_meta.get(f"{prefix}.input_scale"), f"{prefix}.input_scale")
+
+
+def expert_layer(prefix: str, compressed: bool, experts: Sequence[str], source_meta: Mapping[str, Mapping],
+                 base_meta: Mapping[str, Mapping], converted: bool) -> ExpertLayer:
+    """Parse one routed-expert layer of the source into its work. ``compressed`` is whether v16
+    compresses the layer; ``converted`` whether the source is this tool's output (carries its
+    receipt). Every expert must take the same work: a half-converted layer is refused."""
+    def work(expert: str) -> str:
+        plain = f"{expert}.gate_proj.weight_scale" in source_meta
+        if compressed and plain:
+            check_csf_expert(expert, source_meta, base_meta)
+            return ENCODE
+        if compressed:
+            check_kept_expert(expert, source_meta)
+            return KEEP
+        if plain:
+            check_plain_expert(expert, source_meta)
+            return FOLD
+        raise ValueError(f"{expert}: v16 keeps this layer's scales plain, the source's are not")
+
+    if not experts:
+        raise ValueError(f"{prefix}: declared, but the source holds none of its experts")
+    works = {work(expert) for expert in experts}
+    if len(works) != 1:
+        raise ValueError(f"{prefix}: the source mixes {sorted(works)} experts in one layer")
+    (taken,) = works
+    if taken == KEEP and not converted:
+        raise ValueError(f"{prefix}: compressed experts in a source without this tool's {RECEIPT}; "
+                         f"nothing vouches for their folded globals")
+    return ExpertLayer(prefix, taken, len(experts))
 
 
 def csf_geometry(rows: int, columns: int, name: str) -> None:
@@ -319,14 +410,15 @@ def _f32(value: float) -> float:
 class Fold:
     """One routed expert's gate and up globals made one (module docstring), every value FP32.
 
-    Up's activations come out ``ratio`` (c', in (0.5, 1]) times the source's; down's global and input
-    scale carry the ratio so down's output is unchanged. ``halved`` names the projection whose E4M3
-    block scales move by ``2**shift`` (shift < 0), or is None when the globals need no power of two.
+    Up's activations come out ``ratio`` (c', in (0.5, 1]) times the source's; down's global carries the
+    ratio so down's output is unchanged, and so does down's input scale where the layer has one
+    (``down_input``). ``halved`` names the projection whose E4M3 block scales move by ``2**shift``
+    (shift < 0), or is None when the globals need no power of two. Folding already shared globals is
+    the identity: ratio 1, no shift, every global as it was.
     """
 
     global13: float
     global2: float
-    input2: float
     ratio: float
     halved: str | None
     shift: int
@@ -337,11 +429,17 @@ class Fold:
     def weight_global(self, projection: str) -> float:
         return self.global2 if projection == "down_proj" else self.global13
 
+    def down_input(self, scale: float) -> float:
+        """Down's activation input scale (v16's calibrated ``scale``), carrying the ratio with its activations."""
+        if not (math.isfinite(scale) and scale > 0):
+            raise ValueError(f"an input scale must be positive and finite: {scale}")
+        return _f32(scale * self.ratio)
 
-def fold_expert(gate: float, up: float, down: float, down_input: float) -> Fold:
-    """The fold for globals ``gate``/``up``/``down`` and v16's down input scale ``down_input``."""
-    if not all(math.isfinite(value) and value > 0 for value in (gate, up, down, down_input)):
-        raise ValueError(f"expert scales must be positive and finite: {gate}, {up}, {down}, {down_input}")
+
+def fold_expert(gate: float, up: float, down: float) -> Fold:
+    """The fold for one expert's FP32 globals ``gate``/``up``/``down``."""
+    if not all(math.isfinite(value) and value > 0 for value in (gate, up, down)):
+        raise ValueError(f"expert scales must be positive and finite: {gate}, {up}, {down}")
     mantissa, exponent = math.frexp(gate / up)       # gate / up = mantissa * 2**exponent, mantissa in [0.5, 1)
     power = -exponent if mantissa > 0.5 else 1 - exponent
     ratio = gate / up * 2.0 ** power
@@ -351,7 +449,7 @@ def fold_expert(gate: float, up: float, down: float, down_input: float) -> Fold:
         halved, shift, global13 = "gate_proj", -power, gate * 2.0 ** power
     else:
         halved, shift, global13 = None, 0, gate
-    return Fold(_f32(global13), _f32(down / ratio), _f32(down_input * ratio), ratio, halved, shift)
+    return Fold(_f32(global13), _f32(down / ratio), ratio, halved, shift)
 
 
 # Slab CSF (b12x ``encode_csf_source``; ignition ``decode_csf_slab_scales``). numpy arrays in and out.
@@ -473,13 +571,19 @@ def layout(slots: list[Slot], metadata: Mapping | None = None) -> dict:
 class Plan:
     requants: tuple[Requant, ...]       # BF16 in the source, re-encoded into v16's storage
     encoded: tuple[str, ...]            # dense prefixes the source already stores as v16 does (copied)
-    csf_layers: tuple[str, ...]         # routed-expert layers written with slab-CSF scales, globals folded
-    csf_experts: int
+    expert_layers: tuple[ExpertLayer, ...]  # every routed-expert layer and its work, in name order
     rewrite: tuple[str, ...]            # source shards rewritten (everything else is reflinked)
     emptied: tuple[str, ...]            # rewritten shards left with no tensors: not written
     vision: tuple[tuple[str, str], ...]  # (tensor, v16 shard) for the vision shard
     drop_vision: int
     quantization_config: dict
+
+    def layers(self, work: str) -> tuple[str, ...]:
+        """The expert layers taking ``work``."""
+        return tuple(layer.prefix for layer in self.expert_layers if layer.work == work)
+
+    def expert_count(self, work: str) -> int:
+        return sum(layer.experts for layer in self.expert_layers if layer.work == work)
 
     def as_json(self) -> dict:
         """The plan as JSON values (tuples become lists), comparable to a reviewed plan file."""
@@ -487,8 +591,10 @@ class Plan:
 
 
 def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapping], source_config: Mapping,
-              base_index: Mapping[str, str], base_headers: Mapping[str, Mapping], base_config: Mapping) -> Plan:
-    """The whole conversion from parsed headers. ``*_headers`` map shard -> raw header."""
+              base_index: Mapping[str, str], base_headers: Mapping[str, Mapping], base_config: Mapping,
+              converted: bool) -> Plan:
+    """The whole conversion from parsed headers. ``*_headers`` map shard -> raw header; ``converted``
+    is whether the source is this tool's output (it carries the receipt)."""
     mismatched = config_mismatches(source_config, base_config)
     if mismatched:
         raise ValueError(f"source and v16 configs differ beyond quantization: {mismatched[:5]}")
@@ -497,11 +603,12 @@ def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapp
     base_meta = {name: base_headers[shard][name] for name, shard in base_index.items()}
 
     experts = expert_declarations(base_layers, source_index)
-    csf_layers = tuple(sorted(prefix for prefix, declaration in experts.items()
-                              if declaration == CSF_DECLARATION))
-    compressed = csf_experts(source_index, csf_layers)
-    for expert in compressed:
-        check_csf_expert(expert, source_meta, base_meta)
+    expert_layers = tuple(
+        expert_layer(prefix, declaration == CSF_DECLARATION, routed_experts(source_index, [prefix]),
+                     source_meta, base_meta, converted)
+        for prefix, declaration in sorted(experts.items()))
+    # The experts whose scale planes and globals the conversion rewrites (kept ones are copied).
+    changed = routed_experts(source_index, [layer.prefix for layer in expert_layers if layer.work != KEEP])
 
     requants, encoded = [], []
     for prefix in sorted(base_layers):
@@ -528,12 +635,12 @@ def make_plan(source_index: Mapping[str, str], source_headers: Mapping[str, Mapp
             if (expert_layer_of(prefix) or prefix) not in declarations:
                 raise ValueError(f"{name}: a scaled source tensor with no declaration")
 
-    expert_shards = {source_index[f"{expert}.{projection}.{suffix}"] for expert in compressed
+    expert_shards = {source_index[f"{expert}.{projection}.{suffix}"] for expert in changed
                      for projection in PROJECTIONS for suffix in ("weight_scale", "weight_scale_2")}
     rewrite = sorted({r.shard for r in requants} | expert_shards | {source_index[name] for name in vision_source})
     emptied = sorted(shard for shard in rewrite
                      if all(name in vision_source for name, owner in source_index.items() if owner == shard))
-    return Plan(tuple(requants), tuple(e.prefix for e in encoded), csf_layers, len(compressed),
+    return Plan(tuple(requants), tuple(e.prefix for e in encoded), expert_layers,
                 tuple(rewrite), tuple(emptied), tuple(vision_base), len(vision_source),
                 quantization_config(base_config["quantization_config"], declarations))
 
@@ -572,7 +679,8 @@ def plan_from_disk(source: Path, base: Path) -> Plan:
     source_index = read_json(source / INDEX)["weight_map"]
     base_index = read_json(base / INDEX)["weight_map"]
     return make_plan(source_index, load_headers(source, set(source_index.values())), read_json(source / "config.json"),
-                     base_index, load_headers(base, set(base_index.values())), read_json(base / "config.json"))
+                     base_index, load_headers(base, set(base_index.values())), read_json(base / "config.json"),
+                     converted=(source / RECEIPT).is_file())
 
 
 def torch_quantizer() -> Quantizer:
@@ -647,18 +755,28 @@ def read_plane(root: Path, index: Mapping[str, str], name: str):
     return np.frombuffer(read_tensor(root, index[name], name), dtype=np.uint8).reshape(rows, columns)
 
 
-def expert_folds(source: Path, source_index: Mapping[str, str], base: Path, base_index: Mapping[str, str],
-                 experts: Sequence[str]) -> dict[str, Fold]:
-    """Every compressed expert's fold, from the source's globals and v16's down input scale."""
+def expert_folds(source: Path, source_index: Mapping[str, str], experts: Sequence[str]) -> dict[str, Fold]:
+    """Each expert's fold, from the source's globals."""
     return {expert: fold_expert(*(read_scalar(source, source_index, f"{expert}.{projection}.weight_scale_2")
-                                  for projection in PROJECTIONS),
-                                read_scalar(base, base_index, f"{expert}.down_proj.input_scale"))
+                                  for projection in PROJECTIONS))
             for expert in experts}
 
 
 def expert_input(fold: Fold, projection: str, base: Path, base_index: Mapping[str, str], prefix: str) -> float:
-    """The input scale written for one expert projection: v16's, down's carrying the fold's ratio."""
-    return fold.input2 if projection == "down_proj" else read_scalar(base, base_index, f"{prefix}.input_scale")
+    """The input scale written for one compressed expert projection: v16's, down's carrying the fold's ratio."""
+    scale = read_scalar(base, base_index, f"{prefix}.input_scale")
+    return fold.down_input(scale) if projection == "down_proj" else scale
+
+
+def require_shared_globals(root: Path, index: Mapping[str, str], experts: Sequence[str]) -> None:
+    """Every expert's gate and up globals are one FP32 value: what Hyperflare's loader needs to pass
+    b12x a single FC1 gain per expert, on the compressed and the W4A16 path alike."""
+    for expert in experts:
+        gate, up = (read_tensor(root, index[name], name)
+                    for name in (f"{expert}.gate_proj.weight_scale_2", f"{expert}.up_proj.weight_scale_2"))
+        if gate != up:
+            raise ValueError(f"{expert}: gate and up globals differ ({struct.unpack('<f', gate)[0]} vs "
+                             f"{struct.unpack('<f', up)[0]}); the loader would pair its FC1 gains")
 
 
 def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quantizer) -> dict:
@@ -667,17 +785,21 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
         raise ValueError(f"{plan_path}: the checkpoints no longer produce the reviewed plan; re-plan")
     if out.exists():
         raise ValueError(f"{out}: refuses to overwrite an existing directory")
-    out.mkdir(parents=True)
     source_index = read_json(source / INDEX)["weight_map"]
     base_index = read_json(base / INDEX)["weight_map"]
     by_weight = {r.weight: r for r in plan.requants}
     vision = {name for name in source_index if name.startswith(VISION_ROOT)}
-    experts = csf_experts(source_index, plan.csf_layers)
-    folds = expert_folds(source, source_index, base, base_index, experts)
-    # Each compressed projection's scale plane and global, keyed by the source tensor they replace.
-    planes = {f"{expert}.{projection}.weight_scale": (expert, projection) for expert in experts for projection in PROJECTIONS}
+    encode, fold_only, kept = (routed_experts(source_index, plan.layers(work)) for work in (ENCODE, FOLD, KEEP))
+    # Everything that can refuse from the source's values does so before the first write.
+    require_shared_globals(source, source_index, kept)
+    folds = expert_folds(source, source_index, encode + fold_only)
+    out.mkdir(parents=True)
+    encoding = set(encode)
+    # Each folded projection's scale plane and global, keyed by the source tensor they replace.
+    planes = {f"{expert}.{projection}.weight_scale": (expert, projection)
+              for expert in folds for projection in PROJECTIONS}
     globals_ = {f"{expert}.{projection}.weight_scale_2": (expert, projection)
-                for expert in experts for projection in PROJECTIONS}
+                for expert in folds for projection in PROJECTIONS}
     metrics, written, csf = {}, {}, {"exceptions": 0, "plain_bytes": 0, "csf_bytes": 0}
 
     for shard in dense.index_files({"weight_map": source_index}):
@@ -698,9 +820,13 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
                 metrics[target.prefix] = {"storage": target.storage, "rel_error": error[0], "max_abs_error": error[1]}
             elif name in planes:
                 expert, projection = planes[name]
-                plane = read_plane(source, source_index, name)
-                fixed, exceptions = encode_csf_slab(
-                    shifted_scales(plane, folds[expert].block_shift(projection), name))
+                plane = shifted_scales(read_plane(source, source_index, name),
+                                       folds[expert].block_shift(projection), name)
+                if expert not in encoding:
+                    replacements[name] = [Slot(name, "F8_E4M3", plane.shape, "values")]
+                    payloads[name] = plane.tobytes()
+                    continue
+                fixed, exceptions = encode_csf_slab(plane)
                 pair = [Slot(f"{name}.{CSF_FIXED}", "U8", fixed.shape, "values"),
                         Slot(f"{name}.{CSF_EXCEPTIONS}", "U32", exceptions.shape, "values")]
                 replacements[name] = pair
@@ -711,12 +837,13 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
             elif name in globals_:
                 expert, projection = globals_[name]
                 fold, prefix = folds[expert], f"{expert}.{projection}"
-                input_meta = _header(base / base_index[f"{prefix}.input_scale"])[1][f"{prefix}.input_scale"]
-                pair = [Slot(name, "F32", tuple(header[name]["shape"]), "values"),
-                        Slot(f"{prefix}.input_scale", "F32", tuple(input_meta["shape"]), "values")]
-                replacements[name] = pair
+                replacements[name] = [Slot(name, "F32", tuple(header[name]["shape"]), "values")]
                 payloads[name] = struct.pack("<f", fold.weight_global(projection))
-                payloads[pair[1].name] = struct.pack("<f", expert_input(fold, projection, base, base_index, prefix))
+                if expert in encoding:
+                    input_meta = _header(base / base_index[f"{prefix}.input_scale"])[1][f"{prefix}.input_scale"]
+                    replacements[name].append(Slot(f"{prefix}.input_scale", "F32", tuple(input_meta["shape"]), "values"))
+                    payloads[f"{prefix}.input_scale"] = struct.pack(
+                        "<f", expert_input(fold, projection, base, base_index, prefix))
         slots = shard_slots(header, replacements, vision)
         write_shard(out / shard, layout(slots, header.get("__metadata__")), slots, source / shard, payloads)
         written[shard] = len(slots)
@@ -747,7 +874,8 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
                "source_receipt": read_json(source / RECEIPT) if (source / RECEIPT).exists() else None,
                "base": str(base), "plan": plan.as_json() | {"quantization_config": "see config.json"},
                "requant_metrics": metrics, "shards_rewritten": len(written), "vision_tensors": len(vision_slots),
-               "experts": fold_summary(folds.values()) | csf,
+               "experts": {"encoded": fold_summary(folds[e] for e in encode) | csf,
+                           "folded_plain": fold_summary(folds[e] for e in fold_only), "kept": len(kept)},
                "total_size": dense.payload_bytes(headers.values())}
     (out / RECEIPT).write_text(json.dumps(receipt, indent=1))
     return receipt
@@ -757,8 +885,8 @@ def fold_summary(folds) -> dict:
     """How many experts needed which move, and the ratios the down globals absorb."""
     folds = list(folds)
     ratios = [fold.ratio for fold in folds]
-    return {"compressed": len(folds),
-            "folded": {str(halved): sum(fold.halved == halved for fold in folds) for halved in (None, "up_proj", "gate_proj")},
+    return {"experts": len(folds),
+            "halved": {str(halved): sum(fold.halved == halved for fold in folds) for halved in (None, "up_proj", "gate_proj")},
             "unchanged_globals": sum(fold.ratio == 1.0 and fold.halved is None for fold in folds),
             "ratio_min": min(ratios, default=None), "ratio_max": max(ratios, default=None)}
 
@@ -812,11 +940,11 @@ def verify(source: Path, base: Path, out: Path, plan_path: Path) -> None:
             if read_tensor(out, index["weight_map"][name], name) != read_tensor(source, source_index[name], name):
                 raise ValueError(f"{name}: already in v16's storage, yet its bytes differ from the source")
 
-    # Every compressed expert: its planes decode to the source's scales moved by its fold, its scalars
+    # Every encoded expert: its planes decode to the source's scales moved by its fold, its scalars
     # are the fold's, and no plain scale plane is left beside them.
-    experts = csf_experts(source_index, plan.csf_layers)
-    folds = expert_folds(source, source_index, base, base_index, experts)
-    for expert in experts:
+    encode, fold_only, kept = (routed_experts(source_index, plan.layers(work)) for work in (ENCODE, FOLD, KEEP))
+    folds = expert_folds(source, source_index, encode + fold_only)
+    for expert in encode:
         fold = folds[expert]
         for projection in PROJECTIONS:
             prefix = f"{expert}.{projection}"
@@ -834,8 +962,30 @@ def verify(source: Path, base: Path, out: Path, plan_path: Path) -> None:
                                 (f"{prefix}.input_scale", expert_input(fold, projection, base, base_index, prefix))):
                 if read_tensor(out, index["weight_map"][name], name) != struct.pack("<f", value):
                     raise ValueError(f"{name}: not the folded value {value}")
+    # Every expert folded in place: its planes are the source's moved by its fold, its globals the fold's.
+    for expert in fold_only:
+        fold = folds[expert]
+        for projection in PROJECTIONS:
+            prefix = f"{expert}.{projection}"
+            plane = read_plane(source, source_index, f"{prefix}.weight_scale")
+            if not np.array_equal(read_plane(out, index["weight_map"], f"{prefix}.weight_scale"),
+                                  shifted_scales(plane, fold.block_shift(projection), prefix)):
+                raise ValueError(f"{prefix}.weight_scale: not the source's block scales moved by its fold")
+            name = f"{prefix}.weight_scale_2"
+            if read_tensor(out, index["weight_map"][name], name) != struct.pack("<f", fold.weight_global(projection)):
+                raise ValueError(f"{name}: not the folded value {fold.weight_global(projection)}")
+            if f"{prefix}.input_scale" in names:
+                raise ValueError(f"{prefix}.input_scale: a plain W4A16 expert carries no input scales")
+    # Every kept expert: each of its tensors is the source's.
+    kept_layers = set(plan.layers(KEEP))
+    for name in sorted(n for n in source_index if expert_layer_of(n) in kept_layers):
+        if index["weight_map"].get(name) is None \
+                or read_tensor(out, index["weight_map"][name], name) != read_tensor(source, source_index[name], name):
+            raise ValueError(f"{name}: a kept expert tensor is not the source's")
+    require_shared_globals(out, index["weight_map"],
+                           routed_experts(names, [layer.prefix for layer in plan.expert_layers]))
 
-    replaced = {r.weight for r in plan.requants} | {f"{e}.{p}.{s}" for e in experts for p in PROJECTIONS
+    replaced = {r.weight for r in plan.requants} | {f"{e}.{p}.{s}" for e in folds for p in PROJECTIONS
                                                     for s in ("weight_scale", "weight_scale_2")}
     for shard in dense.index_files({"weight_map": source_index}):
         if shard in plan.emptied:
@@ -862,8 +1012,13 @@ def verify(source: Path, base: Path, out: Path, plan_path: Path) -> None:
         if not (out / name).is_file() or (out / name).read_bytes() != (base / name).read_bytes():
             raise ValueError(f"{name}: not v16's pinned bytes")
     print(f"verify OK: {len(files)} files cover their bytes, {len(plan.requants)} re-encoded, "
-          f"{len(plan.encoded)} already v16's, {len(experts)} experts CSF-encoded and folded, "
+          f"{len(plan.encoded)} already v16's, {experts_line(plan)}, every expert one gate/up global, "
           f"{len(plan.vision)} vision tensors from v16, {len(declared)} declarations")
+
+
+def experts_line(plan: Plan) -> str:
+    return (f"{plan.expert_count(ENCODE)} experts CSF-encoded and folded, {plan.expert_count(KEEP)} kept, "
+            f"{plan.expert_count(FOLD)} folded in place")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -882,7 +1037,7 @@ def main(argv: list[str] | None = None) -> int:
             plan = plan_from_disk(args.source, args.base)
             args.plan.write_text(json.dumps(plan.as_json(), indent=1))
             print(f"plan: {len(plan.requants)} re-encoded, {len(plan.encoded)} already v16's, "
-                  f"{plan.csf_experts} experts in {len(plan.csf_layers)} layers CSF-encoded, "
+                  f"{experts_line(plan)} ({len(plan.expert_layers)} layers), "
                   f"{len(plan.rewrite)} shards rewritten ({len(plan.emptied)} emptied), "
                   f"{len(plan.vision)} vision tensors from v16 (replacing {plan.drop_vision}), "
                   f"{len(plan.quantization_config['quantized_layers'])} declarations")
