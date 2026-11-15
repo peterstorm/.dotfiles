@@ -9,7 +9,7 @@
 # room for the FP4-Local checkpoint and the Hyperflare package, so v15 needs
 # its download before it can serve again.
 # Launch is transactional at restart=no; only a fully accepted boot (healthy,
-# authenticated, exact model id, a generated token, bridge on :8011 translating)
+# authenticated, exact model id, the asked-for word decoded, bridge on :8011 translating)
 # is promoted to restart=unless-stopped.
 set -euo pipefail
 
@@ -98,25 +98,32 @@ wait_for_target() {
 # Pure. Health, /v1/models and the bridge all answer before a single token is
 # decoded; on 2026-11-15 the first cyber-hybrid-bf16 package passed all three while
 # every request failed with "prepared model reported device error 1" (non-finite
-# logits). Only a generated token proves the model serves.
+# logits). Only a generated token proves the model serves -- and only the asked-for
+# word proves it decodes sense: the second package (donor tensors fetched from a
+# shifted range) generated fluent multilingual token salad and passed a token count.
 generation_verdict() {
-  local code="$1" body="$2" tokens
+  local code="$1" body="$2" verdict
   if [ "$code" != 200 ]; then
     echo "error:HTTP $code: $(jq -r '.error.message // empty' <<<"$body" 2>/dev/null | head -c 200)"
     return
   fi
-  tokens="$(jq -r '
+  verdict="$(jq -r '
     (.usage.completion_tokens // 0) as $n
     | (.choices[0].message // {}) as $m
-    | if ($n | type) == "number" and $n >= 1
-         and ((($m.content // "") + ($m.reasoning_content // "")) | length) > 0
-      then $n else empty end
-  ' <<<"$body" 2>/dev/null)" || tokens=""
-  if [ -n "$tokens" ]; then echo "ok:$tokens"; else echo "error:the reply carries no generated tokens"; fi
+    | ([$m.content, $m.reasoning_content] | map(select(type == "string")) | join(" ")) as $text
+    | if ($n | type) != "number" or $n < 1 or ($text | test("^\\s*$")) then
+        "error:the reply carries no generated tokens"
+      elif ($text | test("\\bready\\b"; "i")) then "ok:\($n)"
+      else "error:the reply is not the asked-for word (incoherent decode?): \($text | gsub("\\s+"; " ") | .[0:120])"
+      end
+  ' <<<"$body" 2>/dev/null)" || verdict=""
+  echo "${verdict:-error:the reply carries no generated tokens}"
 }
 
 # A short, low-effort completion against the exact served id: acceptance fails
-# unless the model decodes. The key reaches curl through its stdin config, never argv.
+# unless the model decodes the asked-for word (v16 answers "ready" in 10-16
+# tokens; 64 leaves a longer thinker room). The key reaches curl through its
+# stdin config, never argv.
 GENERATION_TIMEOUT_SECONDS="${GENERATION_TIMEOUT_SECONDS:-180}"
 require_generation() {
   local key escaped_key request response code verdict
@@ -124,7 +131,7 @@ require_generation() {
   key="$(<"$INFERENCE_CLIENT_KEYFILE")"
   escaped_key="${key//\\/\\\\}"
   escaped_key="${escaped_key//\"/\\\"}"
-  request="$(jq -cn --arg model "$EXPECTED_MODEL" '{model: $model, max_tokens: 32, reasoning_effort: "low",
+  request="$(jq -cn --arg model "$EXPECTED_MODEL" '{model: $model, max_tokens: 64, reasoning_effort: "low",
     messages: [{role: "user", content: "Reply with the single word: ready"}]}')"
   response="$({
     printf 'url = "http://127.0.0.1:8000/v1/chat/completions"\n'
