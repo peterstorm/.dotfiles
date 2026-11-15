@@ -3,9 +3,9 @@
 #
 # v16 serves nvidia/GLM-5.3-Flash-FP4-Local through NVIDIA Hyperflare (the
 # AzallazA fork at hyperflare-glm-20261112) as the recipe's TP2/DCP2 package.
-# The cyber-hybrid variants serve the same checkpoint with the CYBERSECURITY
-# build's dense tensors spliced in, through the same launchers (VARIANT); the
-# cyber primary serves cyber-hybrid-bf16, and cyber-hybrid stays launchable.
+# The uncensored variant serves dealignai's UNCENSORED build converted into
+# v16's storage formats, through the same launchers (VARIANT), as the
+# uncensored primary. The cyber-hybrid variants were retired on 2026-11-15.
 # The contract proves, without Docker or a GPU, that the build/download/
 # export/run/switch scripts agree on every pin (fork commit, checkpoint
 # revision, image tag, package naming, served id), that every name derives from
@@ -37,8 +37,8 @@ REPO="nvidia/GLM-5.3-Flash-FP4-Local"
 REVISION="76348ddb2be2e35e39ecfc00e75dc07703f4f3d5"
 SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
 CONTAINER="glm53-flash-hyperflare-tp2-v16"
-CYBER_SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16"
-CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid-bf16"
+UNCENSORED_SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-uncensored"
+UNCENSORED_CONTAINER="glm53-flash-hyperflare-tp2-uncensored"
 # git blob ids of the recipe folder's files at recipe commit 9a57f78e.
 EXPORT_BLOB="f2bcc006e3b63c0add107396bfe8f85f4832e502"
 SERVE_BLOB="a7fa2172a9e327070db43444c1d2094aef143315"
@@ -57,7 +57,7 @@ done
 bash -n "$VARIANTS"
 
 # One variant table is the source of every name. v16's are the strings this contract has
-# always pinned; the hybrid's are what switch-primary.sh, Pi's catalog and the vault carry.
+# always pinned; uncensored's are what switch-primary.sh, Pi's catalog and the vault carry.
 # No launcher keeps its own copy, and none takes a checkpoint directory beside the variant
 # (a free MODEL next to VARIANT could name a checkpoint the receipt does not).
 # shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
@@ -65,12 +65,12 @@ source "$VARIANTS"
 [ "$(hyperflare_variant_model v16)" = glm53-fp4-local ] || fail "v16 must export the glm53-fp4-local checkpoint"
 [ "$(hyperflare_variant_container v16)" = "$CONTAINER" ] || fail "v16's container drifted from $CONTAINER"
 [ "$(hyperflare_variant_served v16)" = "$SERVED_MODEL" ] || fail "v16's served id drifted from $SERVED_MODEL"
-[ "$(hyperflare_variant_model cyber-hybrid-bf16)" = glm53-cyber-hybrid-bf16 ] || fail "cyber-hybrid-bf16 must export the glm53-cyber-hybrid-bf16 checkpoint"
-[ "$(hyperflare_variant_container cyber-hybrid-bf16)" = "$CYBER_CONTAINER" ] || fail "the cyber primary's container drifted from $CYBER_CONTAINER"
-[ "$(hyperflare_variant_served cyber-hybrid-bf16)" = "$CYBER_SERVED_MODEL" ] || fail "the cyber primary's served id drifted from $CYBER_SERVED_MODEL"
-# The original hybrid is no longer a primary; it stays a launchable profile the switcher sees as foreign.
-contains "$CATALOG" "  $(hyperflare_variant_container cyber-hybrid)"
-contains "$CATALOG" "  $(hyperflare_variant_container uncensored)"
+[ "$(hyperflare_variant_model uncensored)" = glm53-uncensored ] || fail "uncensored must export the glm53-uncensored checkpoint"
+[ "$(hyperflare_variant_container uncensored)" = "$UNCENSORED_CONTAINER" ] || fail "the uncensored primary's container drifted from $UNCENSORED_CONTAINER"
+[ "$(hyperflare_variant_served uncensored)" = "$UNCENSORED_SERVED_MODEL" ] || fail "the uncensored primary's served id drifted from $UNCENSORED_SERVED_MODEL"
+# The cyber-hybrid variants were retired on 2026-11-15 (hyperflare-variants-unit pins them
+# unknown); their containers left the catalog too.
+absent "$CATALOG" 'glm53-flash-hyperflare-tp2-cyber-hybrid'
 # A built checkpoint is exported only with the receipt its builder wrote (the variant table names it).
 contains "$EXPORT" 'if BUILD_RECEIPT="$(hyperflare_variant_build_receipt "$VARIANT")"; then'
 absent "$EXPORT" 'hybrid-receipt.json'
@@ -182,7 +182,7 @@ contains "$SWITCH" 'if ! wait_for_target || ! require_generation || ! require_me
 contains "$SWITCH" 'promote_restart_policy'
 contains "$SWITCH" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" "  $CONTAINER"
-contains "$CATALOG" "  $CYBER_CONTAINER"
+contains "$CATALOG" "  $UNCENSORED_CONTAINER"
 
 # Monitoring and client catalog.
 contains "$DESKTOP" 'systemd.services.hyperflare-metrics'
@@ -191,11 +191,11 @@ jq -e --arg id "$SERVED_MODEL" '
   | map(select(.id == $id))
   | length == 1 and .[0].contextWindow == 400000 and (.[0].input | index("image") != null)
 ' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $SERVED_MODEL with its 400K context cap and image input"
-jq -e --arg id "$CYBER_SERVED_MODEL" '
+jq -e --arg id "$UNCENSORED_SERVED_MODEL" '
   .providers["desktop-vllm"].models
   | map(select(.id == $id))
   | length == 1 and .[0].contextWindow == 400000 and (.[0].input | index("image") != null)
-' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $CYBER_SERVED_MODEL with its 400K context cap and image input"
+' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $UNCENSORED_SERVED_MODEL with its 400K context cap and image input"
 
 # Runbook records the decisions that differ from the recipe's test system.
 contains "$RUNBOOK" "$FORK_COMMIT"
@@ -205,8 +205,7 @@ contains "$RUNBOOK" '400 W'
 contains "$RUNBOOK" 'TP2'
 contains "$RUNBOOK" 'ds41-1017-maya-exl35'
 contains "$RUNBOOK" 'switch-primary.sh'
-contains "$RUNBOOK" 'Variant: cyber-hybrid'
-contains "$RUNBOOK" 'Variant: cyber-hybrid-bf16'
+contains "$RUNBOOK" 'Variant: uncensored'
 contains "$RUNBOOK" 'hyperflare-variants.sh'
 
 # The primaries switch: its pure decision core, and the catalog it serves.
@@ -219,10 +218,10 @@ bash "$ROOT/tests/glm53-stop-and-export-unit.sh" >/dev/null || fail "the stop-an
 bash "$ROOT/tests/glm53-launch-export-unit.sh" >/dev/null || fail "the export launcher failed its unit tests"
 contains "$RUNBOOK" 'launch-glm53-export.sh'
 contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER\""
-contains "$ROOT/scripts/inference/switch-primary.sh" "CYBER_CONTAINER=\"$CYBER_CONTAINER\""
-contains "$ROOT/scripts/inference/switch-primary.sh" "cyber) echo $CYBER_SERVED_MODEL ;;"
+contains "$ROOT/scripts/inference/switch-primary.sh" "UNCENSORED_CONTAINER=\"$UNCENSORED_CONTAINER\""
+contains "$ROOT/scripts/inference/switch-primary.sh" "uncensored) echo $UNCENSORED_SERVED_MODEL ;;"
 contains "$ROOT/scripts/inference/switch-primary.sh" 'VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start'
-jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
+jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-uncensored","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
   "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the four primaries"
 jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-native"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's default model must be a primary (warmind-1017-native)"

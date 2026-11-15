@@ -4,7 +4,7 @@ import { TUNED_BUDGETS } from "./guard";
 import glmGuardExtension, { guardRequest, servedIdCache, type GuardPorts } from "./index";
 
 const GLM_V16 = "glm-5.3-flash-hyperflare-tp2-v16";
-const GLM_CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16";
+const GLM_UNCENSORED = "glm-5.3-flash-hyperflare-tp2-uncensored";
 const WARMIND = "warmind-1017-native";
 
 /** What Pi sends for a session pinned to WARMIND at max thinking. */
@@ -17,18 +17,18 @@ const pinnedToWarmind = (extra: Record<string, unknown> = {}): Record<string, un
 });
 
 function ports(overrides: Partial<GuardPorts> & { served?: string | Error } = {}): GuardPorts {
-	const { served = GLM_CYBER, ...rest } = overrides;
+	const { served = GLM_UNCENSORED, ...rest } = overrides;
 	return {
 		enabled: () => true,
-		isLocalModel: (id) => id === WARMIND || id === GLM_V16 || id === GLM_CYBER,
+		isLocalModel: (id) => id === WARMIND || id === GLM_V16 || id === GLM_UNCENSORED,
 		servedId: async () => (served instanceof Error ? { ok: false, error: served.message } : { ok: true, value: served }),
 		...rest,
 	};
 }
 
 describe("guardRequest", () => {
-	it("guards a session pinned to WARMIND when the server is actually serving the hybrid", async () => {
-		const out = await guardRequest(pinnedToWarmind(), ports({ served: GLM_CYBER }));
+	it("guards a session pinned to WARMIND when the server is actually serving the uncensored build", async () => {
+		const out = await guardRequest(pinnedToWarmind(), ports({ served: GLM_UNCENSORED }));
 		expect(out).toMatchObject({
 			chat_template_kwargs: { clear_thinking: true },
 			thinking_token_budget: TUNED_BUDGETS.max,
@@ -73,7 +73,7 @@ describe("servedIdCache", () => {
 		let now = 1_000;
 		let probes = 0;
 		const cache = servedIdCache({ ttlMs: 30_000, now: () => now });
-		const probe = async () => { probes++; return { ok: true as const, value: GLM_CYBER }; };
+		const probe = async () => { probes++; return { ok: true as const, value: GLM_UNCENSORED }; };
 		await cache.get(probe);
 		now += 29_000;
 		await cache.get(probe);
@@ -114,10 +114,10 @@ describe("servedIdCache", () => {
 
 describe("the registered hook", () => {
 	let server: { port: number; stop: (force?: boolean) => void } | undefined;
-	let served = GLM_CYBER;
+	let served = GLM_UNCENSORED;
 
 	beforeEach(() => {
-		served = GLM_CYBER;
+		served = GLM_UNCENSORED;
 		server = Bun.serve({
 			port: 0,
 			hostname: "127.0.0.1",
@@ -146,7 +146,7 @@ describe("the registered hook", () => {
 	}
 
 	const ctx = (): ExtensionContext => {
-		const catalog = new Set([WARMIND, GLM_V16, GLM_CYBER]);
+		const catalog = new Set([WARMIND, GLM_V16, GLM_UNCENSORED]);
 		return {
 			modelRegistry: {
 				getAll: () => [{ provider: "desktop-vllm", baseUrl: `http://127.0.0.1:${server?.port}/v1` }],
@@ -160,7 +160,7 @@ describe("the registered hook", () => {
 		expect(typeof registered()).toBe("function");
 	});
 
-	it("guards a request to the hybrid, probing the live /v1/models", async () => {
+	it("guards a request to the uncensored build, probing the live /v1/models", async () => {
 		const out = await registered()({ type: "before_provider_request", payload: pinnedToWarmind() }, ctx());
 		expect(out).toMatchObject({ chat_template_kwargs: { clear_thinking: true }, thinking_token_budget: TUNED_BUDGETS.max });
 	});

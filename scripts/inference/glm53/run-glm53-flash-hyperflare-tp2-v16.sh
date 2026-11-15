@@ -24,8 +24,9 @@
 #
 # VARIANT (default v16) selects which exported checkpoint this serves; its
 # package receipt, container, served id and checkpoint directory all derive from
-# it (hyperflare-variants.sh). VARIANT=cyber-hybrid serves the CYBERSECURITY
-# hybrid with exactly v16's flags: same declarations, same package shape.
+# it (hyperflare-variants.sh). VARIANT=uncensored serves dealignai's UNCENSORED
+# build, converted into v16's storage formats, with exactly v16's flags: same
+# declarations, same package shape.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -110,7 +111,7 @@ FLARE_ARGS=(
   --api-key-file /run/inference/api-key
   # Unattended first use needs explicit trust. This is the local development
   # signing key the v16 export generated in flare-home/.config/flare, which
-  # every later export from the same flare-home (cyber-hybrid included) is
+  # every later export from the same flare-home (uncensored included) is
   # signed with (sha256 of its ed25519 public key); the operator accepted the
   # namespace and with it the checkpoint's NVIDIA Open Model Agreement on
   # 2026-11-14. A re-export that mints a new key fails closed here until

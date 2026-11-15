@@ -42,6 +42,7 @@ if [ "${1:-}" = "--tests" ]; then
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \
     "$here/extensions/primary-switch" \
+    "$here/extensions/glm-guard" \
     "$here/extensions/creative-project-scope/index.test.ts" \
     "$here/root-extensions.test.ts" \
     "$here/tests/reload-runtime.test.ts" \

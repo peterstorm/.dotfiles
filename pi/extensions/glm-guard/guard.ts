@@ -4,12 +4,14 @@
  * GLM served by Hyperflare has no thinking off-switch: it ignores `thinking: disabled`
  * and a missing `reasoning_effort` means max. On top of that, the chat template's
  * default (`clear_thinking = false`) replays every earlier turn's reasoning into each
- * new prompt. A model that thinks long (dealignai's CYBERSECURITY tune thinks about
- * twice as long as upstream) then fills its own context with its old reasoning —
- * measured in a real session at 60% of the prompt — and degenerates into a
- * fixed-point attractor (`their-ih-ih-ih-…`). The tune's own card names this and ships
- * `clear_thinking = true`; the package here cannot (its template is hash-pinned by the
- * exporter), so the request carries it.
+ * new prompt. A model that thinks long (dealignai's tunes think about twice as long as
+ * upstream) then fills its own context with its old reasoning — measured in a real
+ * session at 60% of the prompt — and degenerates into a fixed-point attractor
+ * (`their-ih-ih-ih-…`; the retired CYBERSECURITY hybrids did, 8/8 replays of one turn).
+ * dealignai's cards name this and ship `clear_thinking = true`; the package here cannot
+ * (its template is v16's, hash-pinned by the exporter), so the request carries it. The
+ * served tune is the `uncensored` primary: it held that turn 0/8 even without the flag,
+ * which still halved its prompt and thinking there (runbook, "Variant: uncensored").
  *
  * Pure: the profile follows from the id the server reports serving, and the payload is
  * returned as a new value. index.ts holds the shell (hook, probe, cache).
@@ -23,7 +25,9 @@ export type ThinkingBudgets = Readonly<Record<Effort, number>>;
  * GLM/WARMIND sessions: healthy blocks have p95 ≈ 2.2K tokens and p99 ≈ 5K, so `max` at 8K leaves every
  * ordinary block untouched while a runaway is cut after ~30 s of decode. Measured on the live server: at
  * budget exhaustion Hyperflare closes the thinking and the model goes on to answer (it does not truncate
- * the turn), and it accepts the field for GLM. A cap bounds a spiral; it does not prevent one.
+ * the turn), and it accepts the field for GLM. A cap bounds a spiral; it does not prevent one. The
+ * uncensored tune drafts whole answers inside its thinking: 4 of 21 probe prompts at max effort were
+ * still thinking at 4,000 tokens, so `max` stays at 8K rather than following the probe's cap down.
  */
 export const TUNED_BUDGETS: ThinkingBudgets = Object.freeze({ low: 2_048, high: 4_096, max: 8_192 });
 
@@ -36,7 +40,8 @@ export type GuardProfile =
 	| Readonly<{ kind: "tuned-glm"; budgets: ThinkingBudgets }>;
 
 const GLM_FAMILY = /^glm/i;
-const TUNED_BUILD = /cyber/i;
+/** dealignai's tune as served (`glm-5.3-flash-hyperflare-tp2-uncensored`), the one tuned GLM primary. */
+const TUNED_BUILD = /uncensored/i;
 
 /** The guard for a served model id, or undefined when its template has an off switch of its own. */
 export function profileFor(servedId: string): GuardProfile | undefined {

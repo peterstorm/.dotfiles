@@ -10,7 +10,7 @@
 # setsid/nohup with stdin detached. Start it with launch-glm53-export.sh, which
 # ships a committed snapshot of this whole directory and runs it from there:
 #
-#   scripts/inference/glm53/launch-glm53-export.sh cyber-hybrid-bf16
+#   scripts/inference/glm53/launch-glm53-export.sh uncensored
 #
 # Never copy this script anywhere on its own: it runs the export wrapper and the
 # variant table that sit NEXT TO IT. On 2026-11-15 a lone copy in /tmp found a
@@ -27,8 +27,8 @@
 # while the serving primary is still up, and a failure leaves it untouched.
 #
 # Scope discipline: it stops ONLY containers named glm53-flash-hyperflare-tp2-*
-# (the GLM primaries this repository owns — v16, cyber-hybrid, cyber-hybrid-bf16
-# and a leftover export container). It never touches the ds4-native primaries,
+# (the GLM primaries this repository owns, v16 and uncensored, and a leftover
+# export container). It never touches the ds4-native primaries,
 # comfyui or anything else; if some other workload holds GPU memory when the
 # deadline expires it fails closed with nvidia-smi's answer instead of killing
 # processes it does not own. The export itself runs with no timeout: it either

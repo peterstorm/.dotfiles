@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Safely start/stop a GLM-5.3 Hyperflare TP2 profile: v16 by default, or a
-# CYBERSECURITY hybrid with VARIANT=cyber-hybrid[-bf16] (hyperflare-variants.sh derives
-# the container, served id, receipt and checkpoint from the variant, and the run
+# Safely start/stop a GLM-5.3 Hyperflare TP2 profile: v16 by default, or the
+# uncensored build with VARIANT=uncensored (hyperflare-variants.sh derives the
+# container, served id, receipt and checkpoint from the variant, and the run
 # script reads the same exported VARIANT). switch-primary.sh calls this for the
-# `glm` and `cyber` primaries.
+# `glm` and `uncensored` primaries.
 # The rollback target is whatever profile set was running before (normally
 # ds41-1017-native). The v15 qad2 checkpoint was deleted on 2026-11-13 to make
 # room for the FP4-Local checkpoint and the Hyperflare package, so v15 needs

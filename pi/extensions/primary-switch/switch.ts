@@ -13,19 +13,19 @@ import type { Result } from "../model-routing/policy.js";
 export const PRIMARY_PROVIDER = "desktop-vllm";
 
 /** The primaries switch-primary.sh can report (it owns which served id each has). */
-export const PRIMARIES = ["glm", "cyber", "warmind", "deepseek"] as const;
+export const PRIMARIES = ["glm", "uncensored", "warmind", "deepseek"] as const;
 export type Primary = (typeof PRIMARIES)[number];
 
-/** The script's vocabulary (`switch-primary.sh [toggle|glm|cyber|warmind|deepseek|status]`). */
+/** The script's vocabulary (`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]`). */
 export const SWITCH_REQUESTS = ["toggle", ...PRIMARIES, "status"] as const;
 export type SwitchRequest = (typeof SWITCH_REQUESTS)[number];
 
 const isPrimary = (word: string): word is Primary => (PRIMARIES as readonly string[]).includes(word);
 
 const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
-	toggle: "GLM or cyber -> WARMIND; WARMIND or DeepSeek -> GLM",
+	toggle: "GLM or uncensored -> WARMIND; WARMIND or DeepSeek -> GLM",
 	glm: "GLM-5.3 v16 on Hyperflare",
-	cyber: "GLM-5.3 cyber hybrid BF16 on Hyperflare (v16 plus the CYBERSECURITY build's late-layer + lm_head dense tensors)",
+	uncensored: "GLM-5.3 uncensored on Hyperflare (dealignai's UNCENSORED build in v16's storage)",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",
 	status: "what serves now, and what toggle would do",

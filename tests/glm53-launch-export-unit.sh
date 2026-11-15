@@ -3,6 +3,7 @@
 # from a throwaway git repository holding a copy of the glm53 directory; ssh is a
 # stub that runs the remote command locally with stub setsid/pgrep first on PATH,
 # so nothing reaches desktop and no driver really starts.
+# shellcheck disable=SC2034 # out/result/started are read inside check's eval strings
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,7 +74,7 @@ launch() {
 }
 fresh() {
   echo 1 > "$TMP/pgrep-rc.txt"
-  echo "2026-11-15T10:00:00Z preflight ok: /models/glm53-hyperflare/glm53-cyber-hybrid-bf16 (167 GiB), 300 GiB free" > "$TMP/verdict.txt"
+  echo "2026-11-15T10:00:00Z preflight ok: /models/glm53-hyperflare/glm53-uncensored (167 GiB), 300 GiB free" > "$TMP/verdict.txt"
 }
 SNAP="$REMOTE/glm53-export-$SHA"
 
@@ -84,14 +85,14 @@ launch
 check "no variant: usage, status 2" '[ "$result" = 2 ] && grep -q "usage:" <<<"$out"'
 
 fresh
-launch cyber-hybrid-fp8
-check "unknown variant: status 2, names the known ones" \
-  '[ "$result" = 2 ] && grep -q "known: v16 cyber-hybrid cyber-hybrid-bf16" <<<"$out"'
+launch cyber-hybrid-bf16
+check "unknown (retired) variant: status 2, names the known ones" \
+  '[ "$result" = 2 ] && grep -q "known: v16 uncensored" <<<"$out"'
 check "unknown variant: desktop never contacted" '[ ! -f "$TMP/ssh-calls.txt" ]'
 
 fresh
 echo "# local edit" >> "$REPO/$GLM53/hyperflare-variants.sh"
-launch cyber-hybrid-bf16
+launch uncensored
 check "uncommitted changes: refused" '[ "$result" = 1 ] && grep -q "uncommitted changes" <<<"$out"'
 check "uncommitted changes: desktop never contacted" '[ ! -f "$TMP/ssh-calls.txt" ]'
 git -C "$REPO" checkout -q -- "$GLM53/hyperflare-variants.sh"
@@ -100,44 +101,44 @@ git -C "$REPO" checkout -q -- "$GLM53/hyperflare-variants.sh"
 
 fresh
 echo 0 > "$TMP/pgrep-rc.txt"
-launch cyber-hybrid-bf16
+launch uncensored
 check "a running driver: refused, shown" '[ "$result" = 1 ] && grep -q "already running" <<<"$out" && grep -q 4242 <<<"$out"'
 check "a running driver: nothing shipped or started" '[ ! -d "$SNAP" ] && [ ! -f "$TMP/started.txt" ]'
 
 fresh
 echo 255 > "$TMP/pgrep-rc.txt"
-launch cyber-hybrid-bf16
+launch uncensored
 check "no answer from desktop: refused, not assumed idle" \
   '[ "$result" = 1 ] && grep -q "could not ask" <<<"$out" && [ ! -f "$TMP/started.txt" ]'
 
 # --- the launch ----------------------------------------------------------------------
 
 fresh
-launch cyber-hybrid-bf16
+launch uncensored
 check "launch succeeds on a preflight ok" '[ "$result" = 0 ] && grep -q "preflight ok" <<<"$out"'
 
 # Regression, 2026-11-15: the backgrounded launch subshell kept ssh's stdout open, so the
 # launcher returned only when the driver ended. A driver that runs on must not hold it.
 echo 20 > "$TMP/driver-seconds.txt"
 started=$SECONDS
-launch cyber-hybrid-bf16
+launch uncensored
 check "the launcher returns while the driver is still running" \
   '[ "$result" = 0 ] && [ $((SECONDS - started)) -lt 10 ]'
 rm -f "$TMP/driver-seconds.txt"
 check "the snapshot is HEAD's glm53 directory, whole (variant table beside the driver)" \
   'diff -r "$SNAP/$GLM53" "$REPO/$GLM53" >/dev/null && [ -r "$SNAP/$GLM53/hyperflare-variants.sh" ]'
 check "the driver starts from the snapshot with the variant" \
-  '[ "$(cat "$TMP/started.txt")" = "nohup bash $SNAP/$GLM53/stop-and-export-glm53-hyperflare.sh cyber-hybrid-bf16" ]'
+  '[ "$(cat "$TMP/started.txt")" = "nohup bash $SNAP/$GLM53/stop-and-export-glm53-hyperflare.sh uncensored" ]'
 check "no half-extracted snapshot is left" '[ -z "$(find "$REMOTE" -maxdepth 1 -name "glm53-export-$SHA.*")" ]'
 
 touch "$SNAP/marker"
 fresh
-launch cyber-hybrid-bf16
+launch uncensored
 check "a relaunch at the same commit reuses the snapshot" '[ "$result" = 0 ] && [ -f "$SNAP/marker" ]'
 
 fresh
 echo "2026-11-15T10:00:00Z aborted before stopping anything: disk: the package needs ~167 GiB + 10%, /models/glm53-hyperflare has 142 GiB free" > "$TMP/verdict.txt"
-launch cyber-hybrid-bf16
+launch uncensored
 check "a refused preflight fails the launch with its reason" \
   '[ "$result" = 1 ] && grep -q "has 142 GiB free" <<<"$out" && grep -q "refused before stopping anything" <<<"$out"'
 
@@ -145,10 +146,10 @@ check "a refused preflight fails the launch with its reason" \
 # on disk: the launcher must not report that as this run's success.
 fresh
 : > "$TMP/verdict.txt"
-echo "2026-11-14T09:00:00Z preflight ok: stale, from the last run" > "$REMOTE/glm-export-cyber-hybrid-bf16.status"
-launch cyber-hybrid-bf16
+echo "2026-11-14T09:00:00Z preflight ok: stale, from the last run" > "$REMOTE/glm-export-uncensored.status"
+launch uncensored
 check "no verdict in time fails the launch, pointing at the driver log" \
-  '[ "$result" = 1 ] && grep -q "no preflight verdict" <<<"$out" && grep -q "glm-export-cyber-hybrid-bf16.driver.log" <<<"$out"'
+  '[ "$result" = 1 ] && grep -q "no preflight verdict" <<<"$out" && grep -q "glm-export-uncensored.driver.log" <<<"$out"'
 check "a previous run's status is never read as this run's verdict" '! grep -q stale <<<"$out"'
 
 if [ "$failures" -ne 0 ]; then

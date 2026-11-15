@@ -51,7 +51,7 @@ cat > "$TMP/wrapper-ok" <<EOF
 #!/usr/bin/env bash
 echo "variant=\$VARIANT" >> "$TMP/wrapper-calls.txt"
 echo "root=\$ROOT_HOST" > "$TMP/wrapper-env.txt"
-echo "PACKAGE OK: glm53-cyber-hybrid-bf16@gb202-tp2-202611151234"
+echo "PACKAGE OK: glm53-uncensored@gb202-tp2-202611151234"
 EOF
 cat > "$TMP/wrapper-fail" <<EOF
 #!/usr/bin/env bash
@@ -65,10 +65,10 @@ source "$SCRIPT"
 
 GiB=$((1024 * 1024 * 1024))
 
-# The real variant table, a checkpoint store with the bf16 checkpoint in it, and
+# The real variant table, a checkpoint store with the uncensored checkpoint in it, and
 # a disk that is two numbers the test sets (the measurements are the I/O seam).
-mkdir -p "$TMP/models/glm53-cyber-hybrid-bf16"
-echo '{}' > "$TMP/models/glm53-cyber-hybrid-bf16/config.json"
+mkdir -p "$TMP/models/glm53-uncensored"
+echo '{}' > "$TMP/models/glm53-uncensored/config.json"
 checkpoint_bytes() { echo "$CKPT_BYTES"; }
 avail_bytes() { echo "$AVAIL_BYTES"; }
 
@@ -94,16 +94,16 @@ last_status() { tail -1 "$TMP/status.txt"; }
 
 configure
 : > "$TMP/running.txt"
-printf '%s\n' glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-cyber-hybrid ds41-1017-native comfyui > "$TMP/running.txt"
+printf '%s\n' glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-uncensored ds41-1017-native comfyui > "$TMP/running.txt"
 STATUS_FILE="$TMP/status.txt" stop_primaries
 check "both hyperflare primaries stopped" \
   '[ "$(cat "$TMP/docker-actions.txt")" = "stopped glm53-flash-hyperflare-tp2-v16
-stopped glm53-flash-hyperflare-tp2-cyber-hybrid" ]'
+stopped glm53-flash-hyperflare-tp2-uncensored" ]'
 check "foreign containers are never stopped" \
   '! grep -qE "ds41|comfyui" "$TMP/docker-actions.txt"'
 check "stop phase recorded" 'grep -q "stopping glm53-flash-hyperflare-tp2-v16" "$TMP/status.txt"'
 check "the stopped primaries are remembered for the restore" \
-  '[ "${STOPPED[*]}" = "glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-cyber-hybrid" ]'
+  '[ "${STOPPED[*]}" = "glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-uncensored" ]'
 
 configure
 rm -f "$TMP/docker-actions.txt"
@@ -165,15 +165,15 @@ check "a failing nvidia-smi counts as busy, not a crash" '[ "$result" = 1 ]'
 configure
 rm -f "$TMP/running.txt" "$TMP/status.txt"
 write_gpu 500 500
-EXPORT_WRAPPER="$TMP/wrapper-ok" main cyber-hybrid-bf16
+EXPORT_WRAPPER="$TMP/wrapper-ok" main uncensored
 check "main succeeds end to end" '[ $? = 0 ]'
 check "wrapper received the variant" \
-  '[ "$(cat "$TMP/wrapper-calls.txt")" = "variant=cyber-hybrid-bf16" ]'
+  '[ "$(cat "$TMP/wrapper-calls.txt")" = "variant=uncensored" ]'
 check "status records start, wait, export, done" \
   'grep -q "driver start" "$TMP/status.txt" && grep -q "waiting for idle GPUs" "$TMP/status.txt" \
-   && grep -q "export starting" "$TMP/status.txt" && grep -q "done glm53-cyber-hybrid-bf16@gb202-tp2-202611151234" "$TMP/status.txt"'
+   && grep -q "export starting" "$TMP/status.txt" && grep -q "done glm53-uncensored@gb202-tp2-202611151234" "$TMP/status.txt"'
 check "PACKAGE line comes from the wrapper's log" \
-  'grep -q "PACKAGE OK: glm53-cyber-hybrid-bf16" "$TMP/export.log"'
+  'grep -q "PACKAGE OK: glm53-uncensored" "$TMP/export.log"'
 check "preflight verdict recorded before any stop" \
   '[ "$(grep -n "preflight ok" "$TMP/status.txt" | cut -d: -f1)" -lt "$(grep -n "no hyperflare primaries" "$TMP/status.txt" | cut -d: -f1)" ]'
 check "the wrapper exports from the same state root the preflight checked" \
@@ -185,30 +185,28 @@ rm -f "$TMP/status.txt" "$TMP/wrapper-calls.txt"
 write_gpu 500 500
 cp "$TMP/wrapper-ok" "$TMP/wrapper-noexec"
 chmod -x "$TMP/wrapper-noexec"
-EXPORT_WRAPPER="$TMP/wrapper-noexec" main cyber-hybrid-bf16 2>/dev/null && result=0 || result=$?
+EXPORT_WRAPPER="$TMP/wrapper-noexec" main uncensored 2>/dev/null && result=0 || result=$?
 check "a wrapper without its exec bit still runs" \
-  '[ "$result" = 0 ] && [ "$(cat "$TMP/wrapper-calls.txt")" = "variant=cyber-hybrid-bf16" ]'
+  '[ "$result" = 0 ] && [ "$(cat "$TMP/wrapper-calls.txt")" = "variant=uncensored" ]'
 
 configure
 rm -f "$TMP/running.txt" "$TMP/status.txt" "$TMP/wrapper-calls.txt"
 write_gpu 500 500
-EXPORT_WRAPPER="$TMP/wrapper-fail" main cyber-hybrid-bf16 2>/dev/null && result=0 || result=$?
+EXPORT_WRAPPER="$TMP/wrapper-fail" main uncensored 2>/dev/null && result=0 || result=$?
 check "a failed export fails main" '[ "$result" = 1 ]'
 check "failure recorded with the exit code" 'grep -q "failed exit=7" "$TMP/status.txt"'
 
 configure
 rm -f "$TMP/status.txt" "$TMP/wrapper-calls.txt"
 write_gpu 500 5000
-GPU_WAIT_SECONDS=1 EXPORT_WRAPPER="$TMP/wrapper-ok" main cyber-hybrid-bf16 2>/dev/null && result=0 || result=$?
+GPU_WAIT_SECONDS=1 EXPORT_WRAPPER="$TMP/wrapper-ok" main uncensored 2>/dev/null && result=0 || result=$?
 check "busy GPUs abort before the export" '[ "$result" = 1 ]'
 check "the wrapper never ran on busy GPUs" '[ ! -f "$TMP/wrapper-calls.txt" ]'
 check "abort recorded" 'grep -q "aborted: GPUs never went idle" "$TMP/status.txt"'
 
 # Regression, 2026-11-15: a refused export left v16 stopped and the endpoint dark.
 # Every outcome after the stop starts the primary again before the terminal line.
-mkdir -p "$TMP/models/glm53-uncensored"
-echo '{}' > "$TMP/models/glm53-uncensored/config.json"
-for outcome in "done:$TMP/wrapper-ok:500:0:done glm53-cyber-hybrid-bf16@" \
+for outcome in "done:$TMP/wrapper-ok:500:0:done glm53-uncensored@" \
                "failed:$TMP/wrapper-fail:500:1:failed exit=7" \
                "busy:$TMP/wrapper-ok:30000:1:aborted: GPUs never went idle"; do
   IFS=: read -r label wrapper gpu want_status want_last <<<"$outcome"
@@ -237,8 +235,8 @@ check "an export that succeeded but whose primary will not restart exits 1" \
 
 configure
 rm -f "$TMP/status.txt" "$TMP/docker-actions.txt" "$TMP/wrapper-calls.txt"
-printf '%s\n' glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-cyber-hybrid > "$TMP/running.txt"
-echo glm53-flash-hyperflare-tp2-cyber-hybrid > "$TMP/stop-fails"
+printf '%s\n' glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-uncensored > "$TMP/running.txt"
+echo glm53-flash-hyperflare-tp2-uncensored > "$TMP/stop-fails"
 write_gpu 500 500
 EXPORT_WRAPPER="$TMP/wrapper-ok" main uncensored 2>/dev/null && result=0 || result=$?
 check "a primary that will not stop aborts, restores what did stop, never exports" \
@@ -276,28 +274,28 @@ refuses() {
 }
 
 configure
-refuses "unknown variant" cyber-hybrid-fp8 "unknown variant 'cyber-hybrid-fp8'"
+refuses "unknown (retired) variant" cyber-hybrid-bf16 "unknown variant 'cyber-hybrid-bf16'"
 
 configure
 VARIANTS_LIB="$TMP/nowhere/hyperflare-variants.sh"
-refuses "lone copy without the variant table" cyber-hybrid-bf16 "variant table .* is missing"
+refuses "lone copy without the variant table" uncensored "variant table .* is missing"
 
 configure
 refuses "checkpoint not built" v16 "no checkpoint at $TMP/models/glm53-fp4-local"
 
 configure
 AVAIL_BYTES=$((142 * GiB))
-refuses "package does not fit on disk" cyber-hybrid-bf16 "disk: the package needs ~167 GiB + 10%, .* has 142 GiB free"
+refuses "package does not fit on disk" uncensored "disk: the package needs ~167 GiB + 10%, .* has 142 GiB free"
 
 configure
-EXPORT_WRAPPER_UNDER_TEST="$TMP/no-such-wrapper" refuses "wrapper missing" cyber-hybrid-bf16 "export wrapper .* is missing"
+EXPORT_WRAPPER_UNDER_TEST="$TMP/no-such-wrapper" refuses "wrapper missing" uncensored "export wrapper .* is missing"
 
 # The table beside the wrapper is the one checked, not one beside the driver.
 configure
 unset VARIANTS_LIB
 mkdir -p "$TMP/lone"
 cp "$TMP/wrapper-ok" "$TMP/lone/export.sh"
-EXPORT_WRAPPER_UNDER_TEST="$TMP/lone/export.sh" refuses "wrapper dir without its table" cyber-hybrid-bf16 "variant table $TMP/lone/hyperflare-variants.sh is missing"
+EXPORT_WRAPPER_UNDER_TEST="$TMP/lone/export.sh" refuses "wrapper dir without its table" uncensored "variant table $TMP/lone/hyperflare-variants.sh is missing"
 
 if [ "$failures" -ne 0 ]; then
   echo "stop-and-export unit: $failures of $cases checks FAILED" >&2

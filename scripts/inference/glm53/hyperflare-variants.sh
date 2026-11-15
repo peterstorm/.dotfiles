@@ -8,40 +8,29 @@
 # source it. tests/hyperflare-variants-unit.sh pins the table.
 #
 #   v16           nvidia/GLM-5.3-Flash-FP4-Local as downloaded.
-#   cyber-hybrid  v16's checkpoint with the dense tensors of dealignai's
-#                 GLM-5.3-Flash-CYBERSECURITY build spliced in by
-#                 glm-hybrid-checkpoint.py. The routed experts, the vision tower
-#                 and every quantization declaration are v16's, so one package
-#                 shape (and one launcher) serves both.
-#   cyber-hybrid-bf16  v16's checkpoint (built with --base glm53-fp4-local) carrying
-#                 only the splice's requantized dense tensors from layer 40 on plus
-#                 lm_head, stored as the donor's plain BF16 instead of FP8
-#                 (glm53-bf16-dense.py). Layers 0-39 and the splice's copy/cast
-#                 tensors stay v16's; KDA q/k/v and MLA q_b_proj keep the splice's
-#                 FP8, because Hyperflare's kernels refuse them as plain BF16
-#                 (glm53-bf16-dense.py kernel_fp8_prefixes). Tests whether the late edit alone, without the
-#                 requant, holds up in long generation; the loader serves plain BF16
-#                 projections natively.
 #   uncensored    dealignai's GLM-5.3-Flash-UNCENSORED-NVFP4 (the refusal edit in
 #                 every layer, experts included) converted by
 #                 glm53-uncensored-convert.py into v16's storage, so it fits v16's
 #                 GPU budget and KV room: every dense projection re-encoded into
 #                 v16's FP8; the routed experts' FP4 codes and block scales exact,
 #                 the scales slab-CSF encoded and the gate/up globals folded into
-#                 down's; v16's expert input scales and vision tower.
+#                 down's (the draft layer's plain experts folded too, since b12x
+#                 pairs unequal gate/up globals only in A4 mode); v16's expert
+#                 input scales, chat template and vision tower.
+#
+# Retired 2026-11-15: cyber-hybrid and cyber-hybrid-bf16, the splices of
+# dealignai's CYBERSECURITY build; the runbook keeps their sections as history.
 #
 # Adding a variant is one line in each case below; an unknown variant is a
 # status, never a guess.
 
-HYPERFLARE_VARIANTS=(v16 cyber-hybrid cyber-hybrid-bf16 uncensored)
+HYPERFLARE_VARIANTS=(v16 uncensored)
 
 # hyperflare_variant_model VARIANT: the checkpoint directory, which Hyperflare
 # also uses as the model name. Status 1 for a variant that does not exist.
 hyperflare_variant_model() {
   case "$1" in
     v16) echo glm53-fp4-local ;;
-    cyber-hybrid) echo glm53-cyber-hybrid ;;
-    cyber-hybrid-bf16) echo glm53-cyber-hybrid-bf16 ;;
     uncensored) echo glm53-uncensored ;;
     *) return 1 ;;
   esac
@@ -53,7 +42,6 @@ hyperflare_variant_model() {
 # downloader's --verify is its gate), and for a variant that does not exist.
 hyperflare_variant_build_receipt() {
   case "$1" in
-    cyber-hybrid | cyber-hybrid-bf16) echo hybrid-receipt.json ;;
     uncensored) echo convert-receipt.json ;;
     *) return 1 ;;
   esac
@@ -73,12 +61,6 @@ hyperflare_variant_served() {
 hyperflare_variant_provenance() {
   case "$1" in
     v16) echo "$2" ;;
-    cyber-hybrid)
-      echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (dense tensors)"
-      ;;
-    cyber-hybrid-bf16)
-      echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (late-layer + lm_head requantized dense tensors only, BF16; KDA q/k/v + MLA q_b_proj FP8)"
-      ;;
     uncensored)
       echo "$2 (vision tower, expert input scales, storage formats) + dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4@745aac2ff0f10acf961f396df3f9418598aa7327 (every text weight; dense re-encoded to FP8, expert scales CSF-encoded with folded gate/up globals)"
       ;;

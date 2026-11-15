@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Switch desktop's primary model. The primaries are four served models on two
 # engines, one engine on both GPUs at a time:
-#   glm       glm-5.3-flash-hyperflare-tp2-v16           NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
-#   cyber     glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16  NVIDIA Hyperflare  (same switcher, VARIANT=cyber-hybrid-bf16: v16 plus the CYBERSECURITY build's late-layer + lm_head dense tensors as BF16)
-#   warmind   warmind-1017-native                        ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
-#   deepseek  deepseek-v4.1-flash-native                 ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
+#   glm         glm-5.3-flash-hyperflare-tp2-v16         NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
+#   uncensored  glm-5.3-flash-hyperflare-tp2-uncensored  NVIDIA Hyperflare  (same switcher, VARIANT=uncensored: dealignai's UNCENSORED build in v16's storage)
+#   warmind     warmind-1017-native                      ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
+#   deepseek    deepseek-v4.1-flash-native               ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
 #
-# Usage: switch-primary.sh [toggle|glm|cyber|warmind|deepseek|status]   (default: toggle)
-#   toggle    GLM or cyber -> GLM_TOGGLE_TARGET (WARMIND), WARMIND or DeepSeek -> GLM; with
+# Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]   (default: toggle)
+#   toggle    GLM or uncensored -> GLM_TOGGLE_TARGET (WARMIND), WARMIND or DeepSeek -> GLM; with
 #             nothing running, bring back whichever primary stopped last
-#   glm|cyber|warmind|deepseek
+#   glm|uncensored|warmind|deepseek
 #             make that one the primary (no-op if it already is)
 #   status    what serves now, and what toggle would do
 #
@@ -24,10 +24,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLM_CONTAINER="glm53-flash-hyperflare-tp2-v16"
-CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid-bf16"
+UNCENSORED_CONTAINER="glm53-flash-hyperflare-tp2-uncensored"
 DS41_CONTAINER="ds41-1017-native"
 # Every container that can be a primary; the catalog's other profiles are foreign to the switcher.
-PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$CYBER_CONTAINER" "$DS41_CONTAINER")
+PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$UNCENSORED_CONTAINER" "$DS41_CONTAINER")
 # The Hyperflare primaries share one switcher; it serves the variant it is given.
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
@@ -44,7 +44,7 @@ GLM_TOGGLE_TARGET="warmind"
 primary_of_served() {
   case "$1" in
     glm-5.3-flash-hyperflare-tp2-v16) echo glm ;;
-    glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16) echo cyber ;;
+    glm-5.3-flash-hyperflare-tp2-uncensored) echo uncensored ;;
     warmind-1017-native) echo warmind ;;
     deepseek-v4.1-flash-native) echo deepseek ;;
     *) echo "" ;;
@@ -53,7 +53,7 @@ primary_of_served() {
 served_of_primary() {
   case "$1" in
     glm) echo glm-5.3-flash-hyperflare-tp2-v16 ;;
-    cyber) echo glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16 ;;
+    uncensored) echo glm-5.3-flash-hyperflare-tp2-uncensored ;;
     warmind) echo warmind-1017-native ;;
     deepseek) echo deepseek-v4.1-flash-native ;;
   esac
@@ -63,18 +63,18 @@ served_of_primary() {
 variant_of_primary() {
   case "$1" in
     glm) echo v16 ;;
-    cyber) echo cyber-hybrid-bf16 ;;
+    uncensored) echo uncensored ;;
   esac
 }
 
 # primary_decide REQUEST ACTIVE LAST GLM_PARTNER -> exactly one line:
-#   start:<glm|cyber|warmind|deepseek> | noop:<primary> | error:<reason>
-#   REQUEST    toggle | glm | cyber | warmind | deepseek
-#   ACTIVE     glm | cyber | warmind | deepseek | none | multiple | other:<container>
-#   LAST       glm | cyber | warmind | deepseek | none   (the primary that stopped most recently)
-#   GLM_PARTNER warmind | deepseek              (the ds41 primary toggle starts from GLM)
-# Toggle always crosses engines: a Hyperflare primary (glm, cyber) goes to GLM_PARTNER, a ds41 one
-# to glm. cyber is reached by name (or as the last primary), so toggle is not an involution from it.
+#   start:<glm|uncensored|warmind|deepseek> | noop:<primary> | error:<reason>
+#   REQUEST    toggle | glm | uncensored | warmind | deepseek
+#   ACTIVE     glm | uncensored | warmind | deepseek | none | multiple | other:<container>
+#   LAST       glm | uncensored | warmind | deepseek | none   (the primary that stopped most recently)
+#   GLM_PARTNER warmind | deepseek                   (the ds41 primary toggle starts from GLM)
+# Toggle always crosses engines: a Hyperflare primary (glm, uncensored) goes to GLM_PARTNER, a ds41 one
+# to glm. uncensored is reached by name (or as the last primary), so toggle is not an involution from it.
 # Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
   local request="$1" active="$2" last="$3" glm_partner="$4"
@@ -82,26 +82,26 @@ primary_decide() {
   case "$active" in
     multiple) echo "error:more than one primary is running; stop all but one by hand"; return ;;
     other:*) echo "error:${active#other:} holds the GPUs; stop it before switching primaries"; return ;;
-    glm | cyber | warmind | deepseek | none) ;;
+    glm | uncensored | warmind | deepseek | none) ;;
     *) echo "error:unknown active state '$active'"; return ;;
   esac
   case "$request" in
     toggle)
       case "$active" in
-        glm | cyber) echo "start:$glm_partner" ;;
+        glm | uncensored) echo "start:$glm_partner" ;;
         warmind | deepseek) echo "start:glm" ;;
         none)
           case "$last" in
-            glm | cyber | warmind | deepseek) echo "start:$last" ;;
-            *) echo "error:nothing serves and no primary has run yet; name one: glm, cyber, warmind or deepseek" ;;
+            glm | uncensored | warmind | deepseek) echo "start:$last" ;;
+            *) echo "error:nothing serves and no primary has run yet; name one: glm, uncensored, warmind or deepseek" ;;
           esac
           ;;
       esac
       ;;
-    glm | cyber | warmind | deepseek)
+    glm | uncensored | warmind | deepseek)
       if [ "$active" = "$request" ]; then echo "noop:$request"; else echo "start:$request"; fi
       ;;
-    *) echo "error:unknown request '$request' (toggle, glm, cyber, warmind, deepseek or status)" ;;
+    *) echo "error:unknown request '$request' (toggle, glm, uncensored, warmind, deepseek or status)" ;;
   esac
 }
 
@@ -156,7 +156,7 @@ ds41_served_primary() {
 primary_of_container() {
   case "$1" in
     "$GLM_CONTAINER") echo glm ;;
-    "$CYBER_CONTAINER") echo cyber ;;
+    "$UNCENSORED_CONTAINER") echo uncensored ;;
     "$DS41_CONTAINER") ds41_served_primary ;;
   esac
 }
@@ -199,7 +199,7 @@ wait_for_free_gpus() {
 
 stop_primary() {
   case "$1" in
-    glm | cyber) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" stop ;;
+    glm | uncensored) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" stop ;;
     warmind | deepseek) "$DS41_RUN" --stop ;;
     none) ;;
   esac
@@ -210,7 +210,7 @@ start_primary() {
     # The Hyperflare switcher quiesces whatever serves (idle-gated) and restores it if
     # the variant's acceptance fails. VARIANT is always explicit, so one inherited from
     # the caller's environment cannot pick the wrong profile.
-    glm | cyber) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start ;;
+    glm | uncensored) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start ;;
     warmind | deepseek) WEIGHTS="$1" "$DS41_RUN" --launch ;;
   esac
 }
@@ -231,7 +231,7 @@ report() {
 switch_to() {
   local target="$1" active="$2"
   case "$target" in
-    glm | cyber)
+    glm | uncensored)
       # The Hyperflare switcher gates, quiesces, accepts and rolls back by itself.
       start_primary "$target" || return 1
       report "$target" || return 1
@@ -264,7 +264,7 @@ run_request() {
   last="$(read_last)" || return 1
   if [ "$request" = status ]; then
     local suffix=""
-    case "$active" in glm | cyber | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
+    case "$active" in glm | uncensored | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
     echo "active:     $active$suffix"
     echo "last:       $last"
     echo "toggle ->   $(primary_decide toggle "$active" "$last" "$GLM_TOGGLE_TARGET")"

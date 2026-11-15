@@ -20,12 +20,12 @@ check() {
   fi
 }
 
-PRIMARIES=(glm cyber warmind deepseek)
-REQUESTS=(toggle glm cyber warmind deepseek bogus "")
-ACTIVES=(glm cyber warmind deepseek none multiple other:qwen38-27b-bf16 weird "")
-LASTS=(glm cyber warmind deepseek none "")
+PRIMARIES=(glm uncensored warmind deepseek)
+REQUESTS=(toggle glm uncensored warmind deepseek bogus "")
+ACTIVES=(glm uncensored warmind deepseek none multiple other:qwen38-27b-bf16 weird "")
+LASTS=(glm uncensored warmind deepseek none "")
 GLM_PARTNERS=(warmind deepseek "" junk)
-engine() { case "$1" in glm | cyber) echo hyperflare ;; warmind | deepseek) echo ds4-native ;; *) echo none ;; esac; }
+engine() { case "$1" in glm | uncensored) echo hyperflare ;; warmind | deepseek) echo ds4-native ;; *) echo none ;; esac; }
 
 for request in "${REQUESTS[@]}"; do
   for active in "${ACTIVES[@]}"; do
@@ -34,17 +34,17 @@ for request in "${REQUESTS[@]}"; do
         d="$(primary_decide "$request" "$active" "$last" "$glm_partner")"
         ctx="request='$request' active='$active' last='$last' glm_partner='$glm_partner' -> '$d'"
         # Totality: exactly one well-formed line.
-        check "total: $ctx" '[[ "$d" =~ ^(start:(glm|cyber|warmind|deepseek)|noop:(glm|cyber|warmind|deepseek)|error:.+)$ ]]'
+        check "total: $ctx" '[[ "$d" =~ ^(start:(glm|uncensored|warmind|deepseek)|noop:(glm|uncensored|warmind|deepseek)|error:.+)$ ]]'
         # Never "start" what already serves.
         check "no self-start: $ctx" '[ "$d" != "start:$active" ]'
         # More than one primary, or a foreign profile, on the GPUs is always refused.
         if [ "$active" = multiple ] || [[ "$active" == other:* ]]; then
           check "refuse foreign/multiple: $ctx" '[[ "$d" == error:* ]]'
         fi
-        case "$active" in glm | cyber | warmind | deepseek | none) valid_active=1 ;; *) valid_active=0 ;; esac
+        case "$active" in glm | uncensored | warmind | deepseek | none) valid_active=1 ;; *) valid_active=0 ;; esac
         if [ "$valid_active" = 1 ]; then
           case "$request" in
-            glm | cyber | warmind | deepseek)
+            glm | uncensored | warmind | deepseek)
               # An explicit request lands on exactly that primary.
               check "explicit: $ctx" '[ "$d" = "noop:$request" ] || [ "$d" = "start:$request" ]'
               check "noop iff already: $ctx" '[ "$active" != "$request" ] || [ "$d" = "noop:$request" ]'
@@ -55,13 +55,13 @@ for request in "${REQUESTS[@]}"; do
                 check "toggle crosses engines: $ctx" \
                   '[[ "$d" == start:* ]] && [ "$(engine "${d#start:}")" != "$(engine "$active")" ]'
               fi
-              if [ "$active" = glm ] || [ "$active" = cyber ]; then
+              if [ "$active" = glm ] || [ "$active" = uncensored ]; then
                 expected="$glm_partner"; case "$expected" in warmind | deepseek) ;; *) expected=warmind ;; esac
                 check "a Hyperflare primary toggles to GLM's partner: $ctx" '[ "$d" = "start:$expected" ]'
               fi
               if [ "$active" = none ]; then
                 case "$last" in
-                  glm | cyber | warmind | deepseek) check "resume last: $ctx" '[ "$d" = "start:$last" ]' ;;
+                  glm | uncensored | warmind | deepseek) check "resume last: $ctx" '[ "$d" = "start:$last" ]' ;;
                   *) check "nothing to resume: $ctx" '[[ "$d" == error:* ]]' ;;
                 esac
               fi
@@ -75,7 +75,7 @@ for request in "${REQUESTS[@]}"; do
 done
 
 # Toggle is an involution across engines when the ds41 side is GLM's partner:
-# two toggles return to the start. cyber is reached by name, so a toggle from it
+# two toggles return to the start. uncensored is reached by name, so a toggle from it
 # rejoins the cycle (at the partner, then GLM) instead of returning to itself.
 for start in glm warmind deepseek; do
   for glm_partner in warmind deepseek; do
@@ -87,10 +87,10 @@ for start in glm warmind deepseek; do
 done
 
 for glm_partner in warmind deepseek; do
-  first="$(primary_decide toggle cyber none "$glm_partner")"
+  first="$(primary_decide toggle uncensored none "$glm_partner")"
   second="$(primary_decide toggle "${first#start:}" none "$glm_partner")"
-  check "cyber toggles to GLM's partner ($first)" '[ "$first" = "start:$glm_partner" ]'
-  check "the partner then toggles to glm, not back to cyber ($second)" '[ "$second" = start:glm ]'
+  check "uncensored toggles to GLM's partner ($first)" '[ "$first" = "start:$glm_partner" ]'
+  check "the partner then toggles to glm, not back to uncensored ($second)" '[ "$second" = start:glm ]'
 done
 
 # Sourcing must never run main, whatever $0 is: on 2026-11-14 a test sourced the
@@ -128,25 +128,28 @@ done
 check "unknown served id" '[ -z "$(primary_of_served qwen3.8-27b)" ]'
 # The two Hyperflare primaries are told apart by served id alone.
 check "glm serves the v16 id" '[ "$(served_of_primary glm)" = glm-5.3-flash-hyperflare-tp2-v16 ]'
-check "cyber serves the hybrid's id" '[ "$(served_of_primary cyber)" = glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16 ]'
-check "the hybrid's id is cyber" '[ "$(primary_of_served glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16)" = cyber ]'
+check "uncensored serves its variant's id" '[ "$(served_of_primary uncensored)" = glm-5.3-flash-hyperflare-tp2-uncensored ]'
+check "the uncensored variant's id is uncensored" '[ "$(primary_of_served glm-5.3-flash-hyperflare-tp2-uncensored)" = uncensored ]'
 check "each Hyperflare primary has its own variant" \
-  '[ "$(variant_of_primary glm)" = v16 ] && [ "$(variant_of_primary cyber)" = cyber-hybrid-bf16 ] && [ -z "$(variant_of_primary warmind)" ]'
+  '[ "$(variant_of_primary glm)" = v16 ] && [ "$(variant_of_primary uncensored)" = uncensored ] && [ -z "$(variant_of_primary warmind)" ]'
 # Each Hyperflare primary's container is the one the variant table derives for its variant,
 # and every primary is in the real profile catalog (the Hyperflare switcher quiesces only
-# catalog profiles). The original all-layer hybrid left the primaries on 2026-11-15 and stays
-# a catalog profile, so it is quiesced too, and seen as foreign while it runs.
+# catalog profiles). The cyber-hybrid variants were retired on 2026-11-15: no longer a
+# primary, a variant or a catalog profile.
 check "Hyperflare primary containers derive from the variant table" \
   '( source "$ROOT/scripts/inference/glm53/hyperflare-variants.sh"
      [ "$(hyperflare_variant_container "$(variant_of_primary glm)")" = "$GLM_CONTAINER" ] &&
-     [ "$(hyperflare_variant_container "$(variant_of_primary cyber)")" = "$CYBER_CONTAINER" ] )'
-check "every primary and the retired hybrid are catalog profiles" \
+     [ "$(hyperflare_variant_container "$(variant_of_primary uncensored)")" = "$UNCENSORED_CONTAINER" ] )'
+check "every primary is a catalog profile" \
   '( source "$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
-     for c in "${PRIMARY_CONTAINERS[@]}" glm53-flash-hyperflare-tp2-cyber-hybrid; do
+     for c in "${PRIMARY_CONTAINERS[@]}"; do
        printf "%s\n" "${INFERENCE_PROFILE_CONTAINERS[@]}" | grep -Fxq "$c" || exit 1
      done )'
-check "the retired hybrid is not a primary" \
-  '[[ " ${PRIMARY_CONTAINERS[*]} " != *" glm53-flash-hyperflare-tp2-cyber-hybrid "* ]]'
+check "the retired cyber variants are neither primaries nor catalog profiles" \
+  '( source "$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
+     for c in glm53-flash-hyperflare-tp2-cyber-hybrid glm53-flash-hyperflare-tp2-cyber-hybrid-bf16; do
+       printf "%s\n" "${PRIMARY_CONTAINERS[@]}" "${INFERENCE_PROFILE_CONTAINERS[@]}" | grep -Fxq "$c" && exit 1
+     done; exit 0 )'
 
 # --- dispatch: the real start/stop reach the right launcher with the right variant ---
 # Stub launchers print what they were given; the stubs further down replace these functions.
@@ -158,11 +161,11 @@ done
 GLM_SWITCH="$dispatch_dir/glm-switch"
 DS41_RUN="$dispatch_dir/ds41-run"
 check "start glm serves variant v16" '[ "$(start_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset start" ]'
-check "start cyber serves variant cyber-hybrid-bf16" '[ "$(start_primary cyber)" = "glm-switch VARIANT=cyber-hybrid-bf16 WEIGHTS=unset start" ]'
+check "start uncensored serves variant uncensored" '[ "$(start_primary uncensored)" = "glm-switch VARIANT=uncensored WEIGHTS=unset start" ]'
 check "stop glm stops v16" '[ "$(stop_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset stop" ]'
-check "stop cyber stops the hybrid" '[ "$(stop_primary cyber)" = "glm-switch VARIANT=cyber-hybrid-bf16 WEIGHTS=unset stop" ]'
+check "stop uncensored stops its variant" '[ "$(stop_primary uncensored)" = "glm-switch VARIANT=uncensored WEIGHTS=unset stop" ]'
 check "an inherited VARIANT cannot pick the profile" \
-  '[ "$(VARIANT=cyber-hybrid start_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset start" ]'
+  '[ "$(VARIANT=uncensored start_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset start" ]'
 check "start warmind launches the ds41 weights" '[ "$(start_primary warmind)" = "ds41-run VARIANT=unset WEIGHTS=warmind --launch" ]'
 check "start deepseek launches the ds41 weights" '[ "$(start_primary deepseek)" = "ds41-run VARIANT=unset WEIGHTS=deepseek --launch" ]'
 check "stop warmind stops ds41" '[ "$(stop_primary warmind)" = "ds41-run VARIANT=unset WEIGHTS=unset --stop" ]'
@@ -184,8 +187,7 @@ unset NVIDIA_RC
 unset -f nvidia-smi
 
 # --- read_active / read_last against stubbed container state ----------------
-RETIRED_HYBRID=glm53-flash-hyperflare-tp2-cyber-hybrid
-INFERENCE_PROFILE_CONTAINERS=(qwen38-27b-bf16 "$GLM_CONTAINER" "$RETIRED_HYBRID" "$CYBER_CONTAINER" "$DS41_CONTAINER")
+INFERENCE_PROFILE_CONTAINERS=(qwen38-27b-bf16 "$GLM_CONTAINER" "$UNCENSORED_CONTAINER" "$DS41_CONTAINER")
 declare -A running=() label=() finished=()
 inference_container_running() { [ "${running[$1]:-1}" = 0 ]; }
 container_label() { printf '%s' "${label[$1]:-}"; }
@@ -198,18 +200,16 @@ state; running[$DS41_CONTAINER]=0; label[$DS41_CONTAINER]=deepseek-v4.1-flash-na
 check "active ds41 serving stock DeepSeek" '[ "$(read_active)" = deepseek ]'
 state; running[$DS41_CONTAINER]=0; label[$DS41_CONTAINER]=mystery
 check "unrecognised ds41 label is foreign" '[[ "$(read_active)" == other:* ]]'
-state; running[$CYBER_CONTAINER]=0
-check "active cyber" '[ "$(read_active)" = cyber ]'
+state; running[$UNCENSORED_CONTAINER]=0
+check "active uncensored" '[ "$(read_active)" = uncensored ]'
 state; running[$GLM_CONTAINER]=0; running[$DS41_CONTAINER]=0
 check "two engines up" '[ "$(read_active)" = multiple ]'
-state; running[$GLM_CONTAINER]=0; running[$CYBER_CONTAINER]=0
+state; running[$GLM_CONTAINER]=0; running[$UNCENSORED_CONTAINER]=0
 check "both Hyperflare variants up" '[ "$(read_active)" = multiple ]'
-state; running[$CYBER_CONTAINER]=0; running[$DS41_CONTAINER]=0
-check "cyber and ds41 up" '[ "$(read_active)" = multiple ]'
+state; running[$UNCENSORED_CONTAINER]=0; running[$DS41_CONTAINER]=0
+check "uncensored and ds41 up" '[ "$(read_active)" = multiple ]'
 state; running[qwen38-27b-bf16]=0
 check "foreign profile on the GPUs" '[ "$(read_active)" = "other:qwen38-27b-bf16" ]'
-state; running[$RETIRED_HYBRID]=0
-check "the retired hybrid is foreign, never cyber" '[ "$(read_active)" = "other:$RETIRED_HYBRID" ]'
 state
 check "nothing running" '[ "$(read_active)" = none ]'
 state; finished[$GLM_CONTAINER]=2026-11-14T10:00:00Z; finished[$DS41_CONTAINER]=2026-11-14T09:00:00Z
@@ -218,10 +218,10 @@ state; finished[$GLM_CONTAINER]=2026-11-14T09:00:00Z; finished[$DS41_CONTAINER]=
 check "ds41 stopped last, with its weights" '[ "$(read_last)" = deepseek ]'
 state; finished[$DS41_CONTAINER]=2026-11-14T10:00:00Z
 check "ds41 stopped last without a label defaults to warmind" '[ "$(read_last)" = warmind ]'
-state; finished[$GLM_CONTAINER]=2026-11-14T10:00:00Z; finished[$CYBER_CONTAINER]=2026-11-14T11:00:00Z; finished[$DS41_CONTAINER]=2026-11-14T09:00:00Z
-check "cyber stopped last" '[ "$(read_last)" = cyber ]'
-state; finished[$GLM_CONTAINER]=2026-11-14T12:00:00Z; finished[$CYBER_CONTAINER]=2026-11-14T11:00:00Z
-check "glm stopped after cyber" '[ "$(read_last)" = glm ]'
+state; finished[$GLM_CONTAINER]=2026-11-14T10:00:00Z; finished[$UNCENSORED_CONTAINER]=2026-11-14T11:00:00Z; finished[$DS41_CONTAINER]=2026-11-14T09:00:00Z
+check "uncensored stopped last" '[ "$(read_last)" = uncensored ]'
+state; finished[$GLM_CONTAINER]=2026-11-14T12:00:00Z; finished[$UNCENSORED_CONTAINER]=2026-11-14T11:00:00Z
+check "glm stopped after uncensored" '[ "$(read_last)" = glm ]'
 state
 check "neither ever ran" '[ "$(read_last)" = none ]'
 
@@ -261,18 +261,18 @@ run_switch glm warmind
 check "to glm: its own switcher does gate and rollback" '[ "$switch_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
 FAIL_STARTS="glm" run_switch glm warmind
 check "failed glm switch fails without a report" '[ "$switch_rc" = 1 ] && [ "$calls" = "start:glm" ]'
-run_switch cyber warmind
-check "to cyber: its switcher does gate and rollback" '[ "$switch_rc" = 0 ] && [ "$calls" = "start:cyber report:cyber" ]'
-run_switch cyber glm
-check "glm to cyber stays inside the Hyperflare switcher" '[ "$switch_rc" = 0 ] && [ "$calls" = "start:cyber report:cyber" ]'
-FAIL_STARTS="cyber" run_switch cyber warmind
-check "failed cyber switch fails without a report" '[ "$switch_rc" = 1 ] && [ "$calls" = "start:cyber" ]'
-run_switch warmind cyber
-check "from cyber to warmind: gate, stop cyber, wait, start, report" \
-  '[ "$switch_rc" = 0 ] && [ "$calls" = "idle stop:cyber gpus start:warmind report:warmind" ]'
-FAIL_STARTS="warmind" run_switch warmind cyber
-check "a failed ds41 start restores cyber" \
-  '[ "$switch_rc" = 1 ] && [ "$calls" = "idle stop:cyber gpus start:warmind gpus start:cyber" ]'
+run_switch uncensored warmind
+check "to uncensored: its switcher does gate and rollback" '[ "$switch_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
+run_switch uncensored glm
+check "glm to uncensored stays inside the Hyperflare switcher" '[ "$switch_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
+FAIL_STARTS="uncensored" run_switch uncensored warmind
+check "failed uncensored switch fails without a report" '[ "$switch_rc" = 1 ] && [ "$calls" = "start:uncensored" ]'
+run_switch warmind uncensored
+check "from uncensored to warmind: gate, stop uncensored, wait, start, report" \
+  '[ "$switch_rc" = 0 ] && [ "$calls" = "idle stop:uncensored gpus start:warmind report:warmind" ]'
+FAIL_STARTS="warmind" run_switch warmind uncensored
+check "a failed ds41 start restores uncensored" \
+  '[ "$switch_rc" = 1 ] && [ "$calls" = "idle stop:uncensored gpus start:warmind gpus start:uncensored" ]'
 REPORT_RC=1
 report() { echo "report:$1" >>"$log_file"; return "${REPORT_RC:-0}"; }
 run_switch glm warmind
@@ -304,34 +304,30 @@ run toggle
 check "toggle from WARMIND switches to GLM" '[ "$request_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
 run status
 check "status with nothing to suffix" '[[ "$request_out" == *"active:     warmind (warmind-1017-native)"* ]]'
-state; running[$CYBER_CONTAINER]=0
+state; running[$UNCENSORED_CONTAINER]=0
 run status
-check "status names the hybrid's served id and toggles cyber to WARMIND" \
-  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     cyber (glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16)"* ]] && [[ "$request_out" == *"toggle ->   start:warmind"* ]]'
+check "status names uncensored's served id and toggles uncensored to WARMIND" \
+  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     uncensored (glm-5.3-flash-hyperflare-tp2-uncensored)"* ]] && [[ "$request_out" == *"toggle ->   start:warmind"* ]]'
 run toggle
-check "toggle from cyber crosses engines to WARMIND" \
-  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:cyber gpus start:warmind report:warmind" ]'
-run cyber
-check "an already-serving cyber reports without switching" '[ "$request_rc" = 0 ] && [ "$calls" = "report:cyber" ]'
+check "toggle from uncensored crosses engines to WARMIND" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:uncensored gpus start:warmind report:warmind" ]'
+run uncensored
+check "an already-serving uncensored reports without switching" '[ "$request_rc" = 0 ] && [ "$calls" = "report:uncensored" ]'
 run glm
-check "cyber to glm goes through the Hyperflare switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
+check "uncensored to glm goes through the Hyperflare switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
 state; running[$GLM_CONTAINER]=0
-run cyber
-check "glm to cyber goes through the Hyperflare switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:cyber report:cyber" ]'
-state; finished[$CYBER_CONTAINER]=2026-11-14T11:00:00Z
+run uncensored
+check "glm to uncensored goes through the Hyperflare switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
+state; finished[$UNCENSORED_CONTAINER]=2026-11-14T11:00:00Z
 run toggle
-check "toggle with nothing running resumes cyber" '[ "$request_rc" = 0 ] && [ "$calls" = "start:cyber report:cyber" ]'
+check "toggle with nothing running resumes uncensored" '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
 state
-run cyber
-check "cyber from nothing goes straight to its switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:cyber report:cyber" ]'
+run uncensored
+check "uncensored from nothing goes straight to its switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
 state; running[qwen38-27b-bf16]=0
 run toggle
 check "a foreign profile refuses the switch and touches nothing" \
   '[ "$request_rc" = 1 ] && [ -z "$calls" ] && [[ "$request_out" == *"qwen38-27b-bf16 holds the GPUs"* ]]'
-state; running[$RETIRED_HYBRID]=0
-run cyber
-check "the retired hybrid serving refuses cyber and touches nothing" \
-  '[ "$request_rc" = 1 ] && [ -z "$calls" ] && [[ "$request_out" == *"$RETIRED_HYBRID holds the GPUs"* ]]'
 inference_container_running() { return 2; }
 run status
 check "an uninspectable container fails the request" '[ "$request_rc" = 1 ] && [ -z "$calls" ]'

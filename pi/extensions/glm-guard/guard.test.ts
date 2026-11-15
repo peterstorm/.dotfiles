@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { guardPayload, profileFor, TUNED_BUDGETS, type GuardProfile } from "./guard";
 
 const GLM_V16 = "glm-5.3-flash-hyperflare-tp2-v16";
-const GLM_CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16";
+const GLM_UNCENSORED = "glm-5.3-flash-hyperflare-tp2-uncensored";
 
 const chat = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
 	model: "warmind-1017-native",
@@ -18,8 +18,8 @@ const upstream = (): GuardProfile => {
 	return profile;
 };
 const tuned = (): GuardProfile => {
-	const profile = profileFor(GLM_CYBER);
-	if (profile === undefined) throw new Error("expected a profile for the cyber hybrid");
+	const profile = profileFor(GLM_UNCENSORED);
+	if (profile === undefined) throw new Error("expected a profile for the uncensored build");
 	return profile;
 };
 
@@ -36,8 +36,12 @@ describe("profileFor: what a served model gets", () => {
 	});
 
 	it("gives the tuned build clear_thinking and a reasoning budget as well", () => {
-		expect(profileFor(GLM_CYBER)).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
-		expect(profileFor("glm-5.3-flash-cyber-w4a16")).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
+		expect(profileFor(GLM_UNCENSORED)).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
+		expect(profileFor("GLM-5.3-Flash-UNCENSORED-NVFP4")).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
+	});
+
+	it("treats the retired CYBERSECURITY hybrids as upstream GLM: no catalog or primary serves them", () => {
+		expect(profileFor("glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16")).toEqual({ kind: "glm" });
 	});
 
 	it("keeps every budget positive and ordered by effort", () => {

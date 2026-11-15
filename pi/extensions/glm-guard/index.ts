@@ -3,7 +3,7 @@
  *
  * A `before_provider_request` hook. For a request to a model in desktop-vllm's catalog it asks the
  * server what it is actually serving (the primaries share one port and answer to any model id, so a
- * session pinned to WARMIND can be talking to the GLM hybrid) and, when that is a GLM, lets
+ * session pinned to WARMIND can be talking to the uncensored GLM) and, when that is a GLM, lets
  * guard.ts's profile rewrite the payload. Anything else passes through untouched.
  *
  * Fail-open by construction: Pi's runner keeps the original payload when a handler throws, the
