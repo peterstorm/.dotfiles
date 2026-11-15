@@ -22,8 +22,9 @@
 #
 # VARIANT (default v16) picks the checkpoint, receipt and log; the checkpoint
 # directory is derived from it (hyperflare-variants.sh), never passed beside it.
-# `VARIANT=cyber-hybrid` exports the spliced CYBERSECURITY hybrid
-# (glm-hybrid-checkpoint.py) next to v16 without touching v16's package.
+# `VARIANT=uncensored` exports the converted dealignai checkpoint
+# (glm53-uncensored-convert.py) next to v16 without touching v16's package; a
+# built variant must carry its build receipt (hyperflare_variant_build_receipt).
 #
 # See docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md.
 set -euo pipefail
@@ -58,12 +59,12 @@ die() { echo "error: $*" >&2; exit 1; }
 
 [ "$(git hash-object "$RECIPE_EXPORT")" = "$RECIPE_EXPORT_BLOB" ] \
   || die "vendored recipe export script drifted from blob $RECIPE_EXPORT_BLOB"
-if [ "$VARIANT" = v16 ]; then
-  "$SCRIPT_DIR/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify
+if BUILD_RECEIPT="$(hyperflare_variant_build_receipt "$VARIANT")"; then
+  # A built checkpoint carries the receipt of the tool that built it.
+  [ -r "$CKPT_HOST/config.json" ] && [ -r "$CKPT_HOST/$BUILD_RECEIPT" ] \
+    || die "no built checkpoint (config.json + $BUILD_RECEIPT) at $CKPT_HOST"
 else
-  # A spliced checkpoint carries its own receipt (glm-hybrid-checkpoint.py splice).
-  [ -r "$CKPT_HOST/config.json" ] && [ -r "$CKPT_HOST/hybrid-receipt.json" ] \
-    || die "no spliced checkpoint (config.json + hybrid-receipt.json) at $CKPT_HOST"
+  "$SCRIPT_DIR/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify
 fi
 
 label="$(docker image inspect "$IMAGE" \

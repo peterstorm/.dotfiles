@@ -22,11 +22,16 @@
 #                 (glm53-bf16-dense.py kernel_fp8_prefixes). Tests whether the late edit alone, without the
 #                 requant, holds up in long generation; the loader serves plain BF16
 #                 projections natively.
+#   uncensored    dealignai's GLM-5.3-Flash-UNCENSORED-NVFP4 (the refusal edit in
+#                 every layer, experts included) converted by
+#                 glm53-uncensored-convert.py: its routed experts and BF16 text
+#                 tensors as released, declared the way v16 declares them; KDA q/k/v
+#                 and MLA q_b_proj re-encoded into v16's FP8; v16's vision tower.
 #
 # Adding a variant is one line in each case below; an unknown variant is a
 # status, never a guess.
 
-HYPERFLARE_VARIANTS=(v16 cyber-hybrid cyber-hybrid-bf16)
+HYPERFLARE_VARIANTS=(v16 cyber-hybrid cyber-hybrid-bf16 uncensored)
 
 # hyperflare_variant_model VARIANT: the checkpoint directory, which Hyperflare
 # also uses as the model name. Status 1 for a variant that does not exist.
@@ -35,6 +40,19 @@ hyperflare_variant_model() {
     v16) echo glm53-fp4-local ;;
     cyber-hybrid) echo glm53-cyber-hybrid ;;
     cyber-hybrid-bf16) echo glm53-cyber-hybrid-bf16 ;;
+    uncensored) echo glm53-uncensored ;;
+    *) return 1 ;;
+  esac
+}
+
+# hyperflare_variant_build_receipt VARIANT: the receipt a built checkpoint carries
+# in its directory, written by the tool that built it; the export refuses a
+# checkpoint without it. Status 1 for v16, which is downloaded, not built (its
+# downloader's --verify is its gate), and for a variant that does not exist.
+hyperflare_variant_build_receipt() {
+  case "$1" in
+    cyber-hybrid | cyber-hybrid-bf16) echo hybrid-receipt.json ;;
+    uncensored) echo convert-receipt.json ;;
     *) return 1 ;;
   esac
 }
@@ -58,6 +76,9 @@ hyperflare_variant_provenance() {
       ;;
     cyber-hybrid-bf16)
       echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (late-layer + lm_head requantized dense tensors only, BF16; KDA q/k/v + MLA q_b_proj FP8)"
+      ;;
+    uncensored)
+      echo "$2 (vision tower, quantization formats) + dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4@745aac2ff0f10acf961f396df3f9418598aa7327 (every text weight; KDA q/k/v + MLA q_b_proj re-encoded to FP8)"
       ;;
     *) return 1 ;;
   esac

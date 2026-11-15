@@ -30,6 +30,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   glm53-flash-hyperflare-tp2-v16
   glm53-flash-hyperflare-tp2-cyber-hybrid
   glm53-flash-hyperflare-tp2-cyber-hybrid-bf16
+  glm53-flash-hyperflare-tp2-uncensored
   qwen38-27b-blackfrost-abliterated-bf16-vllm
   ds41-1017-maya-exl35
   ds41-1017-native

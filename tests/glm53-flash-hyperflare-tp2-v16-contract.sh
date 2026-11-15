@@ -70,6 +70,10 @@ source "$VARIANTS"
 [ "$(hyperflare_variant_served cyber-hybrid-bf16)" = "$CYBER_SERVED_MODEL" ] || fail "the cyber primary's served id drifted from $CYBER_SERVED_MODEL"
 # The original hybrid is no longer a primary; it stays a launchable profile the switcher sees as foreign.
 contains "$CATALOG" "  $(hyperflare_variant_container cyber-hybrid)"
+contains "$CATALOG" "  $(hyperflare_variant_container uncensored)"
+# A built checkpoint is exported only with the receipt its builder wrote (the variant table names it).
+contains "$EXPORT" 'if BUILD_RECEIPT="$(hyperflare_variant_build_receipt "$VARIANT")"; then'
+absent "$EXPORT" 'hybrid-receipt.json'
 for script in "$EXPORT" "$RUN" "$SWITCH"; do
   contains "$script" 'source "$SCRIPT_DIR/hyperflare-variants.sh"'
   contains "$script" 'VARIANT="${VARIANT:-v16}"'
