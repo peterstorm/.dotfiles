@@ -323,8 +323,12 @@ reasoning parse exactly as they do on the other Hyperflare primaries.
   the converter, so the v3 build rewrote only shards 104–106 (layer 45) and the vision
   shard. Layer 45 folded 288 experts: up halved in 116, gate in 9, c′ ≥ 0.503. Disk cost
   was 5 GiB thanks to block cloning (`zpool get bcloneused rpool`). `total_size` was
-  unchanged, verify passed, and so did the CPU inspect. v2 stays at `sources/glm53-uncensored-v2`
-  (about 5 GiB unique beside v3's clones) until it is removed: v3 is itself a complete source.
+  unchanged, verify passed, and so did the CPU inspect. v2 (`sources/glm53-uncensored-v2`) was then
+  deleted, v3 being a complete source itself, together with the retired `glm53-cyber-hybrid`
+  checkpoint: 165 + 166 GiB by `du --apparent-size`, but `/models` went only 51 → 65 GiB free.
+  Both were mostly block clones (v2 of v3's blocks, cyber-hybrid of v16's shards, patched in
+  place), so only their own rewritten blocks came back. On this pool, measure what a delete
+  frees by the clones it holds, not by its apparent size.
 - **Export**: `launch-glm53-export.sh uncensored`. The driver now restarts what it stopped,
   so each failed attempt cost the endpoint about 2 minutes. Attempt 3 (v3, 2026-11-15 17:19–17:49Z) produced package
   `glm53-uncensored@gb202-tp2-202611151748` in 30 minutes, 56 graphs, receipt
