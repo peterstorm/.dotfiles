@@ -2,6 +2,7 @@
 # Unit test for scripts/inference/glm53/stop-and-export-glm53-hyperflare.sh.
 # The driver's decisions are exercised against stub docker / nvidia-smi / export
 # wrapper commands; nothing touches real containers or GPUs.
+# shellcheck disable=SC2034 # configure's settings are read by the sourced driver; result/want/want_last inside check's eval strings
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,12 +23,16 @@ trap 'rm -rf "$TMP"' EXIT
 
 # --- stubs ---------------------------------------------------------------------------
 
-# docker stub: ps reads a names file, stop records its argument.
+# docker stub: ps reads a names file, stop and start record their argument; start
+# fails while $TMP/start-fails exists, stop for a name listed in $TMP/stop-fails.
 cat > "$TMP/docker" <<EOF
 #!/usr/bin/env bash
 case "\$1" in
   ps) [ -f "$TMP/running.txt" ] && cat "$TMP/running.txt" || true ;;
-  stop) echo "stopped \${!#}" >> "$TMP/docker-actions.txt" ;;
+  stop) grep -qx "\${!#}" "$TMP/stop-fails" 2>/dev/null && exit 1
+        echo "stopped \${!#}" >> "$TMP/docker-actions.txt" ;;
+  start) [ -f "$TMP/start-fails" ] && exit 1
+         echo "started \${!#}" >> "$TMP/docker-actions.txt" ;;
 esac
 EOF
 chmod +x "$TMP/docker"
@@ -55,6 +60,7 @@ exit 7
 EOF
 chmod +x "$TMP/wrapper-ok" "$TMP/wrapper-fail"
 
+# shellcheck source=scripts/inference/glm53/stop-and-export-glm53-hyperflare.sh
 source "$SCRIPT"
 
 GiB=$((1024 * 1024 * 1024))
@@ -77,7 +83,12 @@ configure() {
   LOG="$TMP/export.log"
   POLL_SECONDS=0
   IDLE_CHECKS=2
+  STOPPED=()
+  rm -f "$TMP/start-fails" "$TMP/stop-fails"
 }
+
+# The last status line: what a poller reads as the outcome.
+last_status() { tail -1 "$TMP/status.txt"; }
 
 # --- stop_primaries ------------------------------------------------------------------
 
@@ -91,6 +102,34 @@ stopped glm53-flash-hyperflare-tp2-cyber-hybrid" ]'
 check "foreign containers are never stopped" \
   '! grep -qE "ds41|comfyui" "$TMP/docker-actions.txt"'
 check "stop phase recorded" 'grep -q "stopping glm53-flash-hyperflare-tp2-v16" "$TMP/status.txt"'
+check "the stopped primaries are remembered for the restore" \
+  '[ "${STOPPED[*]}" = "glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-cyber-hybrid" ]'
+
+configure
+rm -f "$TMP/docker-actions.txt"
+printf '%s\n' glm53-flash-hyperflare-tp2-uncensored-export glm53-flash-hyperflare-tp2-v16 > "$TMP/running.txt"
+STATUS_FILE="$TMP/status.txt" stop_primaries
+check "a leftover export container is stopped but never restored" \
+  'grep -q "stopped glm53-flash-hyperflare-tp2-uncensored-export" "$TMP/docker-actions.txt" \
+   && [ "${STOPPED[*]}" = "glm53-flash-hyperflare-tp2-v16" ]'
+
+configure
+rm -f "$TMP/docker-actions.txt"
+STOPPED=(glm53-flash-hyperflare-tp2-v16)
+STATUS_FILE="$TMP/status.txt" restore_primaries
+check "restore starts what was stopped and records it" \
+  '[ "$(cat "$TMP/docker-actions.txt")" = "started glm53-flash-hyperflare-tp2-v16" ] \
+   && grep -q "restarted glm53-flash-hyperflare-tp2-v16" "$TMP/status.txt"'
+configure
+touch "$TMP/start-fails"
+STOPPED=(glm53-flash-hyperflare-tp2-v16)
+STATUS_FILE="$TMP/status.txt" restore_primaries && result=0 || result=$?
+check "a primary that will not start fails the restore, recorded" \
+  '[ "$result" = 1 ] && grep -q "failed to restart glm53-flash-hyperflare-tp2-v16" "$TMP/status.txt"'
+configure
+rm -f "$TMP/docker-actions.txt"
+STATUS_FILE="$TMP/status.txt" restore_primaries
+check "nothing stopped, nothing started" '[ ! -f "$TMP/docker-actions.txt" ]'
 
 configure
 rm -f "$TMP/docker-actions.txt" "$TMP/running.txt"
@@ -164,6 +203,48 @@ GPU_WAIT_SECONDS=1 EXPORT_WRAPPER="$TMP/wrapper-ok" main cyber-hybrid-bf16 2>/de
 check "busy GPUs abort before the export" '[ "$result" = 1 ]'
 check "the wrapper never ran on busy GPUs" '[ ! -f "$TMP/wrapper-calls.txt" ]'
 check "abort recorded" 'grep -q "aborted: GPUs never went idle" "$TMP/status.txt"'
+
+# Regression, 2026-11-15: a refused export left v16 stopped and the endpoint dark.
+# Every outcome after the stop starts the primary again before the terminal line.
+mkdir -p "$TMP/models/glm53-uncensored"
+echo '{}' > "$TMP/models/glm53-uncensored/config.json"
+for outcome in "done:$TMP/wrapper-ok:500:0:done glm53-cyber-hybrid-bf16@" \
+               "failed:$TMP/wrapper-fail:500:1:failed exit=7" \
+               "busy:$TMP/wrapper-ok:30000:1:aborted: GPUs never went idle"; do
+  IFS=: read -r label wrapper gpu want_status want_last <<<"$outcome"
+  configure
+  rm -f "$TMP/status.txt" "$TMP/docker-actions.txt"
+  echo glm53-flash-hyperflare-tp2-v16 > "$TMP/running.txt"
+  write_gpu "$gpu" "$gpu"
+  GPU_WAIT_SECONDS=1 EXPORT_WRAPPER="$wrapper" main uncensored 2>/dev/null && result=0 || result=$?
+  check "$label: main exits $want_status" '[ "$result" = "$want_status" ]'
+  check "$label: v16 stopped, then started again" \
+    '[ "$(cat "$TMP/docker-actions.txt")" = "stopped glm53-flash-hyperflare-tp2-v16
+started glm53-flash-hyperflare-tp2-v16" ]'
+  check "$label: the restart is recorded before the terminal line" \
+    '[ "$(tail -2 "$TMP/status.txt" | head -1 | cut -d" " -f2-)" = "restarted glm53-flash-hyperflare-tp2-v16" ] \
+     && [[ "$(last_status)" == *"$want_last"* ]]'
+done
+
+configure
+rm -f "$TMP/status.txt" "$TMP/docker-actions.txt"
+echo glm53-flash-hyperflare-tp2-v16 > "$TMP/running.txt"
+write_gpu 500 500
+touch "$TMP/start-fails"
+EXPORT_WRAPPER="$TMP/wrapper-ok" main uncensored 2>/dev/null && result=0 || result=$?
+check "an export that succeeded but whose primary will not restart exits 1" \
+  '[ "$result" = 1 ] && grep -q "failed to restart" "$TMP/status.txt" && [[ "$(last_status)" == *"done "* ]]'
+
+configure
+rm -f "$TMP/status.txt" "$TMP/docker-actions.txt" "$TMP/wrapper-calls.txt"
+printf '%s\n' glm53-flash-hyperflare-tp2-v16 glm53-flash-hyperflare-tp2-cyber-hybrid > "$TMP/running.txt"
+echo glm53-flash-hyperflare-tp2-cyber-hybrid > "$TMP/stop-fails"
+write_gpu 500 500
+EXPORT_WRAPPER="$TMP/wrapper-ok" main uncensored 2>/dev/null && result=0 || result=$?
+check "a primary that will not stop aborts, restores what did stop, never exports" \
+  '[ "$result" = 1 ] && [ ! -f "$TMP/wrapper-calls.txt" ] \
+   && grep -q "started glm53-flash-hyperflare-tp2-v16" "$TMP/docker-actions.txt" \
+   && [[ "$(last_status)" == *"aborted: a primary would not stop"* ]]'
 
 configure
 rm -f "$TMP/status.txt"

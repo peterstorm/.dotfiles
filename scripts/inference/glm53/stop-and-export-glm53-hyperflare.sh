@@ -34,6 +34,12 @@
 # processes it does not own. The export itself runs with no timeout: it either
 # finishes, or fails and records why.
 #
+# Whatever happens after the stop -- the GPUs never go idle, the export fails, or
+# it succeeds -- the primaries it stopped are started again before the terminal
+# status line, so the endpoint is down only while the export holds the GPUs (on
+# 2026-11-15 a refused export left it dark until someone noticed). Cutting over
+# to the new package is the switch script's job; it stops them again first.
+#
 # Usage: stop-and-export-glm53-hyperflare.sh VARIANT
 set -euo pipefail
 
@@ -97,6 +103,10 @@ preflight() {
 
 # --- effects -------------------------------------------------------------------------
 
+# The serving primaries stop_primaries stopped (a leftover export container is
+# stopped but never restarted), for restore_primaries.
+STOPPED=()
+
 stop_primaries() {
   local running name
   running="$("$DOCKER" ps --format '{{.Names}}' 2>/dev/null | grep -E '^glm53-flash-hyperflare-tp2-' || true)"
@@ -107,7 +117,23 @@ stop_primaries() {
   for name in $running; do
     status "stopping $name"
     "$DOCKER" stop -t 120 "$name" >/dev/null || { status "failed to stop $name"; return 1; }
+    [[ "$name" == *-export ]] || STOPPED+=("$name")
   done
+}
+
+# Start every primary stop_primaries stopped. Status 1 when any did not start;
+# each outcome is recorded.
+restore_primaries() {
+  local name rc=0
+  for name in ${STOPPED[@]+"${STOPPED[@]}"}; do
+    if "$DOCKER" start "$name" >/dev/null; then
+      status "restarted $name"
+    else
+      status "failed to restart $name"
+      rc=1
+    fi
+  done
+  return "$rc"
 }
 
 gpu_used_mib() {
@@ -157,9 +183,15 @@ main() {
   }
   status "preflight ok: $checked"
 
-  stop_primaries
+  local restored=0
+  if ! stop_primaries; then
+    restore_primaries || true
+    status "aborted: a primary would not stop; nothing was exported"
+    return 1
+  fi
   status "waiting for idle GPUs"
   if ! await_idle_gpus; then
+    restore_primaries || true
     status "aborted: GPUs never went idle; nothing was exported"
     return 1
   fi
@@ -168,9 +200,10 @@ main() {
   local rc=0
   # Through bash: the wrapper's exec bit is not part of the contract.
   VARIANT="$VARIANT" ROOT_HOST="$ROOT_HOST" bash "$EXPORT_WRAPPER" >>"$LOG" 2>&1 || rc=$?
+  restore_primaries || restored=$?
   if (( rc == 0 )); then
     status "done $(sed -n 's/^PACKAGE OK: //p' "$LOG" | tail -1)"
-    return 0
+    return "$restored"
   fi
   status "failed exit=$rc (see $LOG)"
   return 1
