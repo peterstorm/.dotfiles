@@ -13,11 +13,13 @@
 #                 glm-hybrid-checkpoint.py. The routed experts, the vision tower
 #                 and every quantization declaration are v16's, so one package
 #                 shape (and one launcher) serves both.
-#   cyber-hybrid-bf16  cyber-hybrid with its late-layer dense tensors (>= layer 40
-#                 plus lm_head) stored as plain BF16 instead of the splice's FP8
-#                 requantization (glm53-bf16-dense.py). Tests whether that requant
-#                 is what destabilizes long generation; the loader serves plain
-#                 BF16 projections natively.
+#   cyber-hybrid-bf16  v16's checkpoint (built with --base glm53-fp4-local) carrying
+#                 only the splice's requantized dense tensors from layer 40 on plus
+#                 lm_head, stored as the donor's plain BF16 instead of FP8
+#                 (glm53-bf16-dense.py). Layers 0-39 and the splice's copy/cast
+#                 tensors stay v16's. Tests whether the late edit alone, without the
+#                 requant, holds up in long generation; the loader serves plain BF16
+#                 projections natively.
 #
 # Adding a variant is one line in each case below; an unknown variant is a
 # status, never a guess.
@@ -53,7 +55,7 @@ hyperflare_variant_provenance() {
       echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (dense tensors)"
       ;;
     cyber-hybrid-bf16)
-      echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (dense tensors, late layers + lm_head BF16)"
+      echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (late-layer + lm_head requantized dense tensors only, BF16)"
       ;;
     *) return 1 ;;
   esac

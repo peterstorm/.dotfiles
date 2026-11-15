@@ -150,6 +150,13 @@ def serialize_header(header: dict) -> bytes:
     return struct.pack("<Q", len(encoded) + padding) + encoded + b" " * padding
 
 
+def index_files(index: dict) -> list[str]:
+    """Every tensor file the index names, once each. Paths are relative to the checkpoint and
+    may sit in subdirectories (FP4-Local keeps 214 tensors in tensors/native-QB.safetensors),
+    so the index, not a top-level glob, is what says which files make the checkpoint."""
+    return sorted(set(index["weight_map"].values()))
+
+
 def rewrite_index(index: dict, dropped: set[str]) -> dict:
     """Forget dropped scale tensors; weights keep their shard names, offsets live in headers."""
     return {
@@ -248,14 +255,17 @@ def build(base: Path, plan_path: Path, cache: Path, receipt_path: Path, out: Pat
         shards_affected.setdefault(shard, set()).add(name)
 
     stats = {"shards_rewritten": 0, "shards_shared": 0, "bytes_copied": 0, "bytes_written": 0}
-    for source_file in sorted(base.glob("*.safetensors")):
-        target_file = out / source_file.name
-        if source_file.name not in shards_affected:
+    shards = index_files(index)
+    for shard in shards:
+        source_file = base / shard
+        target_file = out / shard
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        if shard not in shards_affected:
             ref_copy(source_file, target_file)
             stats["shards_shared"] += 1
             continue
         length, header = read_header(source_file)
-        replacement = {name: payloads[name] for name in shards_affected[source_file.name]
+        replacement = {name: payloads[name] for name in shards_affected[shard]
                        if name in selected}
         new_header, copy_map = rewrite_header(header, replacement, drop, data_start=8 + length)
         with source_file.open("rb") as src, target_file.open("wb") as dst:
@@ -277,25 +287,30 @@ def build(base: Path, plan_path: Path, cache: Path, receipt_path: Path, out: Pat
                 while remaining:
                     chunk = src.read(min(remaining, COPY_CHUNK))
                     if not chunk:
-                        raise ValueError(f"{source_file.name}: short read at {src.tell()}")
+                        raise ValueError(f"{shard}: short read at {src.tell()}")
                     dst.write(chunk)
                     remaining -= len(chunk)
                     stats["bytes_copied"] += len(chunk)
         stats["shards_rewritten"] += 1
 
-    dropped_here = {name for name in drop}
-    (out / "model.safetensors.index.json").write_text(
-        json.dumps(rewrite_index(index, dropped_here), indent=2))
+    new_index = rewrite_index(index, drop)
+    (out / "model.safetensors.index.json").write_text(json.dumps(new_index, indent=2))
     (out / "config.json").write_text(
         json.dumps(patch_config(json.loads((base / "config.json").read_text()), prefixes), indent=2))
+    # Top-level files the index does not name (tokenizer, processor config, an unindexed
+    # .safetensors) come along. Directories do not: any that hold indexed shards were written
+    # above, and the rest is fetch residue (e.g. a .cache/).
     for leftover in sorted(base.iterdir()):
-        if leftover.name.endswith(".safetensors") or leftover.name in ("config.json", "model.safetensors.index.json"):
+        if leftover.name in shards or leftover.name in ("config.json", "model.safetensors.index.json"):
             continue
         if leftover.is_dir():
-            continue  # fetch residue (e.g. a .cache/); the checkpoint is its regular files
+            continue
         if not leftover.is_file():
             raise ValueError(f"{leftover}: neither a regular file nor a directory; handle manually")
         ref_copy(leftover, out / leftover.name)
+    missing = [f for f in index_files(new_index) if not (out / f).is_file()]
+    if missing:
+        raise ValueError(f"{out}: the index names files the build did not write: {missing}")
     receipt = json.loads(receipt_path.read_text())
     receipt["bf16"] = {"selected": len(selected), "prefixes": sorted(prefixes),
                        "min_layer": plan["min_layer"], "source_repo": plan["cyber_repo"], **stats}
@@ -330,13 +345,18 @@ def verify(base: Path, plan_path: Path, cache: Path, out: Path) -> None:
         if shard != selected[name]["shard"]:
             raise ValueError(f"{name}: index points at {shard}, expected {selected[name]['shard']}")
 
+    missing = [f for f in index_files(out_index) if not (out / f).is_file()]
+    if missing:
+        raise ValueError(f"the output index names files that are not there: {missing}")
+
     affected_shards = {entry["shard"] for entry in plan["selected"]}
     affected_shards |= {base_index["weight_map"][name] for name in drop
                         if name in base_index["weight_map"]}
-    for source_file in sorted(base.glob("*.safetensors")):
-        out_file = out / source_file.name
+    for shard in index_files(base_index):
+        source_file = base / shard
+        out_file = out / shard
         if not out_file.exists():
-            raise ValueError(f"{source_file.name}: missing from the output")
+            raise ValueError(f"{shard}: missing from the output")
         _, out_header = read_header(out_file)
         previous_end = 0
         for name, meta in out_header.items():
@@ -344,23 +364,23 @@ def verify(base: Path, plan_path: Path, cache: Path, out: Path) -> None:
                 continue
             begin, end = meta["data_offsets"]
             if begin < previous_end:
-                raise ValueError(f"{source_file.name}:{name}: overlapping data_offsets")
+                raise ValueError(f"{shard}:{name}: overlapping data_offsets")
             previous_end = end
-        if source_file.name in affected_shards:
+        if shard in affected_shards:
             continue
         # shared shard: same header, same size, and one sampled tensor byte-equal
         _, base_header = read_header(source_file)
         if base_header != out_header:
-            raise ValueError(f"{source_file.name}: shared shard header drifted from the base")
+            raise ValueError(f"{shard}: shared shard header drifted from the base")
         if out_file.stat().st_size != source_file.stat().st_size:
-            raise ValueError(f"{source_file.name}: shared shard size drifted from the base")
+            raise ValueError(f"{shard}: shared shard size drifted from the base")
         sample = next(name for name in out_header if name != "__metadata__")
         begin, end = out_header[sample]["data_offsets"]
         with source_file.open("rb") as src, out_file.open("rb") as dst:
             dst.seek(8 + header_len(out_header) + begin)
             src.seek(8 + header_len(base_header) + begin)
             if src.read(end - begin) != dst.read(end - begin):
-                raise ValueError(f"{source_file.name}:{sample}: shared shard bytes drifted")
+                raise ValueError(f"{shard}:{sample}: shared shard bytes drifted")
 
     checked = 0
     for name, entry in selected.items():

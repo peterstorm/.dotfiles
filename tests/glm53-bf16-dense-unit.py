@@ -79,6 +79,7 @@ def build_fixture(root: Path) -> dict:
     expert = payload("ex", 32)
     norm = payload("nm", 16)
     gate = payload("gt", 32)
+    native = payload("nq", 16)
 
     write_safetensors(base / "model-00001-of-00004.safetensors", [
         ("model.layers.40.self_attn.q_proj.weight", "F8_E4M3", [8, 32], q_w),
@@ -99,6 +100,15 @@ def build_fixture(root: Path) -> dict:
     write_safetensors(base / "model-00004-of-00004.safetensors", [
         ("model.layers.41.mlp.gate.weight", "BF16", [4, 4], gate),
     ])
+    # FP4-Local keeps some tensors in a subdirectory shard (tensors/native-QB.safetensors on
+    # the real checkpoint): the index names it, so the output must carry it.
+    (base / "tensors").mkdir()
+    write_safetensors(base / "tensors/native-QB.safetensors", [
+        ("model.layers.0.self_attn.b_proj.weight", "BF16", [4, 2], native),
+    ])
+    # A fetch leaves residue directories that are not part of the checkpoint.
+    (base / ".cache").mkdir()
+    (base / ".cache/residue.lock").write_text("residue")
 
     index = {"metadata": {"total_size": 1}, "weight_map": {
         "model.layers.40.self_attn.q_proj.weight": "model-00001-of-00004.safetensors",
@@ -112,6 +122,7 @@ def build_fixture(root: Path) -> dict:
         "model.layers.40.mlp.shared_experts.down_proj.weight_scale": "model-00003-of-00004.safetensors",
         "model.layers.40.input_layernorm.weight": "model-00003-of-00004.safetensors",
         "model.layers.41.mlp.gate.weight": "model-00004-of-00004.safetensors",
+        "model.layers.0.self_attn.b_proj.weight": "tensors/native-QB.safetensors",
     }}
     (base / "model.safetensors.index.json").write_text(json.dumps(index))
     (base / "config.json").write_text(json.dumps({
@@ -155,7 +166,7 @@ def build_fixture(root: Path) -> dict:
     }
     return {"base": base, "plan": plan, "receipt": receipt, "sources": sources,
             "raw": {"q_w": q_w, "q_s": q_s, "o_w": o_w, "head_w": head_w, "sh_w": sh_w,
-                    "expert": expert, "norm": norm, "gate": gate}}
+                    "expert": expert, "norm": norm, "gate": gate, "native": native}}
 
 
 def load_plan_bf16(root: Path, fixture: dict, min_layer: int = 40) -> Path:
@@ -286,8 +297,12 @@ def test_build_and_verify(root, fixture):
     cache = root / "cache"
     out = root / "out"
     stats = mod.build(fixture["base"], plan_bf16, cache, root / "hybrid-receipt.json", out)
-    check(stats["shards_rewritten"] == 3 and stats["shards_shared"] == 1,
-          f"3 shards rewritten, 1 shared (got {stats})")
+    check(stats["shards_rewritten"] == 3 and stats["shards_shared"] == 2,
+          f"3 shards rewritten, 2 shared (got {stats})")
+    check((out / "tensors/native-QB.safetensors").read_bytes()
+          == (fixture["base"] / "tensors/native-QB.safetensors").read_bytes(),
+          "the subdirectory shard the index names is carried, byte-identical")
+    check(not (out / ".cache").exists(), "fetch residue directories are not carried")
     check(len(calls) == 3, f"three source fetches (got {calls})")
     mod.remote_bytes = saved_remote
 
@@ -353,6 +368,8 @@ def test_build_and_verify(root, fixture):
     check_raises("build refuses an existing output",
                  lambda: mod.build(fixture["base"], plan_bf16, cache,
                                    root / "hybrid-receipt.json", out))
+    check(mod.index_files({"weight_map": {"a": "s2", "b": "tensors/q", "c": "s2"}}) == ["s2", "tensors/q"],
+          "index_files: each named file once, sorted, subdirectories kept")
 
     mod.verify(fixture["base"], plan_bf16, cache, out)
     check(True, "verify passes on the built checkpoint")
@@ -397,6 +414,9 @@ def test_build_and_verify(root, fixture):
     def drop_shard(scratch):
         (scratch / "model-00003-of-00004.safetensors").unlink()
 
+    def drop_subdir_shard(scratch):
+        (scratch / "tensors/native-QB.safetensors").unlink()
+
     def overlap_offsets(scratch):
         shard = scratch / "model-00002-of-00004.safetensors"
         _, header = mod.read_header(shard)
@@ -417,6 +437,7 @@ def test_build_and_verify(root, fixture):
                           (resurrect_declaration, "resurrected declaration"),
                           (tamper_shared, "tampered shared shard"),
                           (drop_shard, "missing shard"),
+                          (drop_subdir_shard, "missing subdirectory shard"),
                           (overlap_offsets, "overlapping offsets"),
                           (wrong_shard_point, "wrong shard pointer")):
         check(mutate(action), f"verify catches: {label}")
