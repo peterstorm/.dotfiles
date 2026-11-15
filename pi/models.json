@@ -39,6 +39,39 @@
           }
         },
         {
+          "id": "glm-5.3-flash-hyperflare-tp2-cyber-hybrid",
+          "name": "GLM-5.3 Flash cyber hybrid on Hyperflare TP2 (NVIDIA FP4-Local experts and vision + dealignai CYBERSECURITY dense tensors, hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.2M KV, 1M ctx, vision)",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 1048576,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
           "id": "deepseek-v4.1-flash-native",
           "name": "DeepSeek-V4.1-Flash-1017 released MXFP4 on ds4-native (Exact, TP2, Experts streamed from NVMe, DSpark, 256K ctx, conversations kept as KV checkpoints) behind Project Maya's server",
           "reasoning": true,

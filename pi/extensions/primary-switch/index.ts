@@ -80,7 +80,7 @@ const assertNever = (value: never): never => {
 
 export default function primarySwitchExtension(pi: ExtensionAPI) {
 	pi.registerCommand("switch", {
-		description: "Switch desktop's primary model (toggle|glm|warmind|deepseek|status) and move this session onto it",
+		description: "Switch desktop's primary model (toggle|glm|cyber|warmind|deepseek|status) and move this session onto it",
 		getArgumentCompletions: (prefix) => [...switchCompletions(prefix)],
 		handler: async (args, ctx) => {
 			const request = parseSwitchRequest(args);

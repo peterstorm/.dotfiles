@@ -2,8 +2,9 @@
 # Contract assertions over Pi's model catalog (pi/models.json). Source it from a
 # contract; it defines functions only.
 #
-# Since 2026-11-14 the three primaries (warmind-1017-native,
-# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16) are the only
+# Since 2026-11-14 the primaries (warmind-1017-native,
+# deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16, and since
+# 2026-11-15 glm-5.3-flash-hyperflare-tp2-cyber-hybrid) are the only
 # local models Pi offers (scripts/inference/switch-primary.sh). Retired profiles
 # stay launchable; restore a profile's catalog entry from git history before
 # pointing Pi at it.

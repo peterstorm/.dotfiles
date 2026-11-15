@@ -6,19 +6,44 @@ import {
 	failureTail,
 	observe,
 	PRIMARIES,
+	PRIMARY_PROVIDER,
 	parseSwitchReport,
 	parseSwitchRequest,
 	runPrimarySwitch,
 	SWITCH_REQUESTS,
 	switchCompletions,
+	type Primary,
 	type ScriptRun,
 	type SwitchPorts,
 	type SwitchRequest,
 } from "./switch";
 
 const GLM = "glm-5.3-flash-hyperflare-tp2-v16";
+const CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid";
 const WARMIND = "warmind-1017-native";
+/** Every primary's served id; the Record type makes a new primary a compile error until it is listed. */
+const SERVED: Readonly<Record<Primary, string>> = {
+	glm: GLM,
+	cyber: CYBER,
+	warmind: WARMIND,
+	deepseek: "deepseek-v4.1-flash-native",
+};
 const SCRIPT = join(import.meta.dir, "../../../scripts/inference/switch-primary.sh");
+const CATALOG = join(import.meta.dir, "../../models.json");
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The model ids Pi's catalog offers under the primaries' provider, parsed from the file, never cast. */
+function catalogModelIds(): readonly string[] {
+	const root: unknown = JSON.parse(readFileSync(CATALOG, "utf8"));
+	const providers = isRecord(root) ? root.providers : undefined;
+	const provider = isRecord(providers) ? providers[PRIMARY_PROVIDER] : undefined;
+	const models: unknown = isRecord(provider) ? provider.models : undefined;
+	return Array.isArray(models)
+		? models.flatMap((model: unknown) => (isRecord(model) && typeof model.id === "string" ? [model.id] : []))
+		: [];
+}
 
 const reportOf = (primary: string, served: string, extra = ""): string =>
 	`switching: warmind -> ${primary}\nPRIMARY: ${primary} (${served} on :8000)\npi:      pi --model desktop-vllm/${served}\n${extra}`;
@@ -77,6 +102,7 @@ describe("parsing the /switch request", () => {
 	it("completes request words by prefix, each with a description", () => {
 		expect(switchCompletions("").map((item) => item.value)).toEqual([...SWITCH_REQUESTS]);
 		expect(switchCompletions("g").map((item) => item.value)).toEqual(["glm"]);
+		expect(switchCompletions("c").map((item) => item.value)).toEqual(["cyber"]);
 		expect(switchCompletions("x")).toEqual([]);
 		expect(switchCompletions("").every((item) => item.description.length > 0)).toBe(true);
 	});
@@ -107,18 +133,24 @@ describe("parsing the switch-primary.sh report", () => {
 			if (run.exitCode !== 0) throw new Error(run.stderr.toString());
 			return run.stdout.toString();
 		};
-		const served = { glm: GLM, warmind: WARMIND, deepseek: "deepseek-v4.1-flash-native" } as const;
 		for (const primary of PRIMARIES) {
 			expect(parseSwitchReport(report(primary))).toEqual({
 				ok: true,
-				value: { primary, servedId: served[primary], unchanged: false },
+				value: { primary, servedId: SERVED[primary], unchanged: false },
 			});
 			expect(parseSwitchReport(report(primary, "noop"))).toEqual({
 				ok: true,
-				value: { primary, servedId: served[primary], unchanged: true },
+				value: { primary, servedId: SERVED[primary], unchanged: true },
 			});
 		}
-		expect(readFileSync(SCRIPT, "utf8")).toContain("Usage: switch-primary.sh [toggle|glm|warmind|deepseek|status]");
+		expect(readFileSync(SCRIPT, "utf8")).toContain("Usage: switch-primary.sh [toggle|glm|cyber|warmind|deepseek|status]");
+	});
+
+	it("has a catalog model for every primary's served id", () => {
+		// A primary without a catalog entry would finish its cutover and then fail at the
+		// `model` stage ("is served but missing from pi/models.json"); catch that here.
+		const offered = catalogModelIds();
+		for (const primary of PRIMARIES) expect(offered).toContain(SERVED[primary]);
 	});
 
 	it("refuses a report naming a primary the script does not have", () => {
@@ -164,6 +196,22 @@ describe("running a switch", () => {
 		expect(calls.selected).toEqual([GLM]);
 		expect(calls.progress.at(-1)).toBeUndefined();
 		expect(calls.progress).toContain(`waiting for ${GLM}: still serving ${WARMIND}`);
+	});
+
+	it("waits for the hybrid's own id while the other Hyperflare primary still serves", async () => {
+		// GLM and the cyber hybrid share an engine and a port; only the served id tells them apart.
+		const { ports, calls } = fakePorts({
+			run: { code: 0, stdout: reportOf("cyber", CYBER), stderr: "", killed: false },
+			probes: [
+				{ ok: true, value: GLM },
+				{ ok: true, value: CYBER },
+			],
+		});
+		const outcome = await runPrimarySwitch("cyber", ports, timing);
+		expect(outcome).toEqual({ kind: "switched", primary: "cyber", model: `desktop-vllm/${CYBER}`, unchanged: false, waitedMs: 3_000 });
+		expect(calls.scripts).toEqual(["cyber"]);
+		expect(calls.progress).toContain(`waiting for ${CYBER}: still serving ${GLM}`);
+		expect(calls.selected).toEqual([CYBER]);
 	});
 
 	it("still moves the session onto the primary when it already serves", async () => {

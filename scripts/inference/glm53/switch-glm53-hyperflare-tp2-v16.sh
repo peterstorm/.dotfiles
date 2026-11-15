@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Safely start/stop the GLM-5.3 v16 Hyperflare TP2 profile.
+# Safely start/stop a GLM-5.3 Hyperflare TP2 profile: v16 by default, or the
+# CYBERSECURITY hybrid with VARIANT=cyber-hybrid (hyperflare-variants.sh derives
+# the container, served id, receipt and checkpoint from the variant, and the run
+# script reads the same exported VARIANT). switch-primary.sh calls this for the
+# `glm` and `cyber` primaries.
 # The rollback target is whatever profile set was running before (normally
 # ds41-1017-native). The v15 qad2 checkpoint was deleted on 2026-11-13 to make
 # room for the FP4-Local checkpoint and the Hyperflare package, so v15 needs
@@ -14,14 +18,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 # shellcheck source=scripts/inference/shared/inference-profile-catalog.sh
 source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
+# shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
+source "$SCRIPT_DIR/hyperflare-variants.sh"
 
-TARGET="glm53-flash-hyperflare-tp2-v16"
-EXPECTED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
+# Exported: the run script this starts must serve the same variant.
+VARIANT="${VARIANT:-v16}"
+hyperflare_resolve_model "$VARIANT" >/dev/null || exit 2
+export VARIANT
+TARGET="$(hyperflare_variant_container "$VARIANT")"
+EXPECTED_MODEL="$(hyperflare_variant_served "$VARIANT")"
 RUN="$SCRIPT_DIR/run-glm53-flash-hyperflare-tp2-v16.sh"
 # The package carries compiled kernels and captured graphs; the recipe
 # measured ~30 s launch-to-ready at TP2. 15 minutes covers a cold page cache.
 STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-900}"
-BOOT_RECEIPT="${BOOT_RECEIPT:-$HOME/.local/state/glm53/flash-hyperflare-tp2-v16-boot-receipt.txt}"
+BOOT_RECEIPT="${BOOT_RECEIPT:-$HOME/.local/state/glm53/flash-hyperflare-tp2-$VARIANT-boot-receipt.txt}"
 MODE="${1:-status}"
 
 if ! [[ "$STARTUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -115,7 +125,7 @@ report_boot_receipt() {
   capacity_lines="$(grep -E 'Plan cache\.|Allocate cache\.|Start server\.' <<<"$logs" | tail -n 6 || true)"
   receipt_dir="$(dirname "$BOOT_RECEIPT")"
   install -d -m 700 "$receipt_dir" || { receipt_failed "cannot create $receipt_dir"; return 1; }
-  receipt_tmp="$(mktemp "$receipt_dir/.v16-boot-receipt.XXXXXX")" || { receipt_failed "cannot create a temporary file in $receipt_dir"; return 1; }
+  receipt_tmp="$(mktemp "$receipt_dir/.$VARIANT-boot-receipt.XXXXXX")" || { receipt_failed "cannot create a temporary file in $receipt_dir"; return 1; }
   {
     printf 'container=%s\nmodel=%s\npackage=%s\nstarted_at=%s\nimage=%s\n' \
       "$TARGET" "$EXPECTED_MODEL" "$package" "$started_at" "$image_id"
@@ -194,14 +204,14 @@ case "$MODE" in
       stopped+=("$container")
     done
     if ! "$RUN" --launch; then
-      echo "error: Hyperflare v16 launch failed; restoring previous profile set" >&2
+      echo "error: Hyperflare $VARIANT launch failed; restoring previous profile set" >&2
       restore_profiles "${previous[@]}" || true
       exit 1
     fi
     if ! wait_for_target || ! require_metrics_bridge || ! report_boot_receipt || ! promote_restart_policy; then
       docker logs --tail 200 "$TARGET" >&2 || true
       inference_quiesce_failed_container "$TARGET" || true
-      echo "error: Hyperflare v16 acceptance failed; restoring previous profile set" >&2
+      echo "error: Hyperflare $VARIANT acceptance failed; restoring previous profile set" >&2
       restore_profiles "${previous[@]}" || true
       exit 1
     fi

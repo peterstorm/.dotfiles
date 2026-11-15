@@ -94,11 +94,37 @@ export and run scripts check.
    (`~/.local/state/glm53/flash-hyperflare-tp2-v16-boot-receipt.txt`, Plan/Allocate
    cache lines), promote to `unless-stopped`; any failure restores the previous
    profile set.
-5. **Switching primaries** (GLM v16, WARMIND and stock DeepSeek-V4.1 are the
-   primaries since 2026-11-14): `scripts/inference/switch-primary.sh` toggles GLM
-   to WARMIND (`GLM_TOGGLE_TARGET`) and either ds41 model back to GLM; `… glm|warmind|deepseek` picks one; `… status`
+5. **Switching primaries** (GLM v16, its cyber hybrid, WARMIND and stock DeepSeek-V4.1 are the
+   primaries): `scripts/inference/switch-primary.sh` toggles GLM or cyber
+   to WARMIND (`GLM_TOGGLE_TARGET`) and either ds41 model back to GLM; `… glm|cyber|warmind|deepseek` picks one; `… status`
    reports. It idle-gates :8000, stops the active engine through its own launcher,
-   starts the other, and restores the previous primary if the start fails.
+   starts the other, and restores the previous primary if the start fails. Both
+   Hyperflare primaries go through this one switcher (`VARIANT=v16|cyber-hybrid`),
+   which quiesces and rolls back across them like any other pair.
+
+## Variant: cyber-hybrid (2026-11-15)
+
+`VARIANT=cyber-hybrid` is v16's checkpoint with the dense tensors of
+`dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16` (rev `4c2ee763…`) spliced in:
+attention, shared experts, dense MLP, norms, `lm_head`, MTP. The routed experts
+(163 GiB, where the abliteration is *not*), the vision tower and every
+quantization declaration stay NVIDIA's, so the package has v16's shape (56 graphs,
+same flags) and one launcher set serves both. `scripts/inference/glm53/hyperflare-variants.sh`
+is the one table of names (checkpoint directory, container, served id, provenance);
+the export, run and switch scripts derive from it and take no free `MODEL`.
+
+- **Build** (once): `glm-hybrid-checkpoint.py plan | fetch | check | splice | verify` —
+  fetch only the 854 dense tensors by HTTP range (16.9 GiB), requantize each to the
+  format v16 already stores it in, reflink-copy v16's shards and patch in place.
+  `check` scores the staged bytes against the base and `splice` refuses without a
+  passing verdict. Result: `/models/glm53-hyperflare/glm53-cyber-hybrid`.
+- **Export**: `VARIANT=cyber-hybrid scripts/inference/glm53/export-glm53-flash-hyperflare-tp2-v16.sh`
+  (both GPUs idle; ~13 min with the warm kernel cache) → `package-cyber-hybrid.txt`,
+  package `glm53-cyber-hybrid@gb202-tp2-<ts>`.
+- **Serve**: `switch-primary.sh cyber` (or `/switch cyber`). v16's package and
+  container stay in place, so `switch-primary.sh glm` is the rollback.
+- **Disk**: each package is 168 GiB and packages do not dedupe; `/models` had 98 GiB
+  free after the second one.
 
 ## Monitoring
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Export the GLM-5.3 v16 Hyperflare TP2 package (2 GPUs, 8 slots, images).
+# Export the GLM-5.3 Hyperflare TP2 package (2 GPUs, 8 slots, images).
 #
 # Runs the recipe's own export-glm-tp2.sh (vendored byte-for-byte in
 # glm53-v16-hyperflare/, git blob f2bcc006…) inside the locally built
-# Hyperflare image, from the fork checkout at /opt/flare, against the
-# downloaded FP4-Local checkpoint. The checkpoint is mounted read-only at
-# /ckpt/glm53-fp4-local so its directory name — which Hyperflare uses as the
-# model name — stays glm53-fp4-local.
+# Hyperflare image, from the fork checkout at /opt/flare, against the variant's
+# checkpoint (v16: the downloaded FP4-Local one). The checkpoint is mounted
+# read-only at /ckpt/<model> so its directory name — which Hyperflare uses as the
+# model name — is kept (glm53-fp4-local for v16).
 #
 # Persistent state lives under /models/glm53-hyperflare (rpool/models, not
 # /home): flare-home/ is the container's $HOME, so the package store
@@ -18,21 +18,27 @@
 # Requires both GPUs idle (stop the serving profile first; this script never
 # stops anything). Export at the power limit you serve with: kernel tuning
 # measures the cards as they run (recipe EXPORT.md). On success it writes the
-# package receipt the v16 run script serves from.
+# package receipt the run script serves from.
+#
+# VARIANT (default v16) picks the checkpoint, receipt and log; the checkpoint
+# directory is derived from it (hyperflare-variants.sh), never passed beside it.
+# `VARIANT=cyber-hybrid` exports the spliced CYBERSECURITY hybrid
+# (glm-hybrid-checkpoint.py) next to v16 without touching v16's package.
 #
 # See docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
+source "$SCRIPT_DIR/hyperflare-variants.sh"
 IMAGE="peterstorm/glm53-hyperflare:ac9136b-cu131"
 HYPERFLARE_COMMIT="ac9136b02c7c523f12d6e628e9d94f41006312ea"
 RECIPE_EXPORT="$SCRIPT_DIR/glm53-v16-hyperflare/export-glm-tp2.sh"
 RECIPE_EXPORT_BLOB="f2bcc006e3b63c0add107396bfe8f85f4832e502"
 ROOT_HOST="${ROOT_HOST:-/models/glm53-hyperflare}"
-# MODEL is the checkpoint directory, which Hyperflare also uses as the model name; VARIANT labels
-# the receipt and log so one script exports any checkpoint built by glm-hybrid-checkpoint.py.
-MODEL="${MODEL:-glm53-fp4-local}"
+# MODEL is the checkpoint directory, which Hyperflare also uses as the model name.
 VARIANT="${VARIANT:-v16}"
+MODEL="$(hyperflare_resolve_model "$VARIANT")" || exit 2
 CKPT_HOST="$ROOT_HOST/$MODEL"
 FLARE_HOME="$ROOT_HOST/flare-home"
 BRRR_EXT="$ROOT_HOST/brrr-ext"
@@ -52,10 +58,12 @@ die() { echo "error: $*" >&2; exit 1; }
 
 [ "$(git hash-object "$RECIPE_EXPORT")" = "$RECIPE_EXPORT_BLOB" ] \
   || die "vendored recipe export script drifted from blob $RECIPE_EXPORT_BLOB"
-if [ "$MODEL" = "glm53-fp4-local" ]; then
+if [ "$VARIANT" = v16 ]; then
   "$SCRIPT_DIR/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify
 else
-  [ -r "$CKPT_HOST/config.json" ] || die "no checkpoint at $CKPT_HOST"
+  # A spliced checkpoint carries its own receipt (glm-hybrid-checkpoint.py splice).
+  [ -r "$CKPT_HOST/config.json" ] && [ -r "$CKPT_HOST/hybrid-receipt.json" ] \
+    || die "no spliced checkpoint (config.json + hybrid-receipt.json) at $CKPT_HOST"
 fi
 
 label="$(docker image inspect "$IMAGE" \
@@ -89,7 +97,7 @@ status="${PIPESTATUS[0]}"
 [ "$status" -eq 0 ] || die "export exited $status; see $LOG"
 
 entry="$(sed -nE "s|^Exported cache entry: .*/($MODEL/gb202-tp2-[0-9]+)$|\1|p" "$LOG" | tail -1)"
-[ -n "$entry" ] || die "export log has no 'Exported cache entry: .../glm53-fp4-local/gb202-tp2-<ts>' line"
+[ -n "$entry" ] || die "export log has no 'Exported cache entry: .../$MODEL/gb202-tp2-<ts>' line"
 package="${entry%%/*}@${entry##*/}"
 plan_line="$(grep -E 'Plan cache\.|Graph catalog' "$LOG" | tail -2 | tr '\n' ' ')"
 tmp="$(mktemp "$ROOT_HOST/.package-$VARIANT.XXXXXX")"

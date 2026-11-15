@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Switch desktop's primary model. The primaries are three served models on two
+# Switch desktop's primary model. The primaries are four served models on two
 # engines, one engine on both GPUs at a time:
-#   glm       glm-5.3-flash-hyperflare-tp2-v16  NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh)
-#   warmind   warmind-1017-native               ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
-#   deepseek  deepseek-v4.1-flash-native        ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
+#   glm       glm-5.3-flash-hyperflare-tp2-v16           NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
+#   cyber     glm-5.3-flash-hyperflare-tp2-cyber-hybrid  NVIDIA Hyperflare  (same switcher, VARIANT=cyber-hybrid: v16 plus the CYBERSECURITY build's dense tensors)
+#   warmind   warmind-1017-native                        ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
+#   deepseek  deepseek-v4.1-flash-native                 ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
 #
-# Usage: switch-primary.sh [toggle|glm|warmind|deepseek|status]   (default: toggle)
-#   toggle    GLM -> GLM_TOGGLE_TARGET (WARMIND), WARMIND or DeepSeek -> GLM; with
+# Usage: switch-primary.sh [toggle|glm|cyber|warmind|deepseek|status]   (default: toggle)
+#   toggle    GLM or cyber -> GLM_TOGGLE_TARGET (WARMIND), WARMIND or DeepSeek -> GLM; with
 #             nothing running, bring back whichever primary stopped last
-#   glm|warmind|deepseek
+#   glm|cyber|warmind|deepseek
 #             make that one the primary (no-op if it already is)
 #   status    what serves now, and what toggle would do
 #
@@ -23,7 +24,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLM_CONTAINER="glm53-flash-hyperflare-tp2-v16"
+CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid"
 DS41_CONTAINER="ds41-1017-native"
+# Every container that can be a primary; the catalog's other profiles are foreign to the switcher.
+PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$CYBER_CONTAINER" "$DS41_CONTAINER")
+# The Hyperflare primaries share one switcher; it serves the variant it is given.
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
 SERVING_HOST="desktop"
@@ -39,6 +44,7 @@ GLM_TOGGLE_TARGET="warmind"
 primary_of_served() {
   case "$1" in
     glm-5.3-flash-hyperflare-tp2-v16) echo glm ;;
+    glm-5.3-flash-hyperflare-tp2-cyber-hybrid) echo cyber ;;
     warmind-1017-native) echo warmind ;;
     deepseek-v4.1-flash-native) echo deepseek ;;
     *) echo "" ;;
@@ -47,44 +53,55 @@ primary_of_served() {
 served_of_primary() {
   case "$1" in
     glm) echo glm-5.3-flash-hyperflare-tp2-v16 ;;
+    cyber) echo glm-5.3-flash-hyperflare-tp2-cyber-hybrid ;;
     warmind) echo warmind-1017-native ;;
     deepseek) echo deepseek-v4.1-flash-native ;;
   esac
 }
 
+# The Hyperflare variant a Hyperflare primary serves (hyperflare-variants.sh names it); empty for ds41's.
+variant_of_primary() {
+  case "$1" in
+    glm) echo v16 ;;
+    cyber) echo cyber-hybrid ;;
+  esac
+}
+
 # primary_decide REQUEST ACTIVE LAST GLM_PARTNER -> exactly one line:
-#   start:<glm|warmind|deepseek> | noop:<primary> | error:<reason>
-#   REQUEST    toggle | glm | warmind | deepseek
-#   ACTIVE     glm | warmind | deepseek | none | both | other:<container>
-#   LAST       glm | warmind | deepseek | none   (the primary that stopped most recently)
+#   start:<glm|cyber|warmind|deepseek> | noop:<primary> | error:<reason>
+#   REQUEST    toggle | glm | cyber | warmind | deepseek
+#   ACTIVE     glm | cyber | warmind | deepseek | none | multiple | other:<container>
+#   LAST       glm | cyber | warmind | deepseek | none   (the primary that stopped most recently)
 #   GLM_PARTNER warmind | deepseek              (the ds41 primary toggle starts from GLM)
+# Toggle always crosses engines: a Hyperflare primary (glm, cyber) goes to GLM_PARTNER, a ds41 one
+# to glm. cyber is reached by name (or as the last primary), so toggle is not an involution from it.
 # Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
   local request="$1" active="$2" last="$3" glm_partner="$4"
   case "$glm_partner" in warmind | deepseek) ;; *) glm_partner=warmind ;; esac
   case "$active" in
-    both) echo "error:both primary engines are running; stop one by hand"; return ;;
+    multiple) echo "error:more than one primary is running; stop all but one by hand"; return ;;
     other:*) echo "error:${active#other:} holds the GPUs; stop it before switching primaries"; return ;;
-    glm | warmind | deepseek | none) ;;
+    glm | cyber | warmind | deepseek | none) ;;
     *) echo "error:unknown active state '$active'"; return ;;
   esac
   case "$request" in
     toggle)
       case "$active" in
-        glm) echo "start:$glm_partner" ;;
+        glm | cyber) echo "start:$glm_partner" ;;
         warmind | deepseek) echo "start:glm" ;;
         none)
           case "$last" in
-            glm | warmind | deepseek) echo "start:$last" ;;
-            *) echo "error:nothing serves and no primary has run yet; name one: glm, warmind or deepseek" ;;
+            glm | cyber | warmind | deepseek) echo "start:$last" ;;
+            *) echo "error:nothing serves and no primary has run yet; name one: glm, cyber, warmind or deepseek" ;;
           esac
           ;;
       esac
       ;;
-    glm | warmind | deepseek)
+    glm | cyber | warmind | deepseek)
       if [ "$active" = "$request" ]; then echo "noop:$request"; else echo "start:$request"; fi
       ;;
-    *) echo "error:unknown request '$request' (toggle, glm, warmind, deepseek or status)" ;;
+    *) echo "error:unknown request '$request' (toggle, glm, cyber, warmind, deepseek or status)" ;;
   esac
 }
 
@@ -102,17 +119,21 @@ finished_at() {
 
 # ACTIVE, from the containers themselves.
 read_active() {
-  local glm=0 ds41=0 container status
-  inference_container_running "$GLM_CONTAINER" || glm=$?
-  inference_container_running "$DS41_CONTAINER" || ds41=$?
-  # 0 running, 1 stopped/absent, anything else an inspection failure: fail closed.
-  [ "$glm" -le 1 ] && [ "$ds41" -le 1 ] || die "cannot inspect the primary containers"
-  if [ "$glm" = 0 ] && [ "$ds41" = 0 ]; then echo both; return; fi
-  if [ "$glm" = 0 ]; then echo glm; return; fi
-  if [ "$ds41" = 0 ]; then
-    local served
-    served="$(ds41_served_primary)"
-    echo "${served:-other:$DS41_CONTAINER (unrecognised served model)}"
+  local container status primary live=()
+  for container in "${PRIMARY_CONTAINERS[@]}"; do
+    status=0
+    inference_container_running "$container" || status=$?
+    # 0 running, 1 stopped/absent, anything else an inspection failure: fail closed.
+    case "$status" in
+      0) live+=("$container") ;;
+      1) ;;
+      *) die "cannot inspect the primary containers" ;;
+    esac
+  done
+  if [ "${#live[@]}" -gt 1 ]; then echo multiple; return; fi
+  if [ "${#live[@]}" -eq 1 ]; then
+    primary="$(primary_of_container "${live[0]}")"
+    echo "${primary:-other:${live[0]} (unrecognised served model)}"
     return
   fi
   for container in "${INFERENCE_PROFILE_CONTAINERS[@]}"; do
@@ -130,17 +151,28 @@ ds41_served_primary() {
   primary_of_served "$(container_label "$DS41_CONTAINER" ai.peterstorm.inference.served-model)"
 }
 
-# LAST: of the two containers that exist, the one that stopped most recently
+# The primary a primary container serves: fixed for a Hyperflare container, and
+# for the ds41 one the weights its launcher labelled it with (empty when unknown).
+primary_of_container() {
+  case "$1" in
+    "$GLM_CONTAINER") echo glm ;;
+    "$CYBER_CONTAINER") echo cyber ;;
+    "$DS41_CONTAINER") ds41_served_primary ;;
+  esac
+}
+
+# LAST: of the primary containers that exist, the one that stopped most recently
 # (RFC 3339 UTC timestamps sort lexically); a ds41 stop counts as the weights it
 # last served, WARMIND when its label is missing.
 read_last() {
-  local glm_at ds41_at ds41_primary
-  glm_at="$(finished_at "$GLM_CONTAINER")"
-  ds41_at="$(finished_at "$DS41_CONTAINER")"
-  if [[ "$glm_at" == 0001-* && "$ds41_at" == 0001-* ]]; then echo none
-  elif [[ "$glm_at" > "$ds41_at" ]]; then echo glm
-  else ds41_primary="$(ds41_served_primary)"; echo "${ds41_primary:-warmind}"
-  fi
+  local container stopped_at primary newest="" newest_at="0001-01-01T00:00:00Z"
+  for container in "${PRIMARY_CONTAINERS[@]}"; do
+    stopped_at="$(finished_at "$container")"
+    if [[ "$stopped_at" > "$newest_at" ]]; then newest="$container"; newest_at="$stopped_at"; fi
+  done
+  [ -n "$newest" ] || { echo none; return; }
+  primary="$(primary_of_container "$newest")"
+  echo "${primary:-warmind}"
 }
 
 # Returns 1 (does not exit) so the rollback path can still run after a timeout.
@@ -167,7 +199,7 @@ wait_for_free_gpus() {
 
 stop_primary() {
   case "$1" in
-    glm) "$GLM_SWITCH" stop ;;
+    glm | cyber) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" stop ;;
     warmind | deepseek) "$DS41_RUN" --stop ;;
     none) ;;
   esac
@@ -175,9 +207,10 @@ stop_primary() {
 
 start_primary() {
   case "$1" in
-    # The GLM switcher quiesces whatever serves (idle-gated) and restores it if
-    # GLM's acceptance fails.
-    glm) "$GLM_SWITCH" start ;;
+    # The Hyperflare switcher quiesces whatever serves (idle-gated) and restores it if
+    # the variant's acceptance fails. VARIANT is always explicit, so one inherited from
+    # the caller's environment cannot pick the wrong profile.
+    glm | cyber) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start ;;
     warmind | deepseek) WEIGHTS="$1" "$DS41_RUN" --launch ;;
   esac
 }
@@ -197,12 +230,14 @@ report() {
 # stubbed effects (tests/switch-primary-unit.sh).
 switch_to() {
   local target="$1" active="$2"
-  if [ "$target" = glm ]; then
-    # The GLM switcher gates, quiesces, accepts and rolls back by itself.
-    start_primary glm || return 1
-    report glm || return 1
-    return 0
-  fi
+  case "$target" in
+    glm | cyber)
+      # The Hyperflare switcher gates, quiesces, accepts and rolls back by itself.
+      start_primary "$target" || return 1
+      report "$target" || return 1
+      return 0
+      ;;
+  esac
   # To ds41: gate on idle, stop what serves, launch, and on failure bring the
   # previous primary back with its own launcher.
   if [ "$active" != none ]; then
@@ -229,7 +264,7 @@ run_request() {
   last="$(read_last)" || return 1
   if [ "$request" = status ]; then
     local suffix=""
-    case "$active" in glm | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
+    case "$active" in glm | cyber | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
     echo "active:     $active$suffix"
     echo "last:       $last"
     echo "toggle ->   $(primary_decide toggle "$active" "$last" "$GLM_TOGGLE_TARGET")"
