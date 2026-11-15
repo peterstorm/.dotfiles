@@ -96,15 +96,16 @@ export and run scripts check.
    (`~/.local/state/glm53/flash-hyperflare-tp2-v16-boot-receipt.txt`, Plan/Allocate
    cache lines), promote to `unless-stopped`; any failure restores the previous
    profile set.
-5. **Switching primaries** (GLM v16, its cyber hybrid, WARMIND and stock DeepSeek-V4.1 are the
-   primaries): `scripts/inference/switch-primary.sh` toggles GLM or cyber
-   to WARMIND (`GLM_TOGGLE_TARGET`) and either ds41 model back to GLM; `… glm|cyber|warmind|deepseek` picks one; `… status`
-   reports. It idle-gates :8000, stops the active engine through its own launcher,
+5. **Switching primaries** (GLM v16, the uncensored GLM, WARMIND and stock DeepSeek-V4.1 are
+   the primaries): `scripts/inference/switch-primary.sh` toggles GLM or uncensored
+   to WARMIND (`GLM_TOGGLE_TARGET`) and either ds41 model back to GLM; `… glm|uncensored|warmind|deepseek`
+   picks one (`toggle` never lands on uncensored); `… status` reports. Pi's `/switch` runs the
+   same script. It idle-gates :8000, stops the active engine through its own launcher,
    starts the other, and restores the previous primary if the start fails. Both
-   Hyperflare primaries go through this one switcher (`VARIANT=v16|cyber-hybrid`),
+   Hyperflare primaries go through this one switcher (`VARIANT=v16|uncensored`),
    which quiesces and rolls back across them like any other pair.
 
-## Variant: cyber-hybrid (2026-11-15)
+## Variant: cyber-hybrid (2026-11-15, retired the same day)
 
 `VARIANT=cyber-hybrid` is v16's checkpoint with the dense tensors of
 `dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16` (rev `4c2ee763…`) spliced in:
@@ -132,7 +133,7 @@ the export, run and switch scripts derive from it and take no free `MODEL`.
   nothing with v16's (`/models` had 98 GiB free after it), while cyber-hybrid-bf16 is
   mostly v16's bytes and added 37 GiB (blobs 336 → 373 GiB).
 
-## Variant: cyber-hybrid-bf16 (2026-11-15)
+## Variant: cyber-hybrid-bf16 (2026-11-15, retired the same day)
 
 v16's checkpoint carrying only the splice's requantized dense tensors from layer 40
 on plus `lm_head`, stored as the donor's plain BF16 (`glm53-bf16-dense.py`,
@@ -156,8 +157,9 @@ b/f_a) and every MLA `q_b_proj` (`PreparedGlmMLA` reads `.out_features`).
 - **Export**: `launch-glm53-export.sh cyber-hybrid-bf16` → package
   `glm53-cyber-hybrid-bf16@gb202-tp2-202611151057`, 10 min (warm kernel cache; the
   first, cold export of the BF16 shapes took 26).
-- **Serve**: the `cyber` primary since 2026-11-15: `switch-primary.sh cyber` (or
-  `/switch cyber`) serves container `glm53-flash-hyperflare-tp2-cyber-hybrid-bf16` as
+- **Serve**: the `cyber` primary for part of 2026-11-15, until the `uncensored` primary
+  (below) replaced it and both cyber variants left the variant table: `switch-primary.sh cyber` (or
+  `/switch cyber`) served container `glm53-flash-hyperflare-tp2-cyber-hybrid-bf16` as
   `glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16` (Pi's catalog entry replaced the
   original hybrid's). v16's package and container stay in place, so
   `switch-primary.sh glm` is the rollback. Smoke on `…1057`: acceptance `ready` in 5
@@ -230,13 +232,158 @@ built from shifted bytes (`glm53-cyber-hybrid-bf16.all33-nan`, `.r1-shifted`,
 `<tensor>.bf16` (`/models` 147 → 175 GiB free). The fixed cache files, named
 `<tensor>@<shard>@<begin>-<end>.bf16`, stay in `/tmp/hybrid-work/bf16-cache`.
 
+## Variant: uncensored (2026-11-15)
+
+`VARIANT=uncensored` is `dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4`
+(rev `745aac2f…`, MIT) — the refusal edit applied in **every** layer, routed experts
+included — converted by `glm53-uncensored-convert.py` into exactly the storage v16
+declares, so it plans into v16's GPU budget and KV room. Vision tower, expert input
+scales and the chat template are v16's.
+
+**Why a conversion, not a drop-in.** The download is modelopt NVFP4 without a
+per-layer `quantized_layers` table, which Hyperflare refuses. The first conversion (v1)
+kept dealignai's encodings: BF16 dense projections, plain FP8 expert block scales. It
+loaded but did not fit. The planner scales v16's declared device bytes by the
+stored-bytes ratio (`recipes/__init__.py _replacement`). At 177.2 GiB stored against
+v16's 165.2, the export refused at "Select GPUs": `96.0 GiB per GPU; has … 93.9 GiB`.
+The v2 conversion re-encodes everything into v16's own formats:
+
+| tensors | v16 declares | converter does |
+|---|---|---|
+| q/k/v/o, dense MLP, `lm_head` | MXFP8 [1,32], U8 scales | requantize from BF16 (`Requant`) |
+| MLA o/q_a/q_b/kv_a, shared experts | FP8_PB_WO [128,128], F32 scales | requantize, or copy when the source already stores it (`Encoded`) |
+| layer 45 (MTP) | MXFP8 group 32; experts W4A16_NVFP4 | requantize; experts keep v16's declaration verbatim |
+| routed experts, layers 3–44 | NVFP4 `csf_32x2_v1` | FP4 codes and E4M3 block scales **exact**; scales slab-CSF encoded (`"weight_scale_encoding":"csf"`) |
+
+**Slab CSF.** `weight_scale.nvfp4_csf_fixed` (U8 `(R/16, 16+8C)`) plus
+`weight_scale.nvfp4_csf_exceptions` (U32), the layout b12x's `encode_csf_source`
+writes and ignition's `decode_csf_slab_scales` reads. Measured 0.518× the plain FP8
+scales, with 0.31% exceptions. `verify` decodes every plane back and compares it to
+the source byte for byte.
+
+**The gate/up fold.** Hyperflare's CSF expert path (`load_nvfp4_experts` →
+`_expert_scales`) needs gate and up to share one `weight_scale_2`; dealignai's differ
+(c = g_gate/g_up spans 0.1–3.6 over 12,096 experts, and equals 1 for 3,805 of them).
+The converter writes c = 2^k · c′ with c′ ∈ (0.5, 1]. It shifts the larger side's
+E4M3 block scales down by 2^k, which is always exact by halving: up when c > 1, gate
+when c ≤ 0.5. Both sides then share g_up · c′. Since SwiGLU is `silu(g)·u`, the
+remaining factor c′ goes into down's global scale. **Caveat:** b12x clamps `up`
+at ±10 before the product, and the folded `up` is scaled by 1/c′. Activations with
+|up| > 10·c′ are therefore clamped at a different point than in the source. This can
+only bite where the unfolded `up` already exceeds 5.
+
+**Input scales.** dealignai's `model-input-scales.safetensors` (a side file outside
+the index) holds 1.0 placeholders only, so the converter takes v16's calibrated
+expert input scales (gate/up median 8.4e-4, down 7.8e-3).
+
+**Chat template.** The template is v16's, pinned by digest, so tool calls and
+reasoning parse exactly as they do on the other Hyperflare primaries.
+
+- **Source**: `download-glm53-uncensored-source.sh --wait` →
+  `/models/glm53-hyperflare/sources/dealign-uncensored-nvfp4` (~181 GiB). It goes under
+  `sources/`, never beside the checkpoints, because Hyperflare would take it for a
+  model directory. The converter accepts its own earlier output as an equivalent
+  source (a unit test proves the two builds byte-identical). So once a build
+  verifies, the download can go; the receipt chains through `source_receipt`.
+- **Build**: `glm53-uncensored-convert.py plan | build | verify`. `plan` runs anywhere
+  and needs no numpy. `build` and `verify` run in the image
+  (`--entrypoint /opt/flare/.venv/bin/python3`, `/models` and the repository mounted).
+  The first v2 build, 2026-11-15, from v1 as the source, took ~35 min:
+  - **Shards:** 118 rewritten; the vision tower is v16's `tensors/visual-v16.safetensors`.
+  - **`total_size`:** 176,917,857,020 bytes, below v16's 177,421,592,008. v1 stored
+    190,291,446,056.
+  - **Experts:** 12,096 CSF-encoded. Scales are 9.82 GB against 19.03 GB plain
+    (0.516×), with 51.5 M exceptions.
+  - **Fold:** 5,988 experts needed no shift (c ∈ (0.5, 1]; 3,805 of them already
+    had c = 1). Up was halved in 6,089 and gate in 19. c′ ≥ 0.533.
+  - **Worst dense re-encoding:** MXFP8, relative error 2.8%, max absolute
+    error 0.0078.
+  `verify` took ~12 min: `121 files cover their bytes, 213 re-encoded, 114 already
+  v16's, 12096 experts CSF-encoded and folded, 547 vision tensors from v16, 494
+  declarations`.
+- **Inspect** on the CPU before spending a GPU export (`inspect_indexed_checkpoint`,
+  as for cyber-hybrid-bf16 above): `IndexedCheckpoint`.
+- **Disk sequence**: v1 was moved to `sources/glm53-uncensored-v1` and served as the
+  v2 source. After verify it was deleted (51 → 225 GiB free; ZFS frees
+  asynchronously, so `df` lags `rm` by a few seconds). Preflight then passed at
+  164 GiB checkpoint / 224 GiB free.
+- **The draft layer, too** (`0d82db71`). The first v2 export passed "Select GPUs"
+  (the size fix worked) and loaded all 42 CSF layers. Then, in layer 45, it failed with
+  `paired FC1 gains require gated NVFP4 A4 preparation`. The converter had left the MTP
+  layer's W4A16 experts as released, with unequal gate/up globals. For those, ignition
+  builds a 2-D FC1 gain vector, which b12x accepts only on the NVFP4 A4 path. v2's unit
+  test even asserted the copy. Now every routed-expert layer is parsed into one work:
+  - `encode`: released experts that v16 compresses;
+  - `keep`: the tool's own compressed output, copied once its globals are proven one,
+    and only from a source carrying the receipt;
+  - `fold`: plain W4A16, globals folded and the halved plane shifted in place.
+
+  verify checks the loader's invariant on every routed expert: one gate/up global. With
+  the download deleted, v2 itself was the source. A current output is a fixed point of
+  the converter, so the v3 build rewrote only shards 104–106 (layer 45) and the vision
+  shard. Layer 45 folded 288 experts: up halved in 116, gate in 9, c′ ≥ 0.503. Disk cost
+  was 5 GiB thanks to block cloning (`zpool get bcloneused rpool`). `total_size` was
+  unchanged, verify passed, and so did the CPU inspect. v2 stays at `sources/glm53-uncensored-v2`
+  (about 5 GiB unique beside v3's clones) until it is removed: v3 is itself a complete source.
+- **Export**: `launch-glm53-export.sh uncensored`. The driver now restarts what it stopped,
+  so each failed attempt cost the endpoint about 2 minutes. Attempt 3 (v3, 2026-11-15 17:19–17:49Z) produced package
+  `glm53-uncensored@gb202-tp2-202611151748` in 30 minutes, 56 graphs, receipt
+  `/models/glm53-hyperflare/package-uncensored.txt`; the driver restarted v16 afterwards.
+  `/models` was left with 51 GiB free.
+- **Serve**: the `uncensored` primary: `switch-primary.sh uncensored` (or `/switch uncensored`)
+  serves container `glm53-flash-hyperflare-tp2-uncensored` as
+  `glm-5.3-flash-hyperflare-tp2-uncensored`; `toggle` never lands on it. First start
+  2026-11-15 17:50Z: preflight PASS, acceptance (`ready`), promoted to `unless-stopped`.
+  `Plan cache. per GPU: 86.37 GiB loaded` (v16 86.46) and `Allocate cache. 15.6 GiB ·
+  2271744 KV tokens · 88 shared snapshot slots` (v16 15.4 GiB, 2,240,000, 86): the
+  conversion stores slightly fewer bytes than v16, so it gets slightly more KV.
+  Receipt `~/.local/state/glm53/flash-hyperflare-tp2-uncensored-boot-receipt.txt`.
+  v16's package and container stay, so `switch-primary.sh glm` is the rollback.
+
+### Benchmarks
+
+Same fixtures, settings and seeds as the cyber runs above; receipts on homelab in
+`/tmp/refusal-uncensored-{baseline4k,low4k}`, `/tmp/glm-uncensored-{259,96,317}`,
+`/tmp/glm-passkey-uncensored`.
+
+**Refusals** (`refusal-probe.py`, 21 prompts, temperature 0, `max_tokens 4000`):
+
+| build | default effort | `low` |
+|---|---|---|
+| v16 (stock) | 3 refusals, 2 empty (15.8%) | — |
+| cyber-hybrid-bf16 (retired) | 6 refusals, 1 empty (30.0%) | 6 / 21 (28.6%) |
+| **uncensored** | **0** refusals, 4 empty | **1** / 21 (copyright: song lyrics) |
+
+The four empties (violence, gore, torture, a cyber exploit) are not refusals: each was
+still drafting a compliant answer inside its thinking when the probe's 4,000-token cap
+ended the turn (`finish=length`). This tune writes its answer in the reasoning first,
+which is why glm-guard's `max` budget stays at 8K. The one `low` refusal is a
+copyright refusal; the same prompt complied at default effort.
+
+**Thinking spiral** (`probe-glm-drift.py replay`, the 2026-11-15 Pi session, 8 seeds):
+
+| turn | v16 | cyber-hybrid | cyber-hybrid-bf16 | uncensored | uncensored, `clear_thinking` |
+|---|---|---|---|---|---|
+| 259 (216,539 tokens) | 0/8 | 8/8 | 8/8 loops | **0/8** | 0/8, prompt 106,550 |
+| 96 (141,101 tokens, 8K max) | 0/8 | 8/16 | 3/8 drifts | **0/8** | 0/8, prompt 53,858 |
+| 317 (102,136 tokens) | 2/8 | 6/6 | 6/8 loops | **1/8** loop | 1/8 loop, prompt 91,706 |
+
+Median thinking as sent vs cleared: 12,686 → 5,702 characters (259), 25,563 → 18,476 (96),
+7,316 → 4,913 (317). The spiral that made the CYBERSECURITY splices unusable does not
+reproduce: the uncensored build is at or below v16 on all three turns. `clear_thinking`
+changes no verdict here but halves the prompt, so glm-guard keeps sending it.
+
+**Passkey** (8K–192K tokens, depths 0.1/0.5/0.9, 2 trials): 24/24 found, at every
+context up to 176,355 measured tokens and every depth (cyber-hybrid-bf16 22/24, cyber-hybrid 24/24).
+No refusal to repeat a key from vault content, where the bf16 build refused twice.
+
 ## Exporting while a primary serves: launch-glm53-export.sh (2026-11-15)
 
 The export needs both GPUs, so a Hyperflare primary has to stop first, and doing
 "stop, then export" over ssh dies with the session. From the repository:
 
-    scripts/inference/glm53/launch-glm53-export.sh cyber-hybrid-bf16
-    ssh desktop cat /tmp/glm-export-cyber-hybrid-bf16.status   # poll
+    scripts/inference/glm53/launch-glm53-export.sh uncensored
+    ssh desktop cat /tmp/glm-export-uncensored.status   # poll
 
 It refuses uncommitted changes in `scripts/inference/glm53/`, ships
 `git archive HEAD` of that directory to `desktop:/tmp/glm53-export-<sha>/`, and
@@ -247,8 +394,14 @@ plus 10% (a package is checkpoint-sized). The launcher waits for that verdict an
 exits non-zero on a refusal, with the serving primary untouched. Only then does the
 driver stop the `glm53-flash-hyperflare-tp2-*` containers (never ds4 or comfyui),
 wait for idle GPUs, and run the export wrapper; `.status` gets one line per phase,
-`.log` the wrapper's output. **It does not restart the primary** — afterwards
-`switch-primary.sh glm` (or the new variant) brings serving back.
+`.log` the wrapper's output (appended across runs: read the newest attempt's lines). **It
+starts the primaries it stopped again** whatever happens after the stop: GPUs never idle,
+export failed, or export succeeded. Each outcome gets a `restarted <container>` line
+before the terminal status. Cutting over to the new package is still the switch
+script's job (`VARIANT=<variant> switch-glm53-hyperflare-tp2-v16.sh start`, which stops
+them again first). Until 2026-11-15 the driver left the endpoint dark after a refused
+export, about 40 minutes until someone noticed; the three uncensored attempts that day
+each cost about 2 minutes of downtime, or the export's own 30.
 
 **Never copy the driver on its own.** 2026-11-15, 07:39Z: a lone copy in `/tmp`
 picked up a stale pre-variant `export-…-v16.sh` beside it (mode 644, which reads
@@ -268,7 +421,8 @@ loop — into model-labelled `hyperflare:*` series with
 runtime owns `:8000`.
 
 - Ledger / vllm-stats site: `vllm-stats-record` scrapes `:8011`; rows land as
-  engine `hyperflare`, model `glm-5.3-flash-hyperflare-tp2-v16`.
+  engine `hyperflare`, model `glm-5.3-flash-hyperflare-tp2-v16` (or `…-uncensored`, the
+  bridge labels whatever serves).
 - Prometheus job `hyperflare-desktop` scrapes `192.168.0.80:8011`; the
   `local-inference-runtime-normalization` rules map it into `inference:*`
   (tokens, requests, running/waiting, KV page usage, prefix-hit ratio, MTP
