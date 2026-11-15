@@ -67,9 +67,11 @@ main() {
       t=\$(mktemp -d \"\$d.XXXXXX\"); tar -x -C \"\$t\"; mv -T \"\$t\" \"\$d\"
     fi"
 
+  # The redirections belong to the whole backgrounded group: a subshell still holding the ssh
+  # channel's stdout keeps ssh (and this launcher) waiting until the export ends.
   remote "rm -f '$status_file'
-    cd / && STATUS_FILE='$status_file' LOG='$REMOTE_BASE/glm-export-$variant.log' \
-      setsid nohup bash '$dir/$rel/$DRIVER' '$variant' \
+    ( cd / && STATUS_FILE='$status_file' LOG='$REMOTE_BASE/glm-export-$variant.log' \
+        exec setsid nohup bash '$dir/$rel/$DRIVER' '$variant' ) \
       > '$REMOTE_BASE/glm-export-$variant.driver.log' 2>&1 < /dev/null &"
   echo "launched: $variant export on $HOST from $dir/$rel (commit $sha)"
 

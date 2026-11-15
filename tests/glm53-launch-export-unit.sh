@@ -54,11 +54,13 @@ rc="\$(cat "$TMP/pgrep-rc.txt")"
 [ "\$rc" = 0 ] && echo "4242 bash /tmp/glm53-export-x/stop-and-export-glm53-hyperflare.sh v16"
 exit "\$rc"
 EOF
-# setsid: records what it would start and writes the driver's verdict, if any.
+# setsid: records what it would start, writes the driver's verdict, if any, then keeps
+# running like a real 20-minute export (bounded so a regression cannot wedge the suite).
 cat > "$STUBS/setsid" <<EOF
 #!/usr/bin/env bash
 echo "\$*" >> "$TMP/started.txt"
 [ -s "$TMP/verdict.txt" ] && cat "$TMP/verdict.txt" > "\$STATUS_FILE"
+sleep "\$(cat "$TMP/driver-seconds.txt" 2>/dev/null || echo 0)"
 exit 0
 EOF
 chmod +x "$STUBS/pgrep" "$STUBS/setsid"
@@ -113,6 +115,15 @@ check "no answer from desktop: refused, not assumed idle" \
 fresh
 launch cyber-hybrid-bf16
 check "launch succeeds on a preflight ok" '[ "$result" = 0 ] && grep -q "preflight ok" <<<"$out"'
+
+# Regression, 2026-11-15: the backgrounded launch subshell kept ssh's stdout open, so the
+# launcher returned only when the driver ended. A driver that runs on must not hold it.
+echo 20 > "$TMP/driver-seconds.txt"
+started=$SECONDS
+launch cyber-hybrid-bf16
+check "the launcher returns while the driver is still running" \
+  '[ "$result" = 0 ] && [ $((SECONDS - started)) -lt 10 ]'
+rm -f "$TMP/driver-seconds.txt"
 check "the snapshot is HEAD's glm53 directory, whole (variant table beside the driver)" \
   'diff -r "$SNAP/$GLM53" "$REPO/$GLM53" >/dev/null && [ -r "$SNAP/$GLM53/hyperflare-variants.sh" ]'
 check "the driver starts from the snapshot with the variant" \
