@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Unit checks for glm53-uncensored-convert.py: the pure plan, the shard layout, build, verify.
+"""Unit checks for glm53-uncensored-convert.py: the pure plan, the fold, slab CSF, the shard layout,
+build, verify, and the claim that converting the converter's earlier output (v1) gives the bytes
+converting the download gives.
 
 Runs on a synthetic dealignai-shaped source and a v16-shaped base in a temp directory. The
 quantizer port is a deterministic fake that records its calls; where torch is importable (the
-serving image) the production adapter is exercised on a real BF16 tensor as well. Mutations
-for verify are made on scratch copies of the built output -- never on live files.
+serving image) the production adapter is exercised on a real BF16 tensor and slab CSF is checked
+against ignition's reference decoder as well. Needs numpy (the build encodes CSF with it).
+Mutations for verify are made on scratch copies of the built output -- never on live files.
 
-    python3 -I tests/glm53-uncensored-convert-unit.py
     docker run --rm --user 1000:1000 --entrypoint /opt/flare/.venv/bin/python3 -v "$PWD":/work \\
         peterstorm/glm53-hyperflare:ac9136b-cu131 -I /work/tests/glm53-uncensored-convert-unit.py
+    nix-shell -p 'python3.withPackages (p: [ p.numpy ])' --run 'python3 -I tests/glm53-uncensored-convert-unit.py'
 """
 
 from __future__ import annotations
@@ -19,9 +22,12 @@ import io
 import json
 import math
 import shutil
+import struct
 import sys
 import tempfile
 from pathlib import Path
+
+import numpy as np
 
 MODULE_PATH = Path(__file__).resolve().parent.parent / "scripts/inference/glm53/glm53-uncensored-convert.py"
 spec = importlib.util.spec_from_file_location("uncensored_convert", MODULE_PATH)
@@ -58,8 +64,12 @@ def payload(name: str, size: int) -> bytes:
     return bytes((seed + i * 31) % 256 for i in range(size))
 
 
-def tensor(name: str, dtype: str, shape: list[int]) -> tuple:
-    return (name, dtype, shape, payload(name, mod.nbytes(dtype, shape)))
+def tensor(name: str, dtype: str, shape: list[int], data: bytes | None = None) -> tuple:
+    return (name, dtype, shape, payload(name, mod.nbytes(dtype, shape)) if data is None else data)
+
+
+def f32(name: str, value: float) -> tuple:
+    return tensor(name, "F32", [], struct.pack("<f", value))
 
 
 def write_safetensors(path: Path, tensors, metadata: dict | None = None) -> None:
@@ -87,22 +97,29 @@ def write_checkpoint(root: Path, shards: dict[str, list], config: dict, metadata
     (root / "config.json").write_text(json.dumps(config))
 
 
+def tensors_of(root: Path, shard: str) -> list[tuple]:
+    """A shard's tensors in header order, as write_safetensors takes them."""
+    _, header = mod.dense.read_header(root / shard)
+    return [(name, meta["dtype"], meta["shape"], mod.read_tensor(root, shard, name))
+            for name, meta in header.items() if name != "__metadata__"]
+
+
 # --- fixture -------------------------------------------------------------------------
 
 ARCH = {"architectures": ["GlmForCausalLM"], "text_config": {"num_hidden_layers": 3, "hidden_size": 64},
         "vision_config": {"depth": 1}}
 KDA = f"{L}.0.self_attn"
 MLA = f"{L}.1.self_attn"
-NVFP4_LAYER = f"{L}.1.mlp.experts"
+CSF_LAYER = f"{L}.1.mlp.experts"
 W4A16_LAYER = f"{L}.2.mlp.experts"
-VISION_SOURCE_SHARD = "model-00004-of-00004.safetensors"
+VISION_SOURCE_SHARD = "model-00004-of-00005.safetensors"
+UNTOUCHED_SHARD = "model-00005-of-00005.safetensors"
+MX8 = {"quant_algo": "MXFP8", "weight_block_size": [1, 32]}
 V16_LAYERS = {
-    f"{KDA}.q_proj": {"quant_algo": "MXFP8", "weight_block_size": [1, 32]},
-    f"{KDA}.k_proj": {"quant_algo": "MXFP8", "weight_block_size": [1, 32]},
-    f"{KDA}.v_proj": {"quant_algo": "MXFP8", "weight_block_size": [1, 32]},
-    f"{KDA}.o_proj": {"quant_algo": "NVFP4", "group_size": 16},
+    f"{KDA}.q_proj": MX8, f"{KDA}.k_proj": MX8, f"{KDA}.v_proj": MX8, f"{KDA}.o_proj": MX8,
     f"{MLA}.q_b_proj": {"quant_algo": "FP8_PB_WO", "weight_block_size": [128, 128]},
-    NVFP4_LAYER: {"quant_algo": "NVFP4", "group_size": 16, "weight_scale_encoding": "csf_32x2_v1"},
+    "lm_head": {"quant_algo": "MXFP8", "group_size": 32},
+    CSF_LAYER: {"quant_algo": "NVFP4", "group_size": 16, "weight_scale_encoding": "csf_32x2_v1"},
     W4A16_LAYER: {"quant_algo": "W4A16_NVFP4", "group_size": 16},
     "model.visual.blocks.0.attn.qkv": {"quant_algo": "NVFP4", "group_size": 16},
 }
@@ -110,24 +127,52 @@ V16_QC = {"exclude_modules": [], "quant_algo": "MIXED_PRECISION", "quant_method"
           "quantized_layers": V16_LAYERS}
 SOURCE_QC = {"quant_method": "modelopt", "quant_algo": "NVFP4", "ignore": ["lm_head"]}
 
+#: (gate, up, down) globals per compressed expert: up halved (c = 1.5), gate halved twice (c = 0.25),
+#: equal globals, and a ratio the down global absorbs without a power of two (c = 0.75).
+GLOBALS = {0: (3.0, 2.0, 0.5), 1: (1.0, 4.0, 0.5), 2: (2.0, 2.0, 0.5), 3: (3.0, 4.0, 0.25)}
+V16_INPUTS = {"gate_proj": 0.0078125, "up_proj": 0.0078125, "down_proj": 0.03125}
+CSF_ROWS, CSF_PACKED = 64, 32          # weight [64, 32] packs 64 FP4 columns: four E4M3 scales a row
 
-def experts(layer: str, base: bool) -> list:
+
+def scale_plane(seed: int) -> bytes:
+    """Normal-range E4M3 bytes (exactly halvable) spread so some rows need exceptions."""
+    columns = 2 * CSF_PACKED // 16
+    return bytes(0x60 if (row + column + seed) % 11 == 0 else 0x30 + (row * 7 + column * 3 + seed) % 12
+                 for row in range(CSF_ROWS) for column in range(columns))
+
+
+def csf_experts_source() -> list:
     out = []
-    for proj in ("gate_proj", "up_proj", "down_proj"):
-        prefix = f"{layer}.0.{proj}"
-        out += [tensor(f"{prefix}.weight", "U8", [32, 8]), tensor(f"{prefix}.weight_scale", "F8_E4M3", [32, 1]),
-                tensor(f"{prefix}.weight_scale_2", "F32", [])]
-        if base and layer == NVFP4_LAYER:
-            out.append(tensor(f"{prefix}.input_scale", "F32", []))
+    for number, globals_ in GLOBALS.items():
+        for index, projection in enumerate(mod.PROJECTIONS):
+            prefix = f"{CSF_LAYER}.{number}.{projection}"
+            out += [tensor(f"{prefix}.weight", "U8", [CSF_ROWS, CSF_PACKED]),
+                    tensor(f"{prefix}.weight_scale", "F8_E4M3", [CSF_ROWS, 4], scale_plane(number * 3 + index)),
+                    f32(f"{prefix}.weight_scale_2", globals_[index])]
     return out
 
 
-INPUT_SCALES = "model-input-scales.safetensors"  # dealignai's calibration side file, outside the index
+def csf_experts_base() -> list:
+    out = []
+    for number in GLOBALS:
+        for projection in mod.PROJECTIONS:
+            prefix = f"{CSF_LAYER}.{number}.{projection}"
+            out += [tensor(f"{prefix}.weight", "U8", [CSF_ROWS, CSF_PACKED]),
+                    tensor(f"{prefix}.weight_scale.csf32_bases", "U8", [CSF_ROWS]),
+                    f32(f"{prefix}.weight_scale_2", 1.0), f32(f"{prefix}.input_scale", V16_INPUTS[projection])]
+    return out
 
 
-def input_scales(layers) -> list:
-    return [tensor(f"{layer}.0.{proj}.input_scale", "F32", [])
-            for layer in layers for proj in ("gate_proj", "up_proj", "down_proj")]
+def plain_experts(layer: str) -> list:
+    out = []
+    for projection in mod.PROJECTIONS:
+        prefix = f"{layer}.0.{projection}"
+        out += [tensor(f"{prefix}.weight", "U8", [32, 16]), tensor(f"{prefix}.weight_scale", "F8_E4M3", [32, 2]),
+                tensor(f"{prefix}.weight_scale_2", "F32", [])]
+    return out
+
+
+INPUT_SCALES = "model-input-scales.safetensors"  # dealignai's side file: all 1.0, outside the index
 
 
 def source_vision(extra: bool = False) -> list:
@@ -136,19 +181,21 @@ def source_vision(extra: bool = False) -> list:
     return tensors + ([tensor("model.visual.extra.weight", "BF16", [4, 4])] if extra else [])
 
 
+def fp8_pair(prefix: str, shape: list[int], scale_dtype: str, scale_shape: list[int]) -> list:
+    return [tensor(f"{prefix}.weight", "F8_E4M3", shape), tensor(f"{prefix}.weight_scale", scale_dtype, scale_shape)]
+
+
 def build_fixture(root: Path) -> tuple[Path, Path]:
     source, base = root / "source", root / "base"
     write_checkpoint(base, {
         "base-attn.safetensors": [
-            tensor(f"{KDA}.q_proj.weight", "F8_E4M3", [64, 64]), tensor(f"{KDA}.q_proj.weight_scale", "U8", [64, 2]),
-            tensor(f"{KDA}.k_proj.weight", "F8_E4M3", [64, 64]), tensor(f"{KDA}.k_proj.weight_scale", "U8", [64, 2]),
-            tensor(f"{KDA}.v_proj.weight", "F8_E4M3", [64, 64]), tensor(f"{KDA}.v_proj.weight_scale", "U8", [64, 2]),
-            tensor(f"{KDA}.f_a_proj.weight", "BF16", [8, 64]),
-            tensor(f"{KDA}.o_proj.weight", "U8", [64, 32]), tensor(f"{KDA}.o_proj.weight_scale", "F8_E4M3", [64, 4]),
-            tensor(f"{MLA}.q_b_proj.weight", "F8_E4M3", [128, 128]),
-            tensor(f"{MLA}.q_b_proj.weight_scale", "F32", [1, 1, 1, 1]),
+            *fp8_pair(f"{KDA}.q_proj", [64, 64], "U8", [64, 2]), *fp8_pair(f"{KDA}.k_proj", [64, 64], "U8", [64, 2]),
+            *fp8_pair(f"{KDA}.v_proj", [64, 64], "U8", [64, 2]), tensor(f"{KDA}.f_a_proj.weight", "BF16", [8, 64]),
+            *fp8_pair(f"{KDA}.o_proj", [64, 64], "U8", [64, 2]),
+            *fp8_pair(f"{MLA}.q_b_proj", [128, 128], "F32", [1, 1, 1, 1]),
+            *fp8_pair("lm_head", [16, 64], "U8", [16, 2]),
         ],
-        "base-experts.safetensors": experts(NVFP4_LAYER, True) + experts(W4A16_LAYER, True),
+        "base-experts.safetensors": csf_experts_base() + plain_experts(W4A16_LAYER),
         "tensors/visual.safetensors": [
             tensor("model.visual.blocks.0.attn.qkv.weight", "U8", [32, 8]),
             tensor("model.visual.blocks.0.attn.qkv.weight_scale", "F8_E4M3", [32, 1]),
@@ -160,17 +207,20 @@ def build_fixture(root: Path) -> tuple[Path, Path]:
     (base / "chat_template.jinja").write_text("{%- set clear_thinking = false -%}{{ messages }}")
 
     write_checkpoint(source, {
-        "model-00001-of-00004.safetensors": [
+        "model-00001-of-00005.safetensors": [
             tensor(f"{KDA}.q_proj.weight", "BF16", [64, 64]), tensor(f"{KDA}.k_proj.weight", "BF16", [64, 64]),
             tensor(f"{KDA}.v_proj.weight", "BF16", [64, 64]), tensor(f"{KDA}.f_a_proj.weight", "BF16", [8, 64]),
             tensor(f"{KDA}.o_proj.weight", "BF16", [64, 64]),
         ],
-        "model-00002-of-00004.safetensors": [tensor(f"{MLA}.q_b_proj.weight", "BF16", [128, 128])]
-        + experts(NVFP4_LAYER, False) + experts(W4A16_LAYER, False),
-        "model-00003-of-00004.safetensors": [tensor("lm_head.weight", "BF16", [16, 64])],
+        "model-00002-of-00005.safetensors": [tensor(f"{MLA}.q_b_proj.weight", "BF16", [128, 128])]
+        + csf_experts_source() + plain_experts(W4A16_LAYER),
+        "model-00003-of-00005.safetensors": [tensor("lm_head.weight", "BF16", [16, 64])],
         VISION_SOURCE_SHARD: source_vision(),
+        UNTOUCHED_SHARD: [tensor("model.language_model.embed_tokens.weight", "BF16", [16, 64]),
+                          tensor("model.language_model.norm.weight", "BF16", [64])],
     }, ARCH | {"quantization_config": SOURCE_QC}, metadata={"format": "pt"})
-    write_safetensors(source / INPUT_SCALES, input_scales([NVFP4_LAYER, W4A16_LAYER]))
+    write_safetensors(source / INPUT_SCALES, [f32(f"{CSF_LAYER}.{n}.{p}.input_scale", 1.0)
+                                              for n in GLOBALS for p in mod.PROJECTIONS])
     (source / "tokenizer.json").write_text('{"model": "bpe"}')
     (source / "chat_template.jinja").write_text("{%- set clear_thinking = true -%}{{ messages }}")
     (source / "README.md").write_text("card")
@@ -206,8 +256,14 @@ def test_pure() -> None:
           "config_mismatches: nested keys named by path, quantization_config ignored")
     check(mod.config_mismatches({"a": 1}, {"a": 1, "b": 2}) == ["b"], "config_mismatches: a missing key differs")
     check(mod.side_files(["tokenizer.json", "config.json", mod.INDEX, "a.safetensors", ".download-complete",
-                          "chat_template.jinja", mod.RECEIPT, "README.md"]) == ["README.md", "tokenizer.json"],
-          "side_files: tensors, index, config, receipt, dot files and v16-pinned files stay behind")
+                          "chat_template.jinja", mod.RECEIPT, "README.md", INPUT_SCALES]) == ["README.md", "tokenizer.json"],
+          "side_files: tensors (the input-scale side file too), index, config, receipt, dot files and v16-pinned "
+          "files stay behind")
+    check(mod.unscaled(["a.weight", "a.weight_scale", "a.weight_scale_2", "a.input_scale", "b.bias"])
+          == {"a.weight", "b.bias"}, "unscaled: a format's scale tensors are not the tensor set")
+    check(mod.expert_layer_of(f"{CSF_LAYER}.7.up_proj.weight") == CSF_LAYER
+          and mod.expert_layer_of(f"{L}.1.mlp.shared_experts.up_proj.weight") is None,
+          "expert_layer_of: routed experts only, never the shared expert")
 
     bf16 = {"dtype": "BF16", "shape": [64, 64]}
     mx8 = mod.plan_requant("p", "s", bf16, {"dtype": "F8_E4M3", "shape": [64, 64]},
@@ -231,21 +287,76 @@ def test_pure() -> None:
     check_raises("plan_requant: an unaligned width", lambda: mod.plan_requant(
         "p", "s", {"dtype": "BF16", "shape": [64, 48]}, {"dtype": "F8_E4M3", "shape": [64, 48]},
         {"dtype": "U8", "shape": [64, 2]}), "32-aligned")
+    check_raises("plan_requant: v16 storing a dense projection as FP4 is not a format this writes",
+                 lambda: mod.plan_requant("p", "s", bf16, {"dtype": "U8", "shape": [64, 64]},
+                                          {"dtype": "F8_E4M3", "shape": [64, 4]}), "stored as U8")
 
-    names = {f"{NVFP4_LAYER}.0.gate_proj.weight", f"{NVFP4_LAYER}.0.gate_proj.weight_scale",
-             f"{W4A16_LAYER}.0.gate_proj.weight", f"{L}.0.self_attn.q_proj.weight"}
-    w4a16 = {"quant_algo": "W4A16_NVFP4", "group_size": 16}
-    check(mod.expert_declarations(V16_LAYERS, names) == {NVFP4_LAYER: w4a16, W4A16_LAYER: w4a16},
-          "expert_declarations: every routed layer weight-only NVFP4 group 16, whatever v16's activation format")
+    fp8, grid = {"dtype": "F8_E4M3", "shape": [64, 64]}, {"dtype": "U8", "shape": [64, 2]}
+    check(isinstance(mod.plan_dense("p", "s", bf16, None, fp8, grid), mod.Requant),
+          "plan_dense: dealignai's BF16 is re-encoded")
+    check(mod.plan_dense("p", "s", fp8, grid, fp8, grid) == mod.Encoded("p"),
+          "plan_dense: a projection already in v16's storage is copied (the converter's own output)")
+    check_raises("plan_dense: FP8 on another scale grid is neither", lambda: mod.plan_dense(
+        "p", "s", fp8, {"dtype": "U8", "shape": [64, 1]}, fp8, grid), "neither BF16")
+    check_raises("plan_dense: FP8 without its scale is neither", lambda: mod.plan_dense(
+        "p", "s", fp8, None, fp8, grid), "neither BF16")
+    check_raises("plan_dense: an F32 projection is neither", lambda: mod.plan_dense(
+        "p", "s", {"dtype": "F32", "shape": [64, 64]}, None, fp8, grid), "neither BF16")
+
+    names = {f"{CSF_LAYER}.0.gate_proj.weight", f"{CSF_LAYER}.0.gate_proj.weight_scale",
+             f"{W4A16_LAYER}.0.gate_proj.weight", f"{L}.0.self_attn.q_proj.weight",
+             f"{L}.1.mlp.shared_experts.up_proj.weight"}
     decls = mod.expert_declarations(V16_LAYERS, names)
-    decls[NVFP4_LAYER]["group_size"] = 32
-    check(mod.EXPERT_DECLARATION == w4a16 and mod.expert_declarations(V16_LAYERS, names)[NVFP4_LAYER] == w4a16,
+    check(decls == {CSF_LAYER: mod.CSF_DECLARATION, W4A16_LAYER: V16_LAYERS[W4A16_LAYER]},
+          "expert_declarations: compressed NVFP4 (slab) where v16 compresses, v16's W4A16 where it does not")
+    decls[CSF_LAYER]["group_size"] = 32
+    check(mod.CSF_DECLARATION["group_size"] == 16
+          and mod.expert_declarations(V16_LAYERS, names)[CSF_LAYER] == mod.CSF_DECLARATION,
           "expert_declarations: each layer gets its own copy of the declaration")
+    check(mod.expert_declarations({**V16_LAYERS, CSF_LAYER: {**V16_LAYERS[CSF_LAYER], "weight_scale_encoding": "csf"}},
+                                  names)[CSF_LAYER] == mod.CSF_DECLARATION,
+          "expert_declarations: a base already in the slab encoding stays compressed")
     check_raises("expert_declarations: a layer v16 does not declare",
                  lambda: mod.expert_declarations({}, names), "declares no routed-expert format")
     check_raises("expert_declarations: a v16 format other than NVFP4 group 16",
-                 lambda: mod.expert_declarations({**V16_LAYERS, NVFP4_LAYER: {"quant_algo": "MXFP8"}}, names),
-                 "expected NVFP4")
+                 lambda: mod.expert_declarations({**V16_LAYERS, CSF_LAYER: {"quant_algo": "MXFP8"}}, names),
+                 "expected compressed NVFP4")
+    check_raises("expert_declarations: plain NVFP4 (FP4 activations) is not how v16 runs experts",
+                 lambda: mod.expert_declarations({**V16_LAYERS, CSF_LAYER: {"quant_algo": "NVFP4", "group_size": 16}},
+                                                 names), "expected compressed NVFP4")
+
+    check(mod.csf_experts([f"{CSF_LAYER}.10.gate_proj.weight", f"{CSF_LAYER}.2.gate_proj.weight",
+                           f"{CSF_LAYER}.2.up_proj.weight", f"{W4A16_LAYER}.0.gate_proj.weight"], [CSF_LAYER])
+          == [f"{CSF_LAYER}.2", f"{CSF_LAYER}.10"], "csf_experts: the compressed layers' experts in numeric order")
+
+    def expert_meta(rows=64, packed=32, scale=None):
+        source = {}
+        for projection in mod.PROJECTIONS:
+            prefix = f"e.{projection}"
+            source[f"{prefix}.weight"] = {"dtype": "U8", "shape": [rows, packed]}
+            source[f"{prefix}.weight_scale"] = scale or {"dtype": "F8_E4M3", "shape": [rows, 2 * packed // 16]}
+            source[f"{prefix}.weight_scale_2"] = {"dtype": "F32", "shape": []}
+        base = {f"e.{projection}.input_scale": {"dtype": "F32", "shape": [1]} for projection in mod.PROJECTIONS}
+        return source, base
+
+    source_meta, base_meta = expert_meta()
+    mod.check_csf_expert("e", source_meta, base_meta)
+    check(True, "check_csf_expert: a well-formed expert parses")
+    check_raises("check_csf_expert: a scale plane that does not match the packed weight",
+                 lambda: mod.check_csf_expert("e", *expert_meta(scale={"dtype": "F8_E4M3", "shape": [64, 2]})),
+                 "expected E4M3")
+    check_raises("check_csf_expert: rows outside whole 32-row blocks",
+                 lambda: mod.check_csf_expert("e", *expert_meta(rows=48)), "slab CSF")
+    check_raises("check_csf_expert: an odd scale-column count",
+                 lambda: mod.check_csf_expert("e", *expert_meta(packed=8)), "slab CSF")
+    check_raises("check_csf_expert: v16 lacks an input scale",
+                 lambda: mod.check_csf_expert("e", source_meta, {}), "v16 e.gate_proj.input_scale")
+    check_raises("check_csf_expert: a source carrying its own input scales",
+                 lambda: mod.check_csf_expert("e", {**source_meta, "e.down_proj.input_scale": {"dtype": "F32",
+                                                                                              "shape": []}}, base_meta),
+                 "writes v16's")
+    check_raises("check_csf_expert: a missing global", lambda: mod.check_csf_expert(
+        "e", {k: v for k, v in source_meta.items() if k != "e.up_proj.weight_scale_2"}, base_meta), "one FP32 value")
 
     qc = mod.quantization_config(V16_QC, {"b": {"x": 1}, "a": {"y": 2}})
     check(qc["quantized_layers"] == {"a": {"y": 2}, "b": {"x": 1}} and qc["exclude_modules"] == []
@@ -259,11 +370,11 @@ def test_pure() -> None:
               "w.weight": {"dtype": "BF16", "shape": [64, 64], "data_offsets": [8, 8200]},
               "v": {"dtype": "BF16", "shape": [1], "data_offsets": [8200, 8202]},
               "z": {"dtype": "F32", "shape": [], "data_offsets": [8202, 8206]}}
-    target = mod.Requant("w", "s", (64, 64), "mx8", "U8", (64, 2))
-    slots = mod.shard_slots(header, {"w.weight": target}, {"v"})
+    replacement = [mod.Slot("w.weight", "F8_E4M3", (64, 64), "values"), mod.Slot("w.weight_scale", "U8", (64, 2), "values")]
+    slots = mod.shard_slots(header, {"w.weight": replacement}, {"v"})
     check([(s.name, s.origin) for s in slots] == [("a", "copy"), ("w.weight", "values"),
-                                                   ("w.weight_scale", "scale"), ("z", "copy")],
-          "shard_slots: order kept, dropped tensor gone, the scale right after its weight")
+                                                   ("w.weight_scale", "values"), ("z", "copy")],
+          "shard_slots: order kept, dropped tensor gone, a replaced tensor's slots in its place")
     check((slots[3].begin, slots[3].end) == (8202, 8206), "shard_slots: a copy keeps its source span")
     placed = mod.layout(slots, header["__metadata__"])
     check(placed["__metadata__"] == {"format": "pt"}
@@ -271,34 +382,167 @@ def test_pure() -> None:
           and placed["w.weight"]["dtype"] == "F8_E4M3" and placed["w.weight_scale"]["shape"] == [64, 2],
           "layout: back to back, F8 values one byte each, the grid's scale bytes")
     check(mod.layout([]) == {}, "layout: an empty shard has an empty header")
+    empty = mod.layout([mod.Slot("x", "U32", (0,), "values"), mod.Slot("y", "U8", (4,), "values")])
+    check(empty["x"]["data_offsets"] == [0, 0] and empty["y"]["data_offsets"] == [0, 4],
+          "layout: an empty exception stream takes no bytes")
     check_raises("layout: a copy span that disagrees with its dtype and shape",
                  lambda: mod.layout([mod.Slot("a", "BF16", (2, 2), "copy", 0, 6)]), "is not 8 bytes")
     check_raises("nbytes: an unknown dtype", lambda: mod.nbytes("F4", [2]), "unsupported dtype")
+    check(mod.nbytes("U32", [3]) == 12 and mod.nbytes("U16", [3]) == 6, "nbytes: the CSF stream dtypes")
+
+
+# --- E4M3 and the fold -------------------------------------------------------------------
+
+def test_e4m3_and_fold() -> None:
+    check((mod.e4m3_value(0x38), mod.e4m3_value(0x7E), mod.e4m3_value(0x08), mod.e4m3_value(0x01))
+          == (1.0, 448.0, 2.0 ** -6, 2.0 ** -9), "e4m3_value: one, the maximum, the smallest normal and subnormal")
+    check(math.isnan(mod.e4m3_value(0x7F)) and math.isnan(mod.e4m3_value(0xFF))
+          and math.copysign(1.0, mod.e4m3_value(0x80)) == -1.0 and mod.e4m3_value(0xB8) == -1.0,
+          "e4m3_value: the two NaNs, negative zero, the sign bit")
+    check(sum(not math.isnan(mod.e4m3_value(b)) for b in range(256)) == 254, "e4m3_value: 254 finite encodings")
+    half = mod.shift_table(-1)
+    check((half[0x38], half[0x08], half[0x02], half[0x00], half[0x80]) == (0x30, 0x04, 0x01, 0x00, 0x80),
+          "shift_table: halving one, a normal into the subnormals, a subnormal, both zeros")
+    check(half[0x01] == -1 and half[0x03] == -1, "shift_table: a subnormal's lost bit has no exact half")
+    check(mod.shift_table(1)[0x7E] == -1 and half[0x7F] == -1, "shift_table: overflow past 448 and NaN have no image")
+    check(all(t == (-1 if math.isnan(mod.e4m3_value(b)) else b) for b, t in enumerate(mod.shift_table(0))),
+          "shift_table: power 0 is the identity on every finite byte")
+    exact = all(t == -1 or mod.e4m3_value(t) == mod.e4m3_value(b) * 2.0 ** k
+                for k in range(-4, 5) for b, t in enumerate(mod.shift_table(k)))
+    check(exact, "shift_table: every mapped byte holds exactly value * 2**power, for powers -4..4")
+    check(all((mod.shift_table(k)[b] == -1) == (math.isnan(v := mod.e4m3_value(b)) or abs(v * 2.0 ** k) > 448
+                                                 or not any(mod.e4m3_value(c) == v * 2.0 ** k for c in range(256)))
+              for k in (-2, -1, 1, 2) for b in range(256)),
+          "shift_table: refuses exactly the bytes E4M3 cannot move")
+
+    for number, (gate, up, down) in GLOBALS.items():
+        fold = mod.fold_expert(gate, up, down, V16_INPUTS["down_proj"])
+        expected = {0: ("up_proj", -1, 0.75), 1: ("gate_proj", -2, 1.0), 2: (None, 0, 1.0), 3: (None, 0, 0.75)}[number]
+        check((fold.halved, fold.shift, fold.ratio) == expected, f"fold_expert: fixture expert {number} is {expected}")
+    fold = mod.fold_expert(1.0, 4.0, 0.5, 0.03125)
+    check(fold.global13 == 4.0 and fold.weight_global("gate_proj") == fold.weight_global("up_proj") == 4.0
+          and fold.block_shift("gate_proj") == -2 and fold.block_shift("up_proj") == 0,
+          "fold_expert: a gate halved twice carries a global four times its own")
+    fold = mod.fold_expert(3.0, 2.0, 0.5, 0.03125)
+    check(fold.global13 == 3.0 and fold.global2 == mod._f32(0.5 / 0.75) and fold.input2 == mod._f32(0.03125 * 0.75)
+          and fold.weight_global("down_proj") == fold.global2,
+          "fold_expert: down's global and input scale carry the ratio")
+
+    grid = [mod._f32(v) for v in (1e-4, 0.0371, 0.1, 0.33, 0.5, 0.75, 1.0, 1.5, 2.0, 3.6, 7.0, 1234.5)]
+    for gate in grid:
+        for up in grid:
+            fold = mod.fold_expert(gate, up, 0.7, 0.01)
+            gate_factor = fold.global13 * 2.0 ** fold.block_shift("gate_proj") / gate
+            up_factor = fold.global13 * 2.0 ** fold.block_shift("up_proj") / up
+            if not (0.5 < fold.ratio <= 1.0 and gate_factor == 1.0 and abs(up_factor / fold.ratio - 1) < 1e-12
+                    and fold.shift <= 0 and (fold.shift == 0) == (fold.halved is None)
+                    and abs(fold.global2 * fold.ratio / 0.7 - 1) < 1e-6 and abs(fold.input2 / fold.ratio / 0.01 - 1) < 1e-6):
+                check(False, f"fold_expert: gate {gate}, up {up} -> {fold}")
+    check(True, "fold_expert: over a grid of globals, gate exact, up times a ratio in (0.5, 1], down compensates, "
+                "only halvings")
+    for bad in (0.0, -1.0, math.inf, math.nan):
+        check_raises(f"fold_expert: refuses a global of {bad}", lambda bad=bad: mod.fold_expert(bad, 1.0, 1.0, 1.0),
+                     "positive and finite")
+    check_raises("fold_expert: refuses a non-positive input scale", lambda: mod.fold_expert(1.0, 1.0, 1.0, 0.0),
+                 "positive and finite")
+
+
+# --- slab CSF ------------------------------------------------------------------------------
+
+def test_csf() -> None:
+    rng = np.random.default_rng(5)
+    for rows, columns, spread in ((32, 2, 4), (64, 128, 24), (2048, 256, 40), (4096, 128, 3)):
+        plane = (rng.integers(0, spread, (rows, columns)) + rng.integers(0, 200, (rows, 1))).astype(np.uint8)
+        fixed, exceptions = mod.encode_csf_slab(plane)
+        check(fixed.shape == (rows // 16, 16 + 8 * columns) and fixed.dtype == np.uint8
+              and exceptions.dtype == np.uint32 and np.array_equal(mod.decode_csf_slab(fixed, exceptions, rows, columns),
+                                                                   plane),
+              f"encode_csf_slab: a [{rows}, {columns}] plane (spread {spread}) round-trips exactly")
+        positions = exceptions & 0xFFFFFF
+        check(bool((np.diff(positions.astype(np.int64)) > 0).all()) and bool(
+            (plane.ravel()[positions] == (exceptions >> 24)).all()),
+              f"encode_csf_slab: [{rows}, {columns}] exceptions in position order, each holding its byte")
+    check(mod.encode_csf_slab(np.full((32, 2), 7, np.uint8))[1].size == 0, "encode_csf_slab: a narrow row needs none")
+
+    plane = np.zeros((32, 2), np.uint8)
+    plane[0] = (0x10, 0x30)
+    plane[1] = (0xFA, 0xFA)
+    fixed, exceptions = mod.encode_csf_slab(plane)
+    check(fixed[0, 0] == 1 and fixed[0, 16] == 15, "encode_csf_slab: the lowest base covering the most bytes")
+    check(fixed[0, 1] == 235 and fixed[0, 17] == 0xFF, "encode_csf_slab: a base never passes 240 (a byte above it "
+                                                       "takes code 15 from base 235)")
+    check(list(exceptions) == [1 | (0x30 << 24)], "encode_csf_slab: one record, position 1, the byte in the top 8 bits")
+    check(fixed[1, 0] == 0 and not fixed[1, 1:].any() and fixed.shape == (2, 32),
+          "encode_csf_slab: sixteen bases then sixteen rows of packed codes per slab")
+    odd = np.zeros((32, 2), np.uint8)
+    odd[3] = (1, 2)
+    check(mod.encode_csf_slab(odd)[0][0, 16 + 3] == 0x21, "encode_csf_slab: the even column in the low nibble")
+
+    for bad, needle in ((np.zeros((48, 2), np.uint8), "slab CSF"), (np.zeros((32, 3), np.uint8), "slab CSF"),
+                        (np.zeros((8192, 4096), np.uint8), "slab CSF"), (np.zeros((32, 2), np.int16), "uint8")):
+        check_raises(f"encode_csf_slab: refuses {bad.dtype}{bad.shape}", lambda bad=bad: mod.encode_csf_slab(bad), needle)
+    fixed, exceptions = mod.encode_csf_slab(plane)
+    check_raises("decode_csf_slab: a fixed stream of the wrong shape",
+                 lambda: mod.decode_csf_slab(fixed[:, :-1], exceptions, 32, 2), "expected uint8")
+    check_raises("decode_csf_slab: an int32 exception stream",
+                 lambda: mod.decode_csf_slab(fixed, exceptions.astype(np.int32), 32, 2), "uint32")
+    two = np.array([5 | (9 << 24), 3 | (9 << 24)], np.uint32)
+    check_raises("decode_csf_slab: unsorted positions", lambda: mod.decode_csf_slab(fixed, two, 32, 2), "sorted")
+    check_raises("decode_csf_slab: a position past the plane",
+                 lambda: mod.decode_csf_slab(fixed, np.array([64], np.uint32), 32, 2), "inside the plane")
+    overflow = fixed.copy()
+    overflow[0, 0], overflow[0, 16] = 250, 0xFF
+    check_raises("decode_csf_slab: a base plus code past a byte",
+                 lambda: mod.decode_csf_slab(overflow, exceptions, 32, 2), "exceeds a byte")
+
+    halvable = np.array([[0x38, 0x08], [0x00, 0x40]] * 16, np.uint8)
+    check(mod.shifted_scales(halvable, 0) is halvable and mod.shifted_scales(halvable, -1).tolist()[0] == [0x30, 0x04],
+          "shifted_scales: power 0 returns the plane, -1 halves it exactly")
+    check_raises("shifted_scales: names how many bytes cannot move",
+                 lambda: mod.shifted_scales(np.array([[0x01, 0x7E]] * 32, np.uint8), 1, "p"),
+                 "p: 32 block scales cannot move by 2**1")
+
+    try:
+        import torch
+        from ignition.reference.qwen38_quant import decode_csf_slab_scales
+    except ImportError:
+        print("  (ignition not importable here: slab CSF is checked against its reference decoder in the image)")
+        return
+    for rows, columns in ((2048, 256), (4096, 128)):
+        plane = (rng.integers(0, 30, (rows, columns)) + rng.integers(40, 120, (rows, 1))).astype(np.uint8)
+        fixed, exceptions = mod.encode_csf_slab(plane)
+        decoded = decode_csf_slab_scales(torch.from_numpy(fixed), torch.from_numpy(exceptions.astype(np.int64))
+                                         .to(torch.uint32), rows=rows, columns=columns)
+        check(np.array_equal(decoded.numpy(), plane),
+              f"encode_csf_slab: ignition's reference decoder reads the [{rows}, {columns}] encoding back exactly")
 
 
 # --- the plan --------------------------------------------------------------------------
 
+REQUANT_PREFIXES = ["lm_head", f"{KDA}.k_proj", f"{KDA}.o_proj", f"{KDA}.q_proj", f"{KDA}.v_proj", f"{MLA}.q_b_proj"]
+
+
 def test_plan(source: Path, base: Path) -> None:
     plan = mod.plan_from_disk(source, base)
-    check([r.prefix for r in plan.requants] == [f"{KDA}.k_proj", f"{KDA}.q_proj", f"{KDA}.v_proj", f"{MLA}.q_b_proj"],
-          "plan: KDA q/k/v and the MLA q_b_proj are re-encoded, nothing else")
-    check([r.storage for r in plan.requants] == ["mx8", "mx8", "mx8", "block8"], "plan: each in v16's storage")
-    check(plan.rewrite == ("model-00001-of-00004.safetensors", "model-00002-of-00004.safetensors",
-                           VISION_SOURCE_SHARD), "plan: lm_head's shard is reflinked")
+    check([r.prefix for r in plan.requants] == REQUANT_PREFIXES,
+          "plan: every dense projection v16 declares is re-encoded, nothing else")
+    check([r.storage for r in plan.requants] == ["mx8"] * 5 + ["block8"], "plan: each in v16's storage")
+    check(plan.encoded == () and plan.csf_layers == (CSF_LAYER,) and plan.csf_experts == len(GLOBALS),
+          "plan: nothing already encoded; the compressed layer's experts counted")
+    check(plan.rewrite == ("model-00001-of-00005.safetensors", "model-00002-of-00005.safetensors",
+                           "model-00003-of-00005.safetensors", VISION_SOURCE_SHARD), "plan: the untouched shard is reflinked")
     check(plan.emptied == (VISION_SOURCE_SHARD,), "plan: the vision-only shard is not written")
     check(len(plan.vision) == 5 and plan.drop_vision == 2
           and all(shard == "tensors/visual.safetensors" for _, shard in plan.vision),
           "plan: v16's five vision tensors replace the source's two")
     layers = plan.quantization_config["quantized_layers"]
-    check(set(layers) == set(V16_LAYERS) - {f"{KDA}.o_proj"},
-          "plan: declarations cover experts, re-encoded projections and vision; o_proj is BF16, undeclared")
-    check(layers[NVFP4_LAYER] == layers[W4A16_LAYER] == {"quant_algo": "W4A16_NVFP4", "group_size": 16},
-          "plan: routed experts weight-only, even where v16 runs FP4 activations")
-    check(layers[f"{KDA}.q_proj"] == V16_LAYERS[f"{KDA}.q_proj"]
-          and layers["model.visual.blocks.0.attn.qkv"] == V16_LAYERS["model.visual.blocks.0.attn.qkv"],
-          "plan: re-encoded and vision declarations exactly as v16 writes them")
+    check(set(layers) == set(V16_LAYERS), "plan: v16's declarations, every one")
+    check(layers[CSF_LAYER] == mod.CSF_DECLARATION and layers[W4A16_LAYER] == V16_LAYERS[W4A16_LAYER],
+          "plan: compressed experts in the slab encoding, the draft layer's as v16 has them")
+    check(all(layers[p] == V16_LAYERS[p] for p in REQUANT_PREFIXES + ["model.visual.blocks.0.attn.qkv"]),
+          "plan: dense and vision declarations exactly as v16 writes them")
     as_json = plan.as_json()
-    check(json.loads(json.dumps(as_json)) == as_json and as_json["requants"][0]["scale_shape"] == [64, 2],
+    check(json.loads(json.dumps(as_json)) == as_json and as_json["requants"][0]["scale_shape"] == [16, 2],
           "plan: as_json is plain JSON, comparable with a reviewed plan file")
 
 
@@ -316,6 +560,10 @@ def test_plan_refusals(root: Path, source: Path, base: Path) -> None:
         change(config)
         path.write_text(json.dumps(config))
 
+    def declare(base_dir, prefix, declaration):
+        edit_config(base_dir / "config.json",
+                    lambda c: c["quantization_config"]["quantized_layers"].update({prefix: declaration}))
+
     def extra_vision(source_dir: Path) -> None:
         write_safetensors(source_dir / VISION_SOURCE_SHARD, source_vision(extra=True))
         index = json.loads((source_dir / mod.INDEX).read_text())
@@ -328,20 +576,32 @@ def test_plan_refusals(root: Path, source: Path, base: Path) -> None:
     mutated("a base that is not MIXED_PRECISION",
             lambda s, b: edit_config(b / "config.json", lambda c: c["quantization_config"].update(quant_algo="NVFP4")),
             "MIXED_PRECISION")
-    mutated("a re-encoded projection v16 does not declare",
-            lambda s, b: edit_config(b / "config.json",
-                                     lambda c: c["quantization_config"]["quantized_layers"].pop(f"{MLA}.q_b_proj")),
-            "does not declare")
+    mutated("a dense projection v16 declares that the source lacks",
+            lambda s, b: declare(b, f"{KDA}.g_proj", MX8), "missing from the source")
+    mutated("a v16 declaration over a projection v16 keeps in BF16",
+            lambda s, b: declare(b, f"{KDA}.f_a_proj", MX8), "nothing to match")
     mutated("an expert layer v16 does not have",
             lambda s, b: edit_config(b / "config.json",
                                      lambda c: c["quantization_config"]["quantized_layers"].pop(W4A16_LAYER)),
             "declares no routed-expert format")
+    mutated("a compressed layer whose experts v16 gives no input scales",
+            lambda s, b: declare(b, W4A16_LAYER, V16_LAYERS[CSF_LAYER]), "input_scale")
     mutated("vision towers that differ", lambda s, b: extra_vision(s), "vision towers")
 
 
 # --- build and verify ------------------------------------------------------------------
 
-def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
+def patch_tensor(root: Path, shard: str, name: str, data: bytes) -> None:
+    length, header = mod.dense.read_header(root / shard)
+    begin, end = header[name]["data_offsets"]
+    if len(data) != end - begin:
+        raise ValueError("patch size")
+    with (root / shard).open("r+b") as handle:
+        handle.seek(8 + length + begin)
+        handle.write(data)
+
+
+def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
     plan_path = root / "plan.json"
     check(quiet(lambda: mod.main(["plan", "--source", str(source), "--base", str(base), "--out", str(plan_path)])) == 0,
           "main plan: exit 0")
@@ -358,36 +618,86 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
 
     out, quantize = root / "out", FakeQuantizer()
     receipt = mod.build(source, base, out, plan_path, quantize)
-    check(sorted(quantize.calls) == [(8192, (64, 64), "mx8")] * 3 + [(32768, (128, 128), "block8")],
+    check(sorted(quantize.calls) == sorted([(8192, (64, 64), "mx8")] * 4 + [(2048, (16, 64), "mx8"),
+                                                                            (32768, (128, 128), "block8")]),
           "build: the port re-encodes each target once, from its BF16 bytes")
-    check(set(receipt["requant_metrics"]) == {r.prefix for r in mod.plan_from_disk(source, base).requants}
+    check(set(receipt["requant_metrics"]) == set(REQUANT_PREFIXES)
           and receipt["requant_metrics"][f"{MLA}.q_b_proj"] == {"storage": "block8", "rel_error": 0.02,
                                                                 "max_abs_error": 0.5},
           "build: the receipt records every re-encoding's error")
-    check(receipt["source_marker"] == "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc"
-          and receipt["shards_rewritten"] == 2 and json.loads((out / mod.RECEIPT).read_text()) == receipt,
+    check(receipt["source_marker"] == "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc" and receipt["source_receipt"] is None
+          and receipt["shards_rewritten"] == 3 and json.loads((out / mod.RECEIPT).read_text()) == receipt,
           "build: the receipt names the download and counts")
+    experts = receipt["experts"]
+    check(experts["compressed"] == 4 and experts["folded"] == {"None": 2, "up_proj": 1, "gate_proj": 1}
+          and experts["unchanged_globals"] == 1 and (experts["ratio_min"], experts["ratio_max"]) == (0.75, 1.0)
+          and experts["plain_bytes"] == 4 * 3 * CSF_ROWS * 4 and experts["exceptions"] > 0,
+          "build: the receipt counts the folds, the ratios and the CSF streams")
 
     index = json.loads((out / mod.INDEX).read_text())
-    check(set(index["weight_map"].values()) == {"model-00001-of-00004.safetensors", "model-00002-of-00004.safetensors",
-                                                "model-00003-of-00004.safetensors", mod.VISION_SHARD},
+    check(set(index["weight_map"].values()) == {"model-00001-of-00005.safetensors", "model-00002-of-00005.safetensors",
+                                                "model-00003-of-00005.safetensors", UNTOUCHED_SHARD, mod.VISION_SHARD},
           "build: the index names the kept shards and v16's vision")
+    check(receipt["total_size"] == index["metadata"]["total_size"], "build: the receipt's size is the index's")
     check(not (out / VISION_SOURCE_SHARD).exists(), "build: the emptied shard is not written")
-    _, attn = mod.dense.read_header(out / "model-00001-of-00004.safetensors")
+    _, attn = mod.dense.read_header(out / "model-00001-of-00005.safetensors")
     check(list(attn) == ["__metadata__", f"{KDA}.q_proj.weight", f"{KDA}.q_proj.weight_scale",
                          f"{KDA}.k_proj.weight", f"{KDA}.k_proj.weight_scale", f"{KDA}.v_proj.weight",
-                         f"{KDA}.v_proj.weight_scale", f"{KDA}.f_a_proj.weight", f"{KDA}.o_proj.weight"]
-          and attn["__metadata__"] == {"format": "pt"} and attn[f"{KDA}.q_proj.weight"]["dtype"] == "F8_E4M3"
+                         f"{KDA}.v_proj.weight_scale", f"{KDA}.f_a_proj.weight", f"{KDA}.o_proj.weight",
+                         f"{KDA}.o_proj.weight_scale"]
+          and attn["__metadata__"] == {"format": "pt"} and attn[f"{KDA}.o_proj.weight"]["dtype"] == "F8_E4M3"
           and attn[f"{KDA}.q_proj.weight_scale"] == {"dtype": "U8", "shape": [64, 2], "data_offsets": [4096, 4224]},
           "build: re-encoded weights with their scales in place, metadata kept")
-    check(mod.read_tensor(out, "model-00001-of-00004.safetensors", f"{KDA}.o_proj.weight")
-          == mod.read_tensor(source, "model-00001-of-00004.safetensors", f"{KDA}.o_proj.weight"),
+    check(mod.read_tensor(out, "model-00001-of-00005.safetensors", f"{KDA}.f_a_proj.weight")
+          == mod.read_tensor(source, "model-00001-of-00005.safetensors", f"{KDA}.f_a_proj.weight"),
           "build: an untouched tensor in a rewritten shard keeps its bytes")
-    check(not (out / INPUT_SCALES).exists()
-          and not any(".mlp.experts." in n and n.endswith(".input_scale") for n in index["weight_map"]),
-          "build: weight-only experts carry no input scales")
-    check((out / "model-00003-of-00004.safetensors").read_bytes()
-          == (source / "model-00003-of-00004.safetensors").read_bytes(), "build: an untouched shard is copied whole")
+
+    _, experts_header = mod.dense.read_header(out / "model-00002-of-00005.safetensors")
+    first = f"{CSF_LAYER}.0.gate_proj"
+    check([n for n in experts_header if n.startswith(first + ".")]
+          == [f"{first}.weight", f"{first}.weight_scale.{mod.CSF_FIXED}", f"{first}.weight_scale.{mod.CSF_EXCEPTIONS}",
+              f"{first}.weight_scale_2", f"{first}.input_scale"]
+          and experts_header[f"{first}.weight_scale.{mod.CSF_FIXED}"]["shape"] == [CSF_ROWS // 16, 16 + 8 * 4]
+          and experts_header[f"{first}.weight_scale.{mod.CSF_EXCEPTIONS}"]["dtype"] == "U32",
+          "build: a compressed projection is its codes, the CSF pair, the folded global and v16's input scale")
+    for number, (gate, up, down) in GLOBALS.items():
+        fold = mod.fold_expert(gate, up, down, V16_INPUTS["down_proj"])
+        for projection in mod.PROJECTIONS:
+            prefix = f"{CSF_LAYER}.{number}.{projection}"
+            plane = mod.read_plane(source, json.loads((source / mod.INDEX).read_text())["weight_map"],
+                                   f"{prefix}.weight_scale")
+            fixed = mod.read_plane(out, index["weight_map"], f"{prefix}.weight_scale.{mod.CSF_FIXED}")
+            exceptions = np.frombuffer(mod.read_tensor(out, "model-00002-of-00005.safetensors",
+                                                       f"{prefix}.weight_scale.{mod.CSF_EXCEPTIONS}"), np.uint32)
+            decoded = mod.decode_csf_slab(fixed, exceptions, *plane.shape)
+            check(np.array_equal(decoded, mod.shifted_scales(plane, fold.block_shift(projection)))
+                  and (fold.block_shift(projection) != 0 or np.array_equal(decoded, plane)),
+                  f"build: expert {number} {projection} scales decode to the source's, moved by its fold")
+            stored = struct.unpack("<f", mod.read_tensor(out, "model-00002-of-00005.safetensors",
+                                                          f"{prefix}.weight_scale_2"))[0]
+            given = struct.unpack("<f", mod.read_tensor(out, "model-00002-of-00005.safetensors",
+                                                         f"{prefix}.input_scale"))[0]
+            check(stored == fold.weight_global(projection)
+                  and given == (fold.input2 if projection == "down_proj" else mod._f32(V16_INPUTS[projection])),
+                  f"build: expert {number} {projection} global and input scale are the fold's")
+        # The dequantized product the kernel computes: gate exact, up times the ratio, down's global undoing it.
+        planes = {p: mod.e4m3_value(mod.decode_csf_slab(
+            mod.read_plane(out, index["weight_map"], f"{CSF_LAYER}.{number}.{p}.weight_scale.{mod.CSF_FIXED}"),
+            np.frombuffer(mod.read_tensor(out, "model-00002-of-00005.safetensors",
+                                          f"{CSF_LAYER}.{number}.{p}.weight_scale.{mod.CSF_EXCEPTIONS}"), np.uint32),
+            CSF_ROWS, 4)[0, 0]) for p in mod.PROJECTIONS}
+        source_planes = {p: mod.e4m3_value(scale_plane(number * 3 + i)[0]) for i, p in enumerate(mod.PROJECTIONS)}
+        check(planes["gate_proj"] * fold.global13 == source_planes["gate_proj"] * gate
+              and abs(planes["up_proj"] * fold.global13 / (source_planes["up_proj"] * up) - fold.ratio) < 1e-12
+              and abs(planes["down_proj"] * fold.global2 * fold.ratio / (source_planes["down_proj"] * down) - 1) < 1e-6,
+              f"build: expert {number}'s effective scales: gate exact, up scaled by c', down compensated")
+    check(not any(n.startswith(f"{W4A16_LAYER}.") and n.endswith(".input_scale") for n in index["weight_map"])
+          and mod.read_tensor(out, "model-00002-of-00005.safetensors", f"{W4A16_LAYER}.0.up_proj.weight_scale")
+          == mod.read_tensor(source, "model-00002-of-00005.safetensors", f"{W4A16_LAYER}.0.up_proj.weight_scale"),
+          "build: the plain W4A16 layer is copied as released, without input scales")
+    check(not (out / INPUT_SCALES).exists(), "build: dealignai's placeholder input scales are not carried")
+    check((out / UNTOUCHED_SHARD).read_bytes() == (source / UNTOUCHED_SHARD).read_bytes(),
+          "build: an untouched shard is copied whole")
     config = json.loads((out / "config.json").read_text())
     check(config["quantization_config"] == mod.plan_from_disk(source, base).quantization_config
           and config["text_config"] == ARCH["text_config"], "build: the config carries v16's quantization block")
@@ -421,25 +731,49 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
         change(value)
         path.write_text(json.dumps(value))
 
+    experts_shard = "model-00002-of-00005.safetensors"
     mutant("a copied tensor whose bytes changed",
-           lambda d: flip_last_byte(d / "model-00001-of-00004.safetensors"), "copied bytes differ")
+           lambda d: patch_tensor(d, "model-00001-of-00005.safetensors", f"{KDA}.f_a_proj.weight", bytes(8 * 64 * 2)),
+           "copied bytes differ")
     mutant("a vision tensor whose bytes changed", lambda d: flip_last_byte(d / mod.VISION_SHARD), "vision bytes")
     mutant("a shard with trailing bytes",
-           lambda d: append_byte(d / "model-00002-of-00004.safetensors"), "cover the file")
-    mutant("a reflinked shard that drifted",
-           lambda d: append_byte(d / "model-00003-of-00004.safetensors"), "")
+           lambda d: append_byte(d / "model-00003-of-00005.safetensors"), "cover the file")
+    mutant("a reflinked shard that drifted", lambda d: append_byte(d / UNTOUCHED_SHARD), "")
     mutant("a wrong total_size",
            lambda d: rewrite_json(d / mod.INDEX, lambda i: i["metadata"].update(total_size=1)), "total_size")
     mutant("an index that drops a shard",
            lambda d: rewrite_json(d / mod.INDEX, lambda i: i["weight_map"].update(
-               {"lm_head.weight": "model-00001-of-00004.safetensors"})), "against the plan")
+               {"model.language_model.norm.weight": "model-00001-of-00005.safetensors",
+                "model.language_model.embed_tokens.weight": "model-00001-of-00005.safetensors"})), "against the plan")
     mutant("an index pointing a tensor at the wrong shard",
            lambda d: rewrite_json(d / mod.INDEX, lambda i: i["weight_map"].update(
-               {f"{KDA}.o_proj.weight": "model-00002-of-00004.safetensors"})), "index does not point")
+               {f"{KDA}.f_a_proj.weight": experts_shard})), "index does not point")
     mutant("declarations that drifted from the plan",
            lambda d: rewrite_json(d / "config.json",
                                   lambda c: c["quantization_config"]["quantized_layers"].pop(W4A16_LAYER)),
            "differ from the plan")
+    def plant_plain_plane(d: Path):
+        """A consistent checkpoint (shard, index, total_size) that still holds a plain scale plane."""
+        name = f"{CSF_LAYER}.0.gate_proj.weight_scale"
+        write_safetensors(d / experts_shard, tensors_of(d, experts_shard)
+                          + [tensor(name, "F8_E4M3", [CSF_ROWS, 4], scale_plane(0))], {"format": "pt"})
+
+        def reindex(i):
+            i["weight_map"][name] = experts_shard
+            i["metadata"]["total_size"] += CSF_ROWS * 4
+
+        rewrite_json(d / mod.INDEX, reindex)
+
+    mutant("a plain scale plane left beside its CSF pair", plant_plain_plane, "beside its CSF encoding")
+    mutant("a CSF code changed",
+           lambda d: patch_tensor(d, experts_shard, f"{CSF_LAYER}.2.down_proj.weight_scale.{mod.CSF_FIXED}",
+                                  bytes([0]) * (CSF_ROWS // 16 * (16 + 32))), "do not decode")
+    mutant("a gate/up global left unfolded",
+           lambda d: patch_tensor(d, experts_shard, f"{CSF_LAYER}.0.up_proj.weight_scale_2", struct.pack("<f", 2.0)),
+           "folded value")
+    mutant("down's input scale without the ratio",
+           lambda d: patch_tensor(d, experts_shard, f"{CSF_LAYER}.0.down_proj.input_scale",
+                                  struct.pack("<f", V16_INPUTS["down_proj"])), "folded value")
     mutant("the emptied shard written after all",
            lambda d: shutil.copy(source / VISION_SOURCE_SHARD, d), "replaced vision tower")
     mutant("a missing side file", lambda d: (d / "tokenizer.json").unlink(), "tokenizer.json")
@@ -449,6 +783,67 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
                  lambda: mod.verify(source, base, out, stale), "reviewed plan")
     check(quiet(lambda: mod.main(["verify", "--source", str(source), "--base", str(base), "--plan", str(stale),
                                   "--out", str(out)])) == 1, "main: a refusal exits 1")
+    return out
+
+
+V1_REQUANTS = (f"{KDA}.q_proj", f"{KDA}.k_proj", f"{KDA}.v_proj", f"{MLA}.q_b_proj")
+
+
+def test_v1_source_converts_like_the_download(root: Path, source: Path, base: Path, out: Path) -> None:
+    """The first conversion (v1) kept every BF16 tensor and the plain experts as released, re-encoded
+    only the kernel-bound projections (with the same quantizer) and took v16's vision tower. Converting
+    it must give the bytes converting the download gives."""
+    v1 = root / "v1"
+    source_index = json.loads((source / mod.INDEX).read_text())["weight_map"]
+    out_index = json.loads((out / mod.INDEX).read_text())["weight_map"]
+    shards = {}
+    for shard in mod.dense.index_files({"weight_map": source_index}):
+        if shard == VISION_SOURCE_SHARD:
+            continue
+        tensors = []
+        for name, dtype, shape, data in tensors_of(source, shard):
+            prefix = name[: -len(".weight")]
+            if prefix in V1_REQUANTS:
+                tensors += [(n, *(lambda m: (m["dtype"], m["shape"]))(mod.dense.read_header(out / out_index[n])[1][n]),
+                             mod.read_tensor(out, out_index[n], n)) for n in (name, f"{prefix}.weight_scale")]
+            else:
+                tensors.append((name, dtype, shape, data))
+        shards[shard] = tensors
+    shards[mod.VISION_SHARD] = tensors_of(out, mod.VISION_SHARD)
+    v1_qc = {**V16_QC, "quantized_layers": {CSF_LAYER: {"quant_algo": "W4A16_NVFP4", "group_size": 16}}}
+    write_checkpoint(v1, shards, ARCH | {"quantization_config": v1_qc}, metadata={"format": "pt"})
+    for name in ("tokenizer.json", "README.md"):
+        shutil.copy(source / name, v1 / name)
+    shutil.copy(base / "chat_template.jinja", v1 / "chat_template.jinja")
+    (v1 / mod.RECEIPT).write_text(json.dumps({"source_marker": "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc"}))
+
+    plan = mod.plan_from_disk(v1, base)
+    check(plan.encoded == tuple(sorted(V1_REQUANTS)) and [r.prefix for r in plan.requants]
+          == ["lm_head", f"{KDA}.o_proj"], "v1 plan: the kernel-bound projections are already v16's, the rest re-encode")
+    plan_path = root / "v1-plan.json"
+    plan_path.write_text(json.dumps(plan.as_json()))
+    again, quantize = root / "out-from-v1", FakeQuantizer()
+    receipt = mod.build(v1, base, again, plan_path, quantize)
+    check(sorted(call[2] for call in quantize.calls) == ["mx8", "mx8"], "v1 build: only BF16 projections reach the port")
+    check(receipt["source_receipt"]["source_marker"] == "dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc"
+          and receipt["source_marker"] is None, "v1 build: the receipt chains to the download v1 came from")
+    again_index = json.loads((again / mod.INDEX).read_text())
+    check(again_index["weight_map"].keys() == out_index.keys()
+          and all(mod.read_tensor(again, again_index["weight_map"][n], n) == mod.read_tensor(out, out_index[n], n)
+                  for n in out_index),
+          "v1 build: every tensor is byte-identical to the build from the download")
+    check(json.loads((again / "config.json").read_text())["quantization_config"]
+          == json.loads((out / "config.json").read_text())["quantization_config"],
+          "v1 build: the declarations are the download build's")
+    check(quiet(lambda: mod.main(["verify", "--source", str(v1), "--base", str(base), "--plan", str(plan_path),
+                                  "--out", str(again)])) == 0, "v1 build: verify passes against v1")
+    scratch = root / "v1-mutant"
+    shutil.copytree(again, scratch)
+    first = sorted(V1_REQUANTS)[0]
+    patch_tensor(scratch, again_index["weight_map"][f"{first}.weight"], f"{first}.weight",
+                 bytes(64 * 64))
+    check_raises("verify catches: an already-encoded projection whose bytes changed",
+                 lambda: mod.verify(v1, base, scratch, plan_path), "already in v16's storage")
 
 
 def test_torch_adapter() -> None:
@@ -479,9 +874,12 @@ def main() -> int:
         root = Path(tmp)
         source, base = build_fixture(root)
         test_pure()
+        test_e4m3_and_fold()
+        test_csf()
         test_plan(source, base)
         test_plan_refusals(root, source, base)
-        test_build_and_verify(root, source, base)
+        out = test_build_and_verify(root, source, base)
+        test_v1_source_converts_like_the_download(root, source, base, out)
         test_torch_adapter()
     print(f"glm53-uncensored-convert unit: {CHECKS} checks passed")
     return 0

@@ -24,9 +24,11 @@
 #                 projections natively.
 #   uncensored    dealignai's GLM-5.3-Flash-UNCENSORED-NVFP4 (the refusal edit in
 #                 every layer, experts included) converted by
-#                 glm53-uncensored-convert.py: its routed experts and BF16 text
-#                 tensors as released, declared the way v16 declares them; KDA q/k/v
-#                 and MLA q_b_proj re-encoded into v16's FP8; v16's vision tower.
+#                 glm53-uncensored-convert.py into v16's storage, so it fits v16's
+#                 GPU budget and KV room: every dense projection re-encoded into
+#                 v16's FP8; the routed experts' FP4 codes and block scales exact,
+#                 the scales slab-CSF encoded and the gate/up globals folded into
+#                 down's; v16's expert input scales and vision tower.
 #
 # Adding a variant is one line in each case below; an unknown variant is a
 # status, never a guess.
@@ -78,7 +80,7 @@ hyperflare_variant_provenance() {
       echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (late-layer + lm_head requantized dense tensors only, BF16; KDA q/k/v + MLA q_b_proj FP8)"
       ;;
     uncensored)
-      echo "$2 (vision tower, quantization formats) + dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4@745aac2ff0f10acf961f396df3f9418598aa7327 (every text weight; KDA q/k/v + MLA q_b_proj re-encoded to FP8)"
+      echo "$2 (vision tower, expert input scales, storage formats) + dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4@745aac2ff0f10acf961f396df3f9418598aa7327 (every text weight; dense re-encoded to FP8, expert scales CSF-encoded with folded gate/up globals)"
       ;;
     *) return 1 ;;
   esac

@@ -2,12 +2,15 @@
 # Download dealignai's uncensored GLM-5.3-Flash NVFP4 release, the source the
 # `uncensored` Hyperflare variant is converted from (glm53-uncensored-convert.py).
 #
-# ~181 GiB (120 numbered shards + model-input-scales), pinned to one revision
+# ~181 GiB (120 numbered shards + model-input-scales, whose expert input scales
+# are all 1.0 placeholders the converter does not use), pinned to one revision
 # (MIT). It lands in $ROOT_HOST/sources/, NOT beside the Hyperflare checkpoints:
 # Hyperflare names an export after its checkpoint directory and refuses this
 # layout as-is (modelopt NVFP4 without a per-layer quantized_layers table), so
-# the raw download must never look like a model directory. The converter
-# reflinks it into /models/glm53-hyperflare/glm53-uncensored.
+# the raw download must never look like a model directory. The converter writes
+# /models/glm53-hyperflare/glm53-uncensored from it (reflinking shards it does
+# not change); the download can be deleted once that checkpoint verifies, and
+# the converter accepts its own earlier output as an equivalent source.
 #
 # Same discipline as download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh:
 # digest-pinned python container, pinned huggingface_hub, xet disabled (it
