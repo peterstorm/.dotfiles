@@ -202,6 +202,11 @@ contains "$RUNBOOK" 'hyperflare-variants.sh'
 bash "$ROOT/tests/switch-primary-unit.sh" >/dev/null || fail "switch-primary decision core failed its unit tests"
 bash "$ROOT/tests/switch-glm53-hyperflare-receipt-unit.sh" >/dev/null || fail "v16 boot receipt failed its unit tests"
 bash "$ROOT/tests/hyperflare-variants-unit.sh" >/dev/null || fail "the Hyperflare variant table failed its unit tests"
+# Exports run detached from a committed snapshot, with preflight before any stop.
+[ -x "$GLM/launch-glm53-export.sh" ] || fail "scripts/inference/glm53/launch-glm53-export.sh is not executable"
+bash "$ROOT/tests/glm53-stop-and-export-unit.sh" >/dev/null || fail "the stop-and-export driver failed its unit tests"
+bash "$ROOT/tests/glm53-launch-export-unit.sh" >/dev/null || fail "the export launcher failed its unit tests"
+contains "$RUNBOOK" 'launch-glm53-export.sh'
 contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER\""
 contains "$ROOT/scripts/inference/switch-primary.sh" "CYBER_CONTAINER=\"$CYBER_CONTAINER\""
 contains "$ROOT/scripts/inference/switch-primary.sh" "cyber) echo $CYBER_SERVED_MODEL ;;"

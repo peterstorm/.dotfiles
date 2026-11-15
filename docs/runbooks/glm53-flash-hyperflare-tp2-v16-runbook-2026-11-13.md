@@ -126,6 +126,33 @@ the export, run and switch scripts derive from it and take no free `MODEL`.
 - **Disk**: each package is 168 GiB and packages do not dedupe; `/models` had 98 GiB
   free after the second one.
 
+## Exporting while a primary serves: launch-glm53-export.sh (2026-11-15)
+
+The export needs both GPUs, so a Hyperflare primary has to stop first, and doing
+"stop, then export" over ssh dies with the session. From the repository:
+
+    scripts/inference/glm53/launch-glm53-export.sh cyber-hybrid-bf16
+    ssh desktop cat /tmp/glm-export-cyber-hybrid-bf16.status   # poll
+
+It refuses uncommitted changes in `scripts/inference/glm53/`, ships
+`git archive HEAD` of that directory to `desktop:/tmp/glm53-export-<sha>/`, and
+starts `stop-and-export-glm53-hyperflare.sh` there under `setsid`, which runs
+**preflight before any stop**: the variant resolves in the variant table beside the
+export wrapper, the checkpoint exists, and `/models` has the checkpoint's size free
+plus 10% (a package is checkpoint-sized). The launcher waits for that verdict and
+exits non-zero on a refusal, with the serving primary untouched. Only then does the
+driver stop the `glm53-flash-hyperflare-tp2-*` containers (never ds4 or comfyui),
+wait for idle GPUs, and run the export wrapper; `.status` gets one line per phase,
+`.log` the wrapper's output. **It does not restart the primary** — afterwards
+`switch-primary.sh glm` (or the new variant) brings serving back.
+
+**Never copy the driver on its own.** 2026-11-15, 07:39Z: a lone copy in `/tmp`
+picked up a stale pre-variant `export-…-v16.sh` beside it (mode 644, which reads
+`MODEL`, default `glm53-fp4-local`, and only labels with `VARIANT`), stopped v16 and
+failed with exit 126. Executable, it would have exported v16's checkpoint under the
+`cyber-hybrid-bf16` receipt; and at 142 GiB free against a 167 GiB checkpoint, a
+correct wrapper would have hit ENOSPC mid-export. Both now fail in preflight.
+
 ## Monitoring
 
 Hyperflare's `:8000/metrics` is unauthenticated Prometheus text, but `flare_*`
