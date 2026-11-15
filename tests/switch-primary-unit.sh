@@ -128,10 +128,25 @@ done
 check "unknown served id" '[ -z "$(primary_of_served qwen3.8-27b)" ]'
 # The two Hyperflare primaries are told apart by served id alone.
 check "glm serves the v16 id" '[ "$(served_of_primary glm)" = glm-5.3-flash-hyperflare-tp2-v16 ]'
-check "cyber serves the hybrid's id" '[ "$(served_of_primary cyber)" = glm-5.3-flash-hyperflare-tp2-cyber-hybrid ]'
-check "the hybrid's id is cyber" '[ "$(primary_of_served glm-5.3-flash-hyperflare-tp2-cyber-hybrid)" = cyber ]'
+check "cyber serves the hybrid's id" '[ "$(served_of_primary cyber)" = glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16 ]'
+check "the hybrid's id is cyber" '[ "$(primary_of_served glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16)" = cyber ]'
 check "each Hyperflare primary has its own variant" \
-  '[ "$(variant_of_primary glm)" = v16 ] && [ "$(variant_of_primary cyber)" = cyber-hybrid ] && [ -z "$(variant_of_primary warmind)" ]'
+  '[ "$(variant_of_primary glm)" = v16 ] && [ "$(variant_of_primary cyber)" = cyber-hybrid-bf16 ] && [ -z "$(variant_of_primary warmind)" ]'
+# Each Hyperflare primary's container is the one the variant table derives for its variant,
+# and every primary is in the real profile catalog (the Hyperflare switcher quiesces only
+# catalog profiles). The original all-layer hybrid left the primaries on 2026-11-15 and stays
+# a catalog profile, so it is quiesced too, and seen as foreign while it runs.
+check "Hyperflare primary containers derive from the variant table" \
+  '( source "$ROOT/scripts/inference/glm53/hyperflare-variants.sh"
+     [ "$(hyperflare_variant_container "$(variant_of_primary glm)")" = "$GLM_CONTAINER" ] &&
+     [ "$(hyperflare_variant_container "$(variant_of_primary cyber)")" = "$CYBER_CONTAINER" ] )'
+check "every primary and the retired hybrid are catalog profiles" \
+  '( source "$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
+     for c in "${PRIMARY_CONTAINERS[@]}" glm53-flash-hyperflare-tp2-cyber-hybrid; do
+       printf "%s\n" "${INFERENCE_PROFILE_CONTAINERS[@]}" | grep -Fxq "$c" || exit 1
+     done )'
+check "the retired hybrid is not a primary" \
+  '[[ " ${PRIMARY_CONTAINERS[*]} " != *" glm53-flash-hyperflare-tp2-cyber-hybrid "* ]]'
 
 # --- dispatch: the real start/stop reach the right launcher with the right variant ---
 # Stub launchers print what they were given; the stubs further down replace these functions.
@@ -143,9 +158,9 @@ done
 GLM_SWITCH="$dispatch_dir/glm-switch"
 DS41_RUN="$dispatch_dir/ds41-run"
 check "start glm serves variant v16" '[ "$(start_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset start" ]'
-check "start cyber serves variant cyber-hybrid" '[ "$(start_primary cyber)" = "glm-switch VARIANT=cyber-hybrid WEIGHTS=unset start" ]'
+check "start cyber serves variant cyber-hybrid-bf16" '[ "$(start_primary cyber)" = "glm-switch VARIANT=cyber-hybrid-bf16 WEIGHTS=unset start" ]'
 check "stop glm stops v16" '[ "$(stop_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset stop" ]'
-check "stop cyber stops the hybrid" '[ "$(stop_primary cyber)" = "glm-switch VARIANT=cyber-hybrid WEIGHTS=unset stop" ]'
+check "stop cyber stops the hybrid" '[ "$(stop_primary cyber)" = "glm-switch VARIANT=cyber-hybrid-bf16 WEIGHTS=unset stop" ]'
 check "an inherited VARIANT cannot pick the profile" \
   '[ "$(VARIANT=cyber-hybrid start_primary glm)" = "glm-switch VARIANT=v16 WEIGHTS=unset start" ]'
 check "start warmind launches the ds41 weights" '[ "$(start_primary warmind)" = "ds41-run VARIANT=unset WEIGHTS=warmind --launch" ]'
@@ -169,7 +184,8 @@ unset NVIDIA_RC
 unset -f nvidia-smi
 
 # --- read_active / read_last against stubbed container state ----------------
-INFERENCE_PROFILE_CONTAINERS=(qwen38-27b-bf16 "$GLM_CONTAINER" "$CYBER_CONTAINER" "$DS41_CONTAINER")
+RETIRED_HYBRID=glm53-flash-hyperflare-tp2-cyber-hybrid
+INFERENCE_PROFILE_CONTAINERS=(qwen38-27b-bf16 "$GLM_CONTAINER" "$RETIRED_HYBRID" "$CYBER_CONTAINER" "$DS41_CONTAINER")
 declare -A running=() label=() finished=()
 inference_container_running() { [ "${running[$1]:-1}" = 0 ]; }
 container_label() { printf '%s' "${label[$1]:-}"; }
@@ -192,6 +208,8 @@ state; running[$CYBER_CONTAINER]=0; running[$DS41_CONTAINER]=0
 check "cyber and ds41 up" '[ "$(read_active)" = multiple ]'
 state; running[qwen38-27b-bf16]=0
 check "foreign profile on the GPUs" '[ "$(read_active)" = "other:qwen38-27b-bf16" ]'
+state; running[$RETIRED_HYBRID]=0
+check "the retired hybrid is foreign, never cyber" '[ "$(read_active)" = "other:$RETIRED_HYBRID" ]'
 state
 check "nothing running" '[ "$(read_active)" = none ]'
 state; finished[$GLM_CONTAINER]=2026-11-14T10:00:00Z; finished[$DS41_CONTAINER]=2026-11-14T09:00:00Z
@@ -289,7 +307,7 @@ check "status with nothing to suffix" '[[ "$request_out" == *"active:     warmin
 state; running[$CYBER_CONTAINER]=0
 run status
 check "status names the hybrid's served id and toggles cyber to WARMIND" \
-  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     cyber (glm-5.3-flash-hyperflare-tp2-cyber-hybrid)"* ]] && [[ "$request_out" == *"toggle ->   start:warmind"* ]]'
+  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     cyber (glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16)"* ]] && [[ "$request_out" == *"toggle ->   start:warmind"* ]]'
 run toggle
 check "toggle from cyber crosses engines to WARMIND" \
   '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:cyber gpus start:warmind report:warmind" ]'
@@ -310,6 +328,10 @@ state; running[qwen38-27b-bf16]=0
 run toggle
 check "a foreign profile refuses the switch and touches nothing" \
   '[ "$request_rc" = 1 ] && [ -z "$calls" ] && [[ "$request_out" == *"qwen38-27b-bf16 holds the GPUs"* ]]'
+state; running[$RETIRED_HYBRID]=0
+run cyber
+check "the retired hybrid serving refuses cyber and touches nothing" \
+  '[ "$request_rc" = 1 ] && [ -z "$calls" ] && [[ "$request_out" == *"$RETIRED_HYBRID holds the GPUs"* ]]'
 inference_container_running() { return 2; }
 run status
 check "an uninspectable container fails the request" '[ "$request_rc" = 1 ] && [ -z "$calls" ]'

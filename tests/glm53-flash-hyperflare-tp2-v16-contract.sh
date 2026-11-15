@@ -3,8 +3,9 @@
 #
 # v16 serves nvidia/GLM-5.3-Flash-FP4-Local through NVIDIA Hyperflare (the
 # AzallazA fork at hyperflare-glm-20261112) as the recipe's TP2/DCP2 package.
-# The cyber-hybrid variant serves the same checkpoint with the CYBERSECURITY
-# build's dense tensors spliced in, through the same launchers (VARIANT).
+# The cyber-hybrid variants serve the same checkpoint with the CYBERSECURITY
+# build's dense tensors spliced in, through the same launchers (VARIANT); the
+# cyber primary serves cyber-hybrid-bf16, and cyber-hybrid stays launchable.
 # The contract proves, without Docker or a GPU, that the build/download/
 # export/run/switch scripts agree on every pin (fork commit, checkpoint
 # revision, image tag, package naming, served id), that every name derives from
@@ -36,8 +37,8 @@ REPO="nvidia/GLM-5.3-Flash-FP4-Local"
 REVISION="76348ddb2be2e35e39ecfc00e75dc07703f4f3d5"
 SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
 CONTAINER="glm53-flash-hyperflare-tp2-v16"
-CYBER_SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-cyber-hybrid"
-CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid"
+CYBER_SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16"
+CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid-bf16"
 # git blob ids of the recipe folder's files at recipe commit 9a57f78e.
 EXPORT_BLOB="f2bcc006e3b63c0add107396bfe8f85f4832e502"
 SERVE_BLOB="a7fa2172a9e327070db43444c1d2094aef143315"
@@ -64,9 +65,11 @@ source "$VARIANTS"
 [ "$(hyperflare_variant_model v16)" = glm53-fp4-local ] || fail "v16 must export the glm53-fp4-local checkpoint"
 [ "$(hyperflare_variant_container v16)" = "$CONTAINER" ] || fail "v16's container drifted from $CONTAINER"
 [ "$(hyperflare_variant_served v16)" = "$SERVED_MODEL" ] || fail "v16's served id drifted from $SERVED_MODEL"
-[ "$(hyperflare_variant_model cyber-hybrid)" = glm53-cyber-hybrid ] || fail "cyber-hybrid must export the glm53-cyber-hybrid checkpoint"
-[ "$(hyperflare_variant_container cyber-hybrid)" = "$CYBER_CONTAINER" ] || fail "the hybrid's container drifted from $CYBER_CONTAINER"
-[ "$(hyperflare_variant_served cyber-hybrid)" = "$CYBER_SERVED_MODEL" ] || fail "the hybrid's served id drifted from $CYBER_SERVED_MODEL"
+[ "$(hyperflare_variant_model cyber-hybrid-bf16)" = glm53-cyber-hybrid-bf16 ] || fail "cyber-hybrid-bf16 must export the glm53-cyber-hybrid-bf16 checkpoint"
+[ "$(hyperflare_variant_container cyber-hybrid-bf16)" = "$CYBER_CONTAINER" ] || fail "the cyber primary's container drifted from $CYBER_CONTAINER"
+[ "$(hyperflare_variant_served cyber-hybrid-bf16)" = "$CYBER_SERVED_MODEL" ] || fail "the cyber primary's served id drifted from $CYBER_SERVED_MODEL"
+# The original hybrid is no longer a primary; it stays a launchable profile the switcher sees as foreign.
+contains "$CATALOG" "  $(hyperflare_variant_container cyber-hybrid)"
 for script in "$EXPORT" "$RUN" "$SWITCH"; do
   contains "$script" 'source "$SCRIPT_DIR/hyperflare-variants.sh"'
   contains "$script" 'VARIANT="${VARIANT:-v16}"'
@@ -196,6 +199,7 @@ contains "$RUNBOOK" 'TP2'
 contains "$RUNBOOK" 'ds41-1017-maya-exl35'
 contains "$RUNBOOK" 'switch-primary.sh'
 contains "$RUNBOOK" 'Variant: cyber-hybrid'
+contains "$RUNBOOK" 'Variant: cyber-hybrid-bf16'
 contains "$RUNBOOK" 'hyperflare-variants.sh'
 
 # The primaries switch: its pure decision core, and the catalog it serves.
@@ -211,7 +215,7 @@ contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER
 contains "$ROOT/scripts/inference/switch-primary.sh" "CYBER_CONTAINER=\"$CYBER_CONTAINER\""
 contains "$ROOT/scripts/inference/switch-primary.sh" "cyber) echo $CYBER_SERVED_MODEL ;;"
 contains "$ROOT/scripts/inference/switch-primary.sh" 'VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start'
-jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-cyber-hybrid","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
+jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16","glm-5.3-flash-hyperflare-tp2-v16","warmind-1017-native"]' \
   "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the four primaries"
 jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-native"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's default model must be a primary (warmind-1017-native)"

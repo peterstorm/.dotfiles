@@ -8,7 +8,7 @@ in `docs/runbooks/` are the source of truth for rationale; the contract tests in
 **Primaries (since 2026-11-14).** Pi offers exactly four local models on two
 engines: `warmind-1017-native` and `deepseek-v4.1-flash-native` (ds4-native,
 `deepseek/ds41-1017-native/`), and `glm-5.3-flash-hyperflare-tp2-v16` plus its
-CYBERSECURITY hybrid `glm-5.3-flash-hyperflare-tp2-cyber-hybrid` (Hyperflare,
+CYBERSECURITY hybrid `glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16` (Hyperflare,
 `glm53/`; one launcher set, one `VARIANT`, named in `glm53/hyperflare-variants.sh`).
 Switch between them with `switch-primary.sh [toggle|glm|cyber|warmind|deepseek|status]`
 from any machine: a pure decision (`primary_decide`, `tests/switch-primary-unit.sh`)

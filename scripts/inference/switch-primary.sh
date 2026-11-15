@@ -2,7 +2,7 @@
 # Switch desktop's primary model. The primaries are four served models on two
 # engines, one engine on both GPUs at a time:
 #   glm       glm-5.3-flash-hyperflare-tp2-v16           NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
-#   cyber     glm-5.3-flash-hyperflare-tp2-cyber-hybrid  NVIDIA Hyperflare  (same switcher, VARIANT=cyber-hybrid: v16 plus the CYBERSECURITY build's dense tensors)
+#   cyber     glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16  NVIDIA Hyperflare  (same switcher, VARIANT=cyber-hybrid-bf16: v16 plus the CYBERSECURITY build's late-layer + lm_head dense tensors as BF16)
 #   warmind   warmind-1017-native                        ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
 #   deepseek  deepseek-v4.1-flash-native                 ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLM_CONTAINER="glm53-flash-hyperflare-tp2-v16"
-CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid"
+CYBER_CONTAINER="glm53-flash-hyperflare-tp2-cyber-hybrid-bf16"
 DS41_CONTAINER="ds41-1017-native"
 # Every container that can be a primary; the catalog's other profiles are foreign to the switcher.
 PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$CYBER_CONTAINER" "$DS41_CONTAINER")
@@ -44,7 +44,7 @@ GLM_TOGGLE_TARGET="warmind"
 primary_of_served() {
   case "$1" in
     glm-5.3-flash-hyperflare-tp2-v16) echo glm ;;
-    glm-5.3-flash-hyperflare-tp2-cyber-hybrid) echo cyber ;;
+    glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16) echo cyber ;;
     warmind-1017-native) echo warmind ;;
     deepseek-v4.1-flash-native) echo deepseek ;;
     *) echo "" ;;
@@ -53,7 +53,7 @@ primary_of_served() {
 served_of_primary() {
   case "$1" in
     glm) echo glm-5.3-flash-hyperflare-tp2-v16 ;;
-    cyber) echo glm-5.3-flash-hyperflare-tp2-cyber-hybrid ;;
+    cyber) echo glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16 ;;
     warmind) echo warmind-1017-native ;;
     deepseek) echo deepseek-v4.1-flash-native ;;
   esac
@@ -63,7 +63,7 @@ served_of_primary() {
 variant_of_primary() {
   case "$1" in
     glm) echo v16 ;;
-    cyber) echo cyber-hybrid ;;
+    cyber) echo cyber-hybrid-bf16 ;;
   esac
 }
 

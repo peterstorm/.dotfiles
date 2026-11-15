@@ -19,7 +19,7 @@ import {
 } from "./switch";
 
 const GLM = "glm-5.3-flash-hyperflare-tp2-v16";
-const CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid";
+const CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16";
 const WARMIND = "warmind-1017-native";
 /** Every primary's served id; the Record type makes a new primary a compile error until it is listed. */
 const SERVED: Readonly<Record<Primary, string>> = {

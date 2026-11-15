@@ -4,7 +4,7 @@ import { TUNED_BUDGETS } from "./guard";
 import glmGuardExtension, { guardRequest, servedIdCache, type GuardPorts } from "./index";
 
 const GLM_V16 = "glm-5.3-flash-hyperflare-tp2-v16";
-const GLM_CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid";
+const GLM_CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16";
 const WARMIND = "warmind-1017-native";
 
 /** What Pi sends for a session pinned to WARMIND at max thinking. */

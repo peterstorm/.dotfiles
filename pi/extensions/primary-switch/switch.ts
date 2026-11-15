@@ -25,7 +25,7 @@ const isPrimary = (word: string): word is Primary => (PRIMARIES as readonly stri
 const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
 	toggle: "GLM or cyber -> WARMIND; WARMIND or DeepSeek -> GLM",
 	glm: "GLM-5.3 v16 on Hyperflare",
-	cyber: "GLM-5.3 cyber hybrid on Hyperflare (v16 plus the CYBERSECURITY build's dense tensors)",
+	cyber: "GLM-5.3 cyber hybrid BF16 on Hyperflare (v16 plus the CYBERSECURITY build's late-layer + lm_head dense tensors)",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",
 	status: "what serves now, and what toggle would do",

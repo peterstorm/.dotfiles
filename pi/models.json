@@ -39,8 +39,8 @@
           }
         },
         {
-          "id": "glm-5.3-flash-hyperflare-tp2-cyber-hybrid",
-          "name": "GLM-5.3 Flash cyber hybrid on Hyperflare TP2 (NVIDIA FP4-Local experts and vision + dealignai CYBERSECURITY dense tensors, hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.2M KV, 400K ctx cap, vision)",
+          "id": "glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16",
+          "name": "GLM-5.3 Flash cyber hybrid BF16 on Hyperflare TP2 (NVIDIA FP4-Local v16 + dealignai CYBERSECURITY late-layer and lm_head dense tensors as BF16, hyperflare-glm-20261112, TP2/DCP2 MTP5, 8 slots, 2.2M KV, 400K ctx cap, vision)",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {

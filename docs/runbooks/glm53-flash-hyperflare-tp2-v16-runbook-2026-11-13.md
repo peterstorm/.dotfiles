@@ -121,8 +121,10 @@ the export, run and switch scripts derive from it and take no free `MODEL`.
 - **Export**: `VARIANT=cyber-hybrid scripts/inference/glm53/export-glm53-flash-hyperflare-tp2-v16.sh`
   (both GPUs idle; ~13 min with the warm kernel cache) → `package-cyber-hybrid.txt`,
   package `glm53-cyber-hybrid@gb202-tp2-<ts>`.
-- **Serve**: `switch-primary.sh cyber` (or `/switch cyber`). v16's package and
-  container stay in place, so `switch-primary.sh glm` is the rollback.
+- **Serve**: the `cyber` primary until 2026-11-15, when `cyber` moved to
+  cyber-hybrid-bf16 (below). Still launchable by hand:
+  `VARIANT=cyber-hybrid scripts/inference/glm53/switch-glm53-hyperflare-tp2-v16.sh start`;
+  `switch-primary.sh` then reports it as a foreign profile (`other:`) until stopped.
 - **Disk**: a package is up to its checkpoint's size (168 GiB). Package blobs are
   content-addressed: cyber-hybrid's splice touches every layer and its package shared
   nothing with v16's (`/models` had 98 GiB free after it), while cyber-hybrid-bf16 is
@@ -145,9 +147,11 @@ b/f_a) and every MLA `q_b_proj` (`PreparedGlmMLA` reads `.out_features`).
 - **Export**: `launch-glm53-export.sh cyber-hybrid-bf16` → package
   `glm53-cyber-hybrid-bf16@gb202-tp2-202611150903`, 26 min (cold kernel tuning for the
   BF16 shapes).
-- **Serve**: not a switch primary. The run and switch scripts derive its container
-  (`glm53-flash-hyperflare-tp2-cyber-hybrid-bf16`) and served id from the variant table;
-  as of the export it has not been served yet.
+- **Serve**: the `cyber` primary since 2026-11-15: `switch-primary.sh cyber` (or
+  `/switch cyber`) serves container `glm53-flash-hyperflare-tp2-cyber-hybrid-bf16` as
+  `glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16` (Pi's catalog entry replaced the
+  original hybrid's). v16's package and container stay in place, so
+  `switch-primary.sh glm` is the rollback.
 
 ## Exporting while a primary serves: launch-glm53-export.sh (2026-11-15)
 

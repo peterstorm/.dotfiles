@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { guardPayload, profileFor, TUNED_BUDGETS, type GuardProfile } from "./guard";
 
 const GLM_V16 = "glm-5.3-flash-hyperflare-tp2-v16";
-const GLM_CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid";
+const GLM_CYBER = "glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16";
 
 const chat = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
 	model: "warmind-1017-native",
