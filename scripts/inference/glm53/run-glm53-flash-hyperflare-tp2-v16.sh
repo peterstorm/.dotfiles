@@ -32,11 +32,15 @@ source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 IMAGE="peterstorm/glm53-hyperflare:ac9136b-cu131"
 HYPERFLARE_COMMIT="ac9136b02c7c523f12d6e628e9d94f41006312ea"
 CHECKPOINT="nvidia/GLM-5.3-Flash-FP4-Local@76348ddb2be2e35e39ecfc00e75dc07703f4f3d5"
-NAME="glm53-flash-hyperflare-tp2-v16"
-SERVED_MODEL="glm-5.3-flash-hyperflare-tp2-v16"
+# MODEL is the checkpoint directory Hyperflare exported (and its model name); VARIANT selects the
+# package receipt, container name and served id, so one launcher serves any spliced checkpoint.
+MODEL="${MODEL:-glm53-fp4-local}"
+VARIANT="${VARIANT:-v16}"
+NAME="glm53-flash-hyperflare-tp2-$VARIANT"
+SERVED_MODEL="${SERVED_MODEL:-glm-5.3-flash-hyperflare-tp2-$VARIANT}"
 ROOT_HOST="${ROOT_HOST:-/models/glm53-hyperflare}"
 FLARE_HOME="$ROOT_HOST/flare-home"
-PACKAGE_RECEIPT="$ROOT_HOST/package-v16.txt"
+PACKAGE_RECEIPT="$ROOT_HOST/package-$VARIANT.txt"
 PREFIX_CACHE="${PREFIX_CACHE:-16G}"
 SCHEDULER="${SCHEDULER:-interactive}"
 SIGNING_KEY_FINGERPRINT="f2bca6f9fd072391b10fc6fbd7c2cafd2e0e518fde57e0b05f2d48a22ef1e052"
@@ -74,12 +78,12 @@ label="$(docker image inspect "$IMAGE" \
 # The package is whatever the last successful export recorded — parsed once,
 # then checked against the store, so a typo or a deleted version fails here.
 [ -r "$PACKAGE_RECEIPT" ] || {
-  echo "error: no package receipt at $PACKAGE_RECEIPT; run scripts/inference/glm53/export-glm53-flash-hyperflare-tp2-v16.sh" >&2
+  echo "error: no package receipt at $PACKAGE_RECEIPT; run MODEL=$MODEL VARIANT=$VARIANT scripts/inference/glm53/export-glm53-flash-hyperflare-tp2-v16.sh" >&2
   exit 1
 }
 PACKAGE="$(sed -n 's/^package=//p' "$PACKAGE_RECEIPT")"
-[[ "$PACKAGE" =~ ^glm53-fp4-local@gb202-tp2-[0-9]+$ ]] || {
-  echo "error: package receipt names '$PACKAGE', expected glm53-fp4-local@gb202-tp2-<timestamp>" >&2
+[[ "$PACKAGE" =~ ^"$MODEL"@gb202-tp2-[0-9]+$ ]] || {
+  echo "error: package receipt names '$PACKAGE', expected $MODEL@gb202-tp2-<timestamp>" >&2
   exit 1
 }
 # The fork stores exports as "cores" (config key core_cache; EXPORT.md's
@@ -107,7 +111,7 @@ FLARE_ARGS=(
 )
 
 if [ "$MODE" = --preflight ]; then
-  echo "GLM-5.3 v16 Hyperflare TP2 preflight: PASS (image $HYPERFLARE_COMMIT, package $PACKAGE)"
+  echo "GLM-5.3 $VARIANT Hyperflare TP2 preflight: PASS (image $HYPERFLARE_COMMIT, package $PACKAGE)"
   echo "Launch: flare ${FLARE_ARGS[*]}"
   exit 0
 fi

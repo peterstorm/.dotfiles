@@ -29,12 +29,16 @@ HYPERFLARE_COMMIT="ac9136b02c7c523f12d6e628e9d94f41006312ea"
 RECIPE_EXPORT="$SCRIPT_DIR/glm53-v16-hyperflare/export-glm-tp2.sh"
 RECIPE_EXPORT_BLOB="f2bcc006e3b63c0add107396bfe8f85f4832e502"
 ROOT_HOST="${ROOT_HOST:-/models/glm53-hyperflare}"
-CKPT_HOST="$ROOT_HOST/glm53-fp4-local"
+# MODEL is the checkpoint directory, which Hyperflare also uses as the model name; VARIANT labels
+# the receipt and log so one script exports any checkpoint built by glm-hybrid-checkpoint.py.
+MODEL="${MODEL:-glm53-fp4-local}"
+VARIANT="${VARIANT:-v16}"
+CKPT_HOST="$ROOT_HOST/$MODEL"
 FLARE_HOME="$ROOT_HOST/flare-home"
 BRRR_EXT="$ROOT_HOST/brrr-ext"
-NAME="glm53-flash-hyperflare-tp2-v16-export"
-PACKAGE_RECEIPT="$ROOT_HOST/package-v16.txt"
-LOG="$ROOT_HOST/export-v16-$(date +%Y%m%d%H%M%S).log"
+NAME="glm53-flash-hyperflare-tp2-$VARIANT-export"
+PACKAGE_RECEIPT="$ROOT_HOST/package-$VARIANT.txt"
+LOG="$ROOT_HOST/export-$VARIANT-$(date +%Y%m%d%H%M%S).log"
 # VISION=1 (recipe default) keeps image input; VISION=0 exports text-only
 # (+7.2% KV at TP2). CONC=8 is the recipe's TP2 slot count.
 VISION="${VISION:-1}"
@@ -48,7 +52,11 @@ die() { echo "error: $*" >&2; exit 1; }
 
 [ "$(git hash-object "$RECIPE_EXPORT")" = "$RECIPE_EXPORT_BLOB" ] \
   || die "vendored recipe export script drifted from blob $RECIPE_EXPORT_BLOB"
-"$SCRIPT_DIR/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify
+if [ "$MODEL" = "glm53-fp4-local" ]; then
+  "$SCRIPT_DIR/download-glm53-flash-hyperflare-tp2-v16-checkpoint.sh" --verify
+else
+  [ -r "$CKPT_HOST/config.json" ] || die "no checkpoint at $CKPT_HOST"
+fi
 
 label="$(docker image inspect "$IMAGE" \
   --format '{{index .Config.Labels "ai.peterstorm.inference.hyperflare-commit"}}' 2>/dev/null)" \
@@ -63,15 +71,15 @@ done
 
 mkdir -p "$FLARE_HOME" "$BRRR_EXT"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-echo "Exporting (VISION=$VISION CONC=$CONC) — log: $LOG"
+echo "Exporting $MODEL as $VARIANT (VISION=$VISION CONC=$CONC) — log: $LOG"
 docker run --rm --name "$NAME" \
   --gpus all --ipc host --shm-size 32g \
   --ulimit memlock=-1 --ulimit stack=67108864:67108864 \
   --security-opt seccomp=unconfined \
   --user "$(id -u):$(id -g)" \
   -e HOME=/flare-home -e CUDA_HOME=/usr/local/cuda \
-  -e CKPT=/ckpt/glm53-fp4-local -e VISION="$VISION" -e CONC="$CONC" \
-  -v "$CKPT_HOST:/ckpt/glm53-fp4-local:ro" \
+  -e CKPT=/ckpt/$MODEL -e VISION="$VISION" -e CONC="$CONC" \
+  -v "$CKPT_HOST:/ckpt/$MODEL:ro" \
   -v "$FLARE_HOME:/flare-home" \
   -v "$BRRR_EXT:/opt/flare/.brrr-ext" \
   -v "$RECIPE_EXPORT:/recipe/export-glm-tp2.sh:ro" \
@@ -80,12 +88,12 @@ docker run --rm --name "$NAME" \
 status="${PIPESTATUS[0]}"
 [ "$status" -eq 0 ] || die "export exited $status; see $LOG"
 
-entry="$(sed -nE 's/^Exported cache entry: .*\/(glm53-fp4-local\/gb202-tp2-[0-9]+)$/\1/p' "$LOG" | tail -1)"
+entry="$(sed -nE "s|^Exported cache entry: .*/($MODEL/gb202-tp2-[0-9]+)$|\1|p" "$LOG" | tail -1)"
 [ -n "$entry" ] || die "export log has no 'Exported cache entry: .../glm53-fp4-local/gb202-tp2-<ts>' line"
 package="${entry%%/*}@${entry##*/}"
 plan_line="$(grep -E 'Plan cache\.|Graph catalog' "$LOG" | tail -2 | tr '\n' ' ')"
-tmp="$(mktemp "$ROOT_HOST/.package-v16.XXXXXX")"
-printf 'package=%s\nhyperflare_commit=%s\nvision=%s\nconc=%s\nexported_at=%s\nlog=%s\nplan=%s\n' \
-  "$package" "$HYPERFLARE_COMMIT" "$VISION" "$CONC" "$(date -Is)" "$LOG" "$plan_line" >"$tmp"
+tmp="$(mktemp "$ROOT_HOST/.package-$VARIANT.XXXXXX")"
+printf 'model=%s\npackage=%s\nhyperflare_commit=%s\nvision=%s\nconc=%s\nexported_at=%s\nlog=%s\nplan=%s\n' \
+  "$MODEL" "$package" "$HYPERFLARE_COMMIT" "$VISION" "$CONC" "$(date -Is)" "$LOG" "$plan_line" >"$tmp"
 mv -f "$tmp" "$PACKAGE_RECEIPT"
 echo "PACKAGE OK: $package — receipt $PACKAGE_RECEIPT"
