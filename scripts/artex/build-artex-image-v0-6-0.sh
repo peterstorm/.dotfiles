@@ -44,13 +44,14 @@ echo "== docker build $LOCAL_IMAGE =="
 docker build --build-arg ARTEX_VERSION="$actual_tag" -t "$LOCAL_IMAGE" "$SRC"
 
 # --- verify: the binary carries the audited version stamp (ldflags
-# -X main.version, the same flags as the release binaries job — there is no
-# -version flag to call); the image's own RUN steps already verify the
+# -X main.version, the same flags as the release binaries job — and build.sh
+# strips the leading v, so the string is 0.6.0, not v0.6.0; there is no
+# -version flag to call). The image's own RUN steps already verify the
 # scanner toolbox (nuclei/httpx/... -version) --
 echo "== verify =="
 stamp="$(docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
-  -c "grep -a -m1 -o 'v0\\.6\\.0' /app/artex" || true)"
-[ "$stamp" = "v0.6.0" ] || { echo "FAIL: binary does not carry the v0.6.0 stamp (got: ${stamp:-none})" >&2; exit 1; }
+  -c "grep -a -m1 -o '0\\.6\\.0' /app/artex" || true)"
+[ "$stamp" = "0.6.0" ] || { echo "FAIL: binary does not carry the 0.6.0 stamp (got: ${stamp:-none})" >&2; exit 1; }
 echo "binary stamp: $stamp"
 docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
   -c 'command -v nuclei httpx subfinder katana ffuf dalfox sqlmap bbot' | sort
