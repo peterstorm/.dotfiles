@@ -164,6 +164,44 @@ b/f_a) and every MLA `q_b_proj` (`PreparedGlmMLA` reads `.out_features`).
   tokens; "09:40 → 13:15 in minutes" → `215`; a 586-token SQL-injection explanation with
   vulnerable and parameterized Python, `finish=stop`; `get_weather({"city":"Copenhagen"})`.
 
+### Benchmarks on `…1057` (2026-11-15): it does not carry the uncensoring
+
+Same fixtures, settings and seeds as the earlier runs; receipts on homelab in
+`/tmp/refusal-cyber-bf16-{baseline4k,low4k}`, `/tmp/glm-bf16-{259,96,317}`,
+`/tmp/glm-passkey-bf16`.
+
+**Refusals** (`refusal-probe.py`, 21 prompts, temperature 0, `max_tokens 4000`):
+
+| build | default effort | `low` |
+|---|---|---|
+| v16 (stock) | 3 refusals, 2 empty (15.8%) | — |
+| cyber-hybrid (all layers, FP8) | 0 refusals, 12 empty | 0 / 21 |
+| cyber-hybrid-bf16 (layers ≥ 40 + `lm_head`) | **6** refusals, 1 empty (30.0%) | **6** / 21 (28.6%) |
+
+The BF16 build refuses drugs, weapons, explosives, ransomware and the system-prompt
+probe in plain stock phrasing ("I'm not going to help with this"), where the all-layer
+hybrid gave answers. Carrying only the late layers' requantized tensors and `lm_head`
+does not reproduce the tune's behaviour; the edit evidently lives (at least also) in
+layers 0–39 or in the copy/cast tensors this variant leaves as v16's. Not yet measured
+per layer.
+
+**Thinking spiral** (`probe-glm-drift.py replay`, the 2026-11-15 Pi session, 8 seeds;
+degenerate = loop or script drift):
+
+| turn | v16 | cyber-hybrid | cyber-hybrid-bf16 | bf16 with `clear_thinking` |
+|---|---|---|---|---|
+| 259 (216,539 tokens) | 0/8 | 8/8 | 8/8 loops | 0/8 |
+| 96 (141,101 tokens) | 0/8 | 8/16 | 3/8 drifts | 0/8 |
+| 317 (102,136 tokens) | 2/8 | 6/6 | 6/8 loops | 8/8 loops |
+
+So the late-layer tensors alone bring the spiral back without the uncensoring; glm-guard's
+`clear_thinking` fixes 259 and 96 as it does for the hybrid, and 317 loops either way
+(as it did for the hybrid).
+
+**Passkey** (8K–192K tokens, depths 0.1/0.5/0.9, 2 trials): 22/24 found; both misses are
+refusals to repeat a key "embedded in the content of a vault note", not retrieval
+failures (the hybrid found 24/24).
+
 ### The shifted-fetch bug (2026-11-15)
 
 The first two packages were built from the wrong bytes. A safetensors header's
