@@ -21,7 +21,10 @@ for every format decision:
   v16 stores for them, and the error of each re-encoding is recorded;
 - the vision tower is v16's (dealignai's card: vision is byte-identical to the base model; the
   recipe prepares every vision projection as a declared quantized linear);
-- everything else stays dealignai's BF16, undeclared, which the loader serves natively.
+- everything else stays dealignai's BF16, undeclared, which the loader serves natively;
+- the chat template is v16's: the recipe pins it by digest and inserts its message marks at fixed
+  offsets (``annotated_template_asset``), so dealignai's edited template (``clear_thinking``
+  defaulting to true) would fail the export. Clients pass ``clear_thinking`` per request instead.
 
 Shards holding nothing that changes are reflinked; the rest are rewritten whole (Hyperflare
 refuses a shard whose tensors leave a hole). The index, config and a receipt are written last.
@@ -70,6 +73,8 @@ INDEX = "model.safetensors.index.json"
 VISION_SHARD = "tensors/visual-v16.safetensors"
 VISION_ROOT = "model.visual."
 RECEIPT = "convert-receipt.json"
+#: Side files taken from v16 rather than the source: the recipe pins their bytes.
+BASE_SIDE_FILES = ("chat_template.jinja",)
 DTYPE_BYTES = {"BF16": 2, "F16": 2, "F32": 4, "F8_E4M3": 1, "U8": 1, "I8": 1, "I32": 4, "I64": 8}
 
 # --- pure core -----------------------------------------------------------------------
@@ -87,7 +92,7 @@ def side_files(names) -> list[str]:
     rewrites, and download bookkeeping."""
     return sorted(name for name in names
                   if not name.startswith(".") and not name.endswith(".safetensors")
-                  and name not in (INDEX, "config.json", RECEIPT))
+                  and name not in (INDEX, "config.json", RECEIPT, *BASE_SIDE_FILES))
 
 
 def config_mismatches(source: Mapping, base: Mapping, path: str = "") -> list[str]:
@@ -409,6 +414,8 @@ def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quanti
     (out / "config.json").write_text(json.dumps(config, indent=2))
     for name in side_files(entry.name for entry in source.iterdir() if entry.is_file()):
         dense.ref_copy(source / name, out / name)
+    for name in BASE_SIDE_FILES:
+        dense.ref_copy(base / name, out / name)
     receipt = {"source": str(source), "source_marker": (source / ".download-complete").read_text().strip()
                if (source / ".download-complete").exists() else None,
                "base": str(base), "plan": plan.as_json() | {"quantization_config": "see config.json"},
@@ -481,6 +488,9 @@ def verify(source: Path, base: Path, out: Path, plan_path: Path) -> None:
     for name in side_files(entry.name for entry in source.iterdir() if entry.is_file()):
         if not (out / name).is_file() or (out / name).read_bytes() != (source / name).read_bytes():
             raise ValueError(f"{name}: not carried over from the source")
+    for name in BASE_SIDE_FILES:
+        if not (out / name).is_file() or (out / name).read_bytes() != (base / name).read_bytes():
+            raise ValueError(f"{name}: not v16's pinned bytes")
     print(f"verify OK: {len(files)} files cover their bytes, {len(plan.requants)} re-encoded, "
           f"{len(plan.vision)} vision tensors from v16, {len(declared)} declarations")
 

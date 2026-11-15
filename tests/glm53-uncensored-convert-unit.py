@@ -157,6 +157,7 @@ def build_fixture(root: Path) -> tuple[Path, Path]:
             tensor("model.visual.patch_embed.weight", "BF16", [4, 4]),
         ],
     }, ARCH | {"quantization_config": V16_QC})
+    (base / "chat_template.jinja").write_text("{%- set clear_thinking = false -%}{{ messages }}")
 
     write_checkpoint(source, {
         "model-00001-of-00004.safetensors": [
@@ -171,7 +172,7 @@ def build_fixture(root: Path) -> tuple[Path, Path]:
     }, ARCH | {"quantization_config": SOURCE_QC}, metadata={"format": "pt"})
     write_safetensors(source / INPUT_SCALES, input_scales([NVFP4_LAYER, W4A16_LAYER]))
     (source / "tokenizer.json").write_text('{"model": "bpe"}')
-    (source / "chat_template.jinja").write_text("{{ messages }}")
+    (source / "chat_template.jinja").write_text("{%- set clear_thinking = true -%}{{ messages }}")
     (source / "README.md").write_text("card")
     (source / ".download-complete").write_text("dealignai/GLM-5.3-Flash-UNCENSORED-NVFP4 abc\n")
     (source / ".cache").mkdir()
@@ -205,8 +206,8 @@ def test_pure() -> None:
           "config_mismatches: nested keys named by path, quantization_config ignored")
     check(mod.config_mismatches({"a": 1}, {"a": 1, "b": 2}) == ["b"], "config_mismatches: a missing key differs")
     check(mod.side_files(["tokenizer.json", "config.json", mod.INDEX, "a.safetensors", ".download-complete",
-                          "chat_template.jinja", mod.RECEIPT]) == ["chat_template.jinja", "tokenizer.json"],
-          "side_files: tensors, index, config, receipt and dot files stay behind")
+                          "chat_template.jinja", mod.RECEIPT, "README.md"]) == ["README.md", "tokenizer.json"],
+          "side_files: tensors, index, config, receipt, dot files and v16-pinned files stay behind")
 
     bf16 = {"dtype": "BF16", "shape": [64, 64]}
     mx8 = mod.plan_requant("p", "s", bf16, {"dtype": "F8_E4M3", "shape": [64, 64]},
@@ -390,6 +391,8 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
     config = json.loads((out / "config.json").read_text())
     check(config["quantization_config"] == mod.plan_from_disk(source, base).quantization_config
           and config["text_config"] == ARCH["text_config"], "build: the config carries v16's quantization block")
+    check((out / "chat_template.jinja").read_bytes() == (base / "chat_template.jinja").read_bytes(),
+          "build: the chat template is v16's pinned bytes, not the source's")
     check({p.name for p in out.iterdir() if p.is_file()} >= {"tokenizer.json", "chat_template.jinja", "README.md"}
           and not (out / ".download-complete").exists() and not (out / ".cache").exists(),
           "build: side files carried over, download bookkeeping left behind")
@@ -440,6 +443,8 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> None:
     mutant("the emptied shard written after all",
            lambda d: shutil.copy(source / VISION_SOURCE_SHARD, d), "replaced vision tower")
     mutant("a missing side file", lambda d: (d / "tokenizer.json").unlink(), "tokenizer.json")
+    mutant("the source's chat template instead of v16's",
+           lambda d: shutil.copy(source / "chat_template.jinja", d / "chat_template.jinja"), "pinned bytes")
     check_raises("verify: a plan the checkpoints no longer produce",
                  lambda: mod.verify(source, base, out, stale), "reviewed plan")
     check(quiet(lambda: mod.main(["verify", "--source", str(source), "--base", str(base), "--plan", str(stale),
