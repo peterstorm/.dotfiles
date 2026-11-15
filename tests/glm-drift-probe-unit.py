@@ -171,6 +171,37 @@ check("clear+pad without filler raises rather than silently running unpadded", n
 check("other conditions ignore a supplied pad", "IRRELEVANT" not in json.dumps(probe.replay_payload("m", sys_messages, "clear", seed=1, max_tokens=500, pad="IRRELEVANT")))
 check("seeds can start anywhere", probe.seeds(3, start=9) == [9, 10, 11] and probe.seeds(2) == [1, 2])
 
+# The chain-aware conditions: clear_thinking only drops earlier USER turns' reasoning, so inside one long tool chain
+# every turn's reasoning stays. These blank the reasoning of older assistant turns whatever turn they belong to.
+chain = [
+    {"role": "system", "content": "s"},
+    {"role": "user", "content": "q"},
+    {"role": "assistant", "content": "a1", "reasoning_content": "R1", "tool_calls": [{"id": "c1"}]},
+    {"role": "tool", "tool_call_id": "c1", "content": "t1"},
+    {"role": "assistant", "content": "a2", "reasoning_content": "R2"},
+    {"role": "tool", "tool_call_id": "c2", "content": "t2"},
+    {"role": "assistant", "content": "a3", "reasoning_content": "R3"},
+]
+chain_snapshot = json.dumps(chain)
+
+
+def reasoning(payload):
+    return [m["reasoning_content"] for m in payload["messages"] if m["role"] == "assistant"]
+
+
+strip = probe.replay_payload("m", chain, "strip", seed=1, max_tokens=500)
+check("strip blanks the reasoning of every assistant turn, the current chain included", reasoning(strip) == ["", "", ""])
+check("strip keeps everything else: content, tool calls, tool results, user turns",
+      [m.get("content") for m in strip["messages"]] == ["s", "q", "a1", "t1", "a2", "t2", "a3"] and strip["messages"][2]["tool_calls"] == [{"id": "c1"}])
+check("keep1 keeps only the most recent turn's reasoning", reasoning(probe.replay_payload("m", chain, "keep1", seed=1, max_tokens=500)) == ["", "", "R3"])
+check("keep3 keeps the last three", reasoning(probe.replay_payload("m", chain, "keep3", seed=1, max_tokens=500)) == ["R1", "R2", "R3"])
+check("keeping more turns than exist is fine", reasoning(probe.replay_payload("m", chain[:3], "keep3", seed=1, max_tokens=500)) == ["R1"])
+check("the chain-aware conditions also ask for clear_thinking", strip["chat_template_kwargs"] == {"clear_thinking": True})
+check("stripping never mutates the caller's messages", json.dumps(chain) == chain_snapshot)
+check("baseline and clear leave every turn's reasoning alone",
+      reasoning(probe.replay_payload("m", chain, "baseline", seed=1, max_tokens=500)) == ["R1", "R2", "R3"]
+      and reasoning(probe.replay_payload("m", chain, "clear", seed=1, max_tokens=500)) == ["R1", "R2", "R3"])
+
 # ------------------------------------------------------------------------ passkey
 
 rng = random.Random(7)
@@ -279,6 +310,15 @@ with tempfile.TemporaryDirectory() as scratch:
     code, out, err = run_main(["replay", *common, "--session", str(session), "--target", str(TARGET), "--conditions", "clear+pad",
                                "--samples", "1", "--out", str(scratch / "nopad")])
     check("clear+pad with no --pad-chars is refused up front", code == 2 and "pad" in err)
+
+    Fake.seen.clear()
+    code, out, err = run_main(["replay", *common, "--session", str(session), "--target", "6", "--conditions", "strip",
+                               "--samples", "1", "--out", str(scratch / "strip")])
+    check("a strip replay exits 0", code == 0)
+    sent = [r for r in Fake.seen if "messages" in r]
+    check("the strip request carried no reasoning on any assistant turn",
+          len(sent) == 1 and any(m["role"] == "assistant" for m in sent[0]["messages"])
+          and all(m["reasoning_content"] == "" for m in sent[0]["messages"] if m["role"] == "assistant"))
 
     code, out, err = run_main(["replay", *common, "--session", str(scratch / "absent.jsonl"), "--target", "3",
                                "--out", str(scratch / "x")])

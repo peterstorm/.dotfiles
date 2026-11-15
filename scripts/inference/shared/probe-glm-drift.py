@@ -149,8 +149,17 @@ CONDITIONS: dict[str, dict] = {
     # The length-matched control for `clear`: same cleared reasoning, but the prompt is padded back out with
     # irrelevant prose, so a difference from `clear` is sheer context length and not the replayed reasoning.
     "clear+pad": {"chat_template_kwargs": {"clear_thinking": True}},
+    # The chain-aware family. `clear_thinking` drops only earlier USER turns' reasoning, so inside one long tool
+    # chain every turn's reasoning stays, and in a chain-heavy session that is most of what is replayed. These blank
+    # the reasoning of older assistant turns whatever turn they belong to: `strip` of all of them, `keepN` of all
+    # but the N most recent.
+    "strip": {"chat_template_kwargs": {"clear_thinking": True}},
+    "keep1": {"chat_template_kwargs": {"clear_thinking": True}},
+    "keep3": {"chat_template_kwargs": {"clear_thinking": True}},
 }
 PADDED = frozenset({"clear+pad"})
+#: How many of the most recent assistant turns keep their reasoning, per chain-aware condition.
+KEEP_LAST = {"strip": 0, "keep1": 1, "keep3": 3}
 
 
 def seeds(count: int, start: int = 1) -> list[int]:
@@ -164,6 +173,10 @@ def replay_payload(model: str, messages: Sequence[dict], condition: str, seed: i
     if condition in PADDED and not pad:
         raise ValueError(f"condition {condition!r} needs padding text")
     conversation = [dict(message) for message in messages]
+    if condition in KEEP_LAST:
+        assistant = [i for i, message in enumerate(conversation) if message.get("role") == "assistant"]
+        for i in assistant[: max(0, len(assistant) - KEEP_LAST[condition])]:
+            conversation[i]["reasoning_content"] = ""
     if condition in PADDED:
         lead = 1 if conversation and conversation[0].get("role") == "system" else 0
         conversation.insert(lead, {"role": "user", "content": "Reference material for later (not relevant to the task below; ignore it):\n\n" + pad})
