@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: artex
+  labels:
+    app: artex
+spec:
+  type: ClusterIP
+  selector:
+    app: artex
+  ports:
+    # Single port → NO port name (the multi-port lesson: unnamed ports are
+    # only invalid when there is more than one).
+    - port: 8787
+      targetPort: 8787

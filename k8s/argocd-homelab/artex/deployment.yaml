@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artex
+  labels:
+    app: artex
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: artex
+  template:
+    metadata:
+      labels:
+        app: artex
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        # Co-tenant in ONE pod (transmission sidecar spirit): the DSN targets
+        # 127.0.0.1, so there is no cross-namespace DNS and no second service.
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: artex
+            - name: POSTGRES_DB
+              value: artex
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artex-secrets
+                  key: pg-password
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+        - name: artex
+          image: ghcr.io/peterstorm/artex:sha-a13c68cb
+          ports:
+            - containerPort: 8787
+          env:
+            - name: TZ
+              value: Europe/Copenhagen
+            - name: ARTEX_PG_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: artex-secrets
+                  key: artex-pg-dsn
+            # LLM = desktop vLLM (openai-compatible). The key rides in
+            # OPENAI_API_KEY — the upstream env contract (their compose;
+            # there is no ARTEX_LLM_API_KEY). Provider/model/base as plain
+            # env: not secret.
+            - name: ARTEX_LLM_PROVIDER
+              value: openai
+            - name: ARTEX_LLM_BASE_URL
+              value: http://192.168.0.80:8000/v1
+            - name: ARTEX_LLM_MODEL
+              value: glm-5.3-flash-hyperflare-tp2-cyber-hybrid
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: artex-secrets
+                  key: llm-api-key
+            - name: ARTEX_JWT_KEY_DIR
+              value: /app/keys
+            # Login rate-limit trusts X-Forwarded-For from the two in-path
+            # proxies: k3s pod CIDR (cloudflared) and the LAN (cilium ingress).
+            - name: ARTEX_TRUSTED_PROXIES
+              value: 10.42.0.0/16,192.168.0.0/24
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: data
+              mountPath: /app/keys
+              subPath: keys
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: artex-pgdata
+        - name: data
+          persistentVolumeClaim:
+            claimName: artex-data

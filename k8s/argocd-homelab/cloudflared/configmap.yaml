@@ -45,4 +45,6 @@ data:
       # policy this line publishes the model to the internet.
       - hostname: vllm-tcp.peterstorm.io
         service: tcp://192.168.0.80:8000
+      - hostname: artex.peterstorm.io
+        service: http://artex.artex:8787
       - service: http_status:404
