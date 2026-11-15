@@ -188,15 +188,16 @@ def build_fixture(root: Path) -> dict:
                     "expert": expert, "norm": norm, "gate": gate, "native": native}}
 
 
-def load_plan_bf16(root: Path, fixture: dict, min_layer: int = 40) -> Path:
+def load_plan_bf16(root: Path, fixture: dict, min_layer: int = 40, keep_fp8: list[str] | None = None,
+                   name: str = "bf16-plan.json") -> Path:
     """Run the real plan command against the fixture and return the bf16 plan path."""
     plan_path = root / "hybrid-plan.json"
     plan_path.write_text(json.dumps(fixture["plan"]))
     receipt_path = root / "hybrid-receipt.json"
     receipt_path.write_text(json.dumps(fixture["receipt"]))
-    out = root / "bf16-plan.json"
+    out = root / name
     code = mod.cmd_plan(argparse_ns(base=fixture["base"], plan=plan_path, receipt=receipt_path,
-                                    min_layer=min_layer, out=out))
+                                    min_layer=min_layer, keep_fp8=keep_fp8 or [], out=out))
     assert code == 0
     return out
 
@@ -236,6 +237,31 @@ def test_selection(fixture):
     check(mod.prefix_of("lm_head.weight") == "lm_head", "prefix_of")
     check(mod.scale_of("lm_head") == "lm_head.weight_scale", "scale_of")
     check_raises("prefix_of rejects non-weights", lambda: mod.prefix_of("lm_head.weight_scale"))
+
+    # Operator holds: a pattern matches a whole prefix, never a substring of one.
+    patterns = mod.parse_keep_patterns([r"lm_head", r".*\.shared_experts\..*"])
+    prefixes = {"lm_head", "model.layers.40.mlp.shared_experts.down_proj", "model.layers.40.self_attn.q_proj"}
+    check(mod.held_prefixes(prefixes, patterns) == {"lm_head", "model.layers.40.mlp.shared_experts.down_proj"},
+          "held_prefixes: whole-prefix matches only")
+    check(mod.held_prefixes(prefixes, mod.parse_keep_patterns([r"q_proj"])) == set(),
+          "held_prefixes: a substring is not a whole-prefix match")
+    check(mod.held_prefixes(prefixes, []) == set(), "no patterns hold nothing")
+    check_raises("a pattern that does not compile is refused", lambda: mod.parse_keep_patterns(["(unclosed"]))
+
+
+def test_plan_holds(root, fixture):
+    """--keep-fp8 holds matching prefixes in the base's FP8 and records why."""
+    held = load_plan_bf16(root, fixture, keep_fp8=[r"lm_head"], name="bf16-plan-held.json")
+    plan = json.loads(held.read_text())
+    names = {e["tensor"] for e in plan["selected"]}
+    check("lm_head.weight" not in names, "a held prefix leaves the selection")
+    check(len(names) == 2, f"the rest of the selection is unchanged (got {sorted(names)})")
+    check(plan["keep_fp8_patterns"] == ["lm_head"], "the plan records the operator's patterns")
+    check(plan["kept_fp8"] == ["lm_head", "model.layers.42.self_attn.k_proj",
+                               "model.layers.43.self_attn.q_b_proj"],
+          "kept_fp8 lists held and kernel-bound prefixes together")
+    check_raises("a held pattern that does not compile fails the plan",
+                 lambda: load_plan_bf16(root, fixture, keep_fp8=["(unclosed"], name="bf16-plan-bad.json"))
 
 
 def test_dequantizable(fixture, root):
@@ -418,6 +444,8 @@ def test_build_and_verify(root, fixture):
     receipt = json.loads((out / "hybrid-receipt.json").read_text())
     check(receipt["bf16"]["selected"] == 3 and receipt["bf16"]["min_layer"] == 40,
           "receipt records the bf16 build")
+    check(receipt["bf16"]["kept_fp8"] == plan_written["kept_fp8"] and receipt["bf16"]["keep_fp8_patterns"] == [],
+          "receipt records what the build held in FP8 and the operator patterns behind it")
 
     check_raises("build refuses an existing output",
                  lambda: mod.build(fixture["base"], plan_bf16, cache,
@@ -508,6 +536,7 @@ def main() -> int:
         root = Path(tmp)
         fixture = build_fixture(root)
         test_selection(fixture)
+        test_plan_holds(root, fixture)
         test_dequantizable(fixture, root)
         test_header_surgery()
         test_index_and_config(fixture)

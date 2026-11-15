@@ -67,7 +67,7 @@ def kernel_fp8_prefixes(weight_names) -> set[str]:
       quantized linear has (mla.py). kv_b_proj, lm_head and the other projections accept a
       plain BF16 tensor.
 
-    These stay in the hybrid's FP8 whatever the selection says.
+    These keep the base checkpoint's FP8 storage whatever the selection says.
     """
     names = list(weight_names)
     kda = {match.group(1) for name in names
@@ -75,6 +75,23 @@ def kernel_fp8_prefixes(weight_names) -> set[str]:
     mla_q_b = {name[: -len(".weight")] for name in names
                if re.fullmatch(r".*\.self_attn\.q_b_proj\.weight", name)}
     return {f"{block}.{proj}" for block in kda for proj in ("q_proj", "k_proj", "v_proj")} | mla_q_b
+
+
+def parse_keep_patterns(raw: list[str]) -> list[re.Pattern]:
+    """Operator --keep-fp8 patterns, each matched against a whole prefix. A pattern that does not
+    compile is refused here, before any selection, never silently matched as nothing."""
+    patterns = []
+    for text in raw:
+        try:
+            patterns.append(re.compile(text))
+        except re.error as error:
+            raise ValueError(f"--keep-fp8 {text!r} is not a regular expression: {error}") from error
+    return patterns
+
+
+def held_prefixes(prefixes, patterns: list[re.Pattern]) -> set[str]:
+    """The prefixes an operator pattern holds in FP8 (whole-prefix match)."""
+    return {prefix for prefix in prefixes if any(pattern.fullmatch(prefix) for pattern in patterns)}
 
 
 def select_entries(plan: dict, receipt: dict, min_layer: int, keep_fp8: set[str]) -> list[dict]:
@@ -346,7 +363,9 @@ def build(base: Path, plan_path: Path, cache: Path, receipt_path: Path, out: Pat
         raise ValueError(f"{out}: the index names files the build did not write: {missing}")
     receipt = json.loads(receipt_path.read_text())
     receipt["bf16"] = {"selected": len(selected), "prefixes": sorted(prefixes),
-                       "min_layer": plan["min_layer"], "source_repo": plan["cyber_repo"], **stats}
+                       "min_layer": plan["min_layer"], "kept_fp8": plan["kept_fp8"],
+                       "keep_fp8_patterns": plan["keep_fp8_patterns"],
+                       "source_repo": plan["cyber_repo"], **stats}
     (out / "hybrid-receipt.json").write_text(json.dumps(receipt, indent=1))
     return stats
 
@@ -451,10 +470,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
         base_headers.update({name: meta for name, meta in header.items() if name != "__metadata__"})
     declared = json.loads((Path(args.base) / "config.json").read_text())[
         "quantization_config"]["quantized_layers"]
-    keep_fp8 = kernel_fp8_prefixes(index["weight_map"])
+    patterns = parse_keep_patterns(args.keep_fp8)
+    candidates = {prefix_of(e["tensor"]) for e in select_entries(plan, receipt, args.min_layer, set())}
+    keep_fp8 = kernel_fp8_prefixes(index["weight_map"]) | held_prefixes(candidates, patterns)
     selected = select_entries(plan, receipt, args.min_layer, keep_fp8)
-    kept = sorted({prefix_of(e["tensor"]) for e in select_entries(plan, receipt, args.min_layer, set())}
-                  & keep_fp8)
+    kept = sorted(candidates & keep_fp8)
     if not selected:
         raise ValueError("selection is empty; check --min-layer against the receipt")
     for entry in selected:
@@ -465,6 +485,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         "base_repo": plan["base_repo"],
         "cyber_repo": plan["cyber_repo"],
         "min_layer": args.min_layer,
+        "keep_fp8_patterns": [pattern.pattern for pattern in patterns],
         "kept_fp8": kept,
         "selected": [
             {"tensor": e["tensor"], "shard": e["shard"], "shape": e["shape"],
@@ -477,7 +498,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     late = sum(1 for e in selected if layer_of(e["tensor"]) is not None)
     print(f"plan: {len(selected)} tensors ({late} late >= layer {args.min_layer}, "
           f"{len(selected) - late} lm_head), {len({prefix_of(e['tensor']) for e in selected})} prefixes; "
-          f"{len(kept)} kept FP8 for the kernels")
+          f"{len(kept)} kept FP8 (kernel-bound or --keep-fp8 {[p.pattern for p in patterns]})")
     return 0
 
 
@@ -504,6 +525,9 @@ def main() -> int:
     p_plan.add_argument("--plan", required=True, help="hybrid-plan.json from the splice")
     p_plan.add_argument("--receipt", required=True, help="hybrid-receipt.json from the splice")
     p_plan.add_argument("--min-layer", type=int, default=40)
+    p_plan.add_argument("--keep-fp8", action="append", default=[], metavar="REGEX",
+                        help="hold every prefix this pattern matches whole in the base's FP8 "
+                             "(repeatable; recorded in the plan and the receipt)")
     p_plan.add_argument("--out", required=True)
     p_plan.set_defaults(function=cmd_plan)
 
