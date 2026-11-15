@@ -4,6 +4,8 @@
   # 1. Secrets — decrypted to /run/secrets/
   [
     (util.sops.hostSecret "reclaw-telegram-token" "reclaw.yaml" "telegram_token" { owner = "peterstorm"; group = "users"; })
+    # ARTEX admin credential for the artex-task-watcher scheduled skill (API login only).
+    (util.sops.hostSecret "reclaw-artex-admin-password" "reclaw.yaml" "artex_admin_password" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-gemini-api-key" "reclaw.yaml" "gemini_api_key" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-google-email" "reclaw.yaml" "google_email" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-google-password" "reclaw.yaml" "google_password" { owner = "peterstorm"; group = "users"; })
