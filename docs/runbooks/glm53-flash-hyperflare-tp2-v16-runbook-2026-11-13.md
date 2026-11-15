@@ -286,7 +286,9 @@ reasoning parse exactly as they do on the other Hyperflare primaries.
   source (a unit test proves the two builds byte-identical). So once a build
   verifies, the download can go; the receipt chains through `source_receipt`.
 - **Build**: `glm53-uncensored-convert.py plan | build | verify`. `plan` runs anywhere
-  and needs no numpy. `build` and `verify` run in the image
+  and needs no numpy. `build` writes under `<out>.partial` and renames it into place only
+  when the receipt is written; any refusal removes it (and a killed run's leftover is
+  discarded by the next build), so a failed build never needs cleanup. `build` and `verify` run in the image
   (`--entrypoint /opt/flare/.venv/bin/python3`, `/models` and the repository mounted).
   The first v2 build, 2026-11-15, from v1 as the source, took ~35 min:
   - **Shards:** 118 rewritten; the vision tower is v16's `tensors/visual-v16.safetensors`.
@@ -401,7 +403,10 @@ wait for idle GPUs, and run the export wrapper; `.status` gets one line per phas
 `.log` the wrapper's output (appended across runs: read the newest attempt's lines). **It
 starts the primaries it stopped again** whatever happens after the stop: GPUs never idle,
 export failed, or export succeeded. Each outcome gets a `restarted <container>` line
-before the terminal status. Cutting over to the new package is still the switch
+before the terminal status, which is the verdict: `done <package>` only when the export
+succeeded **and** every stopped primary is back. An export whose primary would not restart
+ends `failed: exported <package>, but a stopped primary did not restart`; start it by hand
+(`docker start <container>`), the package is good. Cutting over to the new package is still the switch
 script's job (`VARIANT=<variant> switch-glm53-hyperflare-tp2-v16.sh start`, which stops
 them again first). Until 2026-11-15 the driver left the endpoint dark after a refused
 export, about 40 minutes until someone noticed; the three uncensored attempts that day

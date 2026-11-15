@@ -37,8 +37,12 @@
 # Whatever happens after the stop -- the GPUs never go idle, the export fails, or
 # it succeeds -- the primaries it stopped are started again before the terminal
 # status line, so the endpoint is down only while the export holds the GPUs (on
-# 2026-11-15 a refused export left it dark until someone noticed). Cutting over
-# to the new package is the switch script's job; it stops them again first.
+# 2026-11-15 a refused export left it dark until someone noticed). The terminal
+# line is the verdict: "done <package>" only when the export succeeded AND every
+# stopped primary is back; an export whose primary would not restart ends
+# "failed: exported <package>, but ..." so a poller never reads success while the
+# endpoint is down. Cutting over to the new package is the switch script's job;
+# it stops them again first.
 #
 # Usage: stop-and-export-glm53-hyperflare.sh VARIANT
 set -euo pipefail
@@ -202,8 +206,14 @@ main() {
   VARIANT="$VARIANT" ROOT_HOST="$ROOT_HOST" bash "$EXPORT_WRAPPER" >>"$LOG" 2>&1 || rc=$?
   restore_primaries || restored=$?
   if (( rc == 0 )); then
-    status "done $(sed -n 's/^PACKAGE OK: //p' "$LOG" | tail -1)"
-    return "$restored"
+    local package
+    package="$(sed -n 's/^PACKAGE OK: //p' "$LOG" | tail -1)"
+    if (( restored == 0 )); then
+      status "done $package"
+      return 0
+    fi
+    status "failed: exported $package, but a stopped primary did not restart (the endpoint is down)"
+    return 1
   fi
   status "failed exit=$rc (see $LOG)"
   return 1

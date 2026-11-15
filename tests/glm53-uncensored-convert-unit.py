@@ -683,8 +683,27 @@ def test_build_and_verify(root: Path, source: Path, base: Path) -> Path:
     check_raises("build: an existing output directory",
                  lambda: mod.build(source, base, root / "occupied", plan_path, FakeQuantizer()), "overwrite")
 
+    # A block scale the fold cannot move exactly is found only while writing: the build leaves nothing.
+    unmovable = root / "unmovable"
+    shutil.copytree(source, unmovable)
+    up_plane = f"{CSF_LAYER}.0.up_proj.weight_scale"            # expert 0 halves up (c = 1.5)
+    patch_tensor(unmovable, "model-00002-of-00005.safetensors", up_plane,
+                 bytes([0x01]) + scale_plane(1)[1:])               # the smallest subnormal has no exact half
+    unmovable_plan = root / "unmovable-plan.json"
+    unmovable_plan.write_text(json.dumps(mod.plan_from_disk(unmovable, base).as_json()))
+    check_raises("build: a block scale the fold cannot halve exactly",
+                 lambda: mod.build(unmovable, base, root / "half", unmovable_plan, FakeQuantizer()),
+                 f"{up_plane}: 1 block scales cannot move by 2**-1")
+    check(not (root / "half").exists() and not mod.staging_dir(root / "half").exists(),
+          "build: a refusal while writing leaves neither the output nor its staging directory")
+
+    # A staging directory a killed run left behind is discarded, not refused.
     out, quantize = root / "out", FakeQuantizer()
+    mod.staging_dir(out).mkdir()
+    (mod.staging_dir(out) / "model-00001-of-00005.safetensors").write_bytes(b"torn")
     receipt = mod.build(source, base, out, plan_path, quantize)
+    check(not mod.staging_dir(out).exists() and (out / mod.RECEIPT).is_file(),
+          "build: publishes the output by renaming its staging directory, a killed run's leftovers discarded")
     check(sorted(quantize.calls) == sorted([(8192, (64, 64), "mx8")] * 4 + [(2048, (16, 64), "mx8"),
                                                                             (32768, (128, 128), "block8")]),
           "build: the port re-encodes each target once, from its BF16 bytes")

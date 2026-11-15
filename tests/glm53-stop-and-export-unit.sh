@@ -231,7 +231,11 @@ write_gpu 500 500
 touch "$TMP/start-fails"
 EXPORT_WRAPPER="$TMP/wrapper-ok" main uncensored 2>/dev/null && result=0 || result=$?
 check "an export that succeeded but whose primary will not restart exits 1" \
-  '[ "$result" = 1 ] && grep -q "failed to restart" "$TMP/status.txt" && [[ "$(last_status)" == *"done "* ]]'
+  '[ "$result" = 1 ] && grep -q "failed to restart glm53-flash-hyperflare-tp2-v16" "$TMP/status.txt"'
+# Regression (review, 2026-11-15): the terminal line said "done" while the endpoint was down.
+check "its terminal line is a failure naming the package, never done" \
+  '[[ "$(last_status | cut -d" " -f2-)" == "failed: exported glm53-uncensored@gb202-tp2-202611151234, but a stopped primary did not restart"* ]] \
+   && ! grep -q " done " "$TMP/status.txt"'
 
 configure
 rm -f "$TMP/status.txt" "$TMP/docker-actions.txt" "$TMP/wrapper-calls.txt"

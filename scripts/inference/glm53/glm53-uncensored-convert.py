@@ -48,7 +48,8 @@ expert scales) was refused at export for 2.1 GiB per GPU. Per tensor:
   defaulting to true) would fail the export. Clients pass ``clear_thinking`` per request instead.
 
 Shards holding nothing that changes are reflinked; the rest are rewritten whole (Hyperflare
-refuses a shard whose tensors leave a hole). The index, config and a receipt are written last.
+refuses a shard whose tensors leave a hole). The index, config and a receipt are written last, all
+under ``<out>.partial``, which is renamed to ``<out>`` only then and removed on any failure.
 
     plan    compute the conversion from both checkpoints' headers and write it      (no numpy)
     build   recompute the plan, require it to equal the reviewed one, write the checkpoint
@@ -73,6 +74,7 @@ import importlib.util
 import json
 import math
 import re
+import shutil
 import struct
 import sys
 from dataclasses import asdict, dataclass
@@ -779,21 +781,48 @@ def require_shared_globals(root: Path, index: Mapping[str, str], experts: Sequen
                              f"{struct.unpack('<f', up)[0]}); the loader would pair its FC1 gains")
 
 
+def staging_dir(out: Path) -> Path:
+    """Where ``build`` writes before it publishes ``out``: a sibling, so the final rename stays on one
+    filesystem (and reflinks stay clones)."""
+    return out.with_name(out.name + ".partial")
+
+
 def build(source: Path, base: Path, out: Path, plan_path: Path, quantize: Quantizer) -> dict:
+    """Write the reviewed plan's checkpoint to ``out``, all or nothing: it is written under
+    ``staging_dir(out)`` and renamed into place only once the receipt is written, and any failure
+    (a block scale that cannot move exactly, a short read, the quantizer) removes the staging
+    directory, so a rerun needs no cleanup. A staging directory left by a killed run is discarded."""
     plan = plan_from_disk(source, base)
     if plan.as_json() != read_json(plan_path):
         raise ValueError(f"{plan_path}: the checkpoints no longer produce the reviewed plan; re-plan")
     if out.exists():
         raise ValueError(f"{out}: refuses to overwrite an existing directory")
     source_index = read_json(source / INDEX)["weight_map"]
+    encode, fold_only, kept = (routed_experts(source_index, plan.layers(work)) for work in (ENCODE, FOLD, KEEP))
+    # The cheap refusals from the source's values come first; the rest surface while writing.
+    require_shared_globals(source, source_index, kept)
+    folds = expert_folds(source, source_index, encode + fold_only)
+    staging = staging_dir(out)
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    try:
+        receipt = write_conversion(source, base, staging, plan, folds, quantize)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    staging.rename(out)
+    return receipt
+
+
+def write_conversion(source: Path, base: Path, out: Path, plan: Plan, folds: Mapping[str, Fold],
+                     quantize: Quantizer) -> dict:
+    """Write the plan's checkpoint into the empty directory ``out``; returns the receipt."""
+    source_index = read_json(source / INDEX)["weight_map"]
     base_index = read_json(base / INDEX)["weight_map"]
     by_weight = {r.weight: r for r in plan.requants}
     vision = {name for name in source_index if name.startswith(VISION_ROOT)}
     encode, fold_only, kept = (routed_experts(source_index, plan.layers(work)) for work in (ENCODE, FOLD, KEEP))
-    # Everything that can refuse from the source's values does so before the first write.
-    require_shared_globals(source, source_index, kept)
-    folds = expert_folds(source, source_index, encode + fold_only)
-    out.mkdir(parents=True)
     encoding = set(encode)
     # Each folded projection's scale plane and global, keyed by the source tensor they replace.
     planes = {f"{expert}.{projection}.weight_scale": (expert, projection)
