@@ -179,13 +179,13 @@ contains "$DESKTOP" 'systemd.services.hyperflare-metrics'
 jq -e --arg id "$SERVED_MODEL" '
   .providers["desktop-vllm"].models
   | map(select(.id == $id))
-  | length == 1 and .[0].contextWindow == 1048576 and (.[0].input | index("image") != null)
-' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $SERVED_MODEL with 1M context and image input"
+  | length == 1 and .[0].contextWindow == 400000 and (.[0].input | index("image") != null)
+' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $SERVED_MODEL with its 400K context cap and image input"
 jq -e --arg id "$CYBER_SERVED_MODEL" '
   .providers["desktop-vllm"].models
   | map(select(.id == $id))
-  | length == 1 and .[0].contextWindow == 1048576 and (.[0].input | index("image") != null)
-' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $CYBER_SERVED_MODEL with 1M context and image input"
+  | length == 1 and .[0].contextWindow == 400000 and (.[0].input | index("image") != null)
+' "$PI_MODELS" >/dev/null || fail "pi/models.json does not carry $CYBER_SERVED_MODEL with its 400K context cap and image input"
 
 # Runbook records the decisions that differ from the recipe's test system.
 contains "$RUNBOOK" "$FORK_COMMIT"

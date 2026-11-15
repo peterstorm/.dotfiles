@@ -253,8 +253,10 @@ if (JSON.stringify(localIds) !== JSON.stringify([...primaryModels].sort())) {
 const expectedContext: Readonly<Record<(typeof primaryModels)[number], number>> = {
   "warmind-1017-native": 262_144,
   "deepseek-v4.1-flash-native": 262_144,
-  "glm-5.3-flash-hyperflare-tp2-v16": 1_048_576,
-  "glm-5.3-flash-hyperflare-tp2-cyber-hybrid": 1_048_576,
+  // Capped at 400K in the catalog (2026-11-15): at the engine's full 1M both GLM builds spiral into
+  // degenerate reasoning, so Pi must compact well before that.
+  "glm-5.3-flash-hyperflare-tp2-v16": 400_000,
+  "glm-5.3-flash-hyperflare-tp2-cyber-hybrid": 400_000,
 };
 for (const id of primaryModels) {
   const model = localModels.find((entry) => entry.id === id);

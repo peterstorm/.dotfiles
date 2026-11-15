@@ -155,8 +155,8 @@ with the four **primary** models, served by two engines that take turns on port 
 
 - `desktop-vllm/warmind-1017-native` — jcartu's abliterated WARMIND-1017 on ds4-native behind Maya's server: Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM. **Pi's default model.**
 - `desktop-vllm/deepseek-v4.1-flash-native` — stock DeepSeek-V4.1-Flash-1017 at released precision on the same engine; only the Backbone differs.
-- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, full 1,048,576-token context per request, vision. GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
-- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-cyber-hybrid` — the same GLM-5.3 package shape with the dense tensors (attention, shared experts, norms, `lm_head`) of dealignai's CYBERSECURITY build spliced into NVIDIA's FP4-Local checkpoint; routed experts and vision stay NVIDIA's. Same engine, flags, 1,048,576-token context and vision as v16. Reached by name only: `toggle` never lands on it. Build and rationale in the runbook's *Variant: cyber-hybrid* section.
+- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, vision. The engine serves a 1,048,576-token context but the catalog caps it at **400K** (2026-11-15: at 1M both GLM builds spiral into degenerate reasoning, so Pi compacts earlier). GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
+- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-cyber-hybrid` — the same GLM-5.3 package shape with the dense tensors (attention, shared experts, norms, `lm_head`) of dealignai's CYBERSECURITY build spliced into NVIDIA's FP4-Local checkpoint; routed experts and vision stay NVIDIA's. Same engine, flags, 400K catalog cap and vision as v16. Reached by name only: `toggle` never lands on it. Build and rationale in the runbook's *Variant: cyber-hybrid* section.
 
 Thinking defaults to **max** everywhere (2026-11-14): each primary's `defaultThinkingLevel`,
 Pi's global `defaultThinkingLevel` (cloud models start at `max` too; Home Manager copies
@@ -564,7 +564,7 @@ parent's; with one, it is pinned (cloud efforts such as `xhigh` do not exist on 
 models). If the probe fails, routing fails before spawn with the reason ("cannot reach
 desktop-vllm: …") — there is no silent fallback to a stale id. Children therefore follow
 `scripts/inference/switch-primary.sh` without any config change, and get the served model's
-own catalog limits (GLM's 1M context, WARMIND's 262K).
+own catalog limits (GLM's 400K cap, WARMIND's 262K).
 
 A parallel `subagent` call names at most 8 tasks and runs up to 8 at once
 (`MAX_PARALLEL_TASKS`, `MAX_CONCURRENCY` in `extensions/subagent/index.ts`; separate knobs).
