@@ -57,22 +57,29 @@ def layer_of(tensor: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def kda_input_prefixes(weight_names) -> set[str]:
-    """q/k/v projections of every KDA attention block (a self_attn that has an f_a_proj).
+def kernel_fp8_prefixes(weight_names) -> set[str]:
+    """Projections Hyperflare's GLM kernels refuse as plain BF16 (ac9136b, recipes/glm53):
 
-    Hyperflare's KDA side-chain kernel (forced on by the recipe's export-glm-tp2.sh) groups a
-    block's input projection as exactly two stored parts: MXFP8 q/k/v, then BF16 b + f_a. A
-    BF16 q/k/v collapses that into one BF16 part and the export refuses the layer, so these
-    prefixes stay in the hybrid's FP8 whatever the selection says.
+    - q/k/v of every KDA attention block (a self_attn with an f_a_proj): the KDA side-chain
+      kernel, forced on by the recipe's export-glm-tp2.sh, needs the input group as exactly
+      MXFP8 q/k/v + BF16 b/f_a (kda.py _prepare_side_chain); BF16 q/k/v collapse it.
+    - every MLA q_b_proj: PreparedGlmMLA reads q_b_proj.out_features, which only a prepared
+      quantized linear has (mla.py). kv_b_proj, lm_head and the other projections accept a
+      plain BF16 tensor.
+
+    These stay in the hybrid's FP8 whatever the selection says.
     """
-    blocks = {match.group(1) for name in weight_names
-              if (match := re.fullmatch(r"(.*\.self_attn)\.f_a_proj\.weight", name))}
-    return {f"{block}.{proj}" for block in blocks for proj in ("q_proj", "k_proj", "v_proj")}
+    names = list(weight_names)
+    kda = {match.group(1) for name in names
+           if (match := re.fullmatch(r"(.*\.self_attn)\.f_a_proj\.weight", name))}
+    mla_q_b = {name[: -len(".weight")] for name in names
+               if re.fullmatch(r".*\.self_attn\.q_b_proj\.weight", name)}
+    return {f"{block}.{proj}" for block in kda for proj in ("q_proj", "k_proj", "v_proj")} | mla_q_b
 
 
 def select_entries(plan: dict, receipt: dict, min_layer: int, keep_fp8: set[str]) -> list[dict]:
     """Requantized dense tensors from the late block plus the vocabulary head, except the
-    prefixes that must keep their FP8 storage (keep_fp8, see kda_input_prefixes)."""
+    prefixes that must keep their FP8 storage (keep_fp8, see kernel_fp8_prefixes)."""
     requant = {entry["tensor"] for entry in receipt["patched"] if entry["action"] == "requant"}
     selected = []
     for entry in plan["entries"]:
@@ -444,7 +451,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         base_headers.update({name: meta for name, meta in header.items() if name != "__metadata__"})
     declared = json.loads((Path(args.base) / "config.json").read_text())[
         "quantization_config"]["quantized_layers"]
-    keep_fp8 = kda_input_prefixes(index["weight_map"])
+    keep_fp8 = kernel_fp8_prefixes(index["weight_map"])
     selected = select_entries(plan, receipt, args.min_layer, keep_fp8)
     kept = sorted({prefix_of(e["tensor"]) for e in select_entries(plan, receipt, args.min_layer, set())}
                   & keep_fp8)
@@ -470,7 +477,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     late = sum(1 for e in selected if layer_of(e["tensor"]) is not None)
     print(f"plan: {len(selected)} tensors ({late} late >= layer {args.min_layer}, "
           f"{len(selected) - late} lm_head), {len({prefix_of(e['tensor']) for e in selected})} prefixes; "
-          f"{len(kept)} KDA q/k/v kept FP8")
+          f"{len(kept)} kept FP8 for the kernels")
     return 0
 
 

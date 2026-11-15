@@ -17,8 +17,9 @@
 #                 only the splice's requantized dense tensors from layer 40 on plus
 #                 lm_head, stored as the donor's plain BF16 instead of FP8
 #                 (glm53-bf16-dense.py). Layers 0-39 and the splice's copy/cast
-#                 tensors stay v16's; the KDA blocks' q/k/v keep the splice's FP8,
-#                 because Hyperflare's KDA side-chain kernel needs them MXFP8. Tests whether the late edit alone, without the
+#                 tensors stay v16's; KDA q/k/v and MLA q_b_proj keep the splice's
+#                 FP8, because Hyperflare's kernels refuse them as plain BF16
+#                 (glm53-bf16-dense.py kernel_fp8_prefixes). Tests whether the late edit alone, without the
 #                 requant, holds up in long generation; the loader serves plain BF16
 #                 projections natively.
 #
@@ -56,7 +57,7 @@ hyperflare_variant_provenance() {
       echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (dense tensors)"
       ;;
     cyber-hybrid-bf16)
-      echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (late-layer + lm_head requantized dense tensors only, BF16; KDA q/k/v FP8)"
+      echo "$2 + dealignai/GLM-5.3-Flash-CYBERSECURITY-W4A16@4c2ee763ff75f3ba50652ee0f024b0b630cd54a0 (late-layer + lm_head requantized dense tensors only, BF16; KDA q/k/v + MLA q_b_proj FP8)"
       ;;
     *) return 1 ;;
   esac
