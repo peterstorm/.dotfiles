@@ -123,8 +123,31 @@ the export, run and switch scripts derive from it and take no free `MODEL`.
   package `glm53-cyber-hybrid@gb202-tp2-<ts>`.
 - **Serve**: `switch-primary.sh cyber` (or `/switch cyber`). v16's package and
   container stay in place, so `switch-primary.sh glm` is the rollback.
-- **Disk**: each package is 168 GiB and packages do not dedupe; `/models` had 98 GiB
-  free after the second one.
+- **Disk**: a package is up to its checkpoint's size (168 GiB). Package blobs are
+  content-addressed: cyber-hybrid's splice touches every layer and its package shared
+  nothing with v16's (`/models` had 98 GiB free after it), while cyber-hybrid-bf16 is
+  mostly v16's bytes and added 37 GiB (blobs 336 → 373 GiB).
+
+## Variant: cyber-hybrid-bf16 (2026-11-15)
+
+v16's checkpoint carrying only the splice's requantized dense tensors from layer 40
+on plus `lm_head`, stored as the donor's plain BF16 (`glm53-bf16-dense.py`,
+`--base glm53-fp4-local`). Layers 0–39 and the splice's copy/cast tensors stay v16's.
+Hyperflare (ac9136b) refuses two projections as plain BF16, so they keep the splice's
+FP8 (`kernel_fp8_prefixes`, recorded as `kept_fp8` in the plan): the KDA blocks'
+q/k/v (the side-chain kernel, forced on by the recipe export, needs MXFP8 q/k/v + BF16
+b/f_a) and every MLA `q_b_proj` (`PreparedGlmMLA` reads `.out_features`).
+
+- **Build**: `glm53-bf16-dense.py plan | build | verify` → 33 BF16 tensors, 14 kept FP8,
+  4 shards rewritten. `verify` checks every file the index names exists and that
+  `total_size` equals the payload (Hyperflare's `inspect_indexed_checkpoint` refuses
+  otherwise); run that inspect in the image on the CPU before spending a GPU export.
+- **Export**: `launch-glm53-export.sh cyber-hybrid-bf16` → package
+  `glm53-cyber-hybrid-bf16@gb202-tp2-202611150903`, 26 min (cold kernel tuning for the
+  BF16 shapes).
+- **Serve**: not a switch primary. The run and switch scripts derive its container
+  (`glm53-flash-hyperflare-tp2-cyber-hybrid-bf16`) and served id from the variant table;
+  as of the export it has not been served yet.
 
 ## Exporting while a primary serves: launch-glm53-export.sh (2026-11-15)
 

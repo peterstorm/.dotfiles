@@ -47,9 +47,11 @@ GPU_LIMIT_MIB="${GPU_LIMIT_MIB:-1024}"     # the export wrapper's own idle gate
 GPU_WAIT_SECONDS="${GPU_WAIT_SECONDS:-600}" # deadline for the GPUs to go idle
 POLL_SECONDS="${POLL_SECONDS:-5}"
 IDLE_CHECKS="${IDLE_CHECKS:-3}"             # consecutive idle polls before proceeding
-# A package is the size of its checkpoint (v16: 166 GiB checkpoint, 168 GiB
-# package) and packages do not dedupe, so the export needs the checkpoint's size
-# free under ROOT_HOST plus this margin.
+# A package is at most about its checkpoint's size (v16: 166 GiB checkpoint, 168 GiB
+# package). Its blobs are content-addressed, so it can dedupe against an existing
+# package (cyber-hybrid-bf16, mostly v16's bytes, added 37 GiB; cyber-hybrid, whose
+# splice touches every layer, added 168), but that is not knowable before the export,
+# so preflight budgets the worst case: the checkpoint's size plus this margin.
 DISK_MARGIN_PERCENT="${DISK_MARGIN_PERCENT:-10}"
 
 status() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$STATUS_FILE"; }
