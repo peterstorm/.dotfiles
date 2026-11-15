@@ -9,6 +9,7 @@ pi/
 ├── agents/           # Generic agents this repo owns (→ linked per file)
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
 │   ├── creative-project-scope/ # Trusted ~/dev/creative subtree resources
+│   ├── glm-guard/    # Keeps a served GLM's reasoning from poisoning its own context
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   ├── global-instructions.ts  # Standalone extension
@@ -196,6 +197,36 @@ session. The id comes from the script, so the extension keeps no copy of the pri
 table. Progress shows in the footer; a failed stage (`script`, `report`, `serve`,
 `model`) is reported with its reason and leaves the session model unchanged. With the
 primary already serving it is a no-op on desktop that still moves the session onto it.
+
+### glm-guard: GLM thinking that cannot run away (`extensions/glm-guard/`)
+
+GLM-5.3 on Hyperflare has no thinking off-switch, and the package's chat template defaults
+`clear_thinking` to **false**, so every earlier turn's reasoning is replayed into each new prompt.
+A model that thinks long (the CYBERSECURITY tune thinks about twice as long as upstream) then
+fills its own context with its old reasoning (51-62% of the prompt in the failing sessions) and
+degenerates into a loop. The symptom varies (`ih-ih-ih`, `= their = their`, `= = = =`); the
+precondition does not. A replay of the failing turns on the live server (same prompt, same seeds):
+
+| turn | as Pi sent it | with `clear_thinking` |
+|---|---|---|
+| 259, 216,539 tokens | 8/8 loops | 0/8, prompt 106,550 tokens |
+| 96, 141,101 tokens | 8/16 spirals | 0/16, prompt 53,858 tokens |
+| 96, cleared then padded back to 133,652 tokens | n/a | 0/8 (so it is the reasoning, not the length) |
+
+A `before_provider_request` hook asks the server which model it is serving (the primaries share
+one port and answer to any model id, so a session pinned to WARMIND can be talking to the hybrid;
+the answer is cached for 30 s) and, for a GLM:
+
+- every GLM: a thinking-off request (`--thinking off`) is raised to `reasoning_effort: low`;
+- the tuned build (`cyber`): `chat_template_kwargs.clear_thinking: true`, and a
+  `thinking_token_budget` by effort (low 2,048, high 4,096, max 8,192; from the p95/p99 of 1,468
+  real thinking blocks). Hyperflare closes the reasoning at the budget and the model then answers.
+
+It never overrides a field the request already sets, fails open (an unreachable server leaves the
+request untouched) and `PI_GLM_GUARD=off` disables it. A session picks it up on `/reload`; the first
+request afterwards re-prefills the shorter prompt once. `clear_thinking` clears reasoning from
+*earlier user turns*; reasoning inside the current tool chain stays, and a budget bounds a runaway
+thinking block without preventing it. Probe and evidence: `scripts/inference/shared/probe-glm-drift.py`.
 
 Every other local profile (DeepSeek V4 Flash and Vision, the GLM-5.3 v10–v15 vLLM
 builds, Qwen3.8 27B/Blackfrost/Flash-Next, the Maya EXL3 DeepSeek-V4.1) left the
