@@ -385,6 +385,7 @@ def main(argv: list[str]) -> int:
 
     if options.conversations:
         return run_conversations(options, model, key)
+    answers: list[Answer] = []
     for arm in arms:
         for entry in prompts:
             answer = run_arm_prompt(options, model, key, arm, entry)
