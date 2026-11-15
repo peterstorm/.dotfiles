@@ -57,12 +57,28 @@ def layer_of(tensor: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def select_entries(plan: dict, receipt: dict, min_layer: int) -> list[dict]:
-    """Requantized dense tensors from the late block plus the vocabulary head."""
+def kda_input_prefixes(weight_names) -> set[str]:
+    """q/k/v projections of every KDA attention block (a self_attn that has an f_a_proj).
+
+    Hyperflare's KDA side-chain kernel (forced on by the recipe's export-glm-tp2.sh) groups a
+    block's input projection as exactly two stored parts: MXFP8 q/k/v, then BF16 b + f_a. A
+    BF16 q/k/v collapses that into one BF16 part and the export refuses the layer, so these
+    prefixes stay in the hybrid's FP8 whatever the selection says.
+    """
+    blocks = {match.group(1) for name in weight_names
+              if (match := re.fullmatch(r"(.*\.self_attn)\.f_a_proj\.weight", name))}
+    return {f"{block}.{proj}" for block in blocks for proj in ("q_proj", "k_proj", "v_proj")}
+
+
+def select_entries(plan: dict, receipt: dict, min_layer: int, keep_fp8: set[str]) -> list[dict]:
+    """Requantized dense tensors from the late block plus the vocabulary head, except the
+    prefixes that must keep their FP8 storage (keep_fp8, see kda_input_prefixes)."""
     requant = {entry["tensor"] for entry in receipt["patched"] if entry["action"] == "requant"}
     selected = []
     for entry in plan["entries"]:
         if entry["tensor"] not in requant or entry["action"] != "requant":
+            continue
+        if prefix_of(entry["tensor"]) in keep_fp8:
             continue
         layer = layer_of(entry["tensor"])
         if (layer is not None and layer >= min_layer) or entry["tensor"].startswith("lm_head."):
@@ -382,19 +398,21 @@ def verify(base: Path, plan_path: Path, cache: Path, out: Path) -> None:
             previous_end = end
         if shard in affected_shards:
             continue
-        # shared shard: same header, same size, and one sampled tensor byte-equal
+        # shared shard: same header, same size, and its first and last tensors byte-equal
+        # (both ends of the file; a full read of every 5 GB reflink is not worth its time)
         _, base_header = read_header(source_file)
         if base_header != out_header:
             raise ValueError(f"{shard}: shared shard header drifted from the base")
         if out_file.stat().st_size != source_file.stat().st_size:
             raise ValueError(f"{shard}: shared shard size drifted from the base")
-        sample = next(name for name in out_header if name != "__metadata__")
-        begin, end = out_header[sample]["data_offsets"]
-        with source_file.open("rb") as src, out_file.open("rb") as dst:
-            dst.seek(8 + header_len(out_header) + begin)
-            src.seek(8 + header_len(base_header) + begin)
-            if src.read(end - begin) != dst.read(end - begin):
-                raise ValueError(f"{shard}:{sample}: shared shard bytes drifted")
+        names = [name for name in out_header if name != "__metadata__"]
+        for sample in {names[0], names[-1]}:
+            begin, end = out_header[sample]["data_offsets"]
+            with source_file.open("rb") as src, out_file.open("rb") as dst:
+                dst.seek(8 + header_len(out_header) + begin)
+                src.seek(8 + header_len(base_header) + begin)
+                if src.read(end - begin) != dst.read(end - begin):
+                    raise ValueError(f"{shard}:{sample}: shared shard bytes drifted")
 
     checked = 0
     for name, entry in selected.items():
@@ -426,7 +444,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         base_headers.update({name: meta for name, meta in header.items() if name != "__metadata__"})
     declared = json.loads((Path(args.base) / "config.json").read_text())[
         "quantization_config"]["quantized_layers"]
-    selected = select_entries(plan, receipt, args.min_layer)
+    keep_fp8 = kda_input_prefixes(index["weight_map"])
+    selected = select_entries(plan, receipt, args.min_layer, keep_fp8)
+    kept = sorted({prefix_of(e["tensor"]) for e in select_entries(plan, receipt, args.min_layer, set())}
+                  & keep_fp8)
     if not selected:
         raise ValueError("selection is empty; check --min-layer against the receipt")
     for entry in selected:
@@ -437,6 +458,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         "base_repo": plan["base_repo"],
         "cyber_repo": plan["cyber_repo"],
         "min_layer": args.min_layer,
+        "kept_fp8": kept,
         "selected": [
             {"tensor": e["tensor"], "shard": e["shard"], "shape": e["shape"],
              "storage": e["storage"],
@@ -447,7 +469,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
     }, indent=1))
     late = sum(1 for e in selected if layer_of(e["tensor"]) is not None)
     print(f"plan: {len(selected)} tensors ({late} late >= layer {args.min_layer}, "
-          f"{len(selected) - late} lm_head), {len({prefix_of(e['tensor']) for e in selected})} prefixes")
+          f"{len(selected) - late} lm_head), {len({prefix_of(e['tensor']) for e in selected})} prefixes; "
+          f"{len(kept)} KDA q/k/v kept FP8")
     return 0
 
 

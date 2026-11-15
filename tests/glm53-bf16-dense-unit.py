@@ -80,6 +80,7 @@ def build_fixture(root: Path) -> dict:
     norm = payload("nm", 16)
     gate = payload("gt", 32)
     native = payload("nq", 16)
+    kda_k, kda_s, kda_fa = payload("kk", 128), payload("ks", 8), payload("kf", 32)
 
     write_safetensors(base / "model-00001-of-00004.safetensors", [
         ("model.layers.40.self_attn.q_proj.weight", "F8_E4M3", [8, 32], q_w),
@@ -97,8 +98,13 @@ def build_fixture(root: Path) -> dict:
         ("model.layers.40.mlp.shared_experts.down_proj.weight_scale", "F32", [1, 1, 1, 1], sh_s),
         ("model.layers.40.input_layernorm.weight", "BF16", [8], norm),
     ])
+    # Layer 42 is a KDA attention block (it has f_a_proj): Hyperflare's side-chain kernel needs
+    # its q/k/v to stay the MXFP8 group, so the hybrid's requant of k_proj must not become BF16.
     write_safetensors(base / "model-00004-of-00004.safetensors", [
         ("model.layers.41.mlp.gate.weight", "BF16", [4, 4], gate),
+        ("model.layers.42.self_attn.k_proj.weight", "F8_E4M3", [8, 16], kda_k),
+        ("model.layers.42.self_attn.k_proj.weight_scale", "U8", [8, 1], kda_s),
+        ("model.layers.42.self_attn.f_a_proj.weight", "BF16", [4, 4], kda_fa),
     ])
     # FP4-Local keeps some tensors in a subdirectory shard (tensors/native-QB.safetensors on
     # the real checkpoint): the index names it, so the output must carry it.
@@ -123,6 +129,9 @@ def build_fixture(root: Path) -> dict:
         "model.layers.40.input_layernorm.weight": "model-00003-of-00004.safetensors",
         "model.layers.41.mlp.gate.weight": "model-00004-of-00004.safetensors",
         "model.layers.0.self_attn.b_proj.weight": "tensors/native-QB.safetensors",
+        "model.layers.42.self_attn.k_proj.weight": "model-00004-of-00004.safetensors",
+        "model.layers.42.self_attn.k_proj.weight_scale": "model-00004-of-00004.safetensors",
+        "model.layers.42.self_attn.f_a_proj.weight": "model-00004-of-00004.safetensors",
     }}
     (base / "model.safetensors.index.json").write_text(json.dumps(index))
     (base / "config.json").write_text(json.dumps({
@@ -134,6 +143,7 @@ def build_fixture(root: Path) -> dict:
                 "model.layers.39.self_attn.o_proj": {"quant_algo": "MXFP8"},
                 "lm_head": {"quant_algo": "MXFP8"},
                 "model.layers.40.mlp.shared_experts.down_proj": {"quant_algo": "FP8_PB_WO"},
+                "model.layers.42.self_attn.k_proj": {"quant_algo": "MXFP8"},
             },
         },
     }))
@@ -151,6 +161,7 @@ def build_fixture(root: Path) -> dict:
         entry("model.layers.39.self_attn.o_proj.weight", "model-00002-of-00004.safetensors", [8, 32], 512, "mx8"),
         entry("lm_head.weight", "model-00002-of-00004.safetensors", [16, 8], 256, "mx8"),
         entry("model.layers.40.mlp.shared_experts.down_proj.weight", "model-00003-of-00004.safetensors", [8, 16], 256, "block8"),
+        entry("model.layers.42.self_attn.k_proj.weight", "model-00004-of-00004.safetensors", [8, 16], 256, "mx8"),
         dict(entry("model.layers.38.self_attn.v_proj.weight", "model-00002-of-00004.safetensors", [8, 32], 512, "mx8"),
              action="copy"),
     ]}
@@ -190,15 +201,26 @@ def argparse_ns(**kwargs):
 # --- pure functions --------------------------------------------------------------------
 
 def test_selection(fixture):
-    selected = mod.select_entries(fixture["plan"], fixture["receipt"], 40)
+    kda = mod.kda_input_prefixes(json.loads(
+        (fixture["base"] / "model.safetensors.index.json").read_text())["weight_map"])
+    check(kda == {"model.layers.42.self_attn.q_proj", "model.layers.42.self_attn.k_proj",
+                  "model.layers.42.self_attn.v_proj"},
+          f"KDA input prefixes are q/k/v of blocks that have f_a_proj (got {sorted(kda)})")
+    check(mod.kda_input_prefixes(["a.self_attn.q_proj.weight", "a.self_attn.f_b_proj.weight"]) == set(),
+          "no f_a_proj, no KDA block")
+    selected = mod.select_entries(fixture["plan"], fixture["receipt"], 40, keep_fp8=kda)
     names = {e["tensor"] for e in selected}
     check("model.layers.40.self_attn.q_proj.weight" in names, "late requant selected")
     check("lm_head.weight" in names, "lm_head selected")
     check("model.layers.40.mlp.shared_experts.down_proj.weight" in names, "block8 late selected")
     check("model.layers.39.self_attn.o_proj.weight" not in names, "early layer excluded")
     check("model.layers.38.self_attn.v_proj.weight" not in names, "copy action excluded")
+    check("model.layers.42.self_attn.k_proj.weight" not in names, "KDA q/k/v kept FP8")
     check(len(names) == 3, f"selection count is 3, got {len(names)}")
-    early = mod.select_entries(fixture["plan"], fixture["receipt"], 0)
+    unkept = mod.select_entries(fixture["plan"], fixture["receipt"], 40, keep_fp8=set())
+    check("model.layers.42.self_attn.k_proj.weight" in {e["tensor"] for e in unkept},
+          "keep_fp8 is the only thing holding the KDA k_proj back")
+    early = mod.select_entries(fixture["plan"], fixture["receipt"], 0, keep_fp8=kda)
     check(len({e["tensor"] for e in early}) == 4, "min_layer 0 includes the early layer")
     check(mod.layer_of("model.layers.41.x.weight") == 41, "layer_of parses")
     check(mod.layer_of("lm_head.weight") is None, "layer_of None for the head")
@@ -346,6 +368,16 @@ def test_build_and_verify(root, fixture):
         handle.seek(8 + mod.header_len(sh_header) + begin)
         stored_norm = handle.read(16)
     check(stored_norm == fixture["raw"]["norm"], "layernorm bytes untouched")
+
+    plan_written = json.loads(plan_bf16.read_text())
+    check(plan_written["kept_fp8"] == ["model.layers.42.self_attn.k_proj"],
+          "the plan records which selectable tensors were kept FP8 for the KDA kernel")
+    declared = json.loads((out / "config.json").read_text())["quantization_config"]["quantized_layers"]
+    check("model.layers.42.self_attn.k_proj" in declared, "KDA k_proj still declared quantized")
+    _, kda_header = mod.read_header(out / "model-00004-of-00004.safetensors")
+    check(kda_header["model.layers.42.self_attn.k_proj.weight"]["dtype"] == "F8_E4M3"
+          and "model.layers.42.self_attn.k_proj.weight_scale" in kda_header,
+          "KDA k_proj stays FP8 with its scale")
 
     _, gate_header = mod.read_header(out / "model-00004-of-00004.safetensors")
     check(gate_header == {k: v for k, v in
