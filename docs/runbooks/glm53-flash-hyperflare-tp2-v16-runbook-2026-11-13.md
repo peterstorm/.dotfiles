@@ -185,12 +185,12 @@ plausible BF16 values that pass any finiteness check.
   the old window are never reused). The unit fixture now serves real safetensors files
   by file range; reverting the fetch to data-relative ranges fails the suite.
 
-Kept on disk, not served, all built from shifted bytes (mostly reflinks of v16's shards;
-deleting one frees only its 4 rewritten shards): `glm53-cyber-hybrid-bf16.all33-nan`,
-`.r1-shifted`, `.qkv-bf16-superseded`; and in `/tmp/hybrid-work/bf16-cache` the 47
-pre-fix files named `<tensor>.bf16` (the fixed cache files are named
-`<tensor>@<shard>@<begin>-<end>.bf16`). Both broken packages were removed from the
-store (`flare models remove --clear-default`, `flare models gc`).
+Cleanup, by decision: both broken packages were removed from the store
+(`flare models remove --clear-default`, `flare models gc`), and the three checkpoints
+built from shifted bytes (`glm53-cyber-hybrid-bf16.all33-nan`, `.r1-shifted`,
+`.qkv-bf16-superseded`) were deleted with the 47 pre-fix cache files named
+`<tensor>.bf16` (`/models` 147 → 175 GiB free). The fixed cache files, named
+`<tensor>@<shard>@<begin>-<end>.bf16`, stay in `/tmp/hybrid-work/bf16-cache`.
 
 ## Exporting while a primary serves: launch-glm53-export.sh (2026-11-15)
 
