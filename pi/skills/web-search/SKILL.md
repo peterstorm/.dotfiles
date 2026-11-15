@@ -50,9 +50,12 @@ SEARCH_HOPS="direct,socks5h://192.168.0.29:1080" ~/.dotfiles/pi/skills/web-searc
 - IPv6 source rotation is dead on this box: all six global addresses sit in one /64
   (2a05:f6c3:9dbf:0::/64), and Brave buckets per-prefix — three different source addresses
   got 200, 429, 429 within 2s (verified 2026-11-15).
-- The NordVPN exit (transmission pod) is a different IP (187.15.110.81 vs the household
-  90.184.68.248) but a shared one: Brave 429s from there too, while DuckDuckGo Lite answers
-  (202). Useful as a DDG rescue hop, not a Brave fix.
+- The NordVPN exit (transmission pod) is a different IP (187.15.112.162 at first light vs
+  the household 90.184.68.248; rotates per reconnect) but a shared one: Brave answered 200
+  through it at first test, and DuckDuckGo Lite 200 with 10 results while direct DDG served
+  the 202 anomaly page (verified 2026-11-15). A rotation hop, not a guaranteed 200.
+- DuckDuckGo Lite rate-limits too: after heavy probing, direct answers 202 + the "anomaly"
+  page with zero result-links. Both engines are IP-bucketed; the hop list is the escape.
 - Shop sites block the homelab IP (Pricerunner 403, Prisjagt/Proshop Cloudflare,
   Komplett/Amazon/Samsung DK connection errors). Search results and review/deal-site
   articles (9to5toys, pcguide, tomshardware) fetch fine; retailer pages mostly don't.

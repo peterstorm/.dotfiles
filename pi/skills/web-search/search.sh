@@ -78,7 +78,7 @@ for eng in ${engines//,/ }; do
         if ! fetch "$brave_url" --data-urlencode "q=$q" --data-urlencode "source=web"; then
           echo "brave: fetch failed [$hop] (pass $pass/2)" >&2; saw_challenge=1
         elif results=$(parse_brave <"$tmp" || true) && [ -n "$results" ]; then
-          printf '%s\n' "$results"; got=1; break 2
+          printf '%s\n' "$results"; got=1; break 3   # leave the engine loop too: ddg is not needed
         elif grep -qiE 'captcha|are you a robot' "$tmp"; then
           echo "brave: challenge [$hop] (pass $pass/2)" >&2; saw_challenge=1
         else
