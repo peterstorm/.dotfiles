@@ -8,6 +8,7 @@
     (util.sops.userSecret "oc-prod-server" "openshift.yaml" "prod_server")
     (util.sops.userSecret "flexii-db-password" "db_secrets.yaml" "flexii_database_password")
     (util.sops.userSecret "oister-db-password" "db_secrets.yaml" "oister_database_password")
+    (util.sops.userSecret "dk-secondbrands-fugue-prod-db-password" "db_secrets.yaml" "dk_secondbrands_fugue_prod_database_password")
     (util.sops.userSecret "keycloak-client-secret" "keycloak.yaml" "keycloak_client_secret")
     (util.sops.userSecret "azure-client-secret" "keycloak.yaml" "azure_client_secret")
     (util.sops.userSecret "keycloak-admin-password-onr" "keycloak.yaml" "keycloak_admin_password_onr")
@@ -29,6 +30,7 @@
     (util.sops.envTemplate "db-env" {
       FLEXII_DATABASE_PASSWORD = "flexii-db-password";
       OISTER_DATABASE_PASSWORD = "oister-db-password";
+      DK_SECONDBRANDS_FUGUE_PROD_DATABASE_PASSWORD = "dk-secondbrands-fugue-prod-db-password";
       KEYCLOAK_CLIENT_SECRET = "keycloak-client-secret";
       AZURE_CLIENT_SECRET = "azure-client-secret";
       KEYCLOAK_ADMIN_PASSWORD_ONR = "keycloak-admin-password-onr";
