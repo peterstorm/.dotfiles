@@ -38,6 +38,7 @@ if [ "${1:-}" = "--tests" ]; then
   trap cleanup EXIT
   bash "$here/../tests/blender-mcp-contract.sh"
   bash "$here/../tests/pi-compaction-autocontinue-contract.sh"
+  bash "$here/../tests/pi-reload-autocontinue-contract.sh"
   bun test \
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \
@@ -47,6 +48,7 @@ if [ "${1:-}" = "--tests" ]; then
     "$here/root-extensions.test.ts" \
     "$here/tests/reload-runtime.test.ts" \
     "$here/tests/reload-command-dispatch.test.ts" \
+    "$here/tests/reload-autocontinue.test.ts" \
     "$here/tests/thinking-switch.test.ts" \
     "$here/tests/compaction-resume.test.ts" \
     "$here/creative-project-skills.test.ts" \

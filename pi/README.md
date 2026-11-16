@@ -13,7 +13,7 @@ pi/
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   ├── global-instructions.ts  # Standalone extension
-│   └── reload-runtime.ts       # LLM-callable parent-session reload
+│   └── reload-runtime.ts       # LLM-callable parent-session reload with auto-continue
 ├── prompts/          # Prompt templates (→ ~/.pi/agent/prompts/)
 ├── skills/           # Global skills this repo owns (→ linked per skill dir)
 │   └── impeccable/   # Impeccable design skill, pi-flavored v4.0.4 release
@@ -874,6 +874,26 @@ than reaching the model. The command calls Pi's real `ctx.reload()` on the
 **restart Pi completely** once: `/reload` reloads extensions but cannot replace
 the running Pi core binary. Later reloads can use the model-callable tool.
 
+The reload would otherwise strand the task: pi sits idle until the next human
+prompt. The tool therefore journals a `reload-runtime-auto-continue` custom
+entry (`{kind: "pending", ts}`) before dispatching the command — the one channel
+that outlives the reload, since a reload replaces the extension instance and
+invalidates the old runner. The reloaded instance's `session_start` handler
+(`reason: "reload"`) consumes the newest marker exactly once, appends the
+`consumed` twin, and sends the `"[runtime-reloaded] Continue from where you left
+off."` user prompt — the reload-side twin of the compaction auto-continue nudge
+(`pi-autocontinue-after-compact.patch`). A pending marker older than 60 s is
+stale (crashed run, forked session) and never consumed. A manual `/reload`
+finds only the `consumed` marker and stays idle. The decision is the pure
+`shouldReloadAutoContinue()` over the session journal. The contracts live in
+`tests/reload-runtime.test.ts` (unit), `tests/reload-autocontinue.test.ts`
+(SDK end-to-end against a fake model server: continuation turn plus the
+manual-reload negative control) and `tests/pi-reload-autocontinue-contract.sh`
+(real CLI binary). The continuation turn matters in live sessions (TUI, RPC);
+in one-shot `pi -p` the process tears down while that extension-triggered turn
+is still starting, and a finished one-shot prompt should not be resumed anyway —
+the same completed-answer carve-out the compaction auto-continue applies.
+
 Run `./pi/verify.sh --tests` after extension changes (including the real SDK
 command-dispatch test).
 
@@ -887,7 +907,7 @@ so upgrading is:
 ```bash
 nix flake update llm-agents
 ./hm-apply.sh            # Mac;  ./system-apply.sh on NixOS hosts
-./pi/verify.sh --tests && ./pi/verify.sh && bash tests/pi-compaction-autocontinue-contract.sh
+./pi/verify.sh --tests && ./pi/verify.sh && bash tests/pi-compaction-autocontinue-contract.sh && bash tests/pi-reload-autocontinue-contract.sh
 ```
 
 The patches apply to the unbundled `dist/` tree of the npm tarball (the overlay
