@@ -67,11 +67,17 @@ CONFIG="$SERVE_DIR/ds4-native.json"
 # Whose dense weights the Backbone carries. The routed Experts, the Engram tables and the DSpark head
 # are DeepSeek's bytes in both, so the store, the GGUF and the profile serve either:
 #   deepseek  DeepSeek's released Backbone;
-#   warmind   WARMIND-1017 (jcartu; norm-preserving biprojected abliteration, alpha 3): 132 tensors
-#             re-written -- attn.wo_b and ffn.shared_experts.w2, weights and scales, layers 4-36 --
-#             and every other byte DeepSeek's (its DERIVATIVE.json). Fetched like DeepSeek's, by
-#             /models/ds41/native/warmind/fetch_backbone.sh. The default.
-# Maya answers any model name with what is loaded; the served name is what /v1/models reports.
+#   warmind   WARMIND-1017 v1.1 "orth4c" (jcartu, 2026-11-16): norm-preserving biprojected
+#             abliteration, with a 4-dimensional abstention subspace ("I don't know", missing
+#             evidence) projected out of the refusal direction first and alpha raised per layer to
+#             make up for it (3.0-3.5). The same 132 tensors re-written -- attn.wo_b and
+#             ffn.shared_experts.w2, weights and scales, layers 4-36 -- and every other byte
+#             DeepSeek's (its DERIVATIVE.json). Fetched, and verified against DeepSeek's Backbone, by
+#             /models/ds41/native/warmind-v1.1/fetch_backbone.sh. The default.
+#   warmind-v1.0  WARMIND-1017 v1.0 (alpha 3; served 2026-11-05 to 2026-11-16): the rollback, under the
+#             same served name; /models/ds41/native/warmind/fetch_backbone.sh.
+# Maya answers any model name with what is loaded; the served name is what /v1/models reports, and
+# the container's ai.peterstorm.inference.backbone label which revision it serves.
 WEIGHTS="${WEIGHTS:-warmind}"
 case "$WEIGHTS" in
   deepseek)
@@ -80,11 +86,16 @@ case "$WEIGHTS" in
     SERVED_MODEL="deepseek-v4.1-flash-native"
     ;;
   warmind)
+    BACKBONE="$NATIVE/warmind-v1.1/backbone.safetensors"
+    BACKBONE_SOURCE="jcartu/WARMIND-1017@a6382f222da49b7109586eecbe1e53a10a4e0637"
+    SERVED_MODEL="warmind-1017-native"
+    ;;
+  warmind-v1.0)
     BACKBONE="$NATIVE/warmind/backbone.safetensors"
     BACKBONE_SOURCE="jcartu/WARMIND-1017@4fbce6300b1e579f608b28ad3325c88008ea4bd4"
     SERVED_MODEL="warmind-1017-native"
     ;;
-  *) echo "error: WEIGHTS is deepseek or warmind: $WEIGHTS" >&2; exit 2 ;;
+  *) echo "error: WEIGHTS is deepseek, warmind or warmind-v1.0: $WEIGHTS" >&2; exit 2 ;;
 esac
 STORE="$NATIVE/experts.ds4n"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"

@@ -382,22 +382,30 @@ pi --model desktop-vllm/deepseek-v4.1-flash-native:high
 
 ### WARMIND-1017 on ds4-native
 
-`warmind-1017-native` is jcartu's `WARMIND-1017`, an abliteration of
-DeepSeek-V4.1-Flash-1017 (norm-preserving biprojected, alpha 3): 132 tensors
+`warmind-1017-native` is jcartu's `WARMIND-1017` v1.1 (`orth4c`, 2026-11-16,
+revision `a6382f22`), an abliteration of DeepSeek-V4.1-Flash-1017: 132 tensors
 re-written — `attn.wo_b` and `ffn.shared_experts.w2`, weights and scales, in
 layers 4–36 — and every other byte DeepSeek's, so the routed Experts, Engram
 tables and DSpark head are the ones the entry above serves. It answers requests
-the stock model refuses. ds4-native keeps all 132 tensors in its Backbone, so
-this entry is a second 10 GB Backbone beside the shared Expert store; the
-launcher serves it by default (`WEIGHTS=deepseek` for the release) and refuses a Backbone whose header
-names another source. Context, conversations and thinking behave as above.
-Maya answers any model name with what is loaded, so `/v1/models` is how to
-tell which one is up.
+the stock model refuses. v1.1 projects a 4-dimensional "the source does not
+say" abstention subspace out of the refusal direction before the
+norm-preserving biprojection (alpha 3.0–3.5 per layer to keep full strength):
+jcartu measured v1.0's extra fabrication on SQuAD 2.0 unanswerables cut from
++13.6 to +4.6 points over stock (+1.6 with a grounding prompt, within noise),
+TruthfulQA MC1 82.5 → 84.7 % (stock 87.1), 0/100 refusals. ds4-native keeps
+all 132 tensors in its Backbone, so this entry is a second 10 GB Backbone
+beside the shared Expert store; the launcher serves it by default (`WEIGHTS=deepseek` for the release,
+`WEIGHTS=warmind-v1.0` for the alpha-3 v1.0 served 2026-11-05 to 2026-11-16,
+under the same name) and refuses a Backbone whose header names another source.
+Context, conversations and thinking behave as above. Maya answers any model
+name with what is loaded, so `/v1/models` is how to tell which one is up, and
+the container's `ai.peterstorm.inference.backbone` label which revision.
 
 - **Verified**: `bun tools/hf-backbone/cli.ts verify` (ds4-native) against
   DeepSeek's Backbone and WARMIND's `DERIVATIVE.json`: all 132 re-written
-  tensors carry the manifest's bytes, the other 1,129 are DeepSeek's.
-- **Speed** (2026-11-05, the stock A/B's victim-tier arm on a fresh engine,
+  tensors carry the manifest's bytes, the other 1,129 are DeepSeek's (v1.0
+  2026-11-05; v1.1 2026-11-16, by its fetch script before it promotes the file).
+- **Speed** (v1.0; 2026-11-05, the stock A/B's victim-tier arm on a fresh engine,
   seed 424242): warm code reply 131-134 tok/s (stock 126-136), decode at 7K-48K
   context 85-87 (stock 81-87), prefill 1,085 / 1,963 / 4,735 tok/s at 7K / 14K /
   48K tokens (stock 1,091-1,152 / 1,962-2,063 / 4,714-4,988). Short-prompt prose

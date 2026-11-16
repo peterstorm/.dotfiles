@@ -238,4 +238,24 @@ jq -e '.targets["served-max"] == {"served": "desktop-vllm", "thinkingLevel": "ma
   "$ROOT/pi/model-routing.json" >/dev/null || fail "a cloud parent's served children must run at max"
 contains "$ROOT/scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh" 'reasoning_effort: "max",'
 
+# The warmind primary serves WARMIND-1017 v1.1 (orth4c, 2026-11-16); v1.0 stays launchable as its
+# rollback under the same served name; any other WEIGHTS is refused before any I/O.
+DS41_RUN="$ROOT/scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
+# One WEIGHTS arm of the launcher's case: the lines from "  LABEL)" through its ";;".
+ds41_arm() { sed -n "/^  $1)\$/,/^    ;;\$/p" "$DS41_RUN"; }
+contains "$DS41_RUN" 'WEIGHTS="${WEIGHTS:-warmind}"'
+[ "$(ds41_arm warmind)" = '  warmind)
+    BACKBONE="$NATIVE/warmind-v1.1/backbone.safetensors"
+    BACKBONE_SOURCE="jcartu/WARMIND-1017@a6382f222da49b7109586eecbe1e53a10a4e0637"
+    SERVED_MODEL="warmind-1017-native"
+    ;;' ] || fail "WEIGHTS=warmind must serve WARMIND-1017 v1.1 (a6382f22) as warmind-1017-native"
+[ "$(ds41_arm warmind-v1.0)" = '  warmind-v1.0)
+    BACKBONE="$NATIVE/warmind/backbone.safetensors"
+    BACKBONE_SOURCE="jcartu/WARMIND-1017@4fbce6300b1e579f608b28ad3325c88008ea4bd4"
+    SERVED_MODEL="warmind-1017-native"
+    ;;' ] || fail "WEIGHTS=warmind-v1.0 must stay the v1.0 (4fbce630) rollback under warmind-1017-native"
+weights_rc=0
+WEIGHTS=bogus bash "$DS41_RUN" --preflight >/dev/null 2>&1 || weights_rc=$?
+[ "$weights_rc" -eq 2 ] || fail "run-ds41-1017-native.sh must refuse an unknown WEIGHTS with exit 2 (got $weights_rc)"
+
 echo "GLM-5.3 v16 Hyperflare TP2 contract: PASS"
