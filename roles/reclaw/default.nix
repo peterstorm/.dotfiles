@@ -124,7 +124,12 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        AGENT_BACKEND = "pi";
+        # 2026-11-16: back on the Claude CLI backend per user request. Claude runs
+        # use ~/.claude OAuth and the CLI's default model (~/.claude/settings.json);
+        # the RECLAW_PI_* pins below only reach Pi runs, so they stay for the
+        # skills that still declare `backend: pi` (discount-watch,
+        # espresso-price-watch).
+        AGENT_BACKEND = "claude";
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json, whose default can drift silently — the pin
         # makes the inference target load-bearing instead of incidental.
