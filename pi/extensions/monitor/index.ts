@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, fstatSync, openSync, readSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import {
@@ -29,7 +29,7 @@ import {
 	MONITOR_WRAPPER,
 	READOPT_POLL_MS,
 	TAIL_READ_BYTES,
-	commandLineMatchesMarker,
+	classifyProbe,
 	createMonitorSpec,
 	decideSpawn,
 	exitCodeLabel,
@@ -42,6 +42,7 @@ import {
 	projectMonitors,
 	tailOf,
 	monitorArgvMarker,
+	type MonitorIdentity,
 	type MonitorSpec,
 	type SpawnRefusalReason,
 } from "./state.js";
@@ -55,6 +56,9 @@ type RunningMonitor =
 
 const specOf = (entry: RunningMonitor): MonitorSpec => entry.spec;
 
+/** Tool result details: the started monitor's identity, or undefined on a refusal. */
+type MonitorToolDetails = Readonly<{ monitorId: string; pid: number }> | undefined;
+
 const isPidAlive = (pid: number): boolean => {
 	try {
 		process.kill(pid, 0);
@@ -64,13 +68,14 @@ const isPidAlive = (pid: number): boolean => {
 	}
 };
 
-/** Identity check: a live pid belongs to this monitor only while the process at
+/** Identity probe: a live pid belongs to this monitor only while the process at
  * that pid still carries the monitor's argv marker. After the monitor exits and
  * the OS recycles the pid, the holder's argv lacks the marker, so a reused pid
- * is classified as ended-while-away instead of adopted. */
-const isMonitorProcess = (pid: number, id: string): boolean => {
+ * is classified as ended-while-away instead of adopted. A failed probe (ps
+ * unusable) is "unknown" — never evidence that the monitor ended. */
+const probeMonitorIdentity = (pid: number, id: string): MonitorIdentity => {
 	const probe = spawnSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" });
-	return probe.status === 0 && commandLineMatchesMarker(probe.stdout ?? "", id);
+	return classifyProbe(probe.status, probe.stdout ?? "", id);
 };
 
 const readExitCode = (codePath: string): number | null => {
@@ -114,7 +119,9 @@ const removeFiles = (spec: MonitorSpec): void => {
 
 /** Terminate the monitor's whole process tree: the spawn is detached, so the
  * negative pid names the monitor's own process group. ESRCH means it is already
- * gone; any other failure surfaces to the caller. */
+ * gone. On any other group-kill failure it retries the wrapper pid alone — which
+ * may leave the rest of the tree running — and surfaces that: a fallback success
+ * returns the partial-termination note, a fallback failure the kill error. */
 const killMonitorTree = (pid: number): string | undefined => {
 	try {
 		process.kill(-pid, "SIGTERM");
@@ -124,7 +131,7 @@ const killMonitorTree = (pid: number): string | undefined => {
 		if (code === "ESRCH") return undefined;
 		try {
 			process.kill(pid, "SIGTERM");
-			return undefined;
+			return `the monitor's process group could not be signalled (${code}); only the wrapper was terminated directly — its descendants may survive`;
 		} catch (fallbackError) {
 			return `could not terminate the monitor's process tree: ${(fallbackError as Error).message}`;
 		}
@@ -188,10 +195,17 @@ export default function (pi: ExtensionAPI) {
 		reported.add(id);
 		const spec = entry.spec;
 		if (entry.kind === "adopted") clearInterval(entry.timer);
-		// Identity gate: never signal a pid whose holder lost the monitor's marker.
+		// Identity gate: never signal a pid whose holder lost the monitor's marker,
+		// and never treat a failed probe as license to signal either — an unverified
+		// pid stays unsignalled, with the reason surfaced either way.
 		let note: string | undefined;
-		if (isPidAlive(spec.pid) && !isMonitorProcess(spec.pid, spec.id)) {
+		// A dead pid maps to "own": there is no live holder to mis-signal, and
+		// killMonitorTree's ESRCH arm already treats it as gone.
+		const identity = isPidAlive(spec.pid) ? probeMonitorIdentity(spec.pid, spec.id) : "own";
+		if (identity === "foreign") {
 			note = "the recorded pid no longer carries this monitor's identity; nothing was signalled";
+		} else if (identity === "unknown") {
+			note = "the monitor's identity could not be verified (the ps probe failed); nothing was signalled";
 		} else {
 			const killError = killMonitorTree(spec.pid);
 			if (killError) note = killError;
@@ -215,14 +229,19 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const adoptMonitor = (spec: MonitorSpec): void => {
-		if (!isPidAlive(spec.pid) || !isMonitorProcess(spec.pid, spec.id)) {
-			// Dead, or the pid was recycled: the monitor ended while pi was away.
+		const identity = isPidAlive(spec.pid) ? probeMonitorIdentity(spec.pid, spec.id) : "foreign";
+		if (identity === "foreign") {
+			// Dead, or the pid was recycled: the probe ran and the marker is gone, so
+			// the monitor ended while pi was away.
 			reportCompletion(spec, true);
 			updateStatus();
 			return;
 		}
+		// "own" is ours to watch; "unknown" (the ps probe failed) keeps watching too —
+		// a wrong adoption self-corrects on the next tick, which re-verifies identity.
 		// Poll the pid and re-verify identity each tick: a post-adoption pid reuse
-		// looks alive forever to a bare liveness check but fails the marker check.
+		// looks alive forever to a bare liveness check but fails the marker check,
+		// while a failed probe reads as unknown, not as an exit.
 		// unref'd so one-shot runs are not held open by the poller alone.
 		const timer: ReturnType<typeof setInterval> = setInterval(() => {
 			if (!isPidAlive(spec.pid)) {
@@ -230,7 +249,7 @@ export default function (pi: ExtensionAPI) {
 				finishAdopted(spec, false);
 				return;
 			}
-			if (!isMonitorProcess(spec.pid, spec.id)) {
+			if (probeMonitorIdentity(spec.pid, spec.id) === "foreign") {
 				// The pid was recycled mid-watch: the exit went unnoticed.
 				finishAdopted(spec, true);
 			}
@@ -284,12 +303,12 @@ export default function (pi: ExtensionAPI) {
 			name: Type.String({ description: "Short unique slug for this monitor, e.g. 'ci' or 'build'" }),
 			command: Type.String({ description: "Shell command to watch; it must terminate on its own" }),
 		}),
-		async execute(_toolCallId, params) {
+		async execute(_toolCallId, params): Promise<AgentToolResult<MonitorToolDetails>> {
 			const { name, command } = params;
 			const active = [...running.values()].map((entry) => entry.spec);
 			const decision = decideSpawn(active, name, command);
 			if (decision.kind === "refused") {
-				return { content: [{ type: "text", text: refusalText(name, decision.reason) }], details: {} };
+				return { content: [{ type: "text", text: refusalText(name, decision.reason) }], details: undefined };
 			}
 			const id = randomUUID();
 			const logPath = join(tmpdir(), `pi-monitor-${id}.log`);
@@ -298,7 +317,7 @@ export default function (pi: ExtensionAPI) {
 			try {
 				fd = openSync(logPath, "w");
 			} catch (error) {
-				return { content: [{ type: "text", text: `Could not create the monitor log file: ${(error as Error).message}` }], details: {} };
+				return { content: [{ type: "text", text: `Could not create the monitor log file: ${(error as Error).message}` }], details: undefined };
 			}
 			// detached: true gives the wrapper its own process group, so cancel can
 			// terminate the command's whole tree. The argv marker (bash's $0) is the
@@ -313,7 +332,7 @@ export default function (pi: ExtensionAPI) {
 				});
 			} catch (error) {
 				closeSync(fd);
-				return { content: [{ type: "text", text: `Could not start the monitor: ${(error as Error).message}` }], details: {} };
+				return { content: [{ type: "text", text: `Could not start the monitor: ${(error as Error).message}` }], details: undefined };
 			}
 			closeSync(fd);
 			// Attach the error handler before anything can return: a spawn failure that
@@ -321,11 +340,11 @@ export default function (pi: ExtensionAPI) {
 			child.on("error", (error) => completeMonitorWithError(id, error));
 			child.unref();
 			if (child.pid === undefined) {
-				return { content: [{ type: "text", text: "Could not start the monitor: the process has no pid." }], details: {} };
+				return { content: [{ type: "text", text: "Could not start the monitor: the process has no pid." }], details: undefined };
 			}
 			const spec = createMonitorSpec({ id, name, command, pid: child.pid, logPath, codePath, startedAt: Date.now() });
 			if (!spec) {
-				return { content: [{ type: "text", text: "Refused: the monitor spec failed validation." }], details: {} };
+				return { content: [{ type: "text", text: "Refused: the monitor spec failed validation." }], details: undefined };
 			}
 			pi.appendEntry(MONITOR_CUSTOM_TYPE, { kind: "started", spec });
 			child.on("exit", () => completeMonitor(id));
@@ -380,8 +399,10 @@ export default function (pi: ExtensionAPI) {
 					if (ctx.hasUI) ctx.ui.notify(`No active monitor named '${name}'`, "warning");
 					return;
 				}
-				cancelMonitor(found[0]);
-				if (ctx.hasUI) ctx.ui.notify(`Monitor '${name}' cancelled`, "info");
+				const result = cancelMonitor(found[0]);
+				// Same truth as the monitor_cancel tool path: surface the outcome note
+				// (identity gate or kill failure) instead of an unconditional success.
+				if (ctx.hasUI) ctx.ui.notify(`Monitor '${name}' cancelled${result.ok && result.note ? ` (${result.note})` : ""}`, "info");
 				return;
 			}
 			const lines = formatMonitorList(projectMonitors(ctx.sessionManager.getEntries()), Date.now());
@@ -416,7 +437,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		for (const [, entry] of running) {
 			if (entry.kind === "adopted") clearInterval(entry.timer);
-			entry.child?.removeAllListeners();
+			else entry.child.removeAllListeners();
 		}
 		running.clear();
 		sessionCtx = undefined;

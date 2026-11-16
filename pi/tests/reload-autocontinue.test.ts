@@ -37,14 +37,6 @@ const continuationCompleted = (journal: readonly JournalEntry[]): boolean => {
 	return continuationIndex >= 0 && isAssistantStop(journal.slice(continuationIndex + 1).find((e) => e.type === "message") ?? { type: "none" });
 };
 
-const waitFor = async (predicate: () => boolean, what: string, timeoutMs = 10_000): Promise<void> => {
-	const start = Date.now();
-	while (!predicate()) {
-		if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`);
-		await new Promise((resolve) => setTimeout(resolve, 25));
-	}
-};
-
 describe("reload auto-continue", () => {
 	it("resumes the turn after a tool-triggered reload and stays idle on a manual reload", async () => {
 		const server = await startFakeModelServer();

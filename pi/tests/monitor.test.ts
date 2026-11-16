@@ -316,7 +316,6 @@ describe("monitor extension", () => {
 			expect(h.statusLabels.at(-1)).toBe("1 running: ft");
 			await waitFor(() => h.appended.some((e) => (e.data as { kind?: string }).kind === "finished"), "completion", 5_000);
 			expect(h.statusLabels.at(-1)).toBeUndefined();
-			void dir;
 		} finally {
 			h.sessionShutdown();
 			// Shutdown clears the label as its last status write.
@@ -330,7 +329,7 @@ describe("monitor extension", () => {
 		try {
 			const result = await run(h.monitor, { name: "listed", command: "sleep 30" });
 			const pid = Number(result.match(/pid (\d+)/)?.[1]);
-			await h.monitorsCommand.handler("", { sessionManager: { getEntries: () => h.appended.map((e) => ({ type: e.customType === MONITOR_CUSTOM_TYPE ? "custom" : "custom", customType: e.customType, data: e.data })) } });
+			await h.monitorsCommand.handler("", { sessionManager: { getEntries: () => h.appended.map((e) => ({ type: "custom", customType: e.customType, data: e.data })) } });
 			const statusEntry = h.appended.find((e) => e.customType === MONITOR_STATUS_CUSTOM_TYPE);
 			const lines = parseMonitorStatusData(statusEntry?.data) ?? [];
 			expect(lines.some((line) => line.includes("● listed — running"))).toBe(true);
@@ -443,6 +442,34 @@ describe("monitor extension", () => {
 			expect(h.appended.filter((e) => (e.data as { kind?: string }).kind === "cancelled")).toHaveLength(1);
 		} finally {
 			h.sessionShutdown();
+		}
+	});
+
+	it("reports a dead monitor's missed completion once across repeated session_start events", async () => {
+		const h = harness();
+		const dir = mkdtempSync(join(tmpdir(), "monitor-once-"));
+		try {
+			const child = spawn("sleep", ["0.05"]);
+			await new Promise<void>((resolve) => child.on("exit", resolve));
+			const logPath = join(dir, "once.log");
+			const codePath = join(dir, "once.code");
+			writeFileSync(logPath, "out\n");
+			writeFileSync(codePath, "2");
+			// The stale journal still says running: the finished entry has not landed
+			// yet, which is exactly the race window the reported set exists to close.
+			const ctx = { sessionManager: { getEntries: () => [startedEntry({
+				id: "once", name: "once", command: "echo hi", pid: child.pid, logPath, codePath, startedAt: Date.now() - 10_000,
+			})] } } as unknown as ExtensionContext;
+			h.sessionStart({ reason: "resume" }, ctx);
+			h.sessionStart({ reason: "reload" }, ctx);
+			await waitFor(() => h.appended.some((e) => (e.data as { kind?: string }).kind === "finished"), "completion", 5_000);
+			expect(h.sent).toHaveLength(1);
+			expect(h.appended.filter((e) => (e.data as { kind?: string }).kind === "finished")).toHaveLength(1);
+			expect(h.sent[0].content).toContain("ended while pi was not watching");
+			expect((h.appended.find((e) => (e.data as { kind?: string }).kind === "finished")?.data as { exitCode?: number }).exitCode).toBe(2);
+		} finally {
+			h.sessionShutdown();
+			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 

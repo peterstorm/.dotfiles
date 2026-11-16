@@ -164,15 +164,20 @@ equivalent model-callable tool. Up to 8 monitors run at once.
 The session journal is the durable state, so monitors survive `/reload` and session resume:
 the tool journals a `monitor` entry carrying the full spec (pid, log and exit-code sidecar
 paths) when it spawns, and each new extension instance re-adopts unfinished monitors at
-`session_start` — polling live pids (the `ChildProcess` handle died with the old instance,
-so the command's exit code is recovered from the sidecar the spawn wrapper writes), and
-completing dead ones as "ended while pi was not watching". Children deliberately outlive
+`session_start` — polling live pids and verifying each against the monitor's argv marker
+before trusting it (a recycled pid is classified as ended while pi was away, never
+adopted; the `ChildProcess` handle died with the old instance, so the command's exit code
+is recovered from the sidecar the spawn wrapper writes), and completing dead ones as
+"ended while pi was not watching". Children deliberately outlive
 `session_shutdown`: a CI watch surviving a session switch is the point, and the journal is
 what makes that safe. The pure decision surface (journal projection, total parsing, tail
 extraction, message formats) lives in `extensions/monitor/state.ts`; the shell owns
 processes, files, timers and message injection.
 
-Contracts: `pi/tests/monitor.test.ts` (unit), `pi/tests/monitor-e2e.test.ts` (SDK
+Contracts: `pi/tests/monitor.test.ts` (unit), `pi/tests/monitor-regression.test.ts`
+(repair pins for the pid-identity and process-tree-cancel criticals),
+`pi/tests/monitor-spawn-failure.test.ts` (the spawn-failure completion arm),
+`pi/tests/monitor-e2e.test.ts` (SDK
 end-to-end against a fake model server, including the reload re-adoption and missed-completion
 paths) and `tests/pi-monitor-contract.sh` (deployed CLI binary; a fast command's completion
 lands mid-turn and is asserted through to the final assistant stop — long-running completions

@@ -8,7 +8,7 @@
 // installs a phantom poller (no completion ever fires) and cancel signals only
 // the wrapper pid (the subshell survives) — both assertions fail there.
 import { describe, expect, it } from "bun:test";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,6 +66,11 @@ const isAlive = (pid: number): boolean => {
 	}
 };
 
+const psLine = (pid: number): string => {
+	const probe = spawnSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+	return probe.status === 0 ? (probe.stdout ?? "") : "";
+};
+
 describe("monitor repair regression (monitor-review-20261116)", () => {
 	it("cancel terminates the monitor's whole process tree (comment-analyzer-1)", async () => {
 		const h = harness();
@@ -120,6 +125,42 @@ describe("monitor repair regression (monitor-review-20261116)", () => {
 			h.sessionShutdown();
 			foreign.kill("SIGKILL");
 			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("cancel never signals a pid whose holder lost the monitor's marker (type-design-analyzer-1, cancel half)", async () => {
+		const h = harness();
+		// Detached wrapper-shaped process carrying the monitor's argv marker; the exec
+		// replaces the image with a foreign argv0 at the same pid — how a recycled pid
+		// presents after the monitor exited. Cancel must refuse to signal it.
+		const foreign = spawn("bash", ["-c", "sleep 0.4; exec -a foreign-recycled sleep 30", "pi-monitor-gate"], { detached: true, stdio: "ignore" });
+		const pid = foreign.pid ?? 0;
+		expect(pid).toBeGreaterThan(0);
+		try {
+			h.sessionStart({ reason: "reload" }, {
+				sessionManager: { getEntries: () => [startedEntry({
+					id: "gate", name: "gated", command: "sleep 30", pid, logPath: "/tmp/none-gate.log", codePath: "/tmp/none-gate.code", startedAt: Date.now(),
+				})] },
+			} as unknown as ExtensionContext);
+			expect(h.sent).toHaveLength(0);
+			// The same pid now runs a foreign image: the argv marker is gone.
+			await waitFor(() => {
+				const line = psLine(pid);
+				return line.length > 0 && !line.includes("pi-monitor-gate");
+			}, "the pid's image to lose the monitor's marker", 5_000);
+			const cancelResult = await run(h.cancel, { name: "gated" });
+			expect(cancelResult).toContain("cancelled");
+			expect(cancelResult).toContain("no longer carries this monitor's identity");
+			expect(h.appended.some((e) => (e.data as { kind?: string }).kind === "cancelled")).toBe(true);
+			// The identity gate refused to signal: the foreign process is still alive.
+			expect(isAlive(pid)).toBe(true);
+		} finally {
+			h.sessionShutdown();
+			try {
+				process.kill(pid, "SIGKILL");
+			} catch {
+				// already gone
+			}
 		}
 	});
 });

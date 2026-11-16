@@ -31,6 +31,17 @@ export const monitorArgvMarker = (id: string): string => `pi-monitor-${id}`;
 export const commandLineMatchesMarker = (commandLine: string, id: string): boolean =>
 	commandLine.includes(monitorArgvMarker(id));
 
+/** Identity of a probed live process: "own" carries the monitor's argv marker,
+ * "foreign" is a live pid without it (the pid was recycled), "unknown" means the
+ * probe itself failed — which is never evidence that the monitor ended. */
+export type MonitorIdentity = "own" | "foreign" | "unknown";
+
+/** Pure: classify a pid probe by its exit status and command line. A non-zero or
+ * missing status is "unknown" — indistinguishable from a marker mismatch would be
+ * a lie, so the caller keeps watching instead of reporting an ending. */
+export const classifyProbe = (status: number | null, commandLine: string, id: string): MonitorIdentity =>
+	status === 0 ? (commandLineMatchesMarker(commandLine, id) ? "own" : "foreign") : "unknown";
+
 /** Everything needed to re-adopt a monitor after a reload or session resume. */
 export type MonitorSpec = Readonly<{
 	id: string;

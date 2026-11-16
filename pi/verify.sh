@@ -51,6 +51,8 @@ if [ "${1:-}" = "--tests" ]; then
     "$here/tests/reload-command-dispatch.test.ts" \
     "$here/tests/reload-autocontinue.test.ts" \
     "$here/tests/reload-continue-regression.test.ts" \
+    "$here/tests/monitor-spawn-failure.test.ts" \
+    "$here/tests/monitor-regression.test.ts" \
     "$here/tests/monitor.test.ts" \
     "$here/tests/monitor-e2e.test.ts" \
     "$here/tests/thinking-switch.test.ts" \
