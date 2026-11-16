@@ -37,6 +37,25 @@
         "kind": "required-file",
         "path": ".loom/completion-reports/reload-continue-regression.xml"
       }
+    },
+    {
+      "id": "project:monitor-regression",
+      "scope": "wave",
+      "executable": "bun",
+      "args": [
+        "test",
+        "--reporter",
+        "junit",
+        "--reporter-outfile",
+        ".loom/completion-reports/monitor-regression.xml",
+        "pi/tests/monitor-regression.test.ts"
+      ],
+      "cwd": ".",
+      "timeoutMs": 120000,
+      "report": {
+        "kind": "required-file",
+        "path": ".loom/completion-reports/monitor-regression.xml"
+      }
     }
   ]
 }

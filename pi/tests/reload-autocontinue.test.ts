@@ -6,8 +6,6 @@
 // mirroring pi/tests/reload-command-dispatch.test.ts and the CLI-level contract test.
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,49 +14,15 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import reloadRuntime, {
-	RELOAD_CONTINUE_CUSTOM_TYPE,
-	RELOAD_CONTINUE_MESSAGE,
-} from "../extensions/reload-runtime";
+import { fakeProviderModelsJson, fakeProviderSettings, JournalEntry, startFakeModelServer, textOf, waitFor } from "./helpers/fake-model-server";
+import reloadRuntime, { RELOAD_CONTINUE_CUSTOM_TYPE, RELOAD_CONTINUE_MESSAGE } from "../extensions/reload-runtime";
 
 const scratch: string[] = [];
-const servers: Server[] = [];
-afterEach(() => {
-	for (const server of servers.splice(0)) server.close();
+const closers: Array<() => Promise<void>> = [];
+afterEach(async () => {
+	for (const close of closers.splice(0)) await close();
 	for (const directory of scratch.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
-
-// Fake chat-completions server: every request gets a short stop response, so the continuation
-// turn ends after one assistant message. SSE shape mirrors tests/pi-compaction-autocontinue-contract.sh.
-const startFakeModelServer = async (): Promise<number> => {
-	const server = createServer((req, res) => {
-		if (req.method !== "POST" || !req.url?.includes("/chat/completions")) {
-			res.writeHead(404).end();
-			return;
-		}
-		req.resume();
-		req.on("end", () => {
-			res.writeHead(200, { "content-type": "text/event-stream" });
-			const base = { id: "chatcmpl-fake", object: "chat.completion.chunk", created: 0, model: "fakemodel" };
-			res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { content: "Continued after reload." }, finish_reason: null }] })}\n\n`);
-			res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`);
-			res.write(`data: ${JSON.stringify({ ...base, choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\n`);
-			res.write("data: [DONE]\n\n");
-			res.end();
-		});
-	});
-	servers.push(server);
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	return (server.address() as { port: number }).port;
-};
-
-type JournalEntry = Readonly<{ type: string; customType?: string; data?: unknown; message?: { role: string; content: unknown; stopReason?: string } }>;
-
-const textOf = (content: unknown): string => {
-	if (typeof content === "string") return content;
-	if (Array.isArray(content)) return content.filter((part) => part?.type === "text").map((part) => (part as { text: string }).text).join("\n");
-	return "";
-};
 
 const isContinuation = (entry: JournalEntry): boolean =>
 	entry.type === "message" && entry.message?.role === "user" && textOf(entry.message.content).includes(RELOAD_CONTINUE_MESSAGE);
@@ -83,35 +47,13 @@ const waitFor = async (predicate: () => boolean, what: string, timeoutMs = 10_00
 
 describe("reload auto-continue", () => {
 	it("resumes the turn after a tool-triggered reload and stays idle on a manual reload", async () => {
-		const port = await startFakeModelServer();
+		const server = await startFakeModelServer();
+		closers.push(server.close);
 		const agentDir = mkdtempSync(join(tmpdir(), "pi-reload-continue-agent-"));
 		const cwd = mkdtempSync(join(tmpdir(), "pi-reload-continue-cwd-"));
 		scratch.push(agentDir, cwd);
-		writeFileSync(agentDir + "/models.json", JSON.stringify({
-			providers: {
-				fakeprov: {
-					baseUrl: `http://127.0.0.1:${port}/v1`,
-					api: "openai-completions",
-					apiKey: "fake-key",
-					models: [{
-						id: "fakemodel",
-						name: "Fake Model",
-						reasoning: false,
-						input: ["text"],
-						contextWindow: 8192,
-						maxTokens: 8192,
-						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					}],
-				},
-			},
-		}));
-		// Pin the fake provider: without a default, provider-default discovery picks a real
-		// configured provider (env-auth) and the continuation turn would leave localhost.
-		const settingsManager = SettingsManager.inMemory({
-			compaction: { enabled: false },
-			defaultProvider: "fakeprov",
-			defaultModel: "fakemodel",
-		});
+		writeFileSync(agentDir + "/models.json", fakeProviderModelsJson(server.port));
+		const settingsManager = SettingsManager.inMemory(fakeProviderSettings());
 		const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager, extensionFactories: [reloadRuntime] });
 		await loader.reload();
 		const { session } = await createAgentSession({

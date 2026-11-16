@@ -10,6 +10,7 @@ pi/
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
 │   ├── creative-project-scope/ # Trusted ~/dev/creative subtree resources
 │   ├── glm-guard/    # Keeps a served GLM's reasoning from poisoning its own context
+│   ├── monitor/      # Background monitors whose completion wakes the session
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
 │   ├── global-instructions.ts  # Standalone extension
@@ -148,6 +149,34 @@ Using a single symlink per directory (instead of per-file) means:
 
 `agents/` is the exception, because it is not purely source — Loom generates
 into it.
+
+### monitor: background watches that wake the session (`extensions/monitor/`)
+
+Long-running waits (a CI run, a build, a deploy, a file that eventually appears) must not
+hold the turn: the `monitor` tool spawns the command under bash and returns immediately, so
+the session stays interactive. When the command exits, the extension injects a message with
+the exit code and the last 4 KB of output — steering the current turn or triggering one if
+the session is idle — so the model can act on a green (or red) run without anyone watching
+the terminal. The footer shows the running count (`ctx.ui.setStatus`); `/monitors` lists
+every monitor on record and `/monitors cancel <name>` kills one; `monitor_cancel` is the
+equivalent model-callable tool. Up to 8 monitors run at once.
+
+The session journal is the durable state, so monitors survive `/reload` and session resume:
+the tool journals a `monitor` entry carrying the full spec (pid, log and exit-code sidecar
+paths) when it spawns, and each new extension instance re-adopts unfinished monitors at
+`session_start` — polling live pids (the `ChildProcess` handle died with the old instance,
+so the command's exit code is recovered from the sidecar the spawn wrapper writes), and
+completing dead ones as "ended while pi was not watching". Children deliberately outlive
+`session_shutdown`: a CI watch surviving a session switch is the point, and the journal is
+what makes that safe. The pure decision surface (journal projection, total parsing, tail
+extraction, message formats) lives in `extensions/monitor/state.ts`; the shell owns
+processes, files, timers and message injection.
+
+Contracts: `pi/tests/monitor.test.ts` (unit), `pi/tests/monitor-e2e.test.ts` (SDK
+end-to-end against a fake model server, including the reload re-adoption and missed-completion
+paths) and `tests/pi-monitor-contract.sh` (deployed CLI binary; a fast command's completion
+lands mid-turn and is asserted through to the final assistant stop — long-running completions
+after teardown are the SDK contract's subject, mirroring the reload carve-out).
 
 ## Local AI Workstation
 

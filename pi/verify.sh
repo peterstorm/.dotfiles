@@ -39,6 +39,7 @@ if [ "${1:-}" = "--tests" ]; then
   bash "$here/../tests/blender-mcp-contract.sh"
   bash "$here/../tests/pi-compaction-autocontinue-contract.sh"
   bash "$here/../tests/pi-reload-autocontinue-contract.sh"
+  bash "$here/../tests/pi-monitor-contract.sh"
   bun test \
     "$here/extensions/model-routing" \
     "$here/extensions/subagent" \
@@ -49,6 +50,9 @@ if [ "${1:-}" = "--tests" ]; then
     "$here/tests/reload-runtime.test.ts" \
     "$here/tests/reload-command-dispatch.test.ts" \
     "$here/tests/reload-autocontinue.test.ts" \
+    "$here/tests/reload-continue-regression.test.ts" \
+    "$here/tests/monitor.test.ts" \
+    "$here/tests/monitor-e2e.test.ts" \
     "$here/tests/thinking-switch.test.ts" \
     "$here/tests/compaction-resume.test.ts" \
     "$here/creative-project-skills.test.ts" \
