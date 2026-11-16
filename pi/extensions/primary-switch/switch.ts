@@ -23,7 +23,7 @@ export type SwitchRequest = (typeof SWITCH_REQUESTS)[number];
 const isPrimary = (word: string): word is Primary => (PRIMARIES as readonly string[]).includes(word);
 
 const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
-	toggle: "GLM or uncensored -> WARMIND; WARMIND or DeepSeek -> GLM",
+	toggle: "GLM or uncensored -> WARMIND; WARMIND -> uncensored (GLM uncensored); DeepSeek -> GLM",
 	glm: "GLM-5.3 v16 on Hyperflare",
 	uncensored: "GLM-5.3 uncensored on Hyperflare (dealignai's UNCENSORED build in v16's storage)",
 	warmind: "WARMIND on ds4-native",

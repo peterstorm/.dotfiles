@@ -74,24 +74,31 @@ for request in "${REQUESTS[@]}"; do
   done
 done
 
-# Toggle is an involution across engines when the ds41 side is GLM's partner:
-# two toggles return to the start. uncensored is reached by name, so a toggle from it
-# rejoins the cycle (at the partner, then GLM) instead of returning to itself.
-for start in glm warmind deepseek; do
-  for glm_partner in warmind deepseek; do
-    partner="$glm_partner"; [ "$start" = glm ] || partner="$start"
-    first="$(primary_decide toggle "$start" none "$partner")"
-    second="$(primary_decide toggle "${first#start:}" none "$partner")"
-    check "toggle twice from $start returns ($first, $second)" '[ "$second" = "start:$start" ]'
-  done
-done
-
+# Toggle's engine graph: WARMIND -> uncensored (the GLM uncensored build) and
+# DeepSeek -> glm, whatever GLM's partner is; every hop crosses engines. With the
+# default partner WARMIND that makes WARMIND and uncensored toggle back and forth,
+# and a toggle from GLM enters that cycle instead of returning; with DeepSeek as
+# the partner, GLM and DeepSeek are the involution.
 for glm_partner in warmind deepseek; do
+  check "toggle from WARMIND goes to uncensored (partner $glm_partner)" \
+    '[ "$(primary_decide toggle warmind none "$glm_partner")" = start:uncensored ]'
+  check "toggle from DeepSeek goes to glm (partner $glm_partner)" \
+    '[ "$(primary_decide toggle deepseek none "$glm_partner")" = start:glm ]'
+  first="$(primary_decide toggle glm none "$glm_partner")"
+  second="$(primary_decide toggle "${first#start:}" none "$glm_partner")"
+  expected=uncensored; [ "$glm_partner" = deepseek ] && expected=glm
+  check "GLM toggles to its partner, then to that partner's fixed target ($first, $second)" \
+    '[ "$first" = "start:$glm_partner" ] && [ "$second" = "start:$expected" ]'
   first="$(primary_decide toggle uncensored none "$glm_partner")"
   second="$(primary_decide toggle "${first#start:}" none "$glm_partner")"
+  expected=uncensored; [ "$glm_partner" = deepseek ] && expected=glm
   check "uncensored toggles to GLM's partner ($first)" '[ "$first" = "start:$glm_partner" ]'
-  check "the partner then toggles to glm, not back to uncensored ($second)" '[ "$second" = start:glm ]'
+  check "the partner then toggles to its fixed target ($second)" '[ "$second" = "start:$expected" ]'
 done
+first="$(primary_decide toggle warmind none warmind)"
+second="$(primary_decide toggle "${first#start:}" none warmind)"
+check "WARMIND and uncensored toggle back and forth under the default partner ($first, $second)" \
+  '[ "$first" = start:uncensored ] && [ "$second" = start:warmind ]'
 
 # Sourcing must never run main, whatever $0 is: on 2026-11-14 a test sourced the
 # script as `bash -c 'source "$0"; …' SCRIPT`, the old BASH_SOURCE==$0 guard
@@ -301,7 +308,7 @@ run glm
 check "already-serving request reports without switching" '[ "$request_rc" = 0 ] && [ "$calls" = "report:glm" ]'
 state; running[$DS41_CONTAINER]=0; label[$DS41_CONTAINER]=warmind-1017-native
 run toggle
-check "toggle from WARMIND switches to GLM" '[ "$request_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
+check "toggle from WARMIND switches to uncensored" '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
 run status
 check "status with nothing to suffix" '[[ "$request_out" == *"active:     warmind (warmind-1017-native)"* ]]'
 state; running[$UNCENSORED_CONTAINER]=0

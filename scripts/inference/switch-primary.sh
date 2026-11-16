@@ -7,8 +7,9 @@
 #   deepseek    deepseek-v4.1-flash-native               ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
 #
 # Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]   (default: toggle)
-#   toggle    GLM or uncensored -> GLM_TOGGLE_TARGET (WARMIND), WARMIND or DeepSeek -> GLM; with
-#             nothing running, bring back whichever primary stopped last
+#   toggle    GLM or uncensored -> GLM_TOGGLE_TARGET (WARMIND), WARMIND -> uncensored (the GLM
+#             uncensored build), DeepSeek -> GLM; with nothing running, bring back whichever
+#             primary stopped last
 #   glm|uncensored|warmind|deepseek
 #             make that one the primary (no-op if it already is)
 #   status    what serves now, and what toggle would do
@@ -32,10 +33,11 @@ PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$UNCENSORED_CONTAINER" "$DS41_CONTAINER")
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
 SERVING_HOST="desktop"
-# The ds41 primary toggle starts from GLM. Fixed rather than taken from whichever
+# The ds41 primary a Hyperflare toggle starts from. Fixed rather than taken from whichever
 # weights ran last, so toggle is predictable (operator choice, 2026-11-14). Set it to
 # deepseek to toggle to stock DeepSeek-V4.1 instead; `switch-primary.sh deepseek`
-# reaches it either way.
+# reaches it either way. The reverse hops are fixed in primary_decide: WARMIND toggles to
+# uncensored (the GLM uncensored build; operator choice, 2026-11-16) and DeepSeek to glm.
 GLM_TOGGLE_TARGET="warmind"
 
 # --- functional core -------------------------------------------------------
@@ -72,9 +74,10 @@ variant_of_primary() {
 #   REQUEST    toggle | glm | uncensored | warmind | deepseek
 #   ACTIVE     glm | uncensored | warmind | deepseek | none | multiple | other:<container>
 #   LAST       glm | uncensored | warmind | deepseek | none   (the primary that stopped most recently)
-#   GLM_PARTNER warmind | deepseek                   (the ds41 primary toggle starts from GLM)
-# Toggle always crosses engines: a Hyperflare primary (glm, uncensored) goes to GLM_PARTNER, a ds41 one
-# to glm. uncensored is reached by name (or as the last primary), so toggle is not an involution from it.
+#   GLM_PARTNER warmind | deepseek                   (the ds41 primary a Hyperflare toggle starts from)
+# Toggle always crosses engines: a Hyperflare primary (glm, uncensored) goes to GLM_PARTNER, WARMIND to
+# uncensored and DeepSeek to glm. uncensored is reached by name and as WARMIND's toggle target, so a
+# toggle from GLM enters the WARMIND/uncensored cycle instead of returning.
 # Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
   local request="$1" active="$2" last="$3" glm_partner="$4"
@@ -89,7 +92,8 @@ primary_decide() {
     toggle)
       case "$active" in
         glm | uncensored) echo "start:$glm_partner" ;;
-        warmind | deepseek) echo "start:glm" ;;
+        warmind) echo "start:uncensored" ;;
+        deepseek) echo "start:glm" ;;
         none)
           case "$last" in
             glm | uncensored | warmind | deepseek) echo "start:$last" ;;
