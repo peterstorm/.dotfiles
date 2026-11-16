@@ -1,9 +1,9 @@
 // End-to-end contract for the reload auto-continue: an LLM-callable reload_runtime tool must
 // resume the agent turn after the reload it triggered, without a human prompt — the reload-side
-// twin of the compaction "[auto-compacted]" nudge (tests/compaction-resume.test.ts and
+// twin of the compaction "[auto-compacted]" nudge (pi/tests/compaction-resume.test.ts and
 // tests/pi-compaction-autocontinue-contract.sh). A manual /reload must stay idle.
 // Drives the real extension through createAgentSession against a fake OpenAI-compatible server,
-// mirroring tests/reload-command-dispatch.test.ts and the CLI-level contract test.
+// mirroring pi/tests/reload-command-dispatch.test.ts and the CLI-level contract test.
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -66,6 +66,13 @@ const isContinuation = (entry: JournalEntry): boolean =>
 const isAssistantStop = (entry: JournalEntry): boolean =>
 	entry.type === "message" && entry.message?.role === "assistant" && entry.message.stopReason === "stop";
 
+// The one continuation-completion predicate, used by both the wait and the assertion below:
+// the first message entry after the continuation turn is its assistant stop response.
+const continuationCompleted = (journal: readonly JournalEntry[]): boolean => {
+	const continuationIndex = journal.findIndex(isContinuation);
+	return continuationIndex >= 0 && isAssistantStop(journal.slice(continuationIndex + 1).find((e) => e.type === "message") ?? { type: "none" });
+};
+
 const waitFor = async (predicate: () => boolean, what: string, timeoutMs = 10_000): Promise<void> => {
 	const start = Date.now();
 	while (!predicate()) {
@@ -122,11 +129,7 @@ describe("reload auto-continue", () => {
 			// The deferred command reloads, the reloaded instance consumes the pending marker
 			// and the continuation turn runs to a stop response — no human prompt involved.
 			const entries = (): JournalEntry[] => session.sessionManager.getEntries() as JournalEntry[];
-			await waitFor(() => {
-				const journal = entries();
-				const continuationIndex = journal.findIndex(isContinuation);
-				return continuationIndex >= 0 && journal.slice(continuationIndex + 1).some(isAssistantStop);
-			}, "assistant response after the continuation prompt");
+			await waitFor(() => continuationCompleted(entries()), "assistant response after the continuation prompt");
 
 			const journal = entries();
 			const markers = journal.filter((e) => e.type === "custom" && e.customType === RELOAD_CONTINUE_CUSTOM_TYPE);
@@ -134,8 +137,7 @@ describe("reload auto-continue", () => {
 			const continuationIndex = journal.findIndex(isContinuation);
 			expect(continuationIndex).toBeGreaterThan(0);
 			expect(textOf(journal[continuationIndex].message?.content)).toBe(RELOAD_CONTINUE_MESSAGE);
-			const firstMessageAfter = journal.slice(continuationIndex + 1).find((e) => e.type === "message");
-			expect(firstMessageAfter && isAssistantStop(firstMessageAfter)).toBe(true);
+			expect(continuationCompleted(journal)).toBe(true);
 
 			// A manual reload afterwards must not spawn another continuation: only the
 			// "consumed" marker remains, so the session gains no new pair and no new turn.

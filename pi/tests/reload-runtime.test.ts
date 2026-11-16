@@ -3,6 +3,8 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import reloadRuntime, {
 	RELOAD_CONTINUE_CUSTOM_TYPE,
 	RELOAD_CONTINUE_MESSAGE,
+	parseReloadContinueMarker,
+	reloadContinueMarker,
 	shouldReloadAutoContinue,
 } from "../extensions/reload-runtime";
 
@@ -62,16 +64,15 @@ describe("reload runtime extension", () => {
 		expect(reloads).toBe(1);
 	});
 
-	it("consumes a fresh pending marker on reload and sends the continuation prompt", () => {
+	it("consumes a pending marker on reload, sending the continuation before the consumed twin", () => {
 		const h = harness();
 		h.sessionStart({ reason: "reload" }, {
-			// The real handler checks freshness against Date.now(), so the fixture must too.
 			sessionManager: { getEntries: () => [entry("pending", Date.now() - 1_000)] },
 		} as unknown as ExtensionContext);
+		expect(h.sent).toEqual([{ text: RELOAD_CONTINUE_MESSAGE, deliverAs: undefined, executeCommandAfterIdle: undefined }]);
 		expect(h.appended).toEqual([
 			{ customType: RELOAD_CONTINUE_CUSTOM_TYPE, data: { kind: "consumed", ts: expect.any(Number) } },
 		]);
-		expect(h.sent).toEqual([{ text: RELOAD_CONTINUE_MESSAGE, deliverAs: undefined, executeCommandAfterIdle: undefined }]);
 	});
 
 	it("ignores startup session_start events", () => {
@@ -85,8 +86,9 @@ describe("reload runtime extension", () => {
 
 	it("stays idle on a manual reload after the continuation was already delivered", () => {
 		const h = harness();
+		const now = Date.now();
 		h.sessionStart({ reason: "reload" }, {
-			sessionManager: { getEntries: () => [entry("pending", Date.now() - 2_000), entry("consumed", Date.now() - 1_000)] },
+			sessionManager: { getEntries: () => [entry("pending", now - 2_000), entry("consumed", now - 1_000)] },
 		} as unknown as ExtensionContext);
 		expect(h.appended).toEqual([]);
 		expect(h.sent).toEqual([]);
@@ -94,30 +96,46 @@ describe("reload runtime extension", () => {
 });
 
 describe("shouldReloadAutoContinue", () => {
-	const now = 1_000_000;
+	const now = Date.now();
 	const other = { type: "custom", customType: "unrelated", data: { kind: "pending", ts: now } };
 
 	it("consumes a fresh pending marker", () => {
-		expect(shouldReloadAutoContinue([entry("pending", now - 1_000)], now)).toBe(true);
+		expect(shouldReloadAutoContinue([entry("pending", now - 1_000)])).toBe(true);
+	});
+
+	it("consumes a pending marker of any age: the reload that lands is the one it asked for", () => {
+		expect(shouldReloadAutoContinue([entry("pending", now - 3_600_000)])).toBe(true);
 	});
 
 	it("skips a consumed marker (continue already delivered)", () => {
-		expect(shouldReloadAutoContinue([entry("pending", now - 2_000), entry("consumed", now - 1_000)], now)).toBe(false);
-	});
-
-	it("skips a stale pending marker (crashed run or forked session)", () => {
-		expect(shouldReloadAutoContinue([entry("pending", now - 61_000)], now)).toBe(false);
+		expect(shouldReloadAutoContinue([entry("pending", now - 2_000), entry("consumed", now - 1_000)])).toBe(false);
 	});
 
 	it("only the newest marker decides", () => {
-		expect(shouldReloadAutoContinue([entry("consumed", now - 3_000), other, entry("pending", now - 1_000)], now)).toBe(true);
-		expect(shouldReloadAutoContinue([entry("pending", now - 3_000), other, entry("consumed", now - 1_000)], now)).toBe(false);
+		expect(shouldReloadAutoContinue([entry("consumed", now - 3_000), other, entry("pending", now - 1_000)])).toBe(true);
+		expect(shouldReloadAutoContinue([entry("pending", now - 3_000), other, entry("consumed", now - 1_000)])).toBe(false);
 	});
 
 	it("is false with no markers and parses malformed journal data defensively", () => {
-		expect(shouldReloadAutoContinue([], now)).toBe(false);
-		expect(shouldReloadAutoContinue([{ type: "custom", customType: RELOAD_CONTINUE_CUSTOM_TYPE, data: "garbage" }], now)).toBe(false);
-		expect(shouldReloadAutoContinue([{ type: "custom", customType: RELOAD_CONTINUE_CUSTOM_TYPE }], now)).toBe(false);
-		expect(shouldReloadAutoContinue([entry("pending", now - 1_000, "other-type")], now)).toBe(false);
+		expect(shouldReloadAutoContinue([])).toBe(false);
+		expect(shouldReloadAutoContinue([{ type: "custom", customType: RELOAD_CONTINUE_CUSTOM_TYPE, data: "garbage" }])).toBe(false);
+		expect(shouldReloadAutoContinue([{ type: "custom", customType: RELOAD_CONTINUE_CUSTOM_TYPE }])).toBe(false);
+		expect(shouldReloadAutoContinue([entry("pending", now - 1_000, "other-type")])).toBe(false);
+	});
+});
+
+describe("marker codec", () => {
+	it("round-trips through the named constructor and parser", () => {
+		expect(parseReloadContinueMarker(reloadContinueMarker("pending"))?.kind).toBe("pending");
+		expect(parseReloadContinueMarker(reloadContinueMarker("consumed"))?.kind).toBe("consumed");
+	});
+
+	it("rejects malformed journal data", () => {
+		expect(parseReloadContinueMarker("garbage")).toBeUndefined();
+		expect(parseReloadContinueMarker(null)).toBeUndefined();
+		expect(parseReloadContinueMarker({ kind: "other", ts: 5 })).toBeUndefined();
+		expect(parseReloadContinueMarker({ kind: "pending" })).toBeUndefined();
+		expect(parseReloadContinueMarker({ kind: "pending", ts: "5" })).toBeUndefined();
+		expect(parseReloadContinueMarker({ kind: "pending", ts: Number.NaN })).toBeUndefined();
 	});
 });

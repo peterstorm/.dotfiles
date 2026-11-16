@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(rm brainstorming:*)",
+      "Bash(nvim:*)",
+      "Bash(__NEW_LINE_07eb3dab48ab2157__ echo:*)",
+      "Bash(__NEW_LINE_6f0a7d7c1f456449__ echo:*)",
+      "Bash(nix-env -qaP -A nixpkgs.pi-coding-agent)",
+      "Bash(nix search *)",
+      "Bash(networksetup -listallnetworkservices)"
+    ]
+  },
+  "outputStyle": "Explanatory"
+}

@@ -876,23 +876,29 @@ the running Pi core binary. Later reloads can use the model-callable tool.
 
 The reload would otherwise strand the task: pi sits idle until the next human
 prompt. The tool therefore journals a `reload-runtime-auto-continue` custom
-entry (`{kind: "pending", ts}`) before dispatching the command — the one channel
-that outlives the reload, since a reload replaces the extension instance and
-invalidates the old runner. The reloaded instance's `session_start` handler
-(`reason: "reload"`) consumes the newest marker exactly once, appends the
-`consumed` twin, and sends the `"[runtime-reloaded] Continue from where you left
-off."` user prompt — the reload-side twin of the compaction auto-continue nudge
-(`pi-autocontinue-after-compact.patch`). A pending marker older than 60 s is
-stale (crashed run, forked session) and never consumed. A manual `/reload`
-finds only the `consumed` marker and stays idle. The decision is the pure
-`shouldReloadAutoContinue()` over the session journal. The contracts live in
-`tests/reload-runtime.test.ts` (unit), `tests/reload-autocontinue.test.ts`
-(SDK end-to-end against a fake model server: continuation turn plus the
-manual-reload negative control) and `tests/pi-reload-autocontinue-contract.sh`
-(real CLI binary). The continuation turn matters in live sessions (TUI, RPC);
-in one-shot `pi -p` the process tears down while that extension-triggered turn
-is still starting, and a finished one-shot prompt should not be resumed anyway —
-the same completed-answer carve-out the compaction auto-continue applies.
+entry (`{kind: "pending", ts}`, the typed `ReloadContinueMarker` union) before
+dispatching the command — the one channel that outlives the reload, since a
+reload replaces the extension instance and invalidates the old runner. The
+reloaded instance's `session_start` handler (`reason: "reload"`) consumes the
+newest marker exactly once, sends the `"[runtime-reloaded] Continue from where
+you left off."` user prompt, and only then journals the `consumed` twin — the
+reload-side twin of the compaction auto-continue nudge
+(`pi-autocontinue-after-compact.patch`). There is no wall-clock freshness gate:
+the deferred dispatch fires after the whole calling turn settles, however long
+its tail, and the reload that lands is the one the marker asked for; a crashed
+run or fork re-enters the session with a different `session_start` reason and
+never reaches this consumer. A manual `/reload` finds only the `consumed`
+marker and stays idle. The decision is the pure `shouldReloadAutoContinue()`
+over the session journal, parsed through `parseReloadContinueMarker()`. The
+contracts live in `pi/tests/reload-runtime.test.ts` (unit),
+`pi/tests/reload-autocontinue.test.ts` (SDK end-to-end against a fake model
+server: continuation turn plus the manual-reload negative control),
+`pi/tests/reload-continue-regression.test.ts` (repair regression pin) and
+`tests/pi-reload-autocontinue-contract.sh` (real CLI binary). The continuation
+turn matters in live sessions (TUI, RPC); in one-shot `pi -p` the process tears
+down while that extension-triggered turn is still starting, and a finished
+one-shot prompt should not be resumed anyway — the same completed-answer
+carve-out the compaction auto-continue applies.
 
 Run `./pi/verify.sh --tests` after extension changes (including the real SDK
 command-dispatch test).

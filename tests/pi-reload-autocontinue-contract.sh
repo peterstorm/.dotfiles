@@ -146,7 +146,7 @@ SERVER_PID=
 
 [ "$rc" = 0 ] || fail "pi exited $rc (stderr: $(head -c 300 "$TMP/err.txt"))"
 
-session_file="$(ls -t "$home"/.pi/agent/sessions/*/*.jsonl 2>/dev/null | head -1)"
+session_file="$(ls -t "$home"/.pi/agent/sessions/*/*.jsonl 2>/dev/null | head -1)" || true
 [ -n "$session_file" ] || fail "no session file written"
 
 node -e '

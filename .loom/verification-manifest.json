@@ -18,6 +18,25 @@
         "kind": "required-file",
         "path": ".loom/completion-reports/artex-repair-regression.xml"
       }
+    },
+    {
+      "id": "project:reload-continue-regression",
+      "scope": "wave",
+      "executable": "bun",
+      "args": [
+        "test",
+        "--reporter",
+        "junit",
+        "--reporter-outfile",
+        ".loom/completion-reports/reload-continue-regression.xml",
+        "pi/tests/reload-continue-regression.test.ts"
+      ],
+      "cwd": ".",
+      "timeoutMs": 120000,
+      "report": {
+        "kind": "required-file",
+        "path": ".loom/completion-reports/reload-continue-regression.xml"
+      }
     }
   ]
 }
