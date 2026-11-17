@@ -147,7 +147,7 @@ If `--save` flag is present:
    ---
    ```
 4. Write the full analysis as note content
-5. Add `[[MOC|Business MOC]]` and `[[dotslash.dev - Unified Business Identity]]` backlinks
+5. Add `[[MOC|Business MOC]]` and `[[unified-business-identity]]` backlinks
 6. Confirm save location to user
 
 ## Refresh Context (`--refresh-context`)
@@ -156,12 +156,12 @@ When invoked with `--refresh-context`:
 
 1. Read vault business strategy files:
    - `business/MOC.md`
-   - `business/dotslash.dev/dotslash.dev - Unified Business Identity.md`
-   - `business/dotslash.dev/smb/strategy/dotslash.dev - Master Business Plan 2026.md`
-   - `business/dotslash.dev/smb/strategy/Pricing Deep Dive & Market Analysis.md`
-   - `business/dotslash.dev/smb/strategy/Chatbot Pricing and Free Website Commercial Model.md`
-   - `business/dotslash.dev/smb/go-to-market/Client Acquisition Playbook Denmark.md`
-   - `business/dotslash.dev/consulting/strategy/Consulting Strategy & Opportunity Analysis.md`
+   - `business/dotslash.dev/strategy/unified-business-identity.md`
+   - `business/dotslash.dev/smb/strategy/master-business-plan-2026.md`
+   - `business/dotslash.dev/smb/strategy/pricing-deep-dive-and-market-analysis.md`
+   - `business/dotslash.dev/smb/strategy/chatbot-pricing-and-free-website-commercial-model.md`
+   - `business/dotslash.dev/smb/go-to-market/client-acquisition-playbook-denmark.md`
+   - `business/dotslash.dev/consulting/strategy/consulting-strategy-and-opportunity-analysis.md`
    - Also Glob for any new files: `business/dotslash.dev/**/*.md` (skip `smb/archive/` — superseded notes)
 2. Read dotslash.dev website content for consulting positioning:
    - Scan page content files in `~/dev/web/dotslash.dev/src/` for services, philosophy, positioning

@@ -34,7 +34,7 @@ If the user gives a WOD description, parse it. If they ask for a workout, design
 ### What to read
 
 ```
-find ~/dev/notes/remotevault/personal/fitness/ -name "*.md" -not -name "MOC.md" | sort -r | head -30
+find ~/dev/notes/remotevault/personal/fitness/log/ -name "*.md" -not -name "MOC.md" | sort -r | head -30
 ```
 
 Walk back up to **30 days** and read every fitness note that contains a `CrossFit/Strength Analysis` section. From each, extract:
@@ -135,7 +135,7 @@ reference lives in the vault:
 cat ~/dev/notes/remotevault/reclaw/skills/workout-json-reference.md
 ```
 
-It covers: step ordering (globally sequential `stepOrder`), the step-type and end-condition tables, RepeatGroupDTO rules (shared `childStepId`, iterations vs time-based AMRAP mode), exercise metadata (`category`, `exerciseName`, `weightValue` in kg with `weightUnit`), and per-sport deltas. CrossFit uses `sportType` HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }`. API gotchas (sport-type IDs, past-date scheduling trap, connectapi vs connect host) are in `~/dev/notes/remotevault/reclaw/garmin-api-gotchas.md`. Build the workout JSON inline following those templates, then schedule it (next section).
+It covers: step ordering (globally sequential `stepOrder`), the step-type and end-condition tables, RepeatGroupDTO rules (shared `childStepId`, iterations vs time-based AMRAP mode), exercise metadata (`category`, `exerciseName`, `weightValue` in kg with `weightUnit`), and per-sport deltas. CrossFit uses `sportType` HIIT — `{ "sportTypeId": 9, "sportTypeKey": "hiit", "displayOrder": 7 }`. API gotchas (sport-type IDs, past-date scheduling trap, connectapi vs connect host) are in `~/dev/notes/remotevault/reclaw/gotchas/garmin-api-gotchas.md`. Build the workout JSON inline following those templates, then schedule it (next section).
 
 ## Scheduling
 
