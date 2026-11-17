@@ -13,6 +13,8 @@
     (util.sops.hostSecret "reclaw-garmin-password" "reclaw.yaml" "garmin_password" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-prej-api-key" "reclaw.yaml" "prej_api_key" { owner = "peterstorm"; group = "users"; })
     (util.sops.hostSecret "reclaw-shelfatlas-api-key" "reclaw.yaml" "shelfatlas_api_key" { owner = "peterstorm"; group = "users"; })
+    # Apify API token for the ig-ingest skill (scripts/ig-ingest.ts → apify/instagram-scraper).
+    (util.sops.hostSecret "reclaw-apify-token" "reclaw.yaml" "apify_token" { owner = "peterstorm"; group = "users"; })
     # (util.sops.hostSecret "reclaw-notebooklm-auth-token" "reclaw.yaml" "notebooklm_auth_token" { owner = "peterstorm"; group = "users"; })
     # (util.sops.hostSecret "reclaw-notebooklm-cookies" "reclaw.yaml" "notebooklm_cookies" { owner = "peterstorm"; group = "users"; })
   ]
@@ -30,6 +32,7 @@
         GARMIN_PASSWORD=${config.sops.placeholder."reclaw-garmin-password"}
         PREJ_API_KEY=${config.sops.placeholder."reclaw-prej-api-key"}
         SHELFATLAS_API_KEY=${config.sops.placeholder."reclaw-shelfatlas-api-key"}
+        APIFY_TOKEN=${config.sops.placeholder."reclaw-apify-token"}
       '';
       owner = "peterstorm";
       group = "users";
