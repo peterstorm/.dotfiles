@@ -46,7 +46,7 @@ nohup bun ~/dev/claude-plugins/reclaw/scripts/ig-ingest.ts @<handle> --limit N >
 
 Check `tail -3 "$LOG"` and whether `$OUT` is non-empty every minute or so. If it is still running when you must answer, tell the user it continues in the background and that re-running the same command is safe (existing notes are skipped, only missing ones are redone).
 
-The background run lives in your turn's process scope: it survives your reply, but it is killed if your turn times out, if `reclaw.service` restarts, or after 4 hours. Any of those leaves the profile partly ingested, and re-running finishes it.
+A `nohup` run lives in your turn's process scope: it survives your reply, but it is killed if your turn times out, if `reclaw.service` restarts, or after 4 hours. Any of those leaves the profile partly ingested, and re-running finishes it. If a run might go near 4 hours or must survive a restart, use the user unit above instead.
 
 Before a profile run, tell the user the limit you are using and the cost: Apify charges about $0.0027 per post (free plan includes $5/month ≈ 1,800 posts, billing month 11th–10th). Each run is hard-capped by `maxTotalChargeUsd`. Transcription and OCR are local and cost nothing.
 
