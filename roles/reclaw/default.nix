@@ -86,6 +86,27 @@
       HandlePowerKey = "ignore";
     };
 
+    # Agents slice — parent of every agent run's transient scope
+    # (reclaw-agent-<uuid>.scope, created by reclaw's runner via systemd-run;
+    # see reclaw docs/adr/0013-agent-run-containment.md). 2026-11-17: a
+    # `vitest run | grep -m3` orphaned ~12 fork workers (5.3G) inside
+    # reclaw.service's own cgroup; its MemoryHigh throttled the bot's event loop
+    # for an hour and Telegram + BullMQ stalled. Agent workloads now live here,
+    # away from the bot:
+    #   - hard MemoryMax and NO MemoryHigh: past the ceiling the kernel OOM-kills
+    #     the biggest process (the test runner), it does not throttle the slice
+    #     into an hour-long stall;
+    #   - MemorySwapMax caps how much of the overflow swap may absorb before
+    #     that OOM kill (6.5G of swap is what stretched the stall).
+    # Shared by all concurrent runs (chat + scheduled skills).
+    systemd.user.slices.reclaw-agents = {
+      description = "Reclaw agent runs";
+      sliceConfig = {
+        MemoryMax = "8G";
+        MemorySwapMax = "1G";
+      };
+    };
+
     # Reclaw user service — restartable without sudo/polkit
     systemd.user.services.reclaw = {
       description = "Reclaw Telegram AI Agent";
@@ -100,10 +121,10 @@
 
       serviceConfig = {
         Type = "simple";
-        # Cap the reclaw cgroup: memory.peak includes page cache charged when
-        # reclaw-hosted sessions read big files (13.2G peak 2026-09-18 was
-        # mostly reclaimable cache). MemoryHigh throttles before pressure;
-        # MemoryMax=6G is a hard ceiling well under real anon needs (~0.4G).
+        # Cap the bot's own cgroup. Agent runs and everything they spawn live
+        # in reclaw-agents.slice (above), so this now holds the bot, cortex
+        # extraction and small helpers (~0.2-0.4G anon). Limits kept from when
+        # agent sessions shared this cgroup (13.2G cache-heavy peak 2026-09-18).
         MemoryHigh = "4G";
         MemoryMax = "6G";
         WorkingDirectory = "/home/peterstorm/dev/claude-plugins/reclaw";
@@ -133,6 +154,20 @@
         # skills that still declare `backend: pi` (discount-watch,
         # espresso-price-watch).
         AGENT_BACKEND = "claude";
+        # Each agent run gets its own transient scope in reclaw-agents.slice
+        # (defined above). A timed-out run is torn down as a whole cgroup, which
+        # also reaches setsid/nohup descendants that a PID signal never could.
+        # BindsTo: restarting the bot ends in-flight runs (no headless agent
+        # writing a session the next turn resumes). RuntimeMaxSec bounds
+        # background work a finished turn left running (4h).
+        RECLAW_AGENT_CONTAINMENT = "systemd-scope";
+        RECLAW_AGENT_SLICE = "reclaw-agents.slice";
+        RECLAW_AGENT_BINDS_TO = "reclaw.service";
+        RECLAW_AGENT_RUNTIME_MAX_SEC = "14400";
+        # Test-runner worker caps, passed through to agent sessions. Vitest
+        # otherwise forks nproc-1 = 15 workers at ~400M each.
+        VITEST_MAX_FORKS = "4";
+        VITEST_MAX_THREADS = "4";
         # Pin pi's provider/model explicitly. Without these, pi falls back to
         # ~/.pi/agent/settings.json, whose default can drift silently — the pin
         # makes the inference target load-bearing instead of incidental.
