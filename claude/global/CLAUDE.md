@@ -37,6 +37,14 @@ Before the first code edit of a session:
 
 Rules outrank taste. If a rule conflicts with a local convention, follow the rule and flag the conflict in the final summary.
 
+## Worktrees
+
+**Implement in a worktree, never in a repository's main checkout.** Other sessions work in parallel, and some checkouts are live dependencies (the Loom plugin path is a symlink to `~/dev/claude-plugins/loom`, so switching that checkout's branch changes the engine every running orchestration uses).
+
+- Branch work: `git worktree add ../<repo>-<topic> -b <branch> origin/main`, work and commit there, remove the worktree after merge.
+- Never `git checkout`/`switch` a branch, stash, or reset in a main checkout another session or tool may be using.
+- Read-only inspection of the main checkout is fine.
+
 # Memory systems
 
 **DO NOT USE THE IN BUILT MEMORY**
