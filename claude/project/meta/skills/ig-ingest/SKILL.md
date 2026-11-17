@@ -14,7 +14,7 @@ One CLI does the whole job: Apify scrapes the post(s), the signed media URLs are
 - **Alt text** → Instagram's own description of the post, when it has one.
 
 ```bash
-bun ~/dev/claude-plugins/reclaw/scripts/ig-ingest.ts <instagram-url | @handle> [--limit N] [--video] [--force] [--no-screen-text] [--model small|medium|large-v3]
+bun ~/dev/claude-plugins/reclaw/scripts/ig-ingest.ts <instagram-url | @handle> [--limit N] [--video] [--force] [--no-screen-text] [--from-dataset FILE] [--model small|medium|large-v3]
 ```
 
 Notes land at `~/dev/notes/remotevault/media/instagram/<handle>/<shortcode>.md` and are linked from `media/instagram/MOC.md` and the vault `changelog.md` automatically. Do not write these yourself.
@@ -29,6 +29,7 @@ Notes land at `~/dev/notes/remotevault/media/instagram/<handle>/<shortcode>.md` 
 | Danish (or other non-English) speech | add `--model medium` (default `small` is weak outside English). Danish speech also switches OCR to Danish + English. |
 | "just the transcript" / a big profile run where speed matters | add `--no-screen-text` (skips OCR; videos then download audio only) |
 | "redo" / "overwrite" | add `--force` |
+| "only the posts since …" / a profile bigger than 200 posts | scrape once with Apify directly (`onlyPostsNewerThan`, higher `resultsLimit`), save the dataset items JSON, then `ig-ingest.ts @handle --from-dataset FILE` — no second scrape, no token; run within ~2 days (signed URLs expire) |
 
 Stories and private accounts are unsupported — say so instead of trying.
 
@@ -36,7 +37,7 @@ Stories and private accounts are unsupported — say so instead of trying.
 
 **Single reel/post** — run in the foreground (`timeout` ≈ 600s). A 30 s reel takes ~20–30 s end to end; a carousel about a second per image.
 
-**Profile** — can take 20+ minutes (≈ 0.6× realtime on CPU, plus OCR), longer than a chat turn. Start it in the background and poll:
+**Profile** — ≈ 1 min per reel with OCR (Whisper reloads per post), so 250 reels ≈ 4 h. Launch long runs as a user unit so a chat-turn timeout or reclaw restart cannot kill them: `systemd-run --user --unit=ig-ingest-<handle> --collect --working-directory=$HOME/dev/claude-plugins/reclaw --setenv=PATH="$PATH" -p StandardOutput=file:$OUT -p StandardError=file:$LOG $(command -v bun) scripts/ig-ingest.ts …`. Shorter runs — can take 20+ minutes (≈ 0.6× realtime on CPU, plus OCR), longer than a chat turn. Start it in the background and poll:
 
 ```bash
 LOG=/tmp/ig-ingest-<handle>.log; OUT=/tmp/ig-ingest-<handle>.json
