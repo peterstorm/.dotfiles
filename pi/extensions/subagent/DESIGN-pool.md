@@ -3,7 +3,7 @@
 Status: design, not yet implemented.
 Scope: `pi/extensions/subagent` (stage A). One small, optional Loom-side addition for stage B (§4.6).
 Verified against: subagent extension (dotfiles), Loom @ `deb8c369` (main; #219/#220/#221/#222/#223 merged,
-#224/#225 open).
+#224/#225 open PRs; #226/#227 open retro issues reviewed §3.7/§3.8).
 
 ---
 
@@ -124,7 +124,25 @@ TaskGraph** (`handlers/helpers/subagent-quiescence.ts`; probe `anyActiveSubagent
 keeps children running while the session is idle, so mid-wave recovery ops refuse more often. Not fatal
 (fail-closed by design); the pool's duty is to make settling **observable** — not to discard owed work.
 
-### 3.8 Retry semantics are engine-owned
+Roster liveness caveat (issue #227): `.active` roster entries are released as spawn claims at settlement or
+by `shutdownPiSession` at parent shutdown — both normal pool paths release them. But roster liveness judges
+only Claude Code ids (`roster-liveness.ts:36`), so a **hard-killed parent** strands Pi entries forever and
+helpers refuse until hand-cleared. That is #227's class, not a pool defect; the pool minimizes exposure by
+never SIGKILLing a child while the parent itself is alive and settling (cancel/shutdown drain first).
+
+### 3.8 One run, one revision — widened by queues (issue #226)
+
+A batch is admitted against the plugin checkout at revision A; children load the checkout's HEAD **at spawn
+time**. If the checkout moves mid-batch, producer children (emission producers) die at their readiness
+handshake and Loom reports only "absent or unusable" (the launcher's `errorMessage` is dropped in
+`reconcileMissingReservedResults`, `pi/subagent-stop.ts:566-580`); implementation children load revision B
+silently. **A pool widens the admission→spawn window** — queued tasks spawn minutes after admission — so
+Loom's one-run-one-revision invariant must be enforced at each child spawn (#226 tier-1: re-validate the
+admitted revision or pin the child to it). Until that lands: the extension must never drop the launcher's
+`errorMessage` when reporting a failed launch, and operators should expect the queue to amplify mid-batch
+revision skew. This is a Loom-side fix, not a pool change.
+
+### 3.9 Retry semantics are engine-owned
 
 Status derives each Task's owed dispatch from protected settlement history
 (`core/task-implementation-dispatch.ts:36`): `initial-implementation` (attempt 1) or `retry-implementation`
@@ -307,8 +325,11 @@ operator experience changes (drain is now visible).
 
 - `/pool` — table: id, agent, state (queued/running/✓/✗/retrying), attempt, elapsed, task head, Task id when
   extractable; totals (queued / running / cap).
-- `/pool cancel <id|all>` — SIGTERM → SIGKILL (5 s) to the child's **process group**; task settles aborted,
-  no retry. Monitor's hardened patterns: detached spawn + argv-marker pid identity + process-group kill.
+- `/pool cancel <id|all>` — group **SIGTERM first**, wait up to 10 s, then SIGKILL to the child's process
+  group; task settles aborted, no retry. The grace window matters: the child's own shutdown handlers run
+  under SIGTERM, and roster-claim release follows the parent's settlement, so a graceful cancel leaves no
+  stranded state (#227 is only reachable when the *parent* dies hard). Monitor's hardened patterns:
+  detached spawn + argv-marker pid identity + process-group kill.
 - Deliberately **no `drain`/`flush`**: queued pool tasks are owed dispatches; discarding them would drop
   Wave work. Quiescence comes from letting tasks settle — `/pool` and injected messages make it observable.
 
@@ -385,11 +406,15 @@ is roster-active. The pool's answer is observability, not work-discarding: wait 
 - **Merged:** #219 (state-file guard by write targets; also hardens `core/subagent-authority.ts` child bash
   authority), #220 (`amend-spec`; quiescence now includes "spec amendment"), #221 (runtime seams),
   #222 (Wave Gate restart reissues only exhausted slots), #223 (phase gate places agents by identity).
-- **Open:** #224 (advisory decisions recorded on the TaskGraph), #225 (a fresh gate carries unchanged
-  Tasks' accepted reviews).
+- **Open issues:** #213 (Wave 2 rework root causes), #224/#225 (advisory dispositions; gate carries accepted
+  reviews), **#226** (checkout move mid-batch kills children — the pool widens the admission→spawn window;
+  §3.8), **#227** (dead Pi roster entries never reaped — normal pool paths release claims; only hard-killed
+  parents strand; §3.7).
 - **None touches `pi/extensions/subagent`, the launch-port v2 contract, or any cap.** #222/#225 reduce
   dispatch/review volume engine-side — complementary to the pool, which changes the shape of the remaining
-  volume. No rebase or conflict expected.
+  volume. #226's tier-1 revision pin is a Loom-side prerequisite for deep queues, not a stage-A blocker
+  (the extension reports what it has; the launcher `errorMessage` must survive into results). No rebase or
+  conflict expected.
 
 ## 7. Testing plan
 
@@ -440,6 +465,12 @@ After merge: copy, then `/reload` in a session *without* an active pool (§4.9).
   more precise than "dwell is bounded".
 - **PR states refreshed:** #219/#220 merged; #221–#223 merged; #224/#225 open. No conflicts with this
   design.
+- **New retro issues reviewed** (#226 checkout-move mid-batch, #227 dead Pi rosters): neither changes stage A
+  in shape. #226 is a real amplification risk for deep queues (wider admission→spawn window) but its fix is
+  Loom-side one-run-one-revision enforcement (§3.8); the extension's obligation is only to never drop the
+  launcher `errorMessage`. #227 is a Loom-side roster-liveness gap; normal pool paths release roster claims
+  at settlement/shutdown, so the pool does not create stranded entries (§3.7). Both added to the hardening
+  backlog and the conflict scan.
 - **Stage B hardened** (final pass): the earlier "event-sourced settlement" sketch was made as safe as
   today's vehicle in code — ledger ADT (§4.6.1), probe-gated handler ownership (§4.6.2), result-free early
   tool result (§4.6.3), shutdown drain parity (§4.6.4), implementation-only scoping + differential test
@@ -521,10 +552,18 @@ stage B; P3 is Loom-side and optional. Each P0/P1 item names its evidence.
 18. Quiescence refusal copy could point at `/pool` for observability (engine text only).
 19. Admission in-flight exclusion and `removeToolCall` relaxation stay scoped to stage B (§4.6.6).
 20. Reservation re-stamp at launch remains the fallback if dwell ever bites (§6.2).
+21. **One run, one revision (#226 tier-1):** re-validate the admitted revision at each child spawn (or pin
+    the child) so queued pool tasks cannot load a moved checkout; the extension keeps the launcher
+    `errorMessage` intact so Loom's missing-slot diagnostic can interpolate it (#226 tier-2).
+22. **Roster liveness (#227 tier-1):** judge a dead entry by the session's liveness, not the id shape, so a
+    hard-killed Pi parent cannot block adoption/helpers forever. Pool-side, prefer group SIGTERM-first
+    cancel (§4.8) and never SIGKILL while the parent is alive and settling.
 
 ### Test additions implied by this backlog
 
 - Fault injection in the integration harness: hang → abort path; malformed JSON lines → protocol-error path;
   exit-by-signal → signal path; huge stderr → cap; late updates after settle.
+- Launcher diagnostics survive: a readiness-refused child's `errorMessage` reaches `SingleResult.errorMessage`
+  unchanged (the extension's half of #226 tier-2).
 - Randomized scheduler loop (seeded, dependency-free — no fast-check in this repo): random sequences of
   enqueue/settle/abort/cancel, assert I1/I2/I7/I8 and exactly-once terminality at every step.
