@@ -51,6 +51,17 @@ import {
 	type SubagentLaunchSlot,
 } from "./loom-launch-port.js";
 import { runRpcAgent } from "./rpc-launcher.js";
+import { GROUP_KILL_GRACE_MS, killProcessGroup, spawnDetachedOptions } from "./process-group.js";
+import {
+	MAX_POOL_TASKS,
+	createDispatcher,
+	looksLoomGoverned,
+	normalizePoolOption,
+	poolConcurrencyFromEnv,
+	type PoolEntry,
+	type PoolOutcome,
+	type PoolSnapshot,
+} from "./pool.js";
 
 /** How many tasks one parallel call may name. */
 const MAX_PARALLEL_TASKS = 8;
@@ -226,6 +237,8 @@ export interface SubagentDetails {
 	projectAgentsDir: string | null;
 	routingPolicyDigest?: string;
 	results: SingleResult[];
+	/** Present on a background pooled call: the dispatcher snapshot at return. */
+	pool?: PoolSnapshot;
 }
 
 function resultFailed(result: SingleResult): boolean {
@@ -483,6 +496,88 @@ type ParsedEmissionDirective = Readonly<{
 	binding: EmissionDescriptor;
 }>;
 
+/** A pooled task's frozen identity, captured once per tool call. */
+type PoolTaskPayload = Readonly<{
+	agent: string;
+	task: string;
+	cwd: string | undefined;
+	index: number;
+	slot: SubagentLaunchSlot;
+}>;
+
+function placeholderResult(agent: string, task: string): SingleResult {
+	return {
+		agent,
+		agentSource: "unknown",
+		task,
+		exitCode: -1, // -1 = still running
+		messages: [],
+		stderr: "",
+		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+	};
+}
+
+function abortedPoolResult(payload: PoolTaskPayload): SingleResult {
+	const result = placeholderResult(payload.agent, payload.task);
+	result.exitCode = 1;
+	result.stopReason = "aborted";
+	result.errorMessage = "Pooled subagent was cancelled before it started";
+	result.stderr = result.errorMessage;
+	return result;
+}
+
+function singleToolResult(
+	result: SingleResult,
+	details: SubagentDetails,
+): AgentToolResult<SubagentDetails> {
+	if (resultFailed(result)) {
+		const errorMessage = result.errorMessage || result.stderr || getFinalOutput(result.messages) || "(no output)";
+		return {
+			content: [{ type: "text", text: `Agent ${result.stopReason || "failed"}: ${errorMessage}` }],
+			details,
+			isError: true,
+		};
+	}
+	return { content: [{ type: "text", text: getFinalOutput(result.messages) || "(no output)" }], details };
+}
+
+function parallelToolResult(
+	results: SingleResult[],
+	details: SubagentDetails,
+): AgentToolResult<SubagentDetails> {
+	const failed = results.filter(resultFailed);
+	const aborted = results.filter((result) => result.stopReason === "aborted").length;
+	const successCount = results.length - failed.length;
+	const sections = results.map((result) => {
+		const output = getFinalOutput(result.messages);
+		const status = resultFailed(result) ? "failed" : "completed";
+		return `## [${result.agent}] ${status}\n\n${output || "(no output)"}`;
+	});
+	const summaryLine = aborted > 0
+		? `Aborted: ${results.length - aborted}/${results.length} completed before abort`
+		: `Parallel: ${successCount}/${results.length} succeeded`;
+	return {
+		content: [{ type: "text", text: `${summaryLine}\n\n${sections.join("\n\n---\n\n")}` }],
+		details,
+		isError: failed.length > 0,
+	};
+}
+
+const POOL_NOTICE_MAX_OUTPUT = 4_000;
+
+function describePoolSettle(
+	entry: PoolEntry<PoolTaskPayload, SingleResult>,
+	outcome: PoolOutcome<SingleResult>,
+): string {
+	const label = `[${entry.payload.agent}] task ${entry.payload.index + 1}`;
+	if (outcome.kind === "aborted") return `${label}: aborted`;
+	const result = outcome.result;
+	const output = getFinalOutput(result.messages).slice(0, POOL_NOTICE_MAX_OUTPUT);
+	if (outcome.kind === "completed") return `${label}: completed\n${output || "(no output)"}`;
+	const reason = (result.errorMessage || result.stderr || output || "(no output)").slice(0, POOL_NOTICE_MAX_OUTPUT);
+	return `${label}: failed (attempt ${entry.attempts}/${entry.maxAttempts})\n${reason}`;
+}
+
 function parseBindingEnv(raw: string): ParseResult<EmissionDescriptor> {
 	let value: unknown;
 	try {
@@ -560,7 +655,7 @@ function descriptorMismatch(descriptor: EmissionDescriptor, binding: EmissionDes
 	return undefined;
 }
 
-export async function runSingleAgent(
+async function runSingleAgentUnsafe(
 	defaultCwd: string,
 	agents: readonly AgentConfig[],
 	agentName: string,
@@ -784,6 +879,7 @@ export async function runSingleAgent(
 				env: childEnv,
 				shell: false,
 				stdio: ["ignore", "pipe", "pipe"],
+				...spawnDetachedOptions(),
 			});
 			let buffer = "";
 			let settled = false;
@@ -842,10 +938,11 @@ export async function runSingleAgent(
 				const killProc = () => {
 					if (settled) return;
 					wasAborted = true;
-					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!settled) proc.kill("SIGKILL");
-					}, 5000);
+					killProcessGroup(proc, "SIGTERM");
+					const force = setTimeout(() => {
+						if (!settled) killProcessGroup(proc, "SIGKILL");
+					}, GROUP_KILL_GRACE_MS);
+					force.unref?.();
 				};
 				if (signal.aborted) killProc();
 				else signal.addEventListener("abort", killProc, { once: true });
@@ -879,6 +976,54 @@ export async function runSingleAgent(
 	}
 }
 
+/**
+ * Total launch boundary: every mode (and the pool) assumes this resolves to a SingleResult, never rejects.
+ * An unexpected throw becomes a failed result with the same shape, so one crashed task can never strand a
+ * pooled call's waiter or reject a whole parallel batch.
+ */
+export async function runSingleAgent(
+	defaultCwd: string,
+	agents: readonly AgentConfig[],
+	agentName: string,
+	task: string,
+	cwd: string | undefined,
+	step: number | undefined,
+	signal: AbortSignal | undefined,
+	onUpdate: OnUpdateCallback | undefined,
+	makeDetails: (results: SingleResult[]) => SubagentDetails,
+	routingSnapshot: SubagentRoutingSnapshot,
+	launch: LaunchContext,
+): Promise<SingleResult> {
+	try {
+		return await runSingleAgentUnsafe(
+			defaultCwd,
+			agents,
+			agentName,
+			task,
+			cwd,
+			step,
+			signal,
+			onUpdate,
+			makeDetails,
+			routingSnapshot,
+			launch,
+		);
+	} catch (cause) {
+		const message = `Subagent launch failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+		return {
+			agent: agentName,
+			agentSource: agents.find((candidate) => candidate.name === agentName)?.source ?? "unknown",
+			task,
+			exitCode: 1,
+			messages: [],
+			stderr: message,
+			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+			errorMessage: message,
+			step,
+		};
+	}
+}
+
 const TaskItem = Type.Object({
 	agent: Type.String({ description: "Name of the agent to invoke" }),
 	task: Type.String({ description: "Task to delegate to the agent" }),
@@ -906,10 +1051,115 @@ const SubagentParams = Type.Object({
 		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
 	),
 	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
+	pool: Type.Optional(
+		Type.Union([
+			Type.Boolean({
+				description:
+					"Run this call through the process-wide pool: slots are shared with other pooled calls and a freed slot starts the next queued task immediately, instead of waiting for this call's whole batch to settle.",
+			}),
+			Type.Object({
+				background: Type.Optional(
+					Type.Boolean({
+						description:
+							"Return immediately and report completions as messages. Non-Loom tasks only; a Loom-governed batch is refused because Loom settles it from this tool result.",
+					}),
+				),
+				maxAttempts: Type.Optional(
+					Type.Integer({
+						minimum: 1,
+						maximum: 3,
+						description:
+							"Process-level attempts per task (non-zero exit, crash). Semantic failures are never retried, and Loom emission tasks are single-use. Default 1.",
+					}),
+				),
+			}),
+		]),
+	),
 });
 
 export default function (pi: ExtensionAPI) {
 	advertiseSubagentLaunchPort(pi.events);
+
+	// One dispatcher per extension instance: every pooled call shares the same slots, so a task that
+	// settles in one call immediately starts the next queued task from any call (retries included).
+	const backgroundPoolCalls = new Set<string>();
+	const pendingPoolNotices = new Map<string, string[]>();
+	let poolNoticeTimer: NodeJS.Timeout | undefined;
+
+	const flushPoolNotices = (callId: string, drained: boolean): void => {
+		const lines = pendingPoolNotices.get(callId) ?? [];
+		pendingPoolNotices.delete(callId);
+		if (drained) backgroundPoolCalls.delete(callId);
+		if (lines.length === 0 && !drained) return;
+		const header = drained ? "Subagent pool drained" : "Subagent pool progress";
+		const body = lines.length > 0 ? `\n\n${lines.join("\n\n")}` : "";
+		pi.sendMessage(
+			{ customType: "subagent-pool", content: `${header}${body}`, display: true },
+			{ deliverAs: "steer", triggerTurn: true },
+		);
+	};
+
+	const schedulePoolNoticeFlush = (): void => {
+		if (poolNoticeTimer !== undefined) return;
+		poolNoticeTimer = setTimeout(() => {
+			poolNoticeTimer = undefined;
+			for (const callId of [...pendingPoolNotices.keys()]) flushPoolNotices(callId, false);
+		}, 1_500);
+		poolNoticeTimer.unref?.();
+	};
+
+	const pool = createDispatcher<PoolTaskPayload, SingleResult>({
+		cap: poolConcurrencyFromEnv(),
+		onSettle: (entry) => {
+			if (!backgroundPoolCalls.has(entry.callId) || entry.outcome === null) return;
+			const lines = pendingPoolNotices.get(entry.callId) ?? [];
+			lines.push(describePoolSettle(entry, entry.outcome));
+			pendingPoolNotices.set(entry.callId, lines);
+			schedulePoolNoticeFlush();
+		},
+		onCallDrained: (callId) => {
+			if (!backgroundPoolCalls.has(callId)) return;
+			const lines = pendingPoolNotices.get(callId) ?? [];
+			lines.push("(all tasks drained)");
+			pendingPoolNotices.set(callId, lines);
+			flushPoolNotices(callId, true);
+		},
+	});
+
+	pi.registerCommand("pool", {
+		description: "Show subagent pool status, or cancel one with '/pool cancel <taskId|all>'",
+		handler: async (args, ctx) => {
+			const parts = args.trim().split(/\s+/).filter((part) => part.length > 0);
+			if (parts[0] === "cancel") {
+				const target = parts.slice(1).join(" ");
+				if (target === "" || target === "all") {
+					pool.cancelAll();
+					if (ctx.hasUI) ctx.ui.notify("Cancelled all pooled subagent work", "info");
+					return;
+				}
+				const cancelled = pool.cancel(target);
+				if (ctx.hasUI) {
+					ctx.ui.notify(
+						cancelled.ok ? `Cancelled pooled task ${target}` : `No pooled task '${target}'`,
+						cancelled.ok ? "info" : "warning",
+					);
+				}
+				return;
+			}
+			const snapshot = pool.snapshot();
+			const lines = [
+				`Pool: ${snapshot.running}/${snapshot.cap} running, ${snapshot.queued} queued, ${snapshot.settled} settled`,
+				...pool.entries().map((entry) =>
+					`${entry.id} [${entry.payload.agent}] ${entry.phase} (attempt ${entry.attempts}/${entry.maxAttempts})`,
+				),
+			];
+			if (ctx.hasUI) ctx.ui.notify(lines.join("\n"), "info");
+		},
+	});
+
+	pi.on("session_shutdown", () => {
+		pool.cancelAll();
+	});
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",
@@ -997,6 +1247,159 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
+			const poolOption = normalizePoolOption(params.pool);
+			if (!poolOption.ok) {
+				return {
+					content: [{ type: "text", text: `Invalid pool option: ${poolOption.error.reason}` }],
+					details: makeDetails(hasChain ? "chain" : hasTasks ? "parallel" : "single")([]),
+					isError: true,
+				};
+			}
+
+			if (poolOption.value !== null) {
+				if (hasChain) {
+					return {
+						content: [{ type: "text", text: "pool applies to single and parallel calls; a chain is already sequential." }],
+						details: makeDetails("chain")([]),
+						isError: true,
+					};
+				}
+				const poolMode: "single" | "parallel" = hasTasks ? "parallel" : "single";
+				const requestedTasks: ReadonlyArray<{ agent: string; task: string; cwd: string | undefined }> = params.tasks
+					?? (params.agent !== undefined && params.task !== undefined
+						? [{ agent: params.agent, task: params.task, cwd: params.cwd }]
+						: []);
+				if (requestedTasks.length > MAX_POOL_TASKS) {
+					return {
+						content: [{ type: "text", text: `Too many pooled tasks (${requestedTasks.length}). Max is ${MAX_POOL_TASKS}.` }],
+						details: makeDetails(poolMode)([]),
+						isError: true,
+					};
+				}
+				const background = poolOption.value.background;
+				if (background && looksLoomGoverned(requestedTasks.map((requested) => requested.task))) {
+					return {
+						content: [{
+							type: "text",
+							text:
+								"pool.background is not available for Loom-governed tasks: Loom settles a dispatch from this tool result, so a background snapshot would settle it before its child runs. Use a blocking pooled call for Loom work.",
+						}],
+						details: makeDetails(poolMode)([]),
+						isError: true,
+					};
+				}
+
+				const poolTasks: PoolTaskPayload[] = requestedTasks.map((requested, index) =>
+					Object.freeze({
+						agent: requested.agent,
+						task: requested.task,
+						cwd: requested.cwd,
+						index,
+						slot: poolMode === "parallel"
+							? Object.freeze({ kind: "parallel" as const, index })
+							: Object.freeze({ kind: "single" as const, index: 0 }),
+					}),
+				);
+
+				const allResults: SingleResult[] = poolTasks.map((task) => placeholderResult(task.agent, task.task));
+				const emitPoolUpdate = () => {
+					if (onUpdate === undefined || background) return;
+					const done = allResults.filter((result) => result.exitCode !== -1).length;
+					onUpdate({
+						content: [{ type: "text", text: `Pool: ${done}/${allResults.length} done, ${allResults.length - done} running...` }],
+						details: makeDetails(poolMode)([...allResults]),
+					});
+				};
+
+				const launchPooledTask = async (
+					entry: PoolEntry<PoolTaskPayload, SingleResult>,
+					entrySignal: AbortSignal,
+				): Promise<PoolOutcome<SingleResult>> => {
+					const payload = entry.payload;
+					const result = await runSingleAgent(
+						ctx.cwd,
+						agents,
+						payload.agent,
+						payload.task,
+						payload.cwd,
+						undefined,
+						entrySignal,
+						background
+							? undefined
+							: (partial) => {
+								const streamed = partial.details?.results[0];
+								if (streamed !== undefined) {
+									allResults[payload.index] = streamed;
+									emitPoolUpdate();
+								}
+							},
+						makeDetails(poolMode),
+						routingSnapshot,
+						{ events: pi.events, sessionId, toolCallId, slot: payload.slot },
+					);
+					if (entrySignal.aborted && result.stopReason === "aborted") return { kind: "aborted" };
+					if (!resultFailed(result)) return { kind: "completed", result };
+					// Process-level only: a non-zero exit. Semantic failures (exit 0) are the engine's retry to own.
+					const retryable = entry.retryable && result.exitCode !== 0 && result.stopReason !== "aborted";
+					if (retryable && entry.attempts < entry.maxAttempts) {
+						appendDiagnostic(
+							result,
+							`Pool attempt ${entry.attempts}/${entry.maxAttempts} failed; retrying on the next free slot`,
+						);
+					}
+					return { kind: "failed", result, retryable };
+				};
+
+				if (background) backgroundPoolCalls.add(toolCallId);
+				const dispatched = await pool.enqueue({
+					callId: toolCallId,
+					items: poolTasks.map((task, index) => {
+						const descriptor = parseEmissionDescriptor(task.task);
+						return {
+							id: `${toolCallId}#${index}`,
+							payload: task,
+							// Emission tasks are single-use: their staged expectation dies with the attempt.
+								retryable: descriptor.ok && descriptor.value === null,
+						};
+					}),
+					maxAttempts: poolOption.value.maxAttempts,
+					launch: launchPooledTask,
+					background,
+					...(background || signal === undefined ? {} : { signal }),
+				});
+
+				if (background) {
+					const snapshot = pool.snapshot();
+					return {
+						content: [{
+							type: "text",
+							text:
+								`Pool: ${dispatched.entries.length} task(s) accepted, ${snapshot.running}/${snapshot.cap} running, ${snapshot.queued} queued. ` +
+								"Completions arrive as messages; /pool shows status, /pool cancel <taskId|all> cancels.",
+						}],
+						details: { ...makeDetails(poolMode)([]), pool: snapshot },
+					};
+				}
+
+				const results = dispatched.entries.map((entry) => {
+					const outcome = entry.outcome;
+					if (outcome === null) return placeholderResult(entry.payload.agent, entry.payload.task);
+					if (outcome.kind === "aborted") return abortedPoolResult(entry.payload);
+					return outcome.result;
+				});
+				if (poolMode === "single") {
+					const [result] = results;
+					if (result === undefined) {
+						return singleToolResult(
+							placeholderResult(params.agent ?? "unknown", params.task ?? ""),
+							makeDetails("single")([]),
+						);
+					}
+					return singleToolResult(result, makeDetails("single")(results));
+				}
+				return parallelToolResult(results, makeDetails("parallel")(results));
+			}
+
 			if (params.chain && params.chain.length > 0) {
 				const results: SingleResult[] = [];
 				let previousOutput = "";
@@ -1068,22 +1471,13 @@ export default function (pi: ExtensionAPI) {
 							},
 						],
 						details: makeDetails("parallel")([]),
+						isError: true,
 					};
 
-				// Track all results for streaming updates
-				const allResults: SingleResult[] = new Array(params.tasks.length);
-
-				// Initialize placeholder results
+				// Track all results for streaming updates (-1 = still running).
+				const allResults: SingleResult[] = [];
 				for (let i = 0; i < params.tasks.length; i++) {
-					allResults[i] = {
-						agent: params.tasks[i].agent,
-						agentSource: "unknown",
-						task: params.tasks[i].task,
-						exitCode: -1, // -1 = still running
-						messages: [],
-						stderr: "",
-						usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-					};
+					allResults.push(placeholderResult(params.tasks[i].agent, params.tasks[i].task));
 				}
 
 				const emitParallelUpdate = () => {
@@ -1129,27 +1523,7 @@ export default function (pi: ExtensionAPI) {
 					return result;
 				});
 
-				const failed = results.filter(resultFailed);
-				const aborted = results.filter((r) => r.stopReason === "aborted").length;
-				const successCount = results.length - failed.length;
-				const sections = results.map((r) => {
-					const output = getFinalOutput(r.messages);
-					const status = resultFailed(r) ? "failed" : "completed";
-					return `## [${r.agent}] ${status}\n\n${output || "(no output)"}`;
-				});
-				const summaryLine = aborted > 0
-					? `Aborted: ${results.length - aborted}/${results.length} completed before abort`
-					: `Parallel: ${successCount}/${results.length} succeeded`;
-				return {
-					content: [
-						{
-							type: "text",
-							text: `${summaryLine}\n\n${sections.join("\n\n---\n\n")}`,
-						},
-					],
-					details: makeDetails("parallel")(results),
-					isError: failed.length > 0,
-				};
+				return parallelToolResult(results, makeDetails("parallel")(results));
 			}
 
 			if (params.agent && params.task) {
@@ -1171,20 +1545,7 @@ export default function (pi: ExtensionAPI) {
 						slot: { kind: "single", index: 0 },
 					},
 				);
-				const isError = resultFailed(result);
-				if (isError) {
-					const errorMsg =
-						result.errorMessage || result.stderr || getFinalOutput(result.messages) || "(no output)";
-					return {
-						content: [{ type: "text", text: `Agent ${result.stopReason || "failed"}: ${errorMsg}` }],
-						details: makeDetails("single")([result]),
-						isError: true,
-					};
-				}
-				return {
-					content: [{ type: "text", text: getFinalOutput(result.messages) || "(no output)" }],
-					details: makeDetails("single")([result]),
-				};
+				return singleToolResult(result, makeDetails("single")([result]));
 			}
 
 			const available = agents.map((a) => `${a.name} (${a.source})`).join(", ") || "none";

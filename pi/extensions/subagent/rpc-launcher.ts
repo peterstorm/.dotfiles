@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Message } from "@earendil-works/pi-ai";
+import { killProcessGroup, spawnDetachedOptions } from "./process-group.js";
 import {
 	LOOM_EMISSION_READINESS_COMMAND,
 	type EmissionRpcDirective,
@@ -224,8 +225,8 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 	const readinessTimeoutMs = input.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS;
 	const pending = new Map<string, PendingRequest>();
 
-	let resolveSettled!: () => void;
-	let rejectSettled!: (error: Error) => void;
+	let resolveSettled: (() => void) | undefined;
+	let rejectSettled: ((error: Error) => void) | undefined;
 	const agentSettled = new Promise<void>((resolve, reject) => {
 		resolveSettled = resolve;
 		rejectSettled = reject;
@@ -234,7 +235,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 	// Observe that early rejection immediately while preserving it for later awaits.
 	void agentSettled.catch(() => {});
 
-	let resolveExit!: (exit: Readonly<{ code: number | null; signal: NodeJS.Signals | null }>) => void;
+	let resolveExit: ((exit: Readonly<{ code: number | null; signal: NodeJS.Signals | null }>) => void) | undefined;
 	const exited = new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null }>>((resolve) => {
 		resolveExit = resolve;
 	});
@@ -246,6 +247,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 			env: input.env,
 			shell: false,
 			stdio: ["pipe", "pipe", "pipe"],
+			...spawnDetachedOptions(),
 		});
 	} catch (error) {
 		return failure("spawn", failurePhase(), `Failed to spawn subagent process: ${errorMessage(error)}`, stderr);
@@ -279,7 +281,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		for (const request of pending.values()) request.reject(error);
 		pending.clear();
 		cancelReadinessEntryWait(error);
-		rejectSettled(error);
+		rejectSettled?.(error);
 	};
 
 	const handleRecord = (line: Buffer): void => {
@@ -346,7 +348,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		if ((event.type === "message_end" || event.type === "tool_result_end") && isRecord(event.message)) {
 			input.onMessage(event.message as Message);
 		}
-		if (event.type === "agent_settled") resolveSettled();
+		if (event.type === "agent_settled") resolveSettled?.();
 	};
 
 	proc.stdout.on("data", (chunk: Buffer | string) => {
@@ -382,7 +384,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		if (stdoutBuffer.length > 0 && !fatalError) {
 			failTransport(new Error("RPC output ended with an unterminated JSON record"), stdoutBuffer.toString("utf8"));
 		}
-		resolveExit({ code, signal: childSignal });
+		resolveExit?.({ code, signal: childSignal });
 		if (!intentionalShutdown && !fatalError) {
 			failTransport(new Error(
 				childSignal
@@ -462,9 +464,9 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 			await exited;
 			return;
 		}
-		proc.kill("SIGTERM");
+		killProcessGroup(proc, "SIGTERM");
 		const force = setTimeout(() => {
-			if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+			if (proc.exitCode === null && proc.signalCode === null) killProcessGroup(proc, "SIGKILL");
 		}, KILL_GRACE_MS);
 		force.unref?.();
 		await exited;
