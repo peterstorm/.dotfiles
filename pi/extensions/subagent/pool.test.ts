@@ -16,6 +16,7 @@ import {
 	abortQueued,
 	callEntries,
 	cancelQueued,
+	classifyPoolAttempt,
 	createDispatcher,
 	drainedCall,
 	emptyPool,
@@ -240,6 +241,14 @@ describe("pure ledger", () => {
 });
 
 describe("options", () => {
+	test("a cap below 1 or non-finite is refused at construction, not wedged silently", () => {
+		for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+			expect(() => emptyPool<string, string>(bad)).toThrow(TypeError);
+			expect(() => createDispatcher<string, string>({ cap: bad })).toThrow(TypeError);
+		}
+		expect(() => emptyPool<string, string>(1)).not.toThrow();
+	});
+
 	test("normalizePoolOption parses the tool parameter", () => {
 		expect(normalizePoolOption(undefined)).toEqual({ ok: true, value: null });
 		expect(normalizePoolOption(false)).toEqual({ ok: true, value: null });
@@ -273,6 +282,52 @@ describe("options", () => {
 		expect(poolConcurrencyFromEnv("-2")).toBe(8);
 		expect(poolConcurrencyFromEnv("abc")).toBe(8);
 		expect(poolConcurrencyFromEnv("999")).toBe(MAX_POOL_TASKS);
+	});
+
+	test("classifyPoolAttempt is the one home of the retry policy", () => {
+		const entry = { retryable: true, attempts: 1, maxAttempts: 2 };
+		const isFailure = (result: { exitCode: number; stopReason?: string }): boolean =>
+			result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
+
+		// Semantic completion.
+		expect(classifyPoolAttempt(entry, { exitCode: 0 }, false, isFailure)).toEqual({
+			kind: "completed",
+			result: { exitCode: 0 },
+		});
+		// Process-level failure within budget: retryable.
+		expect(classifyPoolAttempt(entry, { exitCode: 7 }, false, isFailure)).toEqual({
+			kind: "failed",
+			result: { exitCode: 7 },
+			retryable: true,
+		});
+		// Budget exhausted: settles failed, never retries.
+		expect(classifyPoolAttempt({ ...entry, attempts: 2 }, { exitCode: 7 }, false, isFailure)).toEqual({
+			kind: "failed",
+			result: { exitCode: 7 },
+			retryable: false,
+		});
+		// Entry-level gate: a single-use (descriptor-bearing) task never retries.
+		expect(classifyPoolAttempt({ ...entry, retryable: false }, { exitCode: 7 }, false, isFailure)).toEqual({
+			kind: "failed",
+			result: { exitCode: 7 },
+			retryable: false,
+		});
+		// A cancel that lands mid-failure never respawns the task on a fresh controller.
+		expect(classifyPoolAttempt(entry, { exitCode: 7 }, true, isFailure)).toEqual({
+			kind: "failed",
+			result: { exitCode: 7 },
+			retryable: false,
+		});
+		// The abort collapse: observed abort under an aborted signal is cancel semantics.
+		expect(classifyPoolAttempt(entry, { exitCode: 1, stopReason: "aborted" }, true, isFailure)).toEqual({
+			kind: "aborted",
+		});
+		// An aborted stop reason without an aborted signal is a failed attempt, not a cancel.
+		expect(classifyPoolAttempt(entry, { exitCode: 1, stopReason: "aborted" }, false, isFailure)).toEqual({
+			kind: "failed",
+			result: { exitCode: 1, stopReason: "aborted" },
+			retryable: false,
+		});
 	});
 });
 
@@ -495,5 +550,75 @@ describe("dispatcher", () => {
 		await flush();
 		expect(h.dispatcher.snapshot()).toEqual({ cap: 1, queued: 0, running: 0, settled: 0 });
 		expect(h.drained).toEqual(["shutdown"]);
+	});
+
+	test("an already-aborted signal settles every entry with no launcher call", async () => {
+		const h = harness(2);
+		const controller = new AbortController();
+		controller.abort();
+		const call = h.dispatcher.enqueue({
+			callId: "pre-aborted",
+			items: [
+				{ id: "p0", payload: "p", retryable: true },
+				{ id: "p1", payload: "p", retryable: true },
+			],
+			maxAttempts: 2,
+			launch: h.launch,
+			signal: controller.signal,
+			background: false,
+		});
+		const result = await call;
+		expect(h.started).toEqual([]);
+		expect(result.entries.map((entry) => entry.outcome)).toEqual([{ kind: "aborted" }, { kind: "aborted" }]);
+		expect(h.drained).toEqual(["pre-aborted"]);
+		expect(h.dispatcher.snapshot()).toEqual({ cap: 2, queued: 0, running: 0, settled: 0 });
+	});
+
+	test("a rejecting launcher settles the entry aborted with the cause carried", async () => {
+		const h = harness(1);
+		const call = h.dispatcher.enqueue({
+			callId: "crash",
+			items: [{ id: "x0", payload: "p", retryable: true }],
+			maxAttempts: 2,
+			launch: () => Promise.reject(new Error("routing snapshot exploded")),
+			background: false,
+		});
+		const result = await call;
+		expect(result.entries).toHaveLength(1);
+		expect(result.entries[0].outcome).toEqual({
+			kind: "aborted",
+			reason: "routing snapshot exploded",
+		});
+		expect(h.dispatcher.snapshot()).toEqual({ cap: 1, queued: 0, running: 0, settled: 0 });
+		expect(h.drained).toEqual(["crash"]);
+	});
+
+	test("a throwing dep callback cannot strand the call's waiter or release", async () => {
+		const drained: string[] = [];
+		const dispatcher = createDispatcher<string, string>({
+			cap: 1,
+			onCallDrained: (callId) => {
+				drained.push(callId);
+				throw new Error("notice flush exploded");
+			},
+		});
+		const pending = new Map<string, (outcome: PoolOutcome<string>) => void>();
+		const call = dispatcher.enqueue({
+			callId: "notify",
+			items: [{ id: "n0", payload: "p", retryable: false }],
+			maxAttempts: 1,
+			launch: (entry) =>
+				new Promise<PoolOutcome<string>>((resolve) => {
+					pending.set(entry.id, resolve);
+				}),
+			background: false,
+		});
+		await flush();
+		pending.get("n0")?.({ kind: "completed", result: "done" });
+		// The dep callback throws synchronously inside finalize; the blocking waiter must still resolve.
+		const result = await call;
+		expect(result.entries[0].outcome).toEqual({ kind: "completed", result: "done" });
+		expect(drained).toEqual(["notify"]);
+		expect(dispatcher.snapshot()).toEqual({ cap: 1, queued: 0, running: 0, settled: 0 });
 	});
 });

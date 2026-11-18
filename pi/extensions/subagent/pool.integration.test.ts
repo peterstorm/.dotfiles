@@ -7,6 +7,7 @@
  * `bun test pi/extensions/subagent/pool.integration.test.ts` from the installed extension directory.
  */
 import { afterEach, describe, expect, it } from "bun:test";
+import * as fs from "node:fs";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,26 +138,37 @@ type ToolExecute = (
 type Host = Readonly<{
 	execute: ToolExecute;
 	messages: string[];
+	/** Every sendMessage with its delivery options, most recent last. */
+	sent: readonly Readonly<{ content: string; options: Record<string, unknown> | undefined }>[];
+	/** Event handlers captured from pi.on, by event name. */
+	eventHandlers: ReadonlyMap<string, (payload?: unknown) => unknown>;
 }>;
 
 function host(): Host {
 	let execute: ToolExecute | undefined;
 	const messages: string[] = [];
+	const sent: Array<{ content: string; options: Record<string, unknown> | undefined }> = [];
+	const eventHandlers = new Map<string, (payload?: unknown) => unknown>();
 	const pi = {
 		events: { emit: () => {}, on: () => () => {} },
 		registerTool: (tool: { execute: unknown }) => {
 			execute = tool.execute as unknown as ToolExecute;
 		},
 		registerCommand: () => {},
-		sendMessage: (message: { content?: unknown }) => {
-			if (typeof message.content === "string") messages.push(message.content);
+		sendMessage: (message: { content?: unknown }, options?: unknown) => {
+			if (typeof message.content === "string") {
+				messages.push(message.content);
+				sent.push({ content: message.content, options: options as Record<string, unknown> | undefined });
+			}
 		},
-		on: () => {},
+		on: (event: string, handler: (payload?: unknown) => unknown) => {
+			eventHandlers.set(event, handler);
+		},
 		appendEntry: () => {},
 	} as unknown as ExtensionAPI;
 	subagentExtension(pi);
 	if (execute === undefined) throw new Error("subagent tool was not registered");
-	return { execute, messages };
+	return { execute, messages, sent, eventHandlers };
 }
 
 function context(projectDir: string): Record<string, unknown> {
@@ -172,13 +184,24 @@ function context(projectDir: string): Record<string, unknown> {
 
 type ChildRecord = Readonly<{ kind: string; pid?: number; at?: number }>;
 
+// Wire data is parsed, never cast: a log line without a `kind` must fail loudly here instead of
+// reading as an unintended ChildRecord in whichever assertion consumes it.
+const isChildRecord = (value: unknown): value is ChildRecord =>
+	typeof value === "object" && value !== null && typeof (value as Record<string, unknown>).kind === "string";
+
 function readLog(logPath: string): ChildRecord[] {
 	if (!existsSync(logPath)) return [];
 	return readFileSync(logPath, "utf8")
 		.trim()
 		.split("\n")
 		.filter((line) => line.length > 0)
-		.map((line): ChildRecord => JSON.parse(line) as ChildRecord);
+		.map((line, index): ChildRecord => {
+			const parsed: unknown = JSON.parse(line);
+			if (!isChildRecord(parsed)) {
+				throw new Error(`child log line ${index} is not a ChildRecord: ${line.slice(0, 120)}`);
+			}
+			return parsed;
+		});
 }
 
 function maxConcurrent(records: readonly ChildRecord[]): number {
@@ -297,7 +320,7 @@ describe("subagent pool", () => {
 
 	it("returns immediately in background mode and reports completion as a message", async () => {
 		await withFixture({}, async (fixture) => {
-			const { execute, messages } = host();
+			const { execute, messages, sent } = host();
 			const startedAt = Date.now();
 			const result = await execute(
 				"call-background",
@@ -309,13 +332,17 @@ describe("subagent pool", () => {
 			const elapsed = Date.now() - startedAt;
 			expect(elapsed).toBeLessThan(2_000);
 			expect(result.isError).toBeFalsy();
-			expect(result.details?.pool).toMatchObject({ cap: 8 });
+			expect(result.details?.pool).toEqual({ cap: 8, queued: 0, running: 2, settled: 0 });
 			expect(result.details?.results).toEqual([]);
 
 			await waitFor(() => messages.some((message) => message.includes("Subagent pool drained")));
 			const drained = messages.join("\n\n");
 			expect(drained).toContain("bg0 sleep=40");
 			expect(drained).toContain("bg1 sleep=40");
+			// The delivery options are part of the design contract (steer + triggerTurn): a completion
+			// delivered any other way would not reach the parent turn.
+			const completion = sent.at(-1);
+			expect(completion?.options).toEqual({ deliverAs: "steer", triggerTurn: true });
 		});
 	});
 
@@ -337,6 +364,113 @@ describe("subagent pool", () => {
 			expect(failures).toHaveLength(1);
 		});
 	});
+
+	it("returns blocking results in input order even when a task retries (I13)", async () => {
+		await withFixture({}, async (fixture) => {
+			const { execute } = host();
+			const result = await execute(
+				"call-order-retry",
+				taskParams(["flaky sleep=5", "second sleep=5"], { maxAttempts: 2 }),
+				undefined,
+				undefined,
+				context(fixture.projectDir),
+			);
+			expect(result.isError).toBeFalsy();
+			// The retried task requeues at the ledger tail; results[i] is still task i.
+			expect(result.details?.results.map((task) => task.task)).toEqual(["flaky sleep=5", "second sleep=5"]);
+			expect(result.details?.results.map((task) => task.exitCode)).toEqual([0, 0]);
+		});
+	}, 20_000);
+
+	it("never retries a Loom emission task: the descriptor makes it single-use (I5)", async () => {
+		await withFixture({}, async (fixture) => {
+			const { execute } = host();
+			const result = await execute(
+				"call-descriptor",
+				taskParams(
+					["LOOM_EMISSION_DESCRIPTOR: tool0 kind0 v0 request0 digest0 schema0\nflaky sleep=5"],
+					{ maxAttempts: 2 },
+				),
+				undefined,
+				undefined,
+				context(fixture.projectDir),
+			);
+			// Without a launch-port responder the descriptor task refuses before spawn; the single-use
+			// property is that the failed attempt is terminal — no retry diagnostic, no second launch.
+			const [task] = result.details?.results ?? [];
+			expect(task?.exitCode).toBe(1);
+			expect(task?.errorMessage).toMatch(/not admitted for emission RPC/u);
+			expect(task?.stderr).not.toContain("retrying on the next free slot");
+			expect(readLog(fixture.logPath)).toEqual([]);
+		});
+	});
+
+	it("kills the pooled child tree on session_shutdown, including a SIGTERM-ignoring grandchild", async () => {
+		await withFixture({}, async (fixture) => {
+			const { execute, eventHandlers } = host();
+			const controller = new AbortController();
+			const pending = execute(
+				"call-shutdown",
+				taskParams(["hang"], true),
+				controller.signal,
+				undefined,
+				context(fixture.projectDir),
+			);
+
+			await waitFor(() => readLog(fixture.logPath).some((record) => record.kind === "grandchild"));
+			const grandchild = readLog(fixture.logPath).find((record) => record.kind === "grandchild");
+			const child = readLog(fixture.logPath).find((record) => record.kind === "spawn");
+			const grandchildPid = grandchild?.pid;
+			const childPid = child?.pid;
+			if (typeof grandchildPid !== "number" || typeof childPid !== "number") {
+				throw new Error("fixture did not record the child and grandchild pids");
+			}
+
+			const shutdown = eventHandlers.get("session_shutdown");
+			if (typeof shutdown !== "function") throw new Error("session_shutdown handler was not registered");
+			await (shutdown as () => Promise<void>)();
+
+			// The handler must not return before the SIGKILL escalation could fire: a child that obeys
+			// SIGTERM settles immediately while its ignoring descendant needs the group SIGKILL.
+			await waitFor(() => !isAlive(childPid) && !isAlive(grandchildPid));
+			expect(isAlive(childPid)).toBe(false);
+			expect(isAlive(grandchildPid)).toBe(false);
+
+			const result = await pending;
+			const [task] = result.details?.results ?? [];
+			expect(result.isError).toBe(true);
+			expect(task?.stopReason).toBe("aborted");
+		});
+	}, 30_000);
+
+	it("a pre-spawn throw resolves to a failed result instead of rejecting the call", async () => {
+		await withFixture({}, async (fixture) => {
+			const { execute } = host();
+			const originalMkdtemp = fs.promises.mkdtemp;
+			fs.promises.mkdtemp = (async () => {
+				throw new Error("tmpdir exhausted");
+			}) as typeof fs.promises.mkdtemp;
+			try {
+				const result = await execute(
+					"call-totality",
+					{ agent: "fixture", task: "t0 sleep=5", agentScope: "project", pool: true },
+					undefined,
+					undefined,
+					context(fixture.projectDir),
+				);
+				expect(result.isError).toBe(true);
+				const text = result.content[0];
+				expect(text?.type === "text" && /Agent failed: .*launch failed/u.test(text.text)).toBe(true);
+				const [task] = result.details?.results ?? [];
+				expect(task?.exitCode).toBe(1);
+				expect(task?.errorMessage).toMatch(/Subagent launch failed: tmpdir exhausted/u);
+				expect(task?.stderr).toContain("tmpdir exhausted");
+				expect(readLog(fixture.logPath)).toEqual([]);
+			} finally {
+				fs.promises.mkdtemp = originalMkdtemp;
+			}
+		});
+	}, 20_000);
 
 	it("kills the whole process group on abort, including a SIGTERM-ignoring grandchild", async () => {
 		await withFixture({}, async (fixture) => {

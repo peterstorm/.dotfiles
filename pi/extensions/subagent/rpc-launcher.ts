@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Message } from "@earendil-works/pi-ai";
-import { killProcessGroup, spawnDetachedOptions } from "./process-group.js";
+import { GROUP_KILL_GRACE_MS, killProcessGroup, spawnDetachedOptions } from "./process-group.js";
 import {
 	LOOM_EMISSION_READINESS_COMMAND,
 	type EmissionRpcDirective,
@@ -35,7 +35,6 @@ const CONSUMED_RPC_TYPES: ReadonlySet<string> = new Set([
 ]);
 const rpcTypeIsConsumed = (typeKey: string): boolean => CONSUMED_RPC_TYPES.has(typeKey);
 const MAX_STDERR_BYTES = 64 * 1024;
-const KILL_GRACE_MS = 1_000;
 const STREAM_ACCOUNTING_TOP = 5;
 
 /**
@@ -128,6 +127,18 @@ const isRecord = (value: unknown): value is RpcRecord =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+/** A resolver captured by a promise constructor is assigned synchronously, before any event can
+ * fire; calling one optionally would turn a construction bug into a promise that never settles.
+ * The impossible branch throws instead of hanging. */
+function settleWith<A extends unknown[]>(
+	resolver: ((...args: A) => void) | undefined,
+	label: string,
+	...args: A
+): void {
+	if (resolver === undefined) throw new TypeError(`${label}: promise resolver was never captured`);
+	resolver(...args);
+}
 
 function failure(
 	kind: RpcFailureKind,
@@ -281,7 +292,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		for (const request of pending.values()) request.reject(error);
 		pending.clear();
 		cancelReadinessEntryWait(error);
-		rejectSettled?.(error);
+		settleWith(rejectSettled, "agentSettled rejection", error);
 	};
 
 	const handleRecord = (line: Buffer): void => {
@@ -348,7 +359,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		if ((event.type === "message_end" || event.type === "tool_result_end") && isRecord(event.message)) {
 			input.onMessage(event.message as Message);
 		}
-		if (event.type === "agent_settled") resolveSettled?.();
+		if (event.type === "agent_settled") settleWith(resolveSettled, "agentSettled");
 	};
 
 	proc.stdout.on("data", (chunk: Buffer | string) => {
@@ -384,7 +395,7 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 		if (stdoutBuffer.length > 0 && !fatalError) {
 			failTransport(new Error("RPC output ended with an unterminated JSON record"), stdoutBuffer.toString("utf8"));
 		}
-		resolveExit?.({ code, signal: childSignal });
+		settleWith(resolveExit, "exit", Object.freeze({ code, signal: childSignal }));
 		if (!intentionalShutdown && !fatalError) {
 			failTransport(new Error(
 				childSignal
@@ -465,9 +476,10 @@ export async function runRpcAgent(input: RpcLaunchInput): Promise<RpcLaunchOutco
 			return;
 		}
 		killProcessGroup(proc, "SIGTERM");
-		const force = setTimeout(() => {
-			if (proc.exitCode === null && proc.signalCode === null) killProcessGroup(proc, "SIGKILL");
-		}, KILL_GRACE_MS);
+		// Same escalation contract as the JSON path (index.ts): fire unconditionally at the grace
+		// deadline. A group whose members are all gone makes the kill a no-op; gating on the direct
+		// child's liveness would strand a SIGTERM-ignoring descendant the moment the child exits.
+		const force = setTimeout(() => killProcessGroup(proc, "SIGKILL"), GROUP_KILL_GRACE_MS);
 		force.unref?.();
 		await exited;
 		clearTimeout(force);

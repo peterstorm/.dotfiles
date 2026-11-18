@@ -54,6 +54,8 @@ import { runRpcAgent } from "./rpc-launcher.js";
 import { GROUP_KILL_GRACE_MS, killProcessGroup, spawnDetachedOptions } from "./process-group.js";
 import {
 	MAX_POOL_TASKS,
+	type Dispatcher,
+	classifyPoolAttempt,
 	createDispatcher,
 	looksLoomGoverned,
 	normalizePoolOption,
@@ -517,11 +519,18 @@ function placeholderResult(agent: string, task: string): SingleResult {
 	};
 }
 
-function abortedPoolResult(payload: PoolTaskPayload): SingleResult {
-	const result = placeholderResult(payload.agent, payload.task);
+function abortedPoolResult(
+	entry: PoolEntry<PoolTaskPayload, SingleResult>,
+	outcome: Extract<PoolOutcome<SingleResult>, { kind: "aborted" }>,
+): SingleResult {
+	const result = placeholderResult(entry.payload.agent, entry.payload.task);
 	result.exitCode = 1;
 	result.stopReason = "aborted";
-	result.errorMessage = "Pooled subagent was cancelled before it started";
+	// "before it started" is only true when nothing was ever launched; a mid-run abort must not
+	// claim it. A launcher crash carries its own reason so it stays distinguishable from a cancel.
+	result.errorMessage = entry.attempts === 0
+		? "Pooled subagent was cancelled before it started"
+		: outcome.reason ?? "Pooled subagent was cancelled";
 	result.stderr = result.errorMessage;
 	return result;
 }
@@ -570,7 +579,9 @@ function describePoolSettle(
 	outcome: PoolOutcome<SingleResult>,
 ): string {
 	const label = `[${entry.payload.agent}] task ${entry.payload.index + 1}`;
-	if (outcome.kind === "aborted") return `${label}: aborted`;
+	if (outcome.kind === "aborted") {
+		return outcome.reason !== undefined ? `${label}: aborted (${outcome.reason})` : `${label}: aborted`;
+	}
 	const result = outcome.result;
 	const output = getFinalOutput(result.messages).slice(0, POOL_NOTICE_MAX_OUTPUT);
 	if (outcome.kind === "completed") return `${label}: completed\n${output || "(no output)"}`;
@@ -939,9 +950,12 @@ async function runSingleAgentUnsafe(
 					if (settled) return;
 					wasAborted = true;
 					killProcessGroup(proc, "SIGTERM");
-					const force = setTimeout(() => {
-						if (!settled) killProcessGroup(proc, "SIGKILL");
-					}, GROUP_KILL_GRACE_MS);
+					// The escalation is NOT gated on the direct child's liveness: a child that obeys
+					// SIGTERM settles immediately while a descendant that ignores it is still in the
+					// group. When every member is already gone the group kill is a no-op (ESRCH →
+					// direct-kill fallback on a reaped pid), so firing unconditionally is what makes
+					// "neither survives" hold however early the child itself exits.
+					const force = setTimeout(() => killProcessGroup(proc, "SIGKILL"), GROUP_KILL_GRACE_MS);
 					force.unref?.();
 				};
 				if (signal.aborted) killProc();
@@ -1010,18 +1024,162 @@ export async function runSingleAgent(
 		);
 	} catch (cause) {
 		const message = `Subagent launch failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+		const result = placeholderResult(agentName, task);
+		result.agentSource = agents.find((candidate) => candidate.name === agentName)?.source ?? "unknown";
+		result.exitCode = 1;
+		result.step = step;
+		result.errorMessage = message;
+		// The stack stays out of the one-line errorMessage but lands in stderr: a genuine in-harness
+		// crash must be reproducible, not just quotable.
+		result.stderr = cause instanceof Error && cause.stack ? `${message}\n${cause.stack.slice(0, 2_000)}` : message;
+		return result;
+	}
+}
+
+/** One pooled call's execution — the `executePooled` path DESIGN-pool.md §9 inventories. The
+ * dependency record is explicit, so the branch's dependency surface is visible at its seam instead
+ * of implied by closure capture, and the integration harness exercises a named interface. */
+type PooledExecuteDeps = Readonly<{
+	cwd: string;
+	agents: readonly AgentConfig[];
+	routingSnapshot: SubagentRoutingSnapshot;
+	makeDetails: (results: SingleResult[]) => SubagentDetails;
+	onUpdate: OnUpdateCallback | undefined;
+	signal: AbortSignal | undefined;
+	sessionId: string;
+	toolCallId: string;
+	events: SubagentLaunchEventBus;
+	pool: Dispatcher<PoolTaskPayload, SingleResult>;
+	poolMode: "single" | "parallel";
+	requestedTasks: readonly Readonly<{ agent: string; task: string; cwd: string | undefined }>[];
+	background: boolean;
+	maxAttempts: number;
+	/** Registers a background call so its settlements surface as coalesced messages. */
+	registerBackgroundCall: (callId: string) => void;
+}>;
+
+async function executePooled(deps: PooledExecuteDeps): Promise<AgentToolResult<SubagentDetails>> {
+	const { cwd, agents, routingSnapshot, makeDetails, onUpdate, signal, sessionId, toolCallId, events, pool, poolMode, requestedTasks, background, maxAttempts, registerBackgroundCall } = deps;
+
+	const poolTasks: PoolTaskPayload[] = requestedTasks.map((requested, index) =>
+		Object.freeze({
+			agent: requested.agent,
+			task: requested.task,
+			cwd: requested.cwd,
+			index,
+			slot: poolMode === "parallel"
+				? Object.freeze({ kind: "parallel" as const, index })
+				: Object.freeze({ kind: "single" as const, index: 0 }),
+		}),
+	);
+
+	const allResults: SingleResult[] = poolTasks.map((task) => placeholderResult(task.agent, task.task));
+	const emitPoolUpdate = () => {
+		if (onUpdate === undefined || background) return;
+		const done = allResults.filter((result) => result.exitCode !== -1).length;
+		onUpdate({
+			content: [{ type: "text", text: `Pool: ${done}/${allResults.length} done, ${allResults.length - done} running...` }],
+			details: makeDetails([...allResults]),
+		});
+	};
+
+	const launchPooledTask = async (
+		entry: PoolEntry<PoolTaskPayload, SingleResult>,
+		entrySignal: AbortSignal,
+	): Promise<PoolOutcome<SingleResult>> => {
+		const payload = entry.payload;
+		const result = await runSingleAgent(
+			cwd,
+			agents,
+			payload.agent,
+			payload.task,
+			payload.cwd,
+			undefined,
+			entrySignal,
+			background
+				? undefined
+				: (partial) => {
+					const streamed = partial.details?.results[0];
+					if (streamed !== undefined) {
+						allResults[payload.index] = streamed;
+						emitPoolUpdate();
+					}
+				},
+			makeDetails,
+			routingSnapshot,
+			{ events, sessionId, toolCallId, slot: payload.slot },
+		);
+		// One home for the retry policy (pool.ts); the shell only supplies its failure predicate.
+		const outcome = classifyPoolAttempt(entry, result, entrySignal.aborted, resultFailed);
+		if (outcome.kind === "failed" && outcome.retryable) {
+			appendDiagnostic(
+				result,
+				`Pool attempt ${entry.attempts}/${entry.maxAttempts} failed; retrying on the next free slot`,
+			);
+		}
+		return outcome;
+	};
+
+	if (background) registerBackgroundCall(toolCallId);
+	const dispatched = await pool.enqueue({
+		callId: toolCallId,
+		items: poolTasks.map((task, index) => {
+			const descriptor = parseEmissionDescriptor(task.task);
+			return {
+				id: `${toolCallId}#${index}`,
+				payload: task,
+				// Emission tasks are single-use: their staged expectation dies with the attempt.
+				retryable: descriptor.ok && descriptor.value === null,
+			};
+		}),
+		maxAttempts,
+		launch: launchPooledTask,
+		background,
+		...(background || signal === undefined ? {} : { signal }),
+	});
+
+	if (background) {
+		const snapshot = pool.snapshot();
 		return {
-			agent: agentName,
-			agentSource: agents.find((candidate) => candidate.name === agentName)?.source ?? "unknown",
-			task,
-			exitCode: 1,
-			messages: [],
-			stderr: message,
-			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-			errorMessage: message,
-			step,
+			content: [{
+				type: "text",
+				text:
+					`Pool: ${dispatched.entries.length} task(s) accepted, ${snapshot.running}/${snapshot.cap} running, ${snapshot.queued} queued. ` +
+					"Completions arrive as messages; /pool shows status, /pool cancel <taskId|all> cancels.",
+			}],
+			details: { ...makeDetails([]), pool: snapshot },
 		};
 	}
+
+	// results[i] is the task enqueued at index i (I13) — orderedPooledResults owns that invariant.
+	const results = orderedPooledResults(dispatched.entries);
+	if (poolMode === "single") {
+		const [result] = results;
+		const [sole] = requestedTasks;
+		if (result === undefined || sole === undefined) {
+			return singleToolResult(
+				placeholderResult(sole?.agent ?? "unknown", sole?.task ?? ""),
+				makeDetails([]),
+			);
+		}
+		return singleToolResult(result, makeDetails(results));
+	}
+	return parallelToolResult(results, makeDetails(results));
+}
+
+/** I13's named home: results[i] is the task enqueued at index i. Ledger order is scheduling order —
+ * a retry requeues at the tail — so the mapping orders by the payload's input index, unconditionally. */
+function orderedPooledResults(
+	entries: readonly PoolEntry<PoolTaskPayload, SingleResult>[],
+): SingleResult[] {
+	return [...entries]
+		.sort((left, right) => left.payload.index - right.payload.index)
+		.map((entry) => {
+			const outcome = entry.outcome;
+			if (outcome === null) return placeholderResult(entry.payload.agent, entry.payload.task);
+			if (outcome.kind === "aborted") return abortedPoolResult(entry, outcome);
+			return outcome.result;
+		});
 }
 
 const TaskItem = Type.Object({
@@ -1109,11 +1267,11 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const pool = createDispatcher<PoolTaskPayload, SingleResult>({
-		cap: poolConcurrencyFromEnv(),
-		onSettle: (entry) => {
-			if (!backgroundPoolCalls.has(entry.callId) || entry.outcome === null) return;
+		cap: poolConcurrencyFromEnv(process.env.PI_SUBAGENT_POOL_CONCURRENCY),
+		onSettle: (entry, outcome) => {
+			if (!backgroundPoolCalls.has(entry.callId)) return;
 			const lines = pendingPoolNotices.get(entry.callId) ?? [];
-			lines.push(describePoolSettle(entry, entry.outcome));
+			lines.push(describePoolSettle(entry, outcome));
 			pendingPoolNotices.set(entry.callId, lines);
 			schedulePoolNoticeFlush();
 		},
@@ -1157,8 +1315,18 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", async () => {
+		// SIGTERM every running child's process group, then hold the event loop open past the SIGKILL
+		// grace so the escalation timers fire before pi exits (I8: no pool-owned child survives
+		// shutdown). Early exit when the entries settle is not an option: the direct child settles on
+		// SIGTERM while a SIGTERM-ignoring descendant is still in the group, so only the deadline
+		// proves the escalation was delivered.
 		pool.cancelAll();
+		if (pool.snapshot().running === 0) return;
+		const deadline = Date.now() + GROUP_KILL_GRACE_MS + 1_000;
+		while (Date.now() < deadline) {
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
+		}
 	});
 	pi.registerTool({
 		name: "subagent",
@@ -1289,116 +1457,25 @@ export default function (pi: ExtensionAPI) {
 					};
 				}
 
-				const poolTasks: PoolTaskPayload[] = requestedTasks.map((requested, index) =>
-					Object.freeze({
-						agent: requested.agent,
-						task: requested.task,
-						cwd: requested.cwd,
-						index,
-						slot: poolMode === "parallel"
-							? Object.freeze({ kind: "parallel" as const, index })
-							: Object.freeze({ kind: "single" as const, index: 0 }),
-					}),
-				);
-
-				const allResults: SingleResult[] = poolTasks.map((task) => placeholderResult(task.agent, task.task));
-				const emitPoolUpdate = () => {
-					if (onUpdate === undefined || background) return;
-					const done = allResults.filter((result) => result.exitCode !== -1).length;
-					onUpdate({
-						content: [{ type: "text", text: `Pool: ${done}/${allResults.length} done, ${allResults.length - done} running...` }],
-						details: makeDetails(poolMode)([...allResults]),
-					});
-				};
-
-				const launchPooledTask = async (
-					entry: PoolEntry<PoolTaskPayload, SingleResult>,
-					entrySignal: AbortSignal,
-				): Promise<PoolOutcome<SingleResult>> => {
-					const payload = entry.payload;
-					const result = await runSingleAgent(
-						ctx.cwd,
-						agents,
-						payload.agent,
-						payload.task,
-						payload.cwd,
-						undefined,
-						entrySignal,
-						background
-							? undefined
-							: (partial) => {
-								const streamed = partial.details?.results[0];
-								if (streamed !== undefined) {
-									allResults[payload.index] = streamed;
-									emitPoolUpdate();
-								}
-							},
-						makeDetails(poolMode),
-						routingSnapshot,
-						{ events: pi.events, sessionId, toolCallId, slot: payload.slot },
-					);
-					if (entrySignal.aborted && result.stopReason === "aborted") return { kind: "aborted" };
-					if (!resultFailed(result)) return { kind: "completed", result };
-					// Process-level only: a non-zero exit. Semantic failures (exit 0) are the engine's retry to own.
-					const retryable = entry.retryable && result.exitCode !== 0 && result.stopReason !== "aborted";
-					if (retryable && entry.attempts < entry.maxAttempts) {
-						appendDiagnostic(
-							result,
-							`Pool attempt ${entry.attempts}/${entry.maxAttempts} failed; retrying on the next free slot`,
-						);
-					}
-					return { kind: "failed", result, retryable };
-				};
-
-				if (background) backgroundPoolCalls.add(toolCallId);
-				const dispatched = await pool.enqueue({
-					callId: toolCallId,
-					items: poolTasks.map((task, index) => {
-						const descriptor = parseEmissionDescriptor(task.task);
-						return {
-							id: `${toolCallId}#${index}`,
-							payload: task,
-							// Emission tasks are single-use: their staged expectation dies with the attempt.
-								retryable: descriptor.ok && descriptor.value === null,
-						};
-					}),
-					maxAttempts: poolOption.value.maxAttempts,
-					launch: launchPooledTask,
+				return executePooled({
+					cwd: ctx.cwd,
+					agents,
+					routingSnapshot,
+					makeDetails: (results) => makeDetails(poolMode)(results),
+					onUpdate,
+					signal,
+					sessionId,
+					toolCallId,
+					events: pi.events,
+					pool,
+					poolMode,
+					requestedTasks,
 					background,
-					...(background || signal === undefined ? {} : { signal }),
+					maxAttempts: poolOption.value.maxAttempts,
+					registerBackgroundCall: (callId) => backgroundPoolCalls.add(callId),
 				});
-
-				if (background) {
-					const snapshot = pool.snapshot();
-					return {
-						content: [{
-							type: "text",
-							text:
-								`Pool: ${dispatched.entries.length} task(s) accepted, ${snapshot.running}/${snapshot.cap} running, ${snapshot.queued} queued. ` +
-								"Completions arrive as messages; /pool shows status, /pool cancel <taskId|all> cancels.",
-						}],
-						details: { ...makeDetails(poolMode)([]), pool: snapshot },
-					};
-				}
-
-				const results = dispatched.entries.map((entry) => {
-					const outcome = entry.outcome;
-					if (outcome === null) return placeholderResult(entry.payload.agent, entry.payload.task);
-					if (outcome.kind === "aborted") return abortedPoolResult(entry.payload);
-					return outcome.result;
-				});
-				if (poolMode === "single") {
-					const [result] = results;
-					if (result === undefined) {
-						return singleToolResult(
-							placeholderResult(params.agent ?? "unknown", params.task ?? ""),
-							makeDetails("single")([]),
-						);
-					}
-					return singleToolResult(result, makeDetails("single")(results));
-				}
-				return parallelToolResult(results, makeDetails("parallel")(results));
 			}
+
 
 			if (params.chain && params.chain.length > 0) {
 				const results: SingleResult[] = [];

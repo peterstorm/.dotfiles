@@ -329,16 +329,21 @@ operator experience changes (drain is now visible).
   the child's process group; task settles aborted, no retry. The grace window matters: the child's own
   shutdown handlers run under SIGTERM, and roster-claim release follows the parent's settlement, so a
   graceful cancel leaves no stranded state (#227 is only reachable when the *parent* dies hard). Monitor's
-  hardened patterns: detached spawn + process-group kill (`process-group.ts`).
+  hardened patterns: detached spawn + process-group kill (`process-group.ts`). The escalation fires
+  **unconditionally** at the deadline — a group whose members are all gone makes the kill a no-op — and the
+  same constant is imported by `rpc-launcher.ts`, so the cancel contract is one documented window for both
+  launch paths (JSON and RPC/emission), not 5 s on one and 1 s on the other.
 - Deliberately **no `drain`/`flush`**: queued pool tasks are owed dispatches; discarding them would drop
   Wave work. Quiescence comes from letting tasks settle — `/pool` and injected messages make it observable.
 
 ### 4.9 Lifetime: shutdown, abort, reload
 
 - **Session shutdown** (`pi.on("session_shutdown")`, all reasons): SIGTERM, then SIGKILL after the 5 s grace,
-  to each running child's process group. Pool children spawn **detached** (monitor pattern,
-  `monitor/index.ts:328`) so the group kill is clean; orphan risk on SIGKILL of pi itself is parity with
-  today's non-detached children.
+  to each running child's process group. The handler is async and, when any entry is running, awaits a
+  bounded `GROUP_KILL_GRACE_MS + 1 s` so the (unref'd) escalation timers fire before pi exits — early exit
+  when the entries settle is deliberately avoided, because a settled direct child does not prove the group
+  is empty. Pool children spawn **detached** (monitor pattern, `monitor/index.ts:328`) so the group kill is
+  clean; orphan risk on SIGKILL of pi itself is parity with today's non-detached children.
 - **User abort during a blocking pool call:** that call's tasks are killed, its queued tasks discarded,
   results returned as aborted (today's parallel abort semantics). Other calls unaffected.
 - **`/reload` mid-pool:** shutdown kills children and orphans the queue — **documented stage-A boundary**.
@@ -371,8 +376,10 @@ operator experience changes (drain is now visible).
     capability answered; absent/mismatched probe ⇒ blocking path.
 12. **I12 — Empty early result.** A background tool result carries `results: []` + `poolState: "running"`;
     a missing branch terminalizes loudly at the existing reconciliation, never settles placeholders.
-13. **I13 — Result order.** A blocked call's `results[i]` is the task enqueued at index `i`: terminal
-    settlement keeps the entry's ledger position; only a retry moves it to the tail of the queue. Loom maps
+13. **I13 — Result order.** A blocked call's `results[i]` is the task enqueued at index `i`. The ledger is
+    scheduling state, not the result order: a terminal settlement keeps its position, a retry requeues at
+    the tail for FIFO fairness, and the shell maps drained entries by `payload.index` before building
+    `results` — so the index correspondence holds unconditionally, not only when no retry fires. Loom maps
     a result index to a launch slot, so this is a correctness invariant, not formatting.
 
 ## 6. Loom interplay decisions
@@ -422,18 +429,24 @@ is roster-active. The pool's answer is observability, not work-discarding: wait 
 
 ## 7. Testing plan
 
-- **Unit (`pool.test.ts`, 18 tests)** — scheduler core: cap with reentrant pumps, FIFO, reserve-before-launch,
+- **Unit (`pool.test.ts`, 23 tests)** — scheduler core: cap with reentrant pumps, FIFO, reserve-before-launch,
   frozen entries, retry bound + entry-level `retryable` gate, terminal settlement keeps position while a
   retry moves to the tail (I13), descriptor refusal, governance-heuristic refusal, abort/cancel semantics,
-  I4 semantics, and a seeded randomized invariant loop (cap / exactly-once / attempts bound). Pure core ⇒
-  deterministic, no timers.
-- **Integration (`pool.integration.test.ts`, 7 tests)** — drives the **registered tool** through a fake Pi
+  I4 semantics, and a seeded randomized invariant loop (cap / exactly-once / attempts bound); plus the cap
+  construction guard (0/NaN refuse loudly), the `classifyPoolAttempt` retry-policy table (single-use, budget,
+  aborted-signal gates), a pre-aborted signal settling every entry with no launch, a rejecting launcher
+  settling aborted with the cause carried, and a throwing dep callback that cannot strand the waiter.
+  Pure core ⇒ deterministic, no timers.
+- **Integration (`pool.integration.test.ts`, 11 tests)** — drives the **registered tool** through a fake Pi
   host and a fake child (execPath substitution, the execution-suite pattern): blocking batch of 5 over cap 2
   keeps input order and never exceeds the cap (I1/I2/I13); invalid `maxAttempts`/chain/over-cap refuse before
-  spawn; background + Loom signature refuses whole (I6); background non-Loom returns immediately and injects
-  coalesced messages; `maxAttempts: 2` re-enqueues a crashing child once (I7); abort kills the whole process
-  group, including a SIGTERM-ignoring grandchild (I8). The existing `execution.integration.test.ts` guards
-  the no-pool path (I9).
+  spawn; background + Loom signature refuses whole (I6); background non-Loom returns immediately, injects
+  coalesced steer/triggerTurn messages, and reports the full snapshot; `maxAttempts: 2` re-enqueues a
+  crashing child once (I7) and blocking results stay in input order when a task retries (I13); a
+  descriptor-bearing task is single-use (I5); abort kills the whole process group, including a
+  SIGTERM-ignoring grandchild (I8), and so does `session_shutdown` (the handler is captured and awaited);
+  a pre-spawn throw resolves to a failed result instead of rejecting the call (P0-2 totality). The existing
+  `execution.integration.test.ts` guards the no-pool path (I9).
 - **Loom-shaped end-to-end** — 6-task wave, one child exits non-zero: assert no pool re-dispatch at default
   and that the tool result settles all six (Loom's path unchanged); with `maxAttempts: 2`, a SIGKILLed child
   is re-dispatched once.
@@ -495,11 +508,24 @@ After merge: copy, then `/reload` in a session *without* an active pool (§4.9).
   ordering test, fixed to position-preserving settlement + tail-requeued retries (I13); (b) the retry
   decision ignored the entry-level `retryable` flag, so a failure outcome marked retryable would have
   re-run a descriptor-bearing task — found by the unit test, fixed in `settleEntry`.
+- **Review round (standalone review `subagent-pool-review-20261118b`)**: 6 surviving criticals, 0 refuted
+  (reproduction and intent lenses upheld all six; security upheld the two kill-path ones and marked the
+  rest out of lens). Repair-checked in place:
+  1. pooled blocking results are mapped by `payload.index`, so a retry's tail-requeue can no longer shift
+     `details.results` (I13 now holds unconditionally; `code-reviewer-1`, `pr-test-analyzer-1`);
+  2. the SIGKILL escalation fires unconditionally at the grace deadline in both launch paths and the grace
+     is unified at 5 s (`code-reviewer-2`, `silent-failure-hunter-1`'s escalation half, `code-reviewer-3`);
+  3. `session_shutdown` awaits a bounded grace+1 s so the escalation is delivered before pi exits
+     (I8's shutdown clause; `silent-failure-hunter-1`);
+  4. the three test-coverage criticals are closed by new tests: retry order under `maxAttempts ≥ 2`,
+     `session_shutdown` killing the child tree, and a throwing launch resolving to a failed result
+     (`pr-test-analyzer-1/2/3`).
+  37 advisories dispositioned separately (29 accepted, 8 deferred).
 
 ## 10. Open items for implementation
 
-Stage A is implemented in the `subagent-pool` worktree (see §9); remaining before merge: copy to
-`~/.pi/agent/extensions/subagent`, `/reload`, and a live Loom wave. Stage B is unimplemented by design.
+Stage A is implemented and merged to `main` (commit `1749af08`); the review round's repairs ride on top of
+it. Stage B is unimplemented by design.
 
 1. Background completion messages for *blocking* calls (per-task injected messages) — default **no**,
    background-only (stage A: background notices coalesce on a 1.5 s timer and flush at drain).
@@ -554,8 +580,8 @@ stage B; P3 is Loom-side and optional. Each P0/P1 item names its evidence.
     pool cannot flood the context.
 13. **Drop transcripts after reporting.** Background pool retains `SingleResult.messages` until drain; keep a
     summary + capped final output and release the transcript.
-14. **Env override sanitization.** `PI_SUBAGENT_POOL_CONCURRENCY`: integer, clamped 1..64; invalid → 8 plus a
-    one-time diagnostic.
+14. **Env override sanitization.** `PI_SUBAGENT_POOL_CONCURRENCY`: values above 64 clamp to 64; non-positive
+    or malformed values fall back to 8 (no diagnostic in stage A; the parse is unit-pinned).
 15. **`pool` on `chain` is an explicit refusal**, not a silent no-op.
 16. **Frozen route decision.** Documented as frozen at enqueue; decide whether non-emission tasks re-resolve
     at launch (queue lag vs batch-model consistency).

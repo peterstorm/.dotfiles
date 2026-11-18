@@ -37,7 +37,9 @@ export type PoolOutcome<R> =
 	| Readonly<{ kind: "completed"; result: R }>
 	/** A process-level failure. `retryable` is the launcher's decision (descriptor-free, not aborted). */
 	| Readonly<{ kind: "failed"; result: R; retryable: boolean }>
-	| Readonly<{ kind: "aborted" }>;
+	/** Cancel semantics. `reason` is present only when a launch effect itself failed — a crash in the
+	 *  launch path must stay distinguishable from a user cancellation. */
+	| Readonly<{ kind: "aborted"; reason?: string }>;
 
 export type EntryPhase = "queued" | "running" | "settled";
 
@@ -73,8 +75,18 @@ export type EntryRefusal =
 	| Readonly<{ kind: "not-running"; id: string; phase: EntryPhase }>
 	| Readonly<{ kind: "duplicate-id"; id: string }>;
 
-export const emptyPool = <A, R>(cap: number): PoolState<A, R> =>
-	Object.freeze({ cap, entries: Object.freeze([]) });
+/** The one construction-boundary check for a pool's cap: a cap below 1 wedges the queue forever
+ *  (planLaunches never reserves) and a non-finite cap silently disables the running ≤ cap invariant. */
+function assertCap(cap: number): void {
+	if (!Number.isSafeInteger(cap) || cap < 1) {
+		throw new TypeError(`pool cap must be a safe integer >= 1, got ${cap}`);
+	}
+}
+
+export const emptyPool = <A, R>(cap: number): PoolState<A, R> => {
+	assertCap(cap);
+	return Object.freeze({ cap, entries: Object.freeze([]) });
+};
 
 /** Append one task at the tail of the queue. Identity is the caller's id; duplicates are refused. */
 export function enqueue<A, R>(
@@ -133,8 +145,9 @@ export function settleEntry<A, R>(
 	// The entry's own `retryable` gates the retry: Loom emission tasks are single-use.
 	const retry =
 		entry.retryable && outcome.kind === "failed" && outcome.retryable && entry.attempts < entry.maxAttempts;
-	// Ledger order is the call's result order (Loom maps a result index to its slot). A terminal
-	// settlement therefore keeps its position; only a retry moves to the tail of the queue.
+	// Ledger order is scheduling order, not the call's result order: the shell maps drained entries by
+	// payload.index, so results[i] is task i regardless of ledger position (I13). A terminal settlement
+	// keeps its position; only a retry requeues at the tail, for FIFO fairness across calls.
 	const entries = retry
 		? [
 			...pool.entries.filter((_candidate, position) => position !== index),
@@ -150,14 +163,16 @@ export function settleEntry<A, R>(
  * Abort one call: its queued entries become terminal as aborted; its running entries are left for the
  * shell to abort (their launch promises settle as "aborted"). Cancel semantics, not failure: no retry.
  */
+/** The one cancel-semantics settlement: terminal, no retry, no result payload. */
+const settleAborted = <A, R>(entry: PoolEntry<A, R>): PoolEntry<A, R> =>
+	Object.freeze({ ...entry, phase: "settled" as const, outcome: Object.freeze({ kind: "aborted" as const }) });
+
 export function abortQueued<A, R>(pool: PoolState<A, R>, callId: string): PoolState<A, R> {
 	return Object.freeze({
 		...pool,
 		entries: Object.freeze(
 			pool.entries.map((entry): PoolEntry<A, R> =>
-				entry.callId === callId && entry.phase === "queued"
-					? Object.freeze({ ...entry, phase: "settled" as const, outcome: Object.freeze({ kind: "aborted" as const }) })
-					: entry,
+				entry.callId === callId && entry.phase === "queued" ? settleAborted(entry) : entry,
 			),
 		),
 	});
@@ -172,11 +187,7 @@ export function cancelQueued<A, R>(pool: PoolState<A, R>, id: string): Result<Po
 	return ok(Object.freeze({
 		...pool,
 		entries: Object.freeze(
-			pool.entries.map((candidate, position) =>
-				position === index
-					? Object.freeze({ ...candidate, phase: "settled" as const, outcome: Object.freeze({ kind: "aborted" as const }) })
-					: candidate,
-			),
+			pool.entries.map((candidate, position) => (position === index ? settleAborted(candidate) : candidate)),
 		),
 	}));
 }
@@ -242,12 +253,32 @@ export function looksLoomGoverned(taskTexts: readonly string[]): boolean {
 	);
 }
 
-/** `PI_SUBAGENT_POOL_CONCURRENCY`: integer, clamped 1..MAX_POOL_TASKS; anything malformed is the default. */
-export function poolConcurrencyFromEnv(raw: string | undefined = process.env.PI_SUBAGENT_POOL_CONCURRENCY): number {
+/** `PI_SUBAGENT_POOL_CONCURRENCY`: values above MAX_POOL_TASKS clamp to it; non-positive or malformed
+ *  values fall back to the default. The environment seam lives at the createDispatcher call site. */
+export function poolConcurrencyFromEnv(raw: string | undefined): number {
 	if (raw === undefined || !/^\d+$/u.test(raw)) return DEFAULT_POOL_CONCURRENCY;
 	const parsed = Number(raw);
 	if (!Number.isSafeInteger(parsed) || parsed < 1) return DEFAULT_POOL_CONCURRENCY;
 	return Math.min(parsed, MAX_POOL_TASKS);
+}
+
+/** The pool's retry policy in one pure home: the shell classifies the attempt's shape (aborted /
+ *  process-level failure / semantic completion — `resultFailed` stays the shell's single predicate),
+ *  the entry and its launch signal gate the retry. A task whose signal is already aborted never
+ *  retries: a cancel/shutdown is not a failure, and a fresh attempt would escape its controller. */
+export type AttemptResult = Readonly<{ exitCode: number; stopReason?: string }>;
+
+export function classifyPoolAttempt<R extends AttemptResult, A>(
+	entry: Pick<PoolEntry<A, R>, "retryable" | "attempts" | "maxAttempts">,
+	result: R,
+	signalAborted: boolean,
+	isFailure: (result: R) => boolean,
+): PoolOutcome<R> {
+	if (signalAborted && result.stopReason === "aborted") return Object.freeze({ kind: "aborted" as const });
+	if (!isFailure(result)) return Object.freeze({ kind: "completed" as const, result });
+	const processLevel = result.exitCode !== 0 && result.stopReason !== "aborted";
+	const retryable = entry.retryable && !signalAborted && processLevel && entry.attempts < entry.maxAttempts;
+	return Object.freeze({ kind: "failed" as const, result, retryable });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -288,6 +319,7 @@ export type Dispatcher<A, R> = Readonly<{
  * freed slot).
  */
 export function createDispatcher<A, R>(deps: DispatcherDeps<A, R>): Dispatcher<A, R> {
+	assertCap(deps.cap);
 	let pool = emptyPool<A, R>(deps.cap);
 	const launchers = new Map<string, (entry: PoolEntry<A, R>, signal: AbortSignal) => Promise<PoolOutcome<R>>>();
 	const controllers = new Map<string, AbortController>();
@@ -295,19 +327,31 @@ export function createDispatcher<A, R>(deps: DispatcherDeps<A, R>): Dispatcher<A
 	const finalized = new Set<string>();
 	let pumping = false;
 
+	/** A diagnostic callback must never break settlement: a throw after `finalized` would leave the
+	 *  call unreleased and its waiter unresolved, so every dep notification is isolated here. */
+	const safeNotify = (notify: () => void): void => {
+		try {
+			notify();
+		} catch {
+			// The notification is best-effort by contract; settlement proceeds.
+		}
+	};
+
 	function finalize(callId: string): void {
 		if (finalized.has(callId) || !drainedCall(pool, callId)) return;
 		finalized.add(callId);
 		const entries = callEntries(pool, callId);
 		const waiter = waiters.get(callId);
 		waiters.delete(callId);
-		deps.onCallDrained?.(callId, entries);
+		// Release before notifying: a throwing dep callback must not strand the call's launchers,
+		// controllers or waiter. The waiter resolves first, so the caller never waits on a diagnostic.
 		pool = releaseCall(pool, callId);
 		for (const entry of entries) {
 			launchers.delete(entry.id);
 			controllers.delete(entry.id);
 		}
 		waiter?.(entries);
+		safeNotify(() => deps.onCallDrained?.(callId, entries));
 	}
 
 	/** Drop a call's queued work and abort its running tasks; their launch promises settle as aborted. */
@@ -344,8 +388,13 @@ export function createDispatcher<A, R>(deps: DispatcherDeps<A, R>): Dispatcher<A
 			: launch(entry, controller.signal);
 		void run
 			.then((outcome) => finish(entry.id, outcome))
-			// The launcher contract is total; a violation settles as aborted rather than vanishing.
-			.catch(() => finish(entry.id, Object.freeze({ kind: "aborted" as const })));
+			// The launcher contract is total; a violation settles as aborted rather than vanishing —
+			// with the cause carried, so a launch crash stays distinguishable from a user cancellation.
+			.catch((cause: unknown) =>
+				finish(entry.id, Object.freeze({
+					kind: "aborted" as const,
+					reason: cause instanceof Error ? cause.message : String(cause),
+				})));
 	}
 
 	function finish(id: string, outcome: PoolOutcome<R>): void {
@@ -356,7 +405,7 @@ export function createDispatcher<A, R>(deps: DispatcherDeps<A, R>): Dispatcher<A
 		pool = settled.value;
 		controllers.delete(id);
 		const after = pool.entries.find((candidate) => candidate.id === id);
-		if (after !== undefined && after.phase === "settled") deps.onSettle?.(after, outcome);
+		if (after !== undefined && after.phase === "settled") safeNotify(() => deps.onSettle?.(after, outcome));
 		finalize(entry.callId);
 		pump();
 	}
@@ -372,7 +421,9 @@ export function createDispatcher<A, R>(deps: DispatcherDeps<A, R>): Dispatcher<A
 					retryable: item.retryable,
 					maxAttempts: request.maxAttempts,
 				});
-				if (!added.ok) continue;
+				// The caller's ids are `${toolCallId}#${index}` and cannot collide; a refusal here is a
+				// programming error and must be loud — a silently dropped item misaligns the batch.
+				if (!added.ok) throw new Error(`pool enqueue refused ${item.id}: ${added.error.kind}`);
 				pool = added.value;
 				launchers.set(item.id, request.launch);
 			}
