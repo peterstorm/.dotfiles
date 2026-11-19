@@ -16,7 +16,7 @@
 # .download-complete ($REPO $REV) next to the checkpoint and a receipt; the
 # export script refuses to run without that marker.
 #
-# See docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md.
+# See scripts/inference/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md.
 set -euo pipefail
 
 REPO="nvidia/GLM-5.3-Flash-FP4-Local"

@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16.sh"
 DOWNLOAD="$ROOT/scripts/inference/qwen38/download-qwen38-27b.sh"
-DOC="$ROOT/docs/runbooks/new-desktop-install.md"
+DOC="$ROOT/scripts/inference/runbooks/new-desktop-install.md"
 IMAGE="vllm/vllm-openai:qwen38"
 DIGEST="sha256:d392f621bb3e372ecc09f0b0cb88099afe9fa05d37a0450de45eeb8c12b6787e"
 MODEL_REV="1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"

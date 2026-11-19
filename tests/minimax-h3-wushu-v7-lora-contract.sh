@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DOWNLOADER="$ROOT/scripts/comfyui/download-minimax-h3-wushu-v7-lora.sh"
-RUNBOOK="$ROOT/docs/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/comfyui-krea2-minimax-h3-muse-runbook.md"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2

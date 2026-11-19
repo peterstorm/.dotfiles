@@ -10,7 +10,7 @@
 # Prerequisites:
 #   scripts/inference/qwen38/download-qwen38-27b.sh
 #   scripts/inference/qwen38/download-qwen38-27b-dspark.sh
-# Full rationale: docs/runbooks/new-desktop-install.md —
+# Full rationale: scripts/inference/runbooks/new-desktop-install.md —
 # "Experimental Qwen3.8-27B DSpark on SGLang".
 set -euo pipefail
 

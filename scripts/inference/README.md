@@ -2,8 +2,9 @@
 
 Deployment scripts for the workstation's GPU inference endpoints. All of them run
 on `desktop` (the two-RTX-PRO-6000 box), never on this dev machine. The runbooks
-in `docs/runbooks/` are the source of truth for rationale; the contract tests in
-`tests/` are the source of truth for the pins.
+in `runbooks/` are the source of truth for rationale; the contract tests in
+`tests/` are the source of truth for the pins. [INDEX.md](INDEX.md) maps primaries,
+launchers, runbooks and contracts; retired runbooks live in `runbooks/archive/`.
 
 **Primaries (since 2026-11-14).** Pi offers exactly four local models on two
 engines: `warmind-1017-native` and `deepseek-v4.1-flash-native` (ds4-native,
@@ -51,6 +52,9 @@ shared/    Components more than one profile uses: the credential helper every
            recording, throughput probing, the durable vLLM/SGLang/ds4-native/
            Hyperflare stats recorder/heatmap, and the ds4-native and Hyperflare
            Prometheus bridges (systemd units in machines/desktop/default.nix).
+runbooks/  The dated runbook per profile (rationale, measurements, history);
+           archive/ holds superseded versions and dated research/plan notes.
+           INDEX.md is the primaries table and the map.
 ```
 
 Conventions:
@@ -58,6 +62,9 @@ Conventions:
 - Every launcher sources `shared/inference-api-key.sh` (via
   `$SCRIPT_DIR/../shared/inference-api-key.sh`) and never puts the API key in
   Docker arguments or the environment it inherits.
+- A variant is not shippable until its runbook exists in the same commit:
+  new launcher + new contract test + new (or updated) runbook in
+  `runbooks/`, named `<profile>-runbook-<yyyy-mm-dd>.md`.
 - Launchers fail closed: checkpoint pins, GPU power caps, port conflicts, and
   display-manager state are checked before anything is stopped or started.
 - Monitoring never sits on the inference hot path. Engines expose Prometheus

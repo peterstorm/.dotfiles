@@ -12,7 +12,7 @@
 # continue. On success writes .download-complete ($REPO $REV) into the cache
 # root and a receipt; the serve script refuses to launch without that marker.
 #
-# See docs/runbooks/glm53-flash-spark-tp2-v14-runbook-2026-09-19.md.
+# See scripts/inference/runbooks/glm53-flash-spark-tp2-v14-runbook-2026-09-19.md.
 set -euo pipefail
 
 REPO="local-inference-lab/GLM-5.3-Flash-NVFP4-Spark"

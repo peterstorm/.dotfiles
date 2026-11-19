@@ -11,7 +11,7 @@
 # /models/Qwen3.8-27B-DSpark, so the old profile keeps its exact revision.
 # Runs in a throwaway Python container. Idempotent and resumable.
 #
-# See docs/runbooks/qwen38-27b-runbook-2026-08-18.md and
+# See scripts/inference/runbooks/qwen38-27b-runbook-2026-08-18.md and
 # docs/research/2026-08-18-qwen38-upstream-update-research.md.
 set -euo pipefail
 

@@ -6,7 +6,7 @@
 # scripts/inference/qwen38/download-qwen38-27b.sh. Writes to /models/Qwen3.8-27B-DSpark and runs
 # in a throwaway Python container. Idempotent and resumable.
 #
-# See docs/runbooks/new-desktop-install.md — "Experimental Qwen3.8-27B DSpark on SGLang".
+# See scripts/inference/runbooks/new-desktop-install.md — "Experimental Qwen3.8-27B DSpark on SGLang".
 set -euo pipefail
 
 REPO="RadixArk/Qwen3.8-27B-DSpark"

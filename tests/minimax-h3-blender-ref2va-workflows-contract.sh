@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-blender-ref2va-workflows.sh"
-RUNBOOK="$ROOT/docs/runbooks/minimax-h3-blender-ref2va.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/minimax-h3-blender-ref2va.md"
 SKILL="$ROOT/pi/project-skills/creative/blender-previz/SKILL.md"
 WORKFLOW="$ROOT/pi/project-skills/creative/blender-previz/references/workflow.md"
 DISTILLER_MODEL="$ROOT/pi/project-skills/creative/h3-prompt-distillation/references/h3-response-model.md"

@@ -8,7 +8,7 @@
 # quant at ~280 GB of VRAM + RAM; this box has 191 GB + ~85 GB free, so the CPU
 # lane sees only ~2% of the expert lookups and the Engram rows live on their
 # own 16K-record dataset. UD-Q8_K_XL needed ~305 GB and was SSD-bound at ~5
-# tok/s (docs/runbooks/ds41-1017-maya-q8-runbook-2026-10-20.md). Layers are
+# tok/s (scripts/inference/runbooks/ds41-1017-maya-q8-runbook-2026-10-20.md). Layers are
 # split across the two cards (--tp 2).
 #
 # What the repository owns:

@@ -50,7 +50,7 @@
 #   scripts/inference/qwen38/download-qwen38-27b.sh        (target)
 #   scripts/inference/qwen38/download-qwen38-27b-dflash2.sh (draft)
 #   jq (already in the core-apps package set)
-# Full rationale: docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md.
+# Full rationale: scripts/inference/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

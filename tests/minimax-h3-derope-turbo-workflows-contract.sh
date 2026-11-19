@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-derope-turbo-workflows.sh"
-RUNBOOK="$ROOT/docs/runbooks/minimax-h3-derope-turbo.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/minimax-h3-derope-turbo.md"
 MODEL_DOWNLOAD="$ROOT/scripts/comfyui/download-minimax-h3-models.sh"
 
 fail() {

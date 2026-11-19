@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RECORDER="$ROOT/scripts/inference/shared/gpu-telemetry-record.py"
 LAUNCHER="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
 MACHINE="$ROOT/machines/desktop/default.nix"
-TRIAGE="$ROOT/docs/runbooks/gpu-inference-crash-triage.md"
+TRIAGE="$ROOT/scripts/inference/runbooks/gpu-inference-crash-triage.md"
 
 fail() {
   echo "FAIL: $*" >&2

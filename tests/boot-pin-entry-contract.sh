@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SELECTOR="$ROOT/scripts/boot-pin-entry.sh"
 APPLY="$ROOT/system-apply.sh"
-DOC="$ROOT/docs/runbooks/gaming-desktop.md"
+DOC="$ROOT/scripts/inference/runbooks/gaming-desktop.md"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -69,6 +69,6 @@ grep -Fq 'EFI pin' "$APPLY" ||
   fail "system-apply.sh does not verify the EFI pin it wrote"
 contains_doc='a manual `switch-to-configuration` must re-pin by hand'
 grep -Fq -- "$contains_doc" "$DOC" ||
-  fail "docs/runbooks/gaming-desktop.md lost the manual re-pin caveat"
+  fail "scripts/inference/runbooks/gaming-desktop.md lost the manual re-pin caveat"
 
 printf 'PASS: the EFI boot pin always moves to the newest generation headless entry\n'

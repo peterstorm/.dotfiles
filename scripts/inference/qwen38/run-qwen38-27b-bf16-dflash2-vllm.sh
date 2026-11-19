@@ -30,7 +30,7 @@
 #   scripts/inference/qwen38/download-qwen38-27b.sh
 #   scripts/inference/qwen38/download-qwen38-27b-dflash2.sh
 #   scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh
-# Full rationale: docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md —
+# Full rationale: scripts/inference/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md —
 # "vLLM via the PR branch".
 set -euo pipefail
 

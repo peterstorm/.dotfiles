@@ -24,7 +24,7 @@ BUILD="$ROOT/scripts/inference/qwen38/build-qwen38-dflash2-vllm-image.sh"
 SWITCHER="$ROOT/scripts/inference/qwen38/switch-qwen38-backend-v2.sh"
 PULL="$ROOT/scripts/inference/qwen38/pull-qwen38-dflash2-images.sh"
 WF="$ROOT/.github/workflows/build-dflash2-vllm-image.yml"
-DOC="$ROOT/docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md"
+DOC="$ROOT/scripts/inference/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md"
 BENCH="$ROOT/benchmarks/vllm-tps/2026-08-20-dflash2-vllm.md"
 
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }

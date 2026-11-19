@@ -20,7 +20,7 @@ SWITCH="$DIR/switch-ds41-1017-maya-exl35.sh"
 MANIFEST="$DIR/download-3.5bpw.json"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 DISKS="$ROOT/machines/desktop/disks.nix"
-RUNBOOK="$ROOT/docs/runbooks/ds41-1017-maya-exl35-runbook-2026-10-21.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/ds41-1017-maya-exl35-runbook-2026-10-21.md"
 
 MANIFEST_SHA256="b30489b0462cab55b1b9a522b7b8d8134325db9d11b5f7caee07707fd84c8ace"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"

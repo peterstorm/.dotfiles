@@ -10,7 +10,7 @@ OVERLAY="$ROOT/scripts/inference/qwen38/flash-next-v2-safe"
 RUN="$ROOT/scripts/inference/qwen38/run-qwen38-flash-next-fp8-vllm-v2.sh"
 SWITCH="$ROOT/scripts/inference/qwen38/switch-qwen38-flash-next-profile-v2.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
-PLAN="$ROOT/docs/runbooks/qwen38-flash-next-v2-safety-plan-2026-08-30.md"
+PLAN="$ROOT/scripts/inference/runbooks/qwen38-flash-next-v2-safety-plan-2026-08-30.md"
 
 contains() {
   local file="$1" text="$2"

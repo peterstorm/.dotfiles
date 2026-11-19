@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 DOWNLOADER="$ROOT/scripts/comfyui/download-h3-motion-context-resize-models.sh"
-RUNBOOK="$ROOT/docs/runbooks/h3-motion-context-resize-v1.1.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/h3-motion-context-resize-v1.1.md"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2

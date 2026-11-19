@@ -9,7 +9,7 @@ MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-dual-sampling-workflows.sh"
 DOWNLOADER="$ROOT/scripts/comfyui/download-minimax-h3-dual-sampling-models.sh"
 SOURCE="$ROOT/comfyui/workflows/minimax-h3-singularity-dual-sampling-i2v.json"
-RUNBOOK="$ROOT/docs/runbooks/minimax-h3-dual-sampling.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/minimax-h3-dual-sampling.md"
 SOURCE_SHA256=69b3373cf4b9784d50886c0ae65a516e34f0b9cf65dc29d9d216bd286dab4778
 
 fail() {

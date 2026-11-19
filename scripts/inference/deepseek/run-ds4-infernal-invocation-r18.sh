@@ -8,7 +8,7 @@
 #
 # The checkpoint must already be on disk; run
 # scripts/inference/deepseek/download-ds4-flash.sh first.
-# Full rationale: docs/runbooks/new-desktop-install.md — "Running DeepSeek-V4-Flash
+# Full rationale: scripts/inference/runbooks/new-desktop-install.md — "Running DeepSeek-V4-Flash
 # (Infernal Invocation r18, K5)".
 set -euo pipefail
 

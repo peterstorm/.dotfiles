@@ -7,7 +7,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-muse-character-sheet-workflows.sh"
 DOWNLOADER="$ROOT/scripts/comfyui/download-muse-character-sheet-models.sh"
-RUNBOOK="$ROOT/docs/runbooks/muse-character-sheet-workflows.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/muse-character-sheet-workflows.md"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2

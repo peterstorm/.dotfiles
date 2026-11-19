@@ -7,7 +7,7 @@
 # equivalent of the SGLang DSpark profile, for engine A/B at identical draft/target.
 # OpenAI-compatible endpoint on :8000.
 #
-# Verified 2026-08-16 against the vLLM source (see docs/runbooks/new-desktop-install.md,
+# Verified 2026-08-16 against the vLLM source (see scripts/inference/runbooks/new-desktop-install.md,
 # "Experimental Qwen3.8-27B DSpark on vLLM"):
 #   * The draft ships `"architectures": ["DSparkDraftModel"]`, which vLLM's
 #     registry maps to the DeepSeek-V4 DSpark implementation that reads

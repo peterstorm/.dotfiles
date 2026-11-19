@@ -12,7 +12,7 @@
 # continue. On success writes .download-complete ($REPO $REV) into the cache
 # root and a receipt; the serve script refuses to launch without that marker.
 #
-# See docs/runbooks/glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md.
+# See scripts/inference/runbooks/glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md.
 set -euo pipefail
 
 REPO="local-inference-lab/GLM-5.3-Flash-NVFP4-MXFP8-CSF-QAD"

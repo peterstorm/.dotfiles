@@ -2,7 +2,7 @@
 # Throughput/latency probe for the :8000 inference server (vLLM or SGLang).
 #
 # Purpose: engine A/B evidence for the Qwen3.8-27B DSpark validation gate
-# (docs/runbooks/new-desktop-install.md: "output tokens/s plus inter-token latency at
+# (scripts/inference/runbooks/new-desktop-install.md: "output tokens/s plus inter-token latency at
 # concurrency 1 and 8 beat or match the SGLang DSpark baseline").
 #
 # Rounds (override with ROUNDS, space separated):

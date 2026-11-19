@@ -26,7 +26,7 @@
 # (glm53-uncensored-convert.py) next to v16 without touching v16's package; a
 # built variant must carry its build receipt (hyperflare_variant_build_receipt).
 #
-# See docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md.
+# See scripts/inference/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

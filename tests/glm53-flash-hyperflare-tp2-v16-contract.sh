@@ -28,7 +28,7 @@ SWITCH="$GLM/switch-glm53-hyperflare-tp2-v16.sh"
 VARIANTS="$GLM/hyperflare-variants.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 PI_MODELS="$ROOT/pi/models.json"
-RUNBOOK="$ROOT/docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md"
 DESKTOP="$ROOT/machines/desktop/default.nix"
 
 FORK_COMMIT="ac9136b02c7c523f12d6e628e9d94f41006312ea"

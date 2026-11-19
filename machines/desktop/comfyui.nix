@@ -854,7 +854,7 @@ let
   # YouTube workflows"); the Balanced T2V workflow requires its sampler,
   # scheduling, and tool nodes (DualSampler*, SigmaAncestry, SigmasRescale,
   # SuperSelectLoraName, SetReserveVRAM, ImageSizeCalculator). See
-  # docs/runbooks/minimax-h3-balanced-supercc-workflows.md for the adaptation.
+  # scripts/inference/runbooks/minimax-h3-balanced-supercc-workflows.md for the adaptation.
   superNodesSource = pkgs.fetchFromGitHub {
     owner = "sonnybox";
     repo = "ComfyUI-SuperNodes";
@@ -1690,7 +1690,7 @@ let
       '';
 
   # The two workstation BF16 adaptations of the video's Muse Character Sheet
-  # workflows. See docs/runbooks/muse-character-sheet-workflows.md.
+  # workflows. See scripts/inference/runbooks/muse-character-sheet-workflows.md.
   museCharacterSheetWorkflows =
     pkgs.runCommand "muse-character-sheet-maximum-quality-bf16-workflows"
       {

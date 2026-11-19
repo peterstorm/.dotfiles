@@ -6,7 +6,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-vdn-workflows.sh"
 DOWNLOADER="$ROOT/scripts/comfyui/download-minimax-h3-vdn-stage.sh"
-RUNBOOK="$ROOT/docs/runbooks/minimax-h3-vdn-h3.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/minimax-h3-vdn-h3.md"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2

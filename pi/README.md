@@ -190,7 +190,7 @@ with the four **primary** models, served by two engines that take turns on port 
 
 - `desktop-vllm/warmind-1017-native` — jcartu's abliterated WARMIND-1017 on ds4-native behind Maya's server: Experts streamed from the NVMe, DSpark, 262,144-token context, conversations kept as KV checkpoints in RAM. **Pi's default model.**
 - `desktop-vllm/deepseek-v4.1-flash-native` — stock DeepSeek-V4.1-Flash-1017 at released precision on the same engine; only the Backbone differs.
-- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, vision. The engine serves a 1,048,576-token context but the catalog caps it at **400K** (2026-11-15: at 1M both GLM builds spiral into degenerate reasoning, so Pi compacts earlier). GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `docs/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
+- `desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16` — GLM-5.3-Flash (NVIDIA FP4-Local) on NVIDIA Hyperflare as the recipe's TP2/DCP2 package: 8 slots, MTP 5, ~2.2M KV tokens, vision. The engine serves a 1,048,576-token context but the catalog caps it at **400K** (2026-11-15: at 1M both GLM builds spiral into degenerate reasoning, so Pi compacts earlier). GLM always thinks; `reasoning_effort` `low`/`high` select that effort and anything else gives max. Runbook `scripts/inference/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md`.
 - `desktop-vllm/glm-5.3-flash-hyperflare-tp2-uncensored` — the `uncensored` primary (variant `uncensored`, since 2026-11-15): dealignai's GLM-5.3-Flash-UNCENSORED-NVFP4 (`745aac2f`, the refusal edit in every layer, experts included) converted by `scripts/inference/glm53/glm53-uncensored-convert.py` into v16's storage formats — dense FP8, slab-CSF expert scales with the gate/up globals folded, and v16's vision tower, expert input scales and chat template — so it fits v16's GPU budget (2,271,744 KV tokens against v16's 2,240,000). Same engine, flags, 400K catalog cap and vision as v16. On the 21-prompt refusal probe it refused none at default effort (four answers ran out of the probe's 4K-token cap mid-thinking) and one at low effort (a request for copyrighted lyrics), against v16's 3 and the retired `cyber-hybrid-bf16`'s 6. Reached by name and as WARMIND's toggle target (2026-11-16: the toggle from WARMIND lands here, not on v16). It replaced the CYBERSECURITY splices (`cyber-hybrid`, `cyber-hybrid-bf16`), retired the same day. Build and rationale in the runbook's *Variant: uncensored* section.
 
 Thinking defaults to **max** everywhere (2026-11-14): each primary's `defaultThinkingLevel`,
@@ -329,7 +329,7 @@ conversation-slot PR), which keeps the most-used experts in the two RTX PRO
 6000s' VRAM, reads the rest in place from the model files while holding its
 own anonymous heap copy of the most-routed ones (not a pinned tier, not page
 cache), and keeps DeepSeek's Engram tables on a 16K-record ZFS dataset
-(`docs/runbooks/ds41-1017-maya-exl35-runbook-2026-10-21.md`). Measured on
+(`scripts/inference/runbooks/ds41-1017-maya-exl35-runbook-2026-10-21.md`). Measured on
 the served config (262,144 context, 8,192-token prompt chunks, DSpark on): 83-138
 tok/s decode (108-135 on 58-88K-token conversations, 104 at 205K), 1,420-1,950 tok/s
 prefill on a cold prompt (10K-25K tokens) — level with v1.1.17's 1,541 tok/s at
@@ -522,7 +522,7 @@ for about 3.5 full-length sessions in the shared pool across the eight slots.
 The exact boot values are in
 `~/.local/state/glm53/flash-qad2-tp2-v15-boot-receipt.txt`.
 
-See `docs/runbooks/glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md`.
+See `scripts/inference/runbooks/glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md`.
 
 ### GLM-5.3 Flash Spark TP2 (v14)
 

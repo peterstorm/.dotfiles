@@ -32,7 +32,7 @@ let
   # window; the cooler swap (Arctic AIO) and the 2026-09-14 fan retune change
   # that thermal calculus, which is why 400 W is being retried. If Xid 79
   # recurs, revert to 450 W here and resume the physical-swap track. See
-  # docs/runbooks/gpu-inference-crash-triage.md.
+  # scripts/inference/runbooks/gpu-inference-crash-triage.md.
   #
   # This is a request, not an assertion: the service below clamps it into the
   # range the installed cards actually report. The SKU is confirmed as the
@@ -251,7 +251,7 @@ in
   # nobody reads twice. 16 GiB is ample for /nix and metadata.
   # pcie_aspm=off: disable PCIe Active State Power Management. The recurrent
   # failure on this box is Xid 79 "GPU has fallen off the bus" (GPU0, at both
-  # 450 W and 400 W caps — see docs/runbooks/gpu-inference-crash-triage.md).
+  # 450 W and 400 W caps — see scripts/inference/runbooks/gpu-inference-crash-triage.md).
   # ASPM can drop a marginal PCIe link into a low-power state the GPU does not
   # cleanly resume from, which presents exactly as a bus dropout. Turning it
   # off is a low-risk, well-known Xid 79 mitigation and is orthogonal to the
@@ -313,7 +313,7 @@ in
     # Hardware diagnostics. These are on the installer ISO but were missing from
     # the installed system, which is backwards: this box's whole reason for
     # existing is two GPUs on a specific PCIe topology, and the P2P verification
-    # steps in docs/runbooks/new-desktop-install.md are literally `lspci -PP` and
+    # steps in scripts/inference/runbooks/new-desktop-install.md are literally `lspci -PP` and
     # `lspci -vv | grep LnkSta`. Not having pciutils here meant the one machine
     # that needs to answer PCIe questions could not.
     pciutils

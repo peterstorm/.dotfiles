@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 WORKFLOW="$ROOT/comfyui/workflows/minimax-h3-balanced-supercc-v1.0-t2v.json"
-RUNBOOK="$ROOT/docs/runbooks/minimax-h3-balanced-supercc-workflows.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/minimax-h3-balanced-supercc-workflows.md"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -60,7 +60,7 @@ contains '"$balanced_staging/MiniMax H3 BF16 Balanced SuperCC v1.0 - Text To Vid
 contains 'mv "$balanced_staging" "$balanced_dir"'
 test "$(grep -Fc 'balanced_staging/MiniMax H3 BF16 Balanced SuperCC v1.0 - Text To Video.json' "$MODULE")" -eq 1 \
   || fail "balanced workflow installed more than once"
-contains 'docs/runbooks/minimax-h3-balanced-supercc-workflows.md'
+contains 'scripts/inference/runbooks/minimax-h3-balanced-supercc-workflows.md'
 
 # --- workflow JSON invariants ---
 jq -e . "$WORKFLOW" > /dev/null || fail "adapted workflow is not valid JSON"

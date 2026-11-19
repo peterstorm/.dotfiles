@@ -9,11 +9,11 @@
 # opt-in: TP_SIZE=1 SPEC_MTP=1 bash scripts/inference/qwen38/run-qwen38-27b-bf16.sh.
 # It is refused at TP>=2 while vLLM issue #52480 (qwen3_5 MTP drafter weight-load crash)
 # is open, and the image must demonstrably carry vLLM #51812 + #51674. Full rationale
-# and gate: docs/runbooks/new-desktop-install.md, "Why MTP is off".
+# and gate: scripts/inference/runbooks/new-desktop-install.md, "Why MTP is off".
 #
 # The checkpoint must already be on disk —
 # run scripts/inference/qwen38/download-qwen38-27b.sh.
-# Full rationale: docs/runbooks/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
+# Full rationale: scripts/inference/runbooks/new-desktop-install.md — "Running Qwen3.8-27B BF16 on vLLM".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

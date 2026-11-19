@@ -105,7 +105,7 @@ Allocation heuristic: **if a stronger channel can carry it, the prompt must not.
 
 ### Video carrier rules
 
-- This skill declares the render targets `blender-previz` must hit — frame rate, aspect, exact frame count, and state-still frames — from the consuming graph; the current local profiles are documented in `docs/runbooks/minimax-h3-blender-ref2va.md`.
+- This skill declares the render targets `blender-previz` must hit — frame rate, aspect, exact frame count, and state-still frames — from the consuming graph; the current local profiles are documented in `scripts/inference/runbooks/minimax-h3-blender-ref2va.md`.
 - Encode the carrier contract's owned/not-owned split through the official grammar: what `<Video 1>` provides in `subject_definitions`, its preservation level in `retention_analysis`, and its role positively in the description. Not-owned properties (identity, proxy appearance, gray materials, lighting) are covered by the appearance references and the style-bleed QA row — never by negative prompt clauses.
 - The carrier is generative guidance, not deterministic pixel transfer: every claimed camera, cut, path, contact, and state property still needs sampled-frame QA.
 - Raw proxy state stills are Development A/B material only; prefer Krea-resolved stills that keep the Blender projection and spacing while carrying accepted appearance.

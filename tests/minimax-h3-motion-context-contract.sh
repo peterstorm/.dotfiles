@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODULE="$ROOT/machines/desktop/comfyui.nix"
 BUILDER="$ROOT/scripts/comfyui/build-minimax-h3-motion-context-workflows.sh"
-RUNBOOK="$ROOT/docs/runbooks/minimax-h3-motion-context.md"
+RUNBOOK="$ROOT/scripts/inference/runbooks/minimax-h3-motion-context.md"
 SOURCE_EDIT_NODE="$ROOT/comfyui/custom_nodes/aftersignal_h3_source_edit/nodes.py"
 SOURCE_EDIT_TEST="$ROOT/comfyui/custom_nodes/aftersignal_h3_source_edit/test_nodes.py"
 

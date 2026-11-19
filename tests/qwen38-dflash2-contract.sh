@@ -26,7 +26,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DFLASH2_DL="$ROOT/scripts/inference/qwen38/download-qwen38-27b-dflash2.sh"
 DFLASH2_SGLANG="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dflash2-sglang.sh"
 SWITCHER="$ROOT/scripts/inference/qwen38/switch-qwen38-backend-v2.sh"
-DOC="$ROOT/docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md"
+DOC="$ROOT/scripts/inference/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2

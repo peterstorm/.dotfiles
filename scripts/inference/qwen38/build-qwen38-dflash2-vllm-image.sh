@@ -34,7 +34,7 @@
 #
 # Idempotent: skips when the image already exists (REBUILD=1 to force).
 # On completion it prints the image ID and manifest digest — record the
-# digest in docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md and the
+# digest in scripts/inference/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md and the
 # vLLM run script before serving.
 set -euo pipefail
 

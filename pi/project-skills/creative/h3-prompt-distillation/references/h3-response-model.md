@@ -142,7 +142,7 @@ buying weaker enforcement.
   profiles (124-frame default; 362-frame duration-qualification candidates —
   note 362 frames is nominally 15.08 s against the documented ≤15 s reference
   limit, so confirm the frame-vs-seconds boundary before qualifying). Never
-  stack Turbo and PDD adapters; see `docs/runbooks/minimax-h3-blender-ref2va.md`.
+  stack Turbo and PDD adapters; see `scripts/inference/runbooks/minimax-h3-blender-ref2va.md`.
 - Keep text, titles, and logos out of diffusion outputs; add them in post.
 
 ## 9. Local evidence: v20 Turbo-4 / PDD-8 ensemble A/B

@@ -25,7 +25,7 @@
 # Prerequisites:
 #   scripts/inference/qwen38/download-qwen38-27b.sh
 #   scripts/inference/qwen38/download-qwen38-27b-dspark-v2.sh
-# Full rationale: docs/runbooks/qwen38-27b-runbook-2026-08-18.md —
+# Full rationale: scripts/inference/runbooks/qwen38-27b-runbook-2026-08-18.md —
 # "Experimental Qwen3.8-27B DSpark on SGLang (v2)".
 set -euo pipefail
 

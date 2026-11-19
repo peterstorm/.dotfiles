@@ -2595,4 +2595,4 @@ Sources accessed 2026-08-21–22:
 - [Krea API Zero Data Retention](https://www.krea.ai/docs/developers/zdr)
 
 For full-fidelity H3 architecture, memory, and licensing analysis, also read
-`docs/runbooks/local-ai-video-script-runbook.md`.
+`scripts/inference/runbooks/local-ai-video-script-runbook.md`.

@@ -17,7 +17,7 @@
 # Runs the download in a throwaway Python container (docker + network host).
 # Idempotent and resumable: re-run after an interruption to continue.
 #
-# See docs/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md.
+# See scripts/inference/runbooks/qwen38-27b-dflash2-runbook-2026-08-19.md.
 set -euo pipefail
 
 REPO="z-lab/Qwen3.8-27B-DFlash2"

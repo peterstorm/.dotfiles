@@ -28,7 +28,7 @@ V2_VLLM="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm-v2.sh"
 OLD_DL="$ROOT/scripts/inference/qwen38/download-qwen38-27b-dspark.sh"
 OLD_SGLANG="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-sglang.sh"
 OLD_VLLM="$ROOT/scripts/inference/qwen38/run-qwen38-27b-bf16-dspark-vllm.sh"
-DOC="$ROOT/docs/runbooks/qwen38-27b-runbook-2026-08-18.md"
+DOC="$ROOT/scripts/inference/runbooks/qwen38-27b-runbook-2026-08-18.md"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2

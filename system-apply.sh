@@ -29,7 +29,7 @@ if [ "$rc" -ne 0 ]; then
 fi
 
 # A boot default pinned in EFI (`bootctl set-default`, see
-# docs/runbooks/gaming-desktop.md) names one generation's entry file, and it
+# scripts/inference/runbooks/gaming-desktop.md) names one generation's entry file, and it
 # outranks loader.conf: left alone, the machine keeps booting the generation it
 # was pinned on (desktop 2026-10-22 booted 73 over 74; 2026-11-08 booted 75 over
 # 78, dropping the ds4-native metrics bridge until 79 was applied 2026-11-12).
