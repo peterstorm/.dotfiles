@@ -143,6 +143,23 @@ in
             primarycache = "all";
           };
         };
+
+        # GLM-5.3 Expert store (ds4-native, one 20 MiB record per Expert: two
+        # 10 MiB Halves, each ~0.45 MiB of zero padding to keep 1 MiB alignment)
+        # and its Backbone parts. zle stores those zero runs as nothing and
+        # leaves every other block raw, so streaming reads never decompress
+        # weights; with the parent's compression=off the padding would cost
+        # ~16.4 GiB. Created by hand on 2026-11-19 (zfs create -o
+        # mountpoint=legacy -o compression=zle -o recordsize=1M).
+        "models/glm53-store" = {
+          type = "zfs_fs";
+          mountpoint = "/models/glm53-store";
+          options = {
+            mountpoint = "legacy";
+            compression = "zle";
+            recordsize = "1M";
+          };
+        };
       };
     };
   };
