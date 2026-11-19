@@ -1,0 +1,9 @@
+# bun install
+node_modules
+
+# Reports contain personal data and are written outside git by default
+# (~/.local/share/bench/reclaw-skills-retro/); never commit a run here.
+out
+runs.jsonl
+report.md
+flagged.md

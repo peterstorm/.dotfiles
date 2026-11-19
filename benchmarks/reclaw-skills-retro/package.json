@@ -1,0 +1,19 @@
+{
+  "name": "reclaw-skills-retro",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "retro": "bun src/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "fast-check": "^4.10.3",
+    "typescript": "^7.0.2"
+  }
+}
