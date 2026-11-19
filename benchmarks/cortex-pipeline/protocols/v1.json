@@ -1,0 +1,3950 @@
+{
+  "name": "v1",
+  "id": "v1-d58d7d36be4b",
+  "seed": 20261119,
+  "quotas": {
+    "relate": 300,
+    "prune": 100,
+    "extract": 50
+  },
+  "corpus": {
+    "calls": 15283,
+    "sha256": "82a2ee305650e6fc05312eb37795ea76d801858f491eacff1eb2d9e801aa0472"
+  },
+  "cortexCommit": "7af9a5acc403",
+  "cases": [
+    {
+      "job": "relate",
+      "session": "9442d8b1-7b2b-4378-bfaa-2762cf5c25e3",
+      "at": "2026-10-21T10:47:26.832Z",
+      "promptSha256": "5f9a384a0beb2d2ae8fc6dd063cb6bb73f26058c95caf6f066cf796eb54a9bb8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a9732eec-17a9-41c7-a13e-f316a758beff",
+      "at": "2026-10-20T22:47:14.009Z",
+      "promptSha256": "02624947cea2c7777f7529d4ab1a4d575a395e158485885dfd9f2bdc5712e577",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "447654ab-5430-40ee-9e48-b244036f5f70",
+      "at": "2026-10-22T19:48:26.619Z",
+      "promptSha256": "14aae3c30f9b4c08f65b637f9e1997b996956bd57ca0daf175a8ff2f2a9dbdae",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 1,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2bd96fc4-002e-43c3-bc19-e77e9f3851b4",
+      "at": "2026-10-20T22:14:17.817Z",
+      "promptSha256": "bb3c3a9b074a2ee29c8ce8348fd9e349b5cbe2da4767dd8ca72faa7859a435f9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "cfe774cd-5a4e-4a7e-9862-962a4f0ab373",
+      "at": "2026-10-21T09:19:02.714Z",
+      "promptSha256": "3aaf7daa1fcb96373f45c25ab97da5f52b4b784b1e11cac42f00c8eaeaa70953",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "acd3e9ed-8e5c-4902-a617-d27007a10065",
+      "at": "2026-10-21T09:28:01.388Z",
+      "promptSha256": "ddb662e134519a822e1059ee85857684a249ea4586d042ce9c1453ae6850c5e4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "bbc3cf58-fecd-4911-a687-446083694097",
+      "at": "2026-10-22T22:42:00.168Z",
+      "promptSha256": "7fd29a52998f484a9e4771ff1724de08938fa7b6c4fe03d2e9819addc6b26a0d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "487b45af-9591-4e01-8d14-fda0f785e758",
+      "at": "2026-10-22T22:36:26.254Z",
+      "promptSha256": "2a050428105485b27ae4e7794076c6f04d7ae4d02a004b176986e707fd80cee1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "6d156438-b0a7-4c9f-8dba-9ffcd0a8b356",
+      "at": "2026-10-25T13:14:42.708Z",
+      "promptSha256": "364d53b7a0868c542e796b9b3624bd62acfaaa04227694b526fcc46a46aa53e7",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "9b5f69fd-0afe-4c87-8b94-8d14c5a9a062",
+      "at": "2026-10-25T09:28:00.698Z",
+      "promptSha256": "38a625823131a291fccc32e3463b393527fec1c3ca9ce1ab078550f86c7cbd9b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a413f622-40b0-4539-99d0-6f171f86e125",
+      "at": "2026-10-22T09:41:26.279Z",
+      "promptSha256": "0a8abc22388c30b18cd5768271fab7c4d451f0700afb8af4580f5c483a65406e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a079ffba-cdb0-412a-a817-1b8dbcac49fe",
+      "at": "2026-10-25T00:29:25.669Z",
+      "promptSha256": "9f9204ff503993d917780d948063ad0ff9545ebccbcc5d77627412dca68d2ffa",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "66c65bdf-998c-49fd-adf0-af1ddc40f10a",
+      "at": "2026-10-21T10:23:43.576Z",
+      "promptSha256": "18ad28a1f69e3ea24695edaefe17389d0ed75118136f80a790b82ab9fba318bc",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "584f2aeb-d455-42ad-b9b0-69c96181d533",
+      "at": "2026-10-22T10:11:49.525Z",
+      "promptSha256": "419809a4d9a3ae6a4110690f8a43eb29fd2e8bbc03f34a5835c67571d210eecb",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "3127b79a-ead7-4a5c-af44-b10bb04ce111",
+      "at": "2026-10-20T22:24:24.034Z",
+      "promptSha256": "66ac768d527cf8701b6647224dffa2956f8123e83b75b0ddb4734744a8515faf",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e1fa8dd2-95ea-4052-9fa8-151bcd68a208",
+      "at": "2026-10-20T22:41:47.204Z",
+      "promptSha256": "1f50aa46c0d369f7d08f2555a2bc933d24a2fb568977655a0e4a251781c5fb0c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "dc39332f-ef71-4e86-9607-38c21c0aa1bb",
+      "at": "2026-10-22T13:57:41.627Z",
+      "promptSha256": "7cc069d4f6d6c74c87023293888fb72c983ee5b368b712d601856b3045cd9992",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "db911ef3-47d1-447e-97f9-21251f8291a4",
+      "at": "2026-10-25T00:12:05.004Z",
+      "promptSha256": "7e5f54002efc6075a6b4d99a52963255d05d5962bcec7a1339f03ff2658909d0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "f0909891-3d3d-406e-8e54-aabc7c0b9ee1",
+      "at": "2026-10-22T13:56:02.605Z",
+      "promptSha256": "d7c917cfcaae060b762bc815129be237d8a9d0e38c780edec75c8564c16c11fa",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "434e3e68-53bf-41f6-8926-a338204ee3d2",
+      "at": "2026-10-22T19:23:46.696Z",
+      "promptSha256": "982478c4484fa893d2b1c61542b582c27a01282badf0cb4f38442a7262ce0152",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e6e7672c-cbf5-41f9-9fcb-f1f2ad4765ac",
+      "at": "2026-10-21T06:43:18.333Z",
+      "promptSha256": "c45710d288fbb5a85967da5e84bb3c905e214494a2abb803f5ccd298fabd6c25",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "6992b61b-cacb-4be8-b728-1875cf1be860",
+      "at": "2026-10-25T09:24:22.503Z",
+      "promptSha256": "faf5fe78e9e184ed891a011dee1d5a5b784d0ab5e8654d276dd92e9a5f9ebfc1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "fe98d145-4b13-49a8-93d9-745e4f5bdd2f",
+      "at": "2026-10-21T09:07:40.105Z",
+      "promptSha256": "5e91156cbb9ff59fdb141741a6316e2cc83ff9a2acc01e42f11e8d3c573742ac",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "7ad89698-e1d2-4506-9970-6bbf4c833f3a",
+      "at": "2026-10-21T09:11:38.781Z",
+      "promptSha256": "843b4db92bbf55836fe988325a5648840fc0a567d3ce653f81cc92cc5632ec73",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "082ed9a6-58c4-4107-b636-ee0a252f1bb0",
+      "at": "2026-10-21T14:16:43.603Z",
+      "promptSha256": "6f84555af1263f26a20bb2512c595d142f2e891d44ad5828f481b03e458f625d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "aaf0944a-0467-49ab-93eb-fee0140a08bf",
+      "at": "2026-10-21T17:48:26.742Z",
+      "promptSha256": "17cc2bf896533ba0f31168e4fc72fa669cdf564c3f6a8d5093c7543ebcf0c711",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "08f9a8ba-5cd6-44e0-86ec-e714339d3dd9",
+      "at": "2026-10-22T04:09:00.381Z",
+      "promptSha256": "4e7827ecb273cee1c8c111250d6c685598601c27519f8aba3c7d3521533cf167",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "3a119bdf-140a-4767-bfd9-01d1b0c83e62",
+      "at": "2026-10-25T04:50:37.886Z",
+      "promptSha256": "96175947e8300edaf1ffbe90d5cd0709b0e49939992376c624de2f7f5f97b460",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "852e4121-8812-448b-8517-024e71a297d3",
+      "at": "2026-10-22T10:02:38.462Z",
+      "promptSha256": "bdd1228f9ad3c5d85a4b0347d992f2e388c89af271f73d5ca3891c9e2f01cba9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "abaec5b8-6af1-4517-b4f7-d6aad2ec0e73",
+      "at": "2026-10-22T03:51:39.156Z",
+      "promptSha256": "a5f2aa2c554d9ce38abe85e67419f683eef42a44644fb1af12c313152cc7cd20",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "3ba7bb85-b6e3-4d85-9c3f-047f67c05110",
+      "at": "2026-10-22T00:59:51.143Z",
+      "promptSha256": "9e2af89a358d927983392be42ca38c82881de6ef89714a8a5b62ce7e41c83b37",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "52fb593f-f73b-4ce1-a9e3-482722aa2efd",
+      "at": "2026-10-25T13:31:44.770Z",
+      "promptSha256": "5fe25753a462e11a89e54e35bbd85b87ebdc4f9cfaa7fd4699a5eb1ce984a020",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "5ee36d3e-d86d-435b-adc6-9e7034f9832a",
+      "at": "2026-10-22T22:08:20.300Z",
+      "promptSha256": "4760a51a3fcf524ccc55d564773d8c70dd9a43cdaeb4b9c80574a962dc9f8184",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "d7938fb8-d554-44d9-a181-451cae6a09aa",
+      "at": "2026-10-25T10:55:03.899Z",
+      "promptSha256": "38d45a2438ee3c037a1850d57e1ceed5e926980f3cca879c95fbc59d381736eb",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "b7fe4adf-7df0-496a-b27c-3c541993959d",
+      "at": "2026-10-20T22:00:58.784Z",
+      "promptSha256": "c3f24fd1a052ec556e033f0175366fa073dbb1a552acb03be12fd2a93f4e964f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e813ec5d-ef99-4caf-8020-b30c4d960dcf",
+      "at": "2026-10-20T22:29:34.039Z",
+      "promptSha256": "ba18ea060f4f6755c540074a37ec04e2c6d0bc889e550fede36465382e6a73cd",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "238302f0-b756-4dd1-8c3e-d33a169da5c8",
+      "at": "2026-10-21T01:05:53.787Z",
+      "promptSha256": "79312574239091d101e64135495bdaff50fe7b11ec54af9c4112fc82931d87ac",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "21c981c8-3712-4694-a6c5-6cd35693d74a",
+      "at": "2026-10-21T09:27:19.557Z",
+      "promptSha256": "b10c72a18e79f2dd1550e8b4efb7e892a60e5dcf03d14c54127310010238442c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "1e92349c-6515-4a97-854e-ec8f5417be65",
+      "at": "2026-10-22T03:46:31.279Z",
+      "promptSha256": "59fd8a0341b0638dacacea71db48018a31cefb100f93a835450f843191938211",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "4e200ab3-9433-452e-8624-f8bea824f732",
+      "at": "2026-10-22T09:55:26.085Z",
+      "promptSha256": "e586cc8c179598b4d847c69bbd053d4710743dde0f88373bc41182cdbeae4d9f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "485e931a-c523-4686-8e2d-4d78d10eff81",
+      "at": "2026-10-21T17:39:32.899Z",
+      "promptSha256": "bf39d39d1311484b4db98d195e585b524d0cbd8a4603d495607b813023636b94",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "7da01043-a442-416c-8b4e-ae9c4632a49d",
+      "at": "2026-10-20T22:17:23.183Z",
+      "promptSha256": "529b170faa3d47abce9b27142e37079f6329b887a4ba698908980322a1f4eaf1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "ab6b72ce-36d5-4575-8769-59802f16be1b",
+      "at": "2026-10-21T06:30:16.734Z",
+      "promptSha256": "25f0c3aee674b984c4f68e5f57dbb3d4ebe77d0cbc0969d5a62b5eff0c1e0667",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "71199890-084a-4367-b814-030764568269",
+      "at": "2026-10-20T20:07:06.286Z",
+      "promptSha256": "453ffe3b4a4c95b06aaf9518710010142d020310f82fa2052082235397b40527",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 6,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "04a704bd-35d6-40eb-a02a-00788ecda9b8",
+      "at": "2026-10-22T08:38:04.706Z",
+      "promptSha256": "6be631c84dfa474b06f9294ee295eef366758c3b3bb1f9be190f93acd83ef225",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "7614f560-6ec8-41a6-ae11-5c4f840dc1fa",
+      "at": "2026-10-21T05:33:52.524Z",
+      "promptSha256": "18c29a36fa130d06e7f9fd72eafd839c39ae871ae829edf077966304357b69e2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "3077b7fb-df26-4a4f-b0cc-e082d814fe85",
+      "at": "2026-10-22T10:00:29.802Z",
+      "promptSha256": "78e37baaf70d5afb1b75d9deb6caad74cd530133bcb34253cede6842f636e117",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "3b8cc18a-015c-4b53-9c6f-bc30f61b0aed",
+      "at": "2026-10-25T05:15:35.688Z",
+      "promptSha256": "21ba26893dbfa31ffb39e90f8510befa24bfa4ca88b737f5daeadc7850c2254f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "b51368ab-dd5c-4c07-933a-22a8802b425d",
+      "at": "2026-10-21T09:20:30.253Z",
+      "promptSha256": "7be2fb68840a07fe10bb7ba63c579d30b3c757b7b7f085ee025995d9d3bdc01d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c196b15d-1cd1-4b4f-bb09-fcadbd88222c",
+      "at": "2026-10-21T06:47:49.788Z",
+      "promptSha256": "151ac45669957a1be49a76d702befa2100e1a4ef6ad4d63206246c17f55512a4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "f858484a-8c04-43f7-a191-fa9ae6cacade",
+      "at": "2026-10-21T07:48:15.475Z",
+      "promptSha256": "f8e43809470405bd225144bde752e4da40da88101de33dec2356e87131b42ef9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "83755cd9-bfaf-4558-8bf6-f7924aaa6e86",
+      "at": "2026-10-21T05:39:16.527Z",
+      "promptSha256": "b644bf4be6f43cdf4672fcf1dca31efc82f6baa572675b76e019816142331371",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "71e2c46a-a435-4068-a087-a0557fd9c331",
+      "at": "2026-10-20T22:03:29.012Z",
+      "promptSha256": "a1e32c7a833c38355f6c1314838578b043242fdd416f372aff921d009fe16c1d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "74668f8e-7f8f-425c-b2b8-0dde712f4e4f",
+      "at": "2026-10-22T03:43:18.852Z",
+      "promptSha256": "b4407745f317ef9f2a655b009ec7aeeb0f3aaf036a58b3b8e0519e2f6422a065",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "81e62f17-5b51-48cf-9de5-46b8f19f31f0",
+      "at": "2026-10-25T16:27:24.703Z",
+      "promptSha256": "0c8d3e70ef2268ed51b843e7b91e02631049ab0284459fb6bf3e22496bbd0166",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "970e31c9-69f5-4bec-a9eb-ea3fd72c3f10",
+      "at": "2026-10-25T05:55:07.746Z",
+      "promptSha256": "e410b2ed06e025331345263bd0bec0ef83b7dab16f1ba13219fa216fd506c2a4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "4e1165af-d95c-474b-942d-686463572873",
+      "at": "2026-10-21T07:48:59.517Z",
+      "promptSha256": "9d81e99047692f6971ee94892f260f69bcde633f35aafa5e312355a5d829b1ef",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "d1020d7b-5dce-48b2-b7f8-d3c2efaadd01",
+      "at": "2026-10-21T05:46:38.596Z",
+      "promptSha256": "df9ce5013c75eeccb90150fd825f6a9ac1295dcaff1b9aee5d0384a4838a9a2a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "eab8e5a6-5b08-4fa4-859d-f28a2537d340",
+      "at": "2026-10-21T06:48:33.552Z",
+      "promptSha256": "a81c56883dbae41f6379df60dd4854f20982ade23c0379e7bcaad11844c37821",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "f0c1977c-6991-4199-9194-a493bf1a3c60",
+      "at": "2026-10-21T18:18:01.171Z",
+      "promptSha256": "67fe3102c260aa86675cd5b4e1761b14e68e3cc486f56fbd54ad85fb0f07d353",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 9,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c650ae69-00a7-47a9-8679-255b30c0c693",
+      "at": "2026-10-21T08:00:54.128Z",
+      "promptSha256": "b34ff320fa5b8093a62f41b4230d9685e6ea586d133d82c6049596a9ac01af6b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a4d17492-daf2-4890-a71e-ec25419ba7a5",
+      "at": "2026-10-25T17:43:15.660Z",
+      "promptSha256": "7be187d7fee122248f1cd21d417f0e46df33a642a0a21c1378b3f104643bc25a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "70880584-9b1a-4028-809f-ea24185a49ba",
+      "at": "2026-10-20T20:04:09.294Z",
+      "promptSha256": "3f7d243dea3033f1c9461507bb740baef5585681fb1a88d3c2acee88a22333e4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e8ac9b23-a3a6-41d5-b71b-43fc98955129",
+      "at": "2026-10-20T22:21:43.516Z",
+      "promptSha256": "9e87b66b729937efedc0e863f0174afffb28fa8f167bb09fa226887ae3a30ca1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "aa74ee75-31d4-45af-a654-f41cde905420",
+      "at": "2026-10-23T05:31:15.883Z",
+      "promptSha256": "b7ab334a7f878e39d63fdaecc06929fa46cc014b83152f1a1bc6f87c88f5b03d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "bc4131b3-b95c-471f-a834-4d36b7559a96",
+      "at": "2026-10-20T22:43:25.964Z",
+      "promptSha256": "b67598941af1515904df0a92a388b5cf7e50febca997444f12ee774832c81af2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "31bc4bad-6ebb-49db-96e0-d986f3d2aacf",
+      "at": "2026-10-25T16:37:56.329Z",
+      "promptSha256": "b93431251853965deb6a1b5142b563549f5838b6bf1a29958280c413bfdc4a73",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "1a55c489-6974-4d3e-bdef-8a25d838c60e",
+      "at": "2026-10-21T06:50:55.427Z",
+      "promptSha256": "f4ab35f1fafb7091defcc1325c0d335fd7698855177f4d3496340d38229be440",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "bd0ad30e-ed04-456d-89ab-8d27cc8426b4",
+      "at": "2026-10-20T22:13:48.673Z",
+      "promptSha256": "7dee1e8e6f676457ea25fc674098011723946c9c9617659ed09d2763736d16c1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2e82559b-f863-4129-8cb6-dde378074782",
+      "at": "2026-10-25T16:32:47.372Z",
+      "promptSha256": "0b4a9ea535f3cbe3e498b1c03e4985564d35c4a6239806cdbf1f5a8cc5914200",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "9af07d9e-4038-4258-a334-edc6295fbc7e",
+      "at": "2026-10-21T09:21:53.649Z",
+      "promptSha256": "519f7d5f16b11331e8ac11f7222dd3c8792e45f74f1326f3b2e6d28128f6d7e0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "be0522e4-5c84-4e48-9d33-62031ff61d56",
+      "at": "2026-10-21T05:41:02.233Z",
+      "promptSha256": "7ed99e0821bad0c3698aeb197ebf40a7e14e28ca4a59cff7e8474181a9c9df00",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "38f784fa-3cf2-4395-bbf1-bec3778aadcf",
+      "at": "2026-10-22T22:09:23.703Z",
+      "promptSha256": "e96b9851724c6e0841b0b5d15495d016c2716f9f314a3fb9906a8971f07c062f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "034d9f5c-0c4a-457b-bb98-0b7483c1836c",
+      "at": "2026-10-21T17:40:32.119Z",
+      "promptSha256": "99ce3bc49486798caf4eee749bc8a6c37568ab4b5bc7b75781c61f0e0acaa10c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "7834a662-4c9b-4eb3-87ac-88ce2705912f",
+      "at": "2026-10-21T06:40:02.286Z",
+      "promptSha256": "bb190c6c9819c9a35e866eeb8374be429150ef1464020e475a71349ad205eda4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "011fa045-0a87-46a5-9554-25be70a517d0",
+      "at": "2026-10-21T07:58:30.105Z",
+      "promptSha256": "bd07a5a59e130fd1409b3ee23e90706078e7f3a9c22cad1ba7dcd2070866a354",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2aadc649-97c3-466d-94ee-e8ae26222d74",
+      "at": "2026-10-23T05:31:58.131Z",
+      "promptSha256": "e235b6ffc2e17f43d65e15f139a6fe07a6778d3c20ae0c81010819730b32fd4c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "0be6b9be-ae93-41dc-97c5-6c11e7e825c9",
+      "at": "2026-10-21T17:51:44.419Z",
+      "promptSha256": "386203f0ba0be7c3ed7db161b83e843706ad08b88d046edec164fb6b887d2b28",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "747e90dd-03bf-4eb9-bb73-9f2449cb7e1e",
+      "at": "2026-10-21T17:45:36.480Z",
+      "promptSha256": "84924d8fdf93a0f188e0249c4f39adfe9dbf0c37f789fcb7aebb9fecfcf5e52c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "ce5d996c-34e4-42aa-8f36-57c452355a4c",
+      "at": "2026-10-23T05:30:25.029Z",
+      "promptSha256": "e9e53f7b35beca5c7258af73884913fb58561a2321803f6966cd35271ed7c9df",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "1d462a28-848b-43ed-8dc5-f7a244ef1041",
+      "at": "2026-10-25T05:55:07.748Z",
+      "promptSha256": "ef98fcd323bad3d20bee2ca9ce18a3b50c5b7feb40be40ca321e0e494c4d150d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "768e2c81-6e7c-48ab-abd0-d75e73807209",
+      "at": "2026-10-25T10:49:12.944Z",
+      "promptSha256": "49ea20ab3573870939f04dd0b01cb36d022fed9c027a5abd3ba0e57035562ea1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a990746f-9c67-4ae7-b5da-67880ad8a71c",
+      "at": "2026-10-25T05:16:54.918Z",
+      "promptSha256": "3963bc5f577f26e2532c37cc73d87749e4a63f7741dc8cd15b972566b4f77092",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "6442b513-e9d0-4bc7-ae3e-2032b3254091",
+      "at": "2026-10-22T22:07:47.258Z",
+      "promptSha256": "401c369055d45ba626f62e5ffa3a9f2b398652fd44250fc5869cc01109c4d270",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "9659e670-b2ad-4c50-a2d9-79ec44c9be01",
+      "at": "2026-10-21T06:21:32.726Z",
+      "promptSha256": "9bf255eed50085a12a3b0d471d37473409d562f5b9377dea8c76ca0eaab83769",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e8a0e8b8-599c-464b-b75f-6f85c8fddf1b",
+      "at": "2026-10-21T09:28:40.863Z",
+      "promptSha256": "514938063fefad0f797aaede1515c5299729eb861482800c0d139cb4d168c38f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a92eb151-8d3e-46df-ba94-6b93b6e52977",
+      "at": "2026-10-22T22:13:51.059Z",
+      "promptSha256": "c77626d4f599a256f99b442d8ede591fc1def37762c015177678665406f80f97",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "d49cad6e-bbfa-40e8-96cb-c377915e4eb8",
+      "at": "2026-10-25T16:34:10.322Z",
+      "promptSha256": "321b02655c36e2aa5bc3db79cbb05eda1fb5bfd74d13be60dbbf48b63624679f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "91eafd15-bb72-46c5-808d-2b97e57897c2",
+      "at": "2026-10-21T04:13:48.653Z",
+      "promptSha256": "7eebd7a630b65cbcdff3b4d39dbe15ce69c0e0da75698e0eff6f6a409799a0d9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "b85c0545-6480-455f-9fa0-5b0de072cf0a",
+      "at": "2026-10-21T10:27:26.133Z",
+      "promptSha256": "e6f78119d7cb02e577b46749422cd17e68a6fc1d22851afa95273fd8020d6697",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "bc0ca172-3424-43fe-9dd7-0578237c8dc7",
+      "at": "2026-10-21T06:47:17.458Z",
+      "promptSha256": "b6c093a8bc54b7da20f847b05c0a0e09273cdc1041b1bbd727e31df83afb3b9f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a9ea895d-dba6-4037-8e36-095388d7a10d",
+      "at": "2026-10-25T04:47:05.979Z",
+      "promptSha256": "f569f21983758feb2fd87c9318d559744e9dcf7d7abce5bbc4b4d5bfb218291f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "8d522e30-f037-4757-95a3-df8811966e8a",
+      "at": "2026-10-21T03:59:16.983Z",
+      "promptSha256": "60088fbe56205720b5fd68ffba41fb6a294d9eb993a27a7a968112b90eb9bb8a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "71584d45-8ba7-4ecd-a4c0-af90d9f2c91d",
+      "at": "2026-10-21T09:07:15.209Z",
+      "promptSha256": "61505302628baebad54874522471de8c7e53d75542aef5df9062d45abf35588d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "bab6ecb0-a6e7-4a94-95af-c27bf5a2d682",
+      "at": "2026-10-22T17:57:05.444Z",
+      "promptSha256": "be5c4aa96b6da109cd998c4d5b6deab6aa5195000246cbaf410372c9f457d678",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "d930ac67-92e2-41a2-ba24-f70085c6b9c9",
+      "at": "2026-10-22T22:10:25.044Z",
+      "promptSha256": "6f5ac59ef3307e953a0a708a4e300ee6106ef813263410555c6bff9d0b606abd",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "fe7b38b0-0e21-4061-853a-a41f12f5a9a8",
+      "at": "2026-10-21T01:12:54.468Z",
+      "promptSha256": "95b72a5878bcd5b79bdcafc976408898dcd1086f9aa4c5033d0bd949d67b3782",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "87d1595a-7b2f-4bf9-956a-d0d5373bed15",
+      "at": "2026-10-21T09:17:40.477Z",
+      "promptSha256": "7f0d3ec4fc3b6b96d2d810903e7085c0e6c5151a3c6af471bca0af9d4cbffa44",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "9b00317e-9de3-4687-98f7-017b7bfb2a16",
+      "at": "2026-10-25T00:19:16.529Z",
+      "promptSha256": "036bb1c3cf4e50ad875b1501d4c662bc97048bae94fb47a7f7d120b3e53e6d60",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c86e473a-4a68-46a6-b87b-5067d0e46571",
+      "at": "2026-10-25T04:49:39.082Z",
+      "promptSha256": "a0121861bf061809bb9e855c74d197ecd4ff5ba6b99eaa90b4908aff2de9962a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "11bb8900-087c-4e42-ac7b-b6c7bf44a313",
+      "at": "2026-10-21T22:35:22.220Z",
+      "promptSha256": "2455f88271dd6176e2e6fc9a74bfab699068d6ae8ec7c33b1a1d884dedc04715",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "cf7d6f98-3452-41e3-b536-64229bbb9788",
+      "at": "2026-10-22T03:54:44.620Z",
+      "promptSha256": "62ac578e4cd6be55875ad5dd1fb4bde09a3b3ef571b544ad7e942f605cf4c374",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2f4ff6d2-eaf8-4d3d-9b53-571752d9467d",
+      "at": "2026-10-21T06:18:50.698Z",
+      "promptSha256": "6d7d57f8a33efa5f01c2eb552b7bc398b93795f70f767740e8f74a3f15914dbb",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e54e0714-e420-43a0-8aa5-a0f092b56fbe",
+      "at": "2026-10-21T01:02:29.900Z",
+      "promptSha256": "15dda821ce6a4d9b42b6c9cc518a6133308455a65e5afef1ff231b8bd87443fa",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "ccc6a492-0c20-4093-8d8e-e432bea9fb5a",
+      "at": "2026-10-21T10:09:33.924Z",
+      "promptSha256": "094d13752b9aed34cfd1f6a4812f1e65c1562a2b542902de991f22a156480bbd",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e6d77790-7a13-4539-a119-6d3a48f9b636",
+      "at": "2026-10-21T10:19:22.362Z",
+      "promptSha256": "c5f953aaae772d3ab0e693531d549ad203d0531e19ec24925cbd39256704a245",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "673e1dcf-6983-4254-aa77-6dac134a1d6c",
+      "at": "2026-10-21T04:11:49.993Z",
+      "promptSha256": "8d1d85ca5361975689dbcfd9d0c0e881caf40d665c57b8c4f9d2d5f0e9d5b5bb",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "1143bd80-aa1f-4dc9-99b0-5f1c0518eea1",
+      "at": "2026-10-21T09:10:16.788Z",
+      "promptSha256": "15ff1c19ae74a6bb014190d75297f81c3ef04c4668b2fe2b9dbff189670b008d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "202aa72b-bdd6-48e8-96e4-ad3fcece46aa",
+      "at": "2026-10-22T08:23:35.232Z",
+      "promptSha256": "667311cec3649c92d4f2dce11f0cf9e844f6b554419f7513fd185c718549508a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "9fa3ace6-6e14-4427-b6a8-e28029b97a09",
+      "at": "2026-10-20T22:07:46.296Z",
+      "promptSha256": "684f14df75e302f6fad53691cd8709cb236196f0e7516b83f969ab17f707708a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e3ae58aa-db9b-4027-b3c9-6558e7a88872",
+      "at": "2026-10-22T14:02:36.219Z",
+      "promptSha256": "b4bc4b3fa64713051dcaee21922312a5ca4f46204322fb0ce3261402be484d5a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "531c4588-cf69-4f5b-b321-f7a1c5c7cde8",
+      "at": "2026-10-21T06:46:29.691Z",
+      "promptSha256": "a6d3d1f6742a11755264fde85a6107ea61f951f86bd8693b85451530fb640ae5",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "baf2df0b-6838-4783-98fe-c19d39b8aece",
+      "at": "2026-10-22T00:56:21.760Z",
+      "promptSha256": "7c87466ed5a4699ae1e357d270607bbbcbfcfa7eb9a28538d70b5a50c9c07545",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a72bc58a-f95b-4e51-aa43-72eaa1e473b0",
+      "at": "2026-10-21T22:37:50.601Z",
+      "promptSha256": "5fc5e328d70b626a07fbe2b9b9c3f23764586300e46866ff2dc30722a4c9fa13",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "1b72b266-d9ac-4c8d-bf91-1dea34efa11e",
+      "at": "2026-10-22T04:08:27.830Z",
+      "promptSha256": "81c93e44f61c1ccfdf91dc89260a310993851691708a89a177cc9db780affe11",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "86530adc-ef26-4c84-83cb-747c8a7a63b1",
+      "at": "2026-10-20T22:46:41.438Z",
+      "promptSha256": "693a44dd875af3acc35948850749cc34680001a8cbb911844d5f8c9a5935a223",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "5a3c9607-d15d-4cc6-be42-8a9a816da2c9",
+      "at": "2026-10-20T22:05:15.801Z",
+      "promptSha256": "14905ba0d92ef476886f1726d4f3390e2c222063daabfac97e0c059c92306614",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "d772a09a-cc92-4d1b-abb9-2b9c6a1d0a72",
+      "at": "2026-10-20T20:02:58.069Z",
+      "promptSha256": "0062650522c73b3e7e2845abae39e06cc1051cbb4a62faa76d777a52cbf99b23",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "14792ed7-fb0b-4e95-9654-520ecb0e16ce",
+      "at": "2026-10-22T03:46:09.109Z",
+      "promptSha256": "af4a070b50731071ebd71fdb1c14d34c475fc3d95c56d656c2e15e93de4b076f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2a38d219-6cde-4faf-810c-3863a2a63966",
+      "at": "2026-10-25T00:07:38.191Z",
+      "promptSha256": "335a24b2124cacfc60db3d155d9d964f01d7a6c777c993b3c54de20a2c5cc0ad",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "47bb9767-95fb-4902-9f89-796ae9876275",
+      "at": "2026-10-21T06:25:30.992Z",
+      "promptSha256": "ce41ad19bdf0223ae798408f63e1dfcd27b1dad03e14dda982c7060855d0f6c7",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "31a2eccf-4217-447a-93f5-1af5180d1352",
+      "at": "2026-10-25T05:16:00.802Z",
+      "promptSha256": "bab4b77a6db882545e0c28595ced92c984b7af82650bcfc67c3d5f6e8bb19189",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c685d85e-b1cb-4efd-aaa5-688b753ec934",
+      "at": "2026-10-25T17:40:41.950Z",
+      "promptSha256": "e114ccc570f692dd4a1e89f47b307268aa034f4a7068267912c1c4d9ddbbaa0d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "5b496bac-a694-4aba-b825-766b6f77ded5",
+      "at": "2026-10-25T09:32:53.651Z",
+      "promptSha256": "da7b576f577f73e3ecc94f011e740b177e24c8f78b8818350d3623e618b07195",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "f65d9ba4-9fc8-409b-8c73-62ea5263386a",
+      "at": "2026-10-21T09:09:52.953Z",
+      "promptSha256": "cb754682d2172f05d16e3636bb528c191369dbba3da303b9178475c75903382a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c55d6dbc-dd69-4b11-ab2c-289846278d32",
+      "at": "2026-10-21T01:05:05.456Z",
+      "promptSha256": "86a1c145c2b2572b46c79c0e31c82615041d0d2ca7fceacfb6ab9d7eb4b2fb22",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a2a31313-d942-4ae7-8b08-e2de51fa7ab8",
+      "at": "2026-10-25T09:00:43.312Z",
+      "promptSha256": "a0307bb68e9b7162149d7ec06d96cbcc1bcd0d03af462335dc5183b9412437c7",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "46ad2559-442e-481f-b31c-a71511165994",
+      "at": "2026-10-21T01:14:27.170Z",
+      "promptSha256": "c4ad11572111e41829da2b6045fe99dc8889da9619b51f485c2cb5974baff484",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "0650eb95-7dcd-49d5-807d-b1f9a011190a",
+      "at": "2026-10-20T22:37:46.778Z",
+      "promptSha256": "1cf54d02ff909519e0002d283a52478ed9b849ed7f9c78e1a67e37aaa75e80ec",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c5fdb21b-0f2a-43cf-9574-7fc39be2ed1a",
+      "at": "2026-10-21T22:19:46.890Z",
+      "promptSha256": "5a0bf36253200abe78f481fce9f8be495d967525a7ac71e3cb49d4d2552a24ba",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "1ad8d313-56ba-4a48-97e8-3083b36b2a24",
+      "at": "2026-10-22T04:05:26.218Z",
+      "promptSha256": "1a5c7349772f96089f464a098a8716377db63ad8df1fefb55281b8c950a7ee4e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "689c1007-59cc-442f-8d1e-60e3c5cc8360",
+      "at": "2026-10-21T17:42:12.498Z",
+      "promptSha256": "18908e579c072516ff3ebe662fad5b632f0724fd5bdb1b1528d906099d14ae09",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "53dd0a9f-3895-4d66-b554-fdbecdf18cbc",
+      "at": "2026-10-21T07:58:09.471Z",
+      "promptSha256": "13913064805a1029377ff6ffb8fd599db56214154cb9b5abec2f7f6a8fdc898d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "8d9c5329-9bc3-4bd0-8b74-6030b1e807a8",
+      "at": "2026-10-21T06:27:45.734Z",
+      "promptSha256": "2869cac13ce921ac812a9340585e8e4c7e9fe6413d088c87bf60768f3715d0e3",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "ab4444c5-2d2b-4fbe-bd13-fbc6b8213978",
+      "at": "2026-10-21T13:54:03.938Z",
+      "promptSha256": "d9a8612e26f7bd350443018884ea9f20d9edbf2efb368c56ed33b974bff74310",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "650b2e8a-9157-46d0-a942-fd32d0fc18e5",
+      "at": "2026-10-21T09:09:33.998Z",
+      "promptSha256": "50883f6743c4f194f51719b23c6ed116549960258efe197367a0d8f4c6a6a834",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2459fa98-65ca-40f5-a392-2562878ec36d",
+      "at": "2026-10-22T14:01:09.101Z",
+      "promptSha256": "7fd0933356bbcd7a4cbd7053701ba4b4936680c0a64703590788c320413d6554",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "881252c3-7f2e-4d56-a8a3-3361c819c520",
+      "at": "2026-10-21T17:48:03.203Z",
+      "promptSha256": "483452e1eaf0e062c0794c508c8a6d3626f1e67860cca7a49b01d9e7f87f99d6",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "6b0c57e5-6745-4375-b227-5986d415722a",
+      "at": "2026-10-22T19:26:12.703Z",
+      "promptSha256": "b223a9b897590009ff7f804f8a4f5781efe3be665123062f95e2d68dcbd592e6",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "f68b7f89-9f41-4755-aad9-9e4ff629326d",
+      "at": "2026-10-21T09:10:56.622Z",
+      "promptSha256": "fa12ecbf9d9c0984b0641bbba862d73a99db72d6a107c92a749740c26da1ce12",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "5f46e8ce-67ca-4384-acd8-91defa60d4e7",
+      "at": "2026-10-21T01:15:28.286Z",
+      "promptSha256": "e300f692ad0fcb0a81fc0485a110c999dfe3263f63bdf04f1b10fce8b2262221",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "00e159cd-62c5-4801-9559-a136da0184f9",
+      "at": "2026-10-25T11:00:15.675Z",
+      "promptSha256": "31da44f99f95caa6fc207d3111bcf86e2710bf5e8ec827d8ab8464fd9b979407",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "99564fa0-6964-48b6-a5cf-37f96d855642",
+      "at": "2026-10-21T10:25:10.060Z",
+      "promptSha256": "4f7fe80f6d66dee33ca8e80d48b3eac325745f75d63c43005cc56e31652a3957",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "ef88ace4-ebbd-495e-95cb-fd7a1706c3da",
+      "at": "2026-10-21T08:09:55.574Z",
+      "promptSha256": "1300670be87897e65b5393b0d026f63e38def0fbaa97a57701a4ad53619a4c8a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "8cd496d5-f6c5-4720-960b-c408519f264c",
+      "at": "2026-10-22T19:42:25.868Z",
+      "promptSha256": "275b118b185ff33418d7e69b141d443a800f6540491b74dfbf890791c4cc8db4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c3a54b5e-1cb9-4b06-8495-ff484d538b28",
+      "at": "2026-10-25T16:36:56.364Z",
+      "promptSha256": "c0fb1bbf4d5383b08cc13affc9a2bc8c7db5a5b7ca19211291395a8004514202",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "219b1a26-4eba-4741-8417-46880f26e873",
+      "at": "2026-10-20T20:05:55.735Z",
+      "promptSha256": "56dc1dd0902f77741874e5cf0538a736c44cdc7cdce3878de7b190068eac752c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "8f6e5e4d-59b5-455c-8dcc-62d826424a59",
+      "at": "2026-10-21T04:03:58.455Z",
+      "promptSha256": "2a5a9f43ed9713e454ef3d4364641e7d53930e4f428df17a4d071f4696475f8f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "9928cc4c-2c40-4d91-b437-10cd8d442f1d",
+      "at": "2026-10-21T22:37:21.108Z",
+      "promptSha256": "6e3a889f5d7f46a0387554f65670f6bab993402778cda5ce966fae69f6809731",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c25ae6f7-410b-44b0-938d-ef93cb4dd239",
+      "at": "2026-10-25T11:13:27.230Z",
+      "promptSha256": "b2059537986162ca9db9b6865efc28f4a387f01a410d4958d9331056d73ce078",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c21cc3a1-87d3-4e1b-8f44-ff11e71bcd95",
+      "at": "2026-10-21T04:02:24.856Z",
+      "promptSha256": "3acb116b874a72ae2f1c407d736c24605fcb4257f767666e3926bba1af9bc421",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "13446110-3589-41d4-97cb-cd88e36aeb69",
+      "at": "2026-10-20T22:25:51.950Z",
+      "promptSha256": "280d0b85c2c91369478896f0c36338a36229abce7c332ddfce215816ebe06e0f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a20d37f4-c4c8-49c8-aa59-72cca6b62906",
+      "at": "2026-10-22T03:54:09.921Z",
+      "promptSha256": "1d911806efa33ace86fc0a85146532fe574d93505d6fd61d35657a66f7513783",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "220163df-dcb9-4b3c-a6fb-1496c9758b6e",
+      "at": "2026-10-21T10:21:19.139Z",
+      "promptSha256": "a29680307473074a98006d58e76a12a42a63dba35d01deb0bddecafc7ee9e590",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "df5f7b5c-93f1-435c-9294-94bad783db64",
+      "at": "2026-10-21T09:26:55.862Z",
+      "promptSha256": "d015a17d22008167f37cb99fc7b61b3605346b80dfc26d8b15c99f69003c62dc",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "c971266c-352a-45b2-b7c6-d56c02fb45f7",
+      "at": "2026-10-21T07:55:11.547Z",
+      "promptSha256": "44c0ffcd9c438cca64cd43d17622d4c6d12e64aae872989304b4d1c383db894c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "a45f2667-42d8-4892-8787-2274b60018fc",
+      "at": "2026-10-22T19:41:28.649Z",
+      "promptSha256": "dfa31ad80a1cf9750e0383b303f45d18b09ad8fb9d2ce51d7b2f65e26cd98f44",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2d327669-8992-42f2-89df-f60ced2e8474",
+      "at": "2026-10-21T08:02:05.735Z",
+      "promptSha256": "46ca79103fd049d4b69f0eaa9251061862103d4f9f00df82edac74155d631018",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "335f9d48-e246-48d4-a3b8-7984be6b27f1",
+      "at": "2026-10-22T00:54:35.018Z",
+      "promptSha256": "ccae633a9d3dd129b6f71a9b6c540ef530c6835d24e99402b8a1f2fc730d3939",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "714e76e6-fcda-4ded-b709-3cd303162c64",
+      "at": "2026-10-21T10:25:30.364Z",
+      "promptSha256": "f38377edd74b7f39e49babd36aef1b5e07bcb5a5d652bc9dbe8e1bc7c80cada4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "e2053a51-6a40-4631-a4e8-f17ee5b8972f",
+      "at": "2026-10-25T10:49:51.223Z",
+      "promptSha256": "2d7bc9f2855851257fa66318f23a1490122a4d77c554cdcfa34b21958bc66528",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "32a590aa-e15f-43ed-9d6b-0201d6d6599d",
+      "at": "2026-10-21T04:06:26.920Z",
+      "promptSha256": "da2b5edb7961578a78939f8f24bd3b32b403c76c5acecb71290b8eefbe444865",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "14503dbb-b120-4f9d-b7d6-828725a2197a",
+      "at": "2026-10-21T04:02:04.389Z",
+      "promptSha256": "910a2c60685b902b10c4477010b5505f2eb706924766765f2cf1c598832ba1c0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "f2738113-88bc-49f2-9fa1-ebc54fd8b2d8",
+      "at": "2026-10-22T10:04:09.963Z",
+      "promptSha256": "4812896b0aa602d6ddd00cb5724eb6b524bb1074574d46c32253229a78ced5ad",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "42ffb2fe-59a7-4ad0-9f28-7fc20277eb04",
+      "at": "2026-10-20T22:16:02.080Z",
+      "promptSha256": "19ceb554cbaf3766ed612cdb875b1af5533cb33894cb7e25dd03482baf19ef1f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "915bf3c3-4dc4-4ced-9a8a-049e059f845a",
+      "at": "2026-10-22T19:43:14.858Z",
+      "promptSha256": "c3244d920a7fbabf9f7bba5299007351aa6b827f906a8f4d3c7884c97be7d0bc",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "3b6c9cff-e95f-4356-8e5e-4ab4ca464118",
+      "at": "2026-10-22T14:18:33.714Z",
+      "promptSha256": "15d617b430a2629c50e9db0d0b56131e8a179fef2ec7f776d3a12e89274950ad",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "relate",
+      "session": "2df645e3-f611-4f13-aa9b-064f8737fddf",
+      "at": "2026-10-26T09:13:47.510Z",
+      "promptSha256": "50889c84ee00ded38f9a57567c1d032d808d50d48c143cf44214b42e63fdadf6",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "fcac940c-910f-4645-ab61-9a240c70943b",
+      "at": "2026-10-26T20:12:09.478Z",
+      "promptSha256": "a132f5da50d8b5dad4f96809b7cd29c949401ed485b15471f64f9c0148f85004",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "4d74695b-5cdc-4fc2-9218-f8a19e495a1a",
+      "at": "2026-10-26T09:07:18.285Z",
+      "promptSha256": "0d405e2cadb07257eb64123418fa2d1c3423d3483693d7a71ddff4d3fc99d9f9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f046c99c-6626-4eff-aac5-f1adf6bbea7b",
+      "at": "2026-11-01T11:44:31.753Z",
+      "promptSha256": "ba34fb1d2771196f29a395502ad3f6c0f0ee7837d156905ea012d1bd34d192e1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "b36d94c6-9f6e-4857-ada0-5f0e51413e5f",
+      "at": "2026-10-28T23:11:36.893Z",
+      "promptSha256": "addb0389c3ce0b1416d55e691188abbe36648a467aa7dc92e0515b3eaf72dbc4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "87f23d41-3509-4a74-b882-a818d09fd33e",
+      "at": "2026-10-28T18:45:37.597Z",
+      "promptSha256": "78be0e6c2c59fd0ba6e9832bfacaf342d49cef13ce2c9521c03f776faf637069",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "3f134f6a-c329-4744-8774-2c3720e903e5",
+      "at": "2026-10-28T07:29:32.698Z",
+      "promptSha256": "f24fade959f572134e88ffa4660f46b95faf475bb9ea97f29cdf0b98a904f9c3",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "4325ce53-711c-4a85-8478-855591adeb42",
+      "at": "2026-11-01T14:53:28.355Z",
+      "promptSha256": "8a0b2c25938c55661b9a72d7cce3fca718986f72eb1109e142ae3ef4597f9f9d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f6acf87f-774b-4cb6-a29d-6cf42c6d1d4e",
+      "at": "2026-10-27T23:16:32.200Z",
+      "promptSha256": "b33957143ffed65575bae8d836f19923464a94546b15f48839c534964a6105f0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "75928844-2745-468b-8f20-08dc352de85f",
+      "at": "2026-10-30T14:46:14.951Z",
+      "promptSha256": "0e119a1b6eaef8569a6bdbf51bc576905c561b6abcb23bd08d66e62b65ba866c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "04c2144a-58c2-4f5a-9a0e-e1a091ba5658",
+      "at": "2026-10-29T23:24:53.781Z",
+      "promptSha256": "45cebd1f69b1a35f6015e508017a2fe7d8f5c1401c85efbf37e009857c1e35f2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d2553d7f-6062-45eb-96d4-6026dbbb3948",
+      "at": "2026-11-01T13:22:31.796Z",
+      "promptSha256": "6754bf5861effa7ac5e3e82272cd1f1b2dd2560bbdb5309ee54cbdfbdac0b341",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f104b08a-0377-427c-b0f5-17d4e4bb36e5",
+      "at": "2026-10-27T07:08:22.582Z",
+      "promptSha256": "5e52f3c0e89709c075b8e0093409eb0083fbc2a1765a3881e87dfd9f8c8f7fd9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "e324e92b-46a6-41fb-a7d1-1c89f78464f1",
+      "at": "2026-10-30T19:06:03.902Z",
+      "promptSha256": "b6644eb614d474b60d68d73412817f53b130f80c99197f4a09a1cf778a0b2a70",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "68d280a0-69fc-48c7-9e26-80ca74152940",
+      "at": "2026-10-28T18:35:49.338Z",
+      "promptSha256": "f8d667f3f83e2ed8c87e865ebd73d10085d76aa480aa7682a153dccf7cc4574c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "8620171b-c774-4904-9bed-46b538c8728f",
+      "at": "2026-10-27T07:43:54.790Z",
+      "promptSha256": "847dbfb4d6a84fc45b48468fc49657c6e55fdb47840767792a061700fbc45be2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "ed240441-2225-48e2-a299-f2e3bfaa77b7",
+      "at": "2026-10-28T23:19:05.858Z",
+      "promptSha256": "0c50d7764d804e5ea8ac6f4e2d7a91f33f5008521eb134436d55fd224bf95e63",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "09acf523-5d59-4abc-abbe-c6673de53991",
+      "at": "2026-10-28T10:44:35.616Z",
+      "promptSha256": "369115af64d253db324d8f04f9e027ee706d13c95af2b8e727861ea069e9b8d3",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "bdacec6c-db64-4b9e-a04f-7114a5b45a6a",
+      "at": "2026-10-26T20:25:08.359Z",
+      "promptSha256": "2e5c5ad111d85269ad1e5e385fe430d742a9280a693baadd2b71d33f0c24ca90",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "0ba87458-14b3-4d96-aeea-8a35ffa610a1",
+      "at": "2026-10-28T23:29:45.812Z",
+      "promptSha256": "6365e06dd2edc3e8831758e805fd57e0b3e4280759e40e810337b28bf53db66f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "47d67335-4a8f-45ce-a2b0-137252bba394",
+      "at": "2026-10-30T11:10:38.286Z",
+      "promptSha256": "1a2cfaed602afcf60aa608d514a096ee8df6990c90e5cee108014f0e2f5afe0f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "1999fc42-27c9-4cb7-8626-00d0943bf743",
+      "at": "2026-10-26T13:13:18.508Z",
+      "promptSha256": "7280f7c91a754ea07b786b46b2d9895a05002208ccbe2ff18b0f2302524ae00a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "11fb87e4-551f-4c46-834c-670aceca900e",
+      "at": "2026-10-28T18:32:38.244Z",
+      "promptSha256": "666df53f7fa4f57d5f26d38c629200bf3869950541c5a741f6c70e52ac893a75",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "28ee9256-3c61-41ae-90f0-0d150b9dda49",
+      "at": "2026-10-30T20:39:57.478Z",
+      "promptSha256": "1f6e47bba4570368c1d2afbdfbbe8adc20e39a7d0764cafaa05b17ff5f3189f1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c69b020d-5384-4d1c-93b0-8e18adbe91c2",
+      "at": "2026-10-28T18:58:24.197Z",
+      "promptSha256": "30c1f9a54a5b51ce867c2dd4e2e2cc689a859a2f699b47ffa1922beb966bae3f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "3685c106-4aea-44be-9560-c374eef67a0b",
+      "at": "2026-10-30T14:58:15.617Z",
+      "promptSha256": "5ebb3e1aa0a6506da7496faacae192108017eb9f8c37e78a404c3078c753bf12",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "de2db38e-ff3a-47a7-8e48-9158c6b9b669",
+      "at": "2026-10-27T07:06:11.603Z",
+      "promptSha256": "d3123b9eede530eeb7cc530b57375e0a0cf50b01bdb1ad60624636296a3e6083",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "1328a89b-3517-42a9-8e7a-7fce3265f814",
+      "at": "2026-10-28T19:05:04.660Z",
+      "promptSha256": "7f760851fa7c37b3a062a1e7b085bef92a85a1c08beee92fb258aaffa3505b64",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "3e148844-5bbc-42c7-93f8-e8da1ee3cda0",
+      "at": "2026-10-30T06:32:51.252Z",
+      "promptSha256": "86049b99b76c9e74a530acc326e4a873cdf059aaf14f77366bb731c9acab109f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "2fb75100-7666-49c0-9d2b-ba4cea3677b2",
+      "at": "2026-10-27T23:19:24.387Z",
+      "promptSha256": "3096214ec14c7f55b27f6c104f2b4c1a3c916779425f4e635a6fa954769f5289",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c47882ce-a7ba-4ebe-ab72-a35cd70b46d0",
+      "at": "2026-10-30T06:21:46.266Z",
+      "promptSha256": "436b2620e6856e1c54ae2f5077409b35bff9032b84cf19f3b6f76dd057883a8f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d5a4f7b8-da92-48f5-803e-163d9b599c36",
+      "at": "2026-10-26T05:30:28.293Z",
+      "promptSha256": "5e96acabfb4c93bffcfafacfa09a02edd78fc6f6a907065a1b5553d1d0a43ae2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "52f738d7-8f6e-40f8-8896-4a9b66d9a329",
+      "at": "2026-10-26T11:12:51.178Z",
+      "promptSha256": "ca5e2d6d1252f73354abe849a5c3e3d28559014e183b5670b6383f267bed0707",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "bf7a021a-fa7e-4988-96d6-a408e247520c",
+      "at": "2026-10-27T07:02:09.464Z",
+      "promptSha256": "5cbd98c15b3eec67aefb66bca20bea9ce150515b3b2890faf831832f0716b80a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "a983a676-fa54-496c-b73d-2e6986a9aad6",
+      "at": "2026-10-26T09:09:05.018Z",
+      "promptSha256": "a5b090c69f913e5686c09bbbf830d5b361bc336929551b2b240df9f4b7ed85c6",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "87a60c6e-abff-4e9e-b3ed-29a7fe7f8469",
+      "at": "2026-10-27T11:11:31.049Z",
+      "promptSha256": "e92d548fca5727af9a28b39e96e4dc2f0722766b4cb99422b68a88810b1dc177",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c3cc4e01-8e4c-44de-9ef7-876f6acc625d",
+      "at": "2026-10-28T18:41:00.713Z",
+      "promptSha256": "627f79eb25a309889f0f7b47adccf08e5ae0479b4b2c334cab4c5b82f9419750",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c7b72534-6302-41e0-b57a-d5542dbd9fb0",
+      "at": "2026-10-28T11:40:37.422Z",
+      "promptSha256": "dba94232dd455bfe35ee004ac290ed65943fe400e53311e667eb6ea3df8db022",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d70ee684-ad64-4ebf-bba1-83f8d1a1be37",
+      "at": "2026-10-26T09:12:04.813Z",
+      "promptSha256": "51a5c43c860df950aa8d6bfd7cf14fb4b209670d3d421ead9ce76414a81b675f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "0fff57d5-cc1b-4f31-b001-03a2f440ec7d",
+      "at": "2026-10-28T23:28:30.713Z",
+      "promptSha256": "887f9366197ee4927dcd87653083bed6b0394d9104e98dd6cd1edec1a2da37f9",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c759814b-2a29-4b22-9d72-89a6e938e596",
+      "at": "2026-10-30T08:50:15.495Z",
+      "promptSha256": "37f62f8034bfb304128bb4ef09c25ec221ce45444f23614318b1dc99e22ce479",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "7d230368-d2d1-4cb4-9438-e5322ac6eb16",
+      "at": "2026-10-26T05:16:05.029Z",
+      "promptSha256": "bdfb7dade598aefb45e6879475ba226ebb14f1ca0819874d243f3331eaefcc53",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "a732aa65-1ed8-4e35-bc50-74fbc790d743",
+      "at": "2026-10-30T19:13:31.190Z",
+      "promptSha256": "918399d7f424f7c6b5bce60ac5f67ee5128c679f9b90a93d663b81a04a776378",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "0ffe83f0-89b7-4b2e-a9ab-b14952dd2714",
+      "at": "2026-11-01T13:39:12.857Z",
+      "promptSha256": "cda73849d1e7615351a854699c3e4e65b1bf079d8d6da333612f5ae615844408",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f4650e94-8498-4de5-9d24-42968f7c551b",
+      "at": "2026-11-01T23:41:41.748Z",
+      "promptSha256": "a5f39d0cdc29af2730c9410a5ec97a1f736a429cb06eb65b7c4824cf1a984a11",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "3df6766a-5717-46fd-ad49-d1b7c908d933",
+      "at": "2026-10-26T13:04:36.892Z",
+      "promptSha256": "ddc09e1bce45cc136630acee50176bd326c1ca27edb712bb2dfa41c3b2d24b96",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "4b051b99-f992-42ed-970f-036ea35809fd",
+      "at": "2026-10-28T23:02:08.511Z",
+      "promptSha256": "a046808662e22f96d6ceb450ab5403970a9e57da43e2f336b45f8be9f4c68b9d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c61031fb-a0b3-42e9-83af-e4fb5e0da824",
+      "at": "2026-10-26T20:12:32.110Z",
+      "promptSha256": "df6acb2f9537480dc8dd3057ac65fb1dc7949c50ec262383da8dc4e77dd93834",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f2b15935-03eb-4c8b-8c04-ee9ffa30f9af",
+      "at": "2026-10-30T06:19:05.492Z",
+      "promptSha256": "d6000c99a292acbeb7240936bca74d41a8910f50abb6b58d1fb49fced533b60c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "854600e9-efbc-4969-acff-4da4d8d21e44",
+      "at": "2026-11-01T23:25:02.410Z",
+      "promptSha256": "c8a2e0b81a197083d6f8963fdb681f2f292d066921ca100befbcf2e182238d8b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "337f03c2-114d-4093-82b6-16ca4c85b74b",
+      "at": "2026-10-30T14:42:20.144Z",
+      "promptSha256": "87847f8c4ca8472b91471d85d3b68e1708f4c4309282d6e6229231b8b1ae3751",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d44546b9-5dd7-4394-bb6e-9e448578af3e",
+      "at": "2026-11-01T13:09:24.018Z",
+      "promptSha256": "050e074efc4c9ddc0c43443d208789626a2f45a35349ad178e98e341844f4b1f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "abe9bea1-03d2-42e2-8a14-6d3ac94afda6",
+      "at": "2026-10-28T18:39:38.583Z",
+      "promptSha256": "001b5d6324d411bf319ebf17b5977727f7046a367aa653c9469da5dc6ebb1834",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "64acd308-cbee-4fcd-8b5f-cffc28696f5b",
+      "at": "2026-10-27T05:07:46.254Z",
+      "promptSha256": "2b6d747fb3ec52affb4b4ea9137bcb97b5171b157325a0aaf78790bbc03ec9f8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "79d46cb3-f0ad-487c-8d67-75f37e811347",
+      "at": "2026-10-30T14:39:11.241Z",
+      "promptSha256": "0e9d7f7d63799c72ced06185761ab25f83a8479e47e4d42759d312b9cd9ae148",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d83a6d2d-0a8b-41cb-87f2-a406aaa68343",
+      "at": "2026-11-01T11:24:57.467Z",
+      "promptSha256": "5246b467281f04da6b0ed2280946e17dce3f3567b3c0b8fc5be36d5634da28ae",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "7a4ae468-edf1-425b-808c-0c7fa165b9df",
+      "at": "2026-10-28T23:20:51.835Z",
+      "promptSha256": "588add26c580122ebed5ea8d54ecb41872e934b23d9052d3a31ad851891e803d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "0205aea7-b088-4ff0-a217-d3058acd0b56",
+      "at": "2026-10-28T11:21:05.373Z",
+      "promptSha256": "55f2eab6df8aff06b9f08c945e9e706748d35f3a28c50a95dc4f5a296e5c90be",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "a0c61df7-2ca0-42d6-a9cc-df812455d055",
+      "at": "2026-10-27T07:42:28.688Z",
+      "promptSha256": "35a89f9f344cd9197ae6b210bb3d6553de45f77eafb7af02ec5b47ea11b1f43f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "06490c27-0c61-41cb-a7b6-484b0b7599e2",
+      "at": "2026-10-26T18:46:49.959Z",
+      "promptSha256": "e001ee0f879e3170ff00b0fbf8a8c703dd8ca7d4944398eed71dfb03c2b1b3cd",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "84fb1074-a59d-4c9a-aceb-e96a23dedd54",
+      "at": "2026-10-29T06:13:26.470Z",
+      "promptSha256": "e7782bf78baddc3617b9a1d0770365e0ab9470568220121b2d5ee620c7449625",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "4f9bd2df-3fbb-4ba5-938d-51ad78672945",
+      "at": "2026-10-27T05:09:27.354Z",
+      "promptSha256": "ddcae54421b80b45fe86cb8f126be2c422401fd13a58f7e585d7e753427639d8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "204c8cdb-b46b-4368-aed2-9b7c974c5427",
+      "at": "2026-10-30T10:55:32.358Z",
+      "promptSha256": "81de65a62fc09b38fd31d02ae1f50e9cc57665dd5e9cce1d140ba93c5c2601bc",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "1104bfd4-96c8-4b1c-bca1-be78c7ffc0a1",
+      "at": "2026-10-28T15:13:20.726Z",
+      "promptSha256": "bafd2b259e5a641f802c1244ff588f6cbec52432e87cc49dc972e8892d67b781",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "daa36988-fb8b-472c-8f53-3b07bd0df2e9",
+      "at": "2026-11-01T13:35:49.228Z",
+      "promptSha256": "8ba74015ce9b20124cdbfe86be3c07c0f8a871522044d4d491a73645ff8a6a38",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "94da34c5-db37-4281-a4f1-7a6f8d5bfb3a",
+      "at": "2026-10-26T05:27:08.856Z",
+      "promptSha256": "0bfb5a5166a898a1c8b5b11375fad934278a779db6f30fbc4f98b8c630d3a730",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "bc95cdf3-b78e-4ab6-93f7-525c667f6c36",
+      "at": "2026-10-30T14:41:07.039Z",
+      "promptSha256": "bd0cee7ee1729d35262598aec973ff0780b99b8fbbd0fcdbb855fb4df38f5a66",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "e208a3ed-b0a9-432d-aa52-196b92f56ff5",
+      "at": "2026-10-27T07:05:19.997Z",
+      "promptSha256": "a3abf83129d0719e50f3850940edb0571816d5b9fd893b6add3d9f58db9ef539",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "2a4c732e-a801-4c76-896d-f8de8fb6d988",
+      "at": "2026-10-26T04:25:32.954Z",
+      "promptSha256": "19d65ec3f0e5d447db2824d89318d04fffc20c45eac62e95c120371e0693ad0a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "b8b723d2-a50c-48d9-999d-587f445434fe",
+      "at": "2026-10-28T20:05:19.062Z",
+      "promptSha256": "f3c614af61a0ae109fe3693b01435678e6f898edba44649930a26ac35c6771be",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "223ceda6-b8e6-47df-a17a-7190c6cf1021",
+      "at": "2026-10-26T05:11:20.906Z",
+      "promptSha256": "8d8370cfffa90c2e74e1381e9c1b924adcd6f0fb1fe6797e61213624b1ae50ce",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "319cd9d9-aa3d-48bd-aae7-85feee9defb7",
+      "at": "2026-10-27T09:38:07.638Z",
+      "promptSha256": "31e605a7cab775793ad66da12dddfcbff0c80db39d01b8aa8b1834683cd0b3d2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "cac115b7-9a40-4c37-9c26-23b20eb8b675",
+      "at": "2026-10-26T09:10:25.153Z",
+      "promptSha256": "05c47a495ec40e10b6d43ab20f6ba1e07f9f7c68e649d3a9bdb6135845716a8a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "33f39c90-0bf9-4214-9962-eb37878adb2c",
+      "at": "2026-10-27T05:16:43.259Z",
+      "promptSha256": "fec612d3bd0185fc44cc3c424ba5a06c67e62862bedde7d9562b880c796e3991",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "287dfb55-b156-492a-9388-d5f3c2a22fd4",
+      "at": "2026-10-29T10:41:51.713Z",
+      "promptSha256": "94e34efcdea71bc8ecad4fe7962b1206a86554b8a434eddee9952be7e2ec030a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "98d04c03-5ca1-4507-9a63-225f6060d3dc",
+      "at": "2026-10-29T06:40:23.630Z",
+      "promptSha256": "2ae7a49bb7ae6614cb26d1578ac11e58df2ed291c80f3d1a8dd295cd2bad5b20",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "40b9b96e-0b7b-4ed8-94b1-9e3ac75245fe",
+      "at": "2026-10-30T19:01:04.934Z",
+      "promptSha256": "e0e87e5de2eb7bf6f72f83b1637620014dd638915cf2fa47c5c694ed2af13b9d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f41ccff1-8c7b-4fed-97cf-26a7f1378bd6",
+      "at": "2026-10-27T07:01:07.609Z",
+      "promptSha256": "5569ee7e84f6a92c6efb821ce9e581afbf46e50ce36e0bb45d933e6565edcf44",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "6145d254-03fa-49c2-a4f3-943c8f0df6f7",
+      "at": "2026-10-27T09:38:44.033Z",
+      "promptSha256": "3e3af8c1e164b941d5c21387836edb3b838fb6d49a6bcc815d397d32427e9528",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "7eeec573-9f48-480b-aa18-cde677822b73",
+      "at": "2026-10-26T23:15:10.938Z",
+      "promptSha256": "b87c4515f2414b8d2923ff6e907b5b27faadb5e4fbb126831d540962a4361998",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "3c7c09f4-1874-480c-96cd-2d7eddd24571",
+      "at": "2026-10-26T04:16:45.164Z",
+      "promptSha256": "4ab6b701b1228359b44084425994aee2b158aaf4fb1e9435ca9f2f72e1066609",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "7c46659a-5575-4c9f-a93c-99284e7d1905",
+      "at": "2026-10-26T09:15:41.397Z",
+      "promptSha256": "c09ab0a9a2ef3320dc56a33c1a918d5b4ace461609397a15bee48c560c5922c5",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "0b2f7363-22a0-4d34-97cf-6431ad6865f1",
+      "at": "2026-10-29T23:27:27.460Z",
+      "promptSha256": "d3acceb0f9db53893f8ae549528a3272a8878c29e31d8fc8819e94437e17a1e8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "8a252361-6a91-40ce-9913-129bc6a8bbbf",
+      "at": "2026-10-27T11:03:39.460Z",
+      "promptSha256": "7c43c9e62073de90f29546d61fedabb9a22f314871e8d2c9554c0a017e3cc62c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d34c08d2-7f4a-4e20-90c5-f4d52ca5cbd5",
+      "at": "2026-10-26T02:15:58.811Z",
+      "promptSha256": "7ab2fd8b140f9a2533671cb1f810705330a63b96b33f7675369ff0856c89ad53",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "547751cd-ca11-451f-af74-0bb85accf561",
+      "at": "2026-10-26T05:24:14.270Z",
+      "promptSha256": "eecf7f68f8227e8d1c9976aa0d251a799b27c04515fb2d4dd0b927a03b008050",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c34ab1d7-353d-4b44-9c63-f3bbdbe30686",
+      "at": "2026-11-01T14:49:38.816Z",
+      "promptSha256": "64bde3e5d0146f3eaac6202a15140e77292e7a2fa6edbdd9f0b8dade6b97cd98",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "0703f725-2cdb-4c33-b323-8364b0ed8a1b",
+      "at": "2026-10-26T04:16:13.013Z",
+      "promptSha256": "fcf6984b984473478baaa5cf5fe5c25b9297f303dd5ff5537f750df1dcecd21f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "7ec50f3e-90fb-47aa-a792-044855218aed",
+      "at": "2026-10-27T07:07:59.353Z",
+      "promptSha256": "52b6732dd1f1c036424659385eeb81ac92d5741eb095b6872424eb8147fa030a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "fa5d6399-4298-4659-b6b9-76ea6c83fc33",
+      "at": "2026-10-28T18:54:05.296Z",
+      "promptSha256": "a8a3240a0f5ce33dfe99c161c8e5de2427d3ce624434ba469b7ee6d8e0b474c8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "f658959c-b661-4dc9-a303-b2eed7cb9d85",
+      "at": "2026-10-29T19:10:21.296Z",
+      "promptSha256": "75958e48be94064abcc2ff0d65b231b5122f1b17ea155178e7a023c979908b28",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "b135757e-cc5b-4e99-acad-6749d2871f00",
+      "at": "2026-10-30T06:23:14.667Z",
+      "promptSha256": "3d087e7d12df140a59aa1f026074f8de65699f22891322298f41d1147af25858",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "01f3bdf4-b7de-4d09-a715-d32e0c9b0950",
+      "at": "2026-10-28T23:43:46.983Z",
+      "promptSha256": "6f93c85c3ad805266edf2773b0d548f68c068189d0e289f6d96e76f5e316dbb4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "35282a22-05f0-4016-947e-632c1d6cc667",
+      "at": "2026-10-30T19:05:38.852Z",
+      "promptSha256": "93220cf586a6265f074476f7c95e300475719fab747b57ba4b36745a3adc3070",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "c3962a1a-8a57-4444-9daf-d7a5d04ece84",
+      "at": "2026-10-27T05:24:48.336Z",
+      "promptSha256": "6ca410a42b6cc577f5edd1c813bf9a6403e4b44e85f062f9b445e9661ee91a52",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "8c75d489-3a1a-4d90-bfd2-5ecd86308a9e",
+      "at": "2026-10-26T09:06:01.387Z",
+      "promptSha256": "b14bbd85f9520cc7a78bd858ada9ed5a88e44700215099cfba72cc7cb802cc03",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "relate",
+      "session": "d98d3e28-6a7b-41d5-8c44-39bb207a3f63",
+      "at": "2026-11-05T20:46:36.574Z",
+      "promptSha256": "f6fbddb54fa7d690337cda8ad0e1625c1c0b87808defda01020e263f03d1eafd",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 2,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "a7336910-fec5-4091-8665-fc8ade86e63f",
+      "at": "2026-11-03T11:05:23.470Z",
+      "promptSha256": "b239e7cb488020e46fd1102f28897b548f4912793b1d06ffb03d209ffb460cf4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "cfebf9f2-581f-47c0-8dda-f770238a46ef",
+      "at": "2026-11-02T10:58:07.326Z",
+      "promptSha256": "374b771a2a163b24c0f79a6f2e5dc44fc0e68c6066569be040fa075ab186c2c7",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "b491000c-4db9-4305-900c-accdd762af5c",
+      "at": "2026-11-04T15:08:39.649Z",
+      "promptSha256": "af3605cd016f765790043d8c1ed918b711facff7f456ed7076790a1e39aa8439",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "c0450585-bb68-4dab-92e6-93ac310f38ae",
+      "at": "2026-11-03T10:36:52.076Z",
+      "promptSha256": "db7563fc61fd1857b9bb1650af0df903501fc438f779fc0e4cae47280d47792e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "d4630b26-fe5f-439f-8344-5de5794f1854",
+      "at": "2026-11-02T05:42:33.394Z",
+      "promptSha256": "877a69a3724a8b7d449a2ebb2d2dca9238eb759ab02d9b4b66129946c8ad5919",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "89fb1565-a500-4433-bae3-5245ffbe27a6",
+      "at": "2026-11-02T19:07:45.382Z",
+      "promptSha256": "38a141a4958a277e58eab9786ac595f7991250d5191ce7ffcce6b6ec6b7e5e9e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "46c58c1b-4690-4ab5-bdea-e684a70f409c",
+      "at": "2026-11-05T05:07:43.906Z",
+      "promptSha256": "df8c77055a9f0541a26eae597107e715a352fa2a1e21bc0367634c4677dcbd8c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "54b5da4e-23cb-401c-bb90-00aed38c10c6",
+      "at": "2026-11-02T05:22:02.327Z",
+      "promptSha256": "ba802d5061f7e1ed247860aa441ff1045bb4c0effd33fe890b9779e9bc23fbe0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "eeb55614-9e3f-4fcf-8a82-bad2cbf1e41e",
+      "at": "2026-11-02T20:38:11.833Z",
+      "promptSha256": "27ec6ffda361129e0cda4a6cd02c6c7c29d452b23abc1b8cb3ce2ebf2f7f3f01",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "bccabda7-0c16-474b-8854-7a20bee5f50d",
+      "at": "2026-11-04T20:47:33.235Z",
+      "promptSha256": "29db6c3c34f18bda0f20e787c8a371d683bd6bc484efd94fa115b4f1339d0446",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "b0719b74-32b3-455e-a6b0-24224daf2884",
+      "at": "2026-11-05T04:51:44.547Z",
+      "promptSha256": "60c74dfe8524ea9c5ade13e2739169435b3d5c6cacc00c43a45618436e807a40",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "cdace1d2-b5e9-4548-b19e-7375b3bbd417",
+      "at": "2026-11-03T10:35:11.566Z",
+      "promptSha256": "c5d2fb7bb1f0dafbfc240b6cce0e63d05b37abce3c2c6b331dffd1e280df149d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "e01d301f-4f74-437f-a53a-1b1e4a3ffa11",
+      "at": "2026-11-02T01:38:32.483Z",
+      "promptSha256": "5a12982b48477b46cf3f14115a85c4d6536df288cc1cb12198dd4019ebf3f95b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "b4c69ed9-cae7-4268-8896-77f3703f6562",
+      "at": "2026-11-03T07:25:26.636Z",
+      "promptSha256": "5ade30f5cedf04e2b71dba3fd3bb305e12d0943d972f144567a235060bd0a04e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "6dc8a3e7-d858-42d2-ad29-5fa32e9b4416",
+      "at": "2026-11-04T20:29:14.870Z",
+      "promptSha256": "403f1933a405a33c3cf7e155e5b5c8ac652e323b8fd51d3e6d9323da69198330",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "f0d3e6e6-aa68-4577-92fe-ef6b5afc4648",
+      "at": "2026-11-04T12:52:31.790Z",
+      "promptSha256": "a360b42983068e5dde495a1fe7a91cb2b5f002bc990544430ec162631efb62a8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "a23bf651-639f-4b9c-987d-59b12fcc12ff",
+      "at": "2026-11-05T05:06:44.402Z",
+      "promptSha256": "2a4951c716aa7d67783c1a498267fdd85d0632038bf88a7ab9f9461ae15922ac",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "0b8c4785-12a2-43be-a263-824e41a2c8cc",
+      "at": "2026-11-04T05:33:21.546Z",
+      "promptSha256": "fbc8b3ef0effebf7789b6779685a6d5e9d3d181e26716c95304530525b26023f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "173783f7-3f42-4027-94ee-654f3aab4343",
+      "at": "2026-11-04T12:48:18.430Z",
+      "promptSha256": "eaf01645b5a19594ccb59f43a2d6711fb14e98ab6963fddc7c6c0b92e7ede867",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "29cd6f7a-8312-4594-b15c-d70ef2f4cee1",
+      "at": "2026-11-03T10:51:07.522Z",
+      "promptSha256": "b75a2013a04b014de6d7b8665404fa46d5db231be13331d135e43d4f09690049",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "e8c5cb8a-b299-4b6b-95ef-dd951e67a26b",
+      "at": "2026-11-04T07:18:35.771Z",
+      "promptSha256": "868dd88af3f64bca5a6297cf8abba0ac841f154563b7696b5cf30943a7a6621e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "c500735c-c290-4d40-9158-eca6f0f073f3",
+      "at": "2026-11-05T05:08:38.153Z",
+      "promptSha256": "c9d0f3d2dafdc8a72cea03e9851d81878f7327e001138663124eff2410f1bdfc",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "df0a4beb-8fa5-41bf-8356-d9116b2dbc40",
+      "at": "2026-11-02T05:07:59.301Z",
+      "promptSha256": "f56bacabe828c2c313effd8a5e591b8fbf8490dd1d17b01f82c033b80632656c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "3bbae29d-9b4b-4434-914e-53f24cb5ed88",
+      "at": "2026-11-02T11:01:53.124Z",
+      "promptSha256": "714a78980954714ed1422253960b1b035d4f68030abc8170771bc476ae919163",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "bdc788bd-d696-4669-bbd5-66d997adc499",
+      "at": "2026-11-05T05:04:14.068Z",
+      "promptSha256": "4edf493426400fa51081d459755df9e52e485fcc2b372b299375a634d63fb843",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "1f4acc6c-6d4f-4fa9-bf70-5875ac31c5d0",
+      "at": "2026-11-04T05:22:46.494Z",
+      "promptSha256": "869aaf320444a5575fc137ec156d037a49e4848cafbf59a8d54e571d226dc307",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "cc08f23e-8af1-49ef-9957-9b7d2fe60ef3",
+      "at": "2026-11-03T10:51:27.098Z",
+      "promptSha256": "73d34c4a4c4cee57babfde7015f97c808d31c1b7fbaf2fe18a809128310b5e78",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 10,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "relate",
+      "session": "39032287-d640-4143-b27f-90a873198e91",
+      "at": "2026-11-10T08:40:17.779Z",
+      "promptSha256": "f86b305f2a06ba8ed88bbe29b3413a84cf506edb925366e2de967d5eec6b0375",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 9,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "relate",
+      "session": "cc42e464-0484-456b-9279-12f1c304906e",
+      "at": "2026-11-10T18:27:13.884Z",
+      "promptSha256": "eea72b372b0c714ca3aa675e013b73f44eb05b60a77eab5e162ad187b4e05298",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 2,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "relate",
+      "session": "00f4321e-a958-4dff-b72a-7d261a50ac07",
+      "at": "2026-11-10T19:28:29.963Z",
+      "promptSha256": "36698a2a531666da96333c6244411130d00da684a670a77af2b06944290654e5",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 10,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "relate",
+      "session": "ac704c48-eab9-4825-8818-0be6281b28e0",
+      "at": "2026-11-18T23:07:51.009Z",
+      "promptSha256": "ade70f0c1ef11227872e04ef9248163d1943b7a9f0e826321e35a38c47fed5c0",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 10,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "relate",
+      "session": "57fbe4ec-c143-4eac-b67a-84341882f39a",
+      "at": "2026-11-16T19:04:56.533Z",
+      "promptSha256": "1d1ca7df04b871f16bd7e64aa8f206f3effbb11c0d4883b3e82716122e6a0c37",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 10,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "relate",
+      "session": "15679c84-b9de-41b0-8d4b-de57e32e597e",
+      "at": "2026-11-17T05:00:58.697Z",
+      "promptSha256": "a36c310df19dbddb51ab0a9b5668f2714cb2fa44bec10da3f9a43c52186ff089",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 6,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "relate",
+      "session": "f518ccf8-7cb8-411c-8da6-4dcd9a096477",
+      "at": "2026-11-17T06:30:19.552Z",
+      "promptSha256": "fed83e394eff9145e30923283600157bd1bf74866773b4c56484a7fddf57d9c6",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 5,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "relate",
+      "session": "97663710-807e-43c8-850b-f77e0a95d431",
+      "at": "2026-11-16T23:15:43.005Z",
+      "promptSha256": "ae3d9b09dddff8246f64383e75aaa5127c579c2258c5f57bd811c208c22a8bab",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 6,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "relate",
+      "session": "ddb5394e-6487-4af4-8f28-2f43949c0e66",
+      "at": "2026-11-17T03:30:17.809Z",
+      "promptSha256": "56024a694adfea51ebce3b51279e74e76b37133a0be909e2c348fac82e0a75c2",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 6,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "4e3a07e8-c9f4-4ca5-8005-429291c5de90",
+      "at": "2026-10-21T09:30:31.870Z",
+      "promptSha256": "60d6a522a3d4d490464e06746b6ebaeff883d5a8ede8a223f21ece982c9c2ad6",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 20,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "8bb9e81e-598c-4a05-bdae-47f84c627186",
+      "at": "2026-10-21T21:02:21.540Z",
+      "promptSha256": "c187abf4fa85c2881539e5cc0a3bb1134097e48590ca53bf3c38431d8c939b77",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 16,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "351b0a1c-bf6d-4c65-9f1c-2cfc60fd53e0",
+      "at": "2026-10-21T03:30:42.296Z",
+      "promptSha256": "768222f27f2ce3d72688d4f74f033f63208a7e56b9d9d496f340c7c1f813a9bf",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 20,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "3d293512-7344-4d33-b2ec-47a9b4b261da",
+      "at": "2026-10-22T18:01:57.017Z",
+      "promptSha256": "e58c92955861b5db493393bdc550c0d1b80c638459f105b36c2095b349fd1561",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 25,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "14a01b80-6d6c-49e8-9f5e-a24147089d08",
+      "at": "2026-10-22T08:32:16.007Z",
+      "promptSha256": "fc956643f8a5710d26828787fb0948be1c64950d6dc96f2dc149d98e79c68a99",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 21,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "c8fe1e4c-1e8a-4df8-9a6b-ac3ea5846518",
+      "at": "2026-10-25T05:00:52.944Z",
+      "promptSha256": "007a7124e3fe6528b6afbd3eae05efab04fd0f90f6404c793209fdad03b78cb0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 17,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "a519151e-1b67-46ec-87e0-8bf123e2866d",
+      "at": "2026-10-21T17:30:20.928Z",
+      "promptSha256": "1b709633a07c769a1504ff3e03d9ccec05707288e2729d373255e934714b467d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 19,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "2ca96fde-dbac-4e90-bc3c-2ffa4df0ac48",
+      "at": "2026-10-23T00:30:30.379Z",
+      "promptSha256": "ec2cf559523e5b3afc61de4514682497556a28a4048280ebed1d796d243d2b74",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 20,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "1bce7a87-298b-4485-add3-870b9a6e8d69",
+      "at": "2026-10-23T05:37:23.957Z",
+      "promptSha256": "4081fdf062f84652fc2226f4fc8c0af87e89faff7720446b9daff957da63435b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 19,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "prune",
+      "session": "ef8d221e-b6c9-4b5d-9594-0ba70a876f01",
+      "at": "2026-10-26T09:52:43.705Z",
+      "promptSha256": "baabb3ca91f3457ee1bf26670f971d4c773090e55a7c401394cc04595022cc0c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 80,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "prune",
+      "session": "2eb3c443-de85-4dd0-b108-351d97ca8d5a",
+      "at": "2026-10-26T09:46:47.136Z",
+      "promptSha256": "e4781820f5f52dd2b88d2310609b2d92b9d3defae89b92684c8147d7daf565ec",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 80,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "prune",
+      "session": "3ffd2fbf-5f1a-454d-9112-5db47e9ebe72",
+      "at": "2026-10-26T09:59:42.359Z",
+      "promptSha256": "6d048af3fcce6e2a156ab7fdf37f38a9dc5e6e4ad41233c07ff0e08a17b3273c",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 31,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "prune",
+      "session": "4c009b45-07d0-4ae3-bfed-a37852370b5b",
+      "at": "2026-11-04T06:27:24.162Z",
+      "promptSha256": "8916c84ddad7775fc7259083745ad9a22e7992ab9bc81fe8351d47bc2628c7a5",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 18,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "03e1aec3-d6f0-4aff-a80c-bfd12d4cc559",
+      "at": "2026-11-05T10:30:23.161Z",
+      "promptSha256": "cb209bac5e928af50b3680ed5662a5dfb8aa6c4d9adb15d62dc89fd5abec4706",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 19,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "b686c95e-b0cc-4d9c-90b6-9720c398f38e",
+      "at": "2026-11-05T20:20:08.037Z",
+      "promptSha256": "df67c39e0b998c0afd67764842661109c38751ed2587ae05648f3ec1bb9dd806",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 18,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "fe3ef7f1-d946-4ef1-afe6-b888b4c691f2",
+      "at": "2026-11-05T20:32:25.609Z",
+      "promptSha256": "76a7859c7ca7d0ec0f150f31cbd3e229df1f115a2eb3be97086a928e1e03d0a0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 19,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "bc6c97b3-f8d2-437c-95b9-06fa5bc9b177",
+      "at": "2026-11-05T14:30:21.421Z",
+      "promptSha256": "d4d0ec949a20d8592ee41af8bc26fbf0107994c06096ca6a677f42c632ea6479",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 18,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "6cd60df2-fe38-4ee8-9c4c-b1f98cb8851d",
+      "at": "2026-11-05T20:03:30.564Z",
+      "promptSha256": "aa0770ccb39192cc45c29c3e68ec7812b81aee263b55be20315597a4e036e906",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 20,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "aa4c78fd-99cc-465f-86d5-5b9a27827d4b",
+      "at": "2026-11-05T05:01:18.363Z",
+      "promptSha256": "3215a805653050893c9b613e44bf40d59603a944b7789efb5494c1fb33b53dc5",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 21,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "2804df0a-1530-4b9a-bbb5-0dff9614653e",
+      "at": "2026-11-02T01:14:03.199Z",
+      "promptSha256": "81fa3fd88ca35ce09450700f0abc062fbb35fc9a9f41fb24ad262a1035470b78",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 9,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "bb68c80f-ec36-4875-856c-2165ccde9d03",
+      "at": "2026-11-05T06:36:04.997Z",
+      "promptSha256": "4becf0e037f35d86ec8756772ec22c4f12b92a65a9bb7891570c5462ef189880",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 20,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "a47d70fc-41ab-4710-b3a1-9208f6094059",
+      "at": "2026-11-04T19:17:37.120Z",
+      "promptSha256": "2efb85efedad580ab6af12d504d063a3488e0430dfba583ab71ccd530cd0fcf1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 23,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "b23b8580-466c-4182-a38e-6834b42e80cf",
+      "at": "2026-11-04T11:10:58.943Z",
+      "promptSha256": "c594326c37e8a8e30e943c5f89705a652e2774d112dc9eb994fe30a0b6445abe",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 22,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "prune",
+      "session": "ce39048f-d6c4-4695-9bef-83248279fd5c",
+      "at": "2026-11-14T21:17:53.767Z",
+      "promptSha256": "1000519a11f6271ea8633687db414824c8f4f30fa1d97d0184a9f8e8cdeb1e19",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 72,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "ebe01f5f-7432-4f70-8cd7-e2dfb509e120",
+      "at": "2026-11-12T20:18:55.365Z",
+      "promptSha256": "cd1971204308c5db11c30c5051af1d059a7740dc0ec03db53db63a3c99ff68ec",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "99a752e8-8e84-463c-9ce5-72d713589546",
+      "at": "2026-11-12T20:30:44.729Z",
+      "promptSha256": "e8df12c96b623f0aa031413809fb1f6f9bd97edc82936d9f1f1ee9e138eebf2c",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "895d643f-8dae-4a05-9609-a3dd7066a2e8",
+      "at": "2026-11-12T20:12:23.709Z",
+      "promptSha256": "1a68abf4b2edcf2d7851bcd55d68ff8bb00e44bf10b9fd6335ae7a6e8b600e07",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "ec44ce3b-4f1e-4f86-b5fb-0049a2891ca9",
+      "at": "2026-11-13T18:14:04.345Z",
+      "promptSha256": "d4b70cc422a4a93caa05a03815c5b479a384687f2a16b905d38231e6f8729fd5",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "71a6ddd2-5fda-43bc-8460-e958ec99594a",
+      "at": "2026-11-12T20:28:52.304Z",
+      "promptSha256": "637865fd8ea7eab1821476b99bd8e2527df26a7f6b4b050ac0c6efc8d6e6497c",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "0927b3c5-5d91-4e3e-8312-7bc40a95752b",
+      "at": "2026-11-12T19:41:08.206Z",
+      "promptSha256": "e5e4e3cae93038ebc701b3515fafd1ba7de22e584bbe5e12175bcde5252b0de3",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "332d2081-3a08-4e3a-85a3-2babc2a9013b",
+      "at": "2026-11-12T20:17:12.923Z",
+      "promptSha256": "098785c9cd00f4d25bf1deca83117995f9e8c8a04d54958e727aefbbc7800068",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "46baf219-49e7-4d45-a574-f4af4f460599",
+      "at": "2026-11-10T12:59:32.823Z",
+      "promptSha256": "831f33fdd30e000bc808650ad6b1f8cb2d50a2ed307decb6405717b18c1c59d1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "aac25e6a-c79d-45bb-a0df-0d117ce731fb",
+      "at": "2026-11-12T20:10:12.304Z",
+      "promptSha256": "8a8a284d52ffd3c6a47c4ecb9036dbde59e2b62ef8b048ba1b2663277f8a35de",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "be06f0e0-f05e-40ef-8752-5afddd795f07",
+      "at": "2026-11-12T19:40:26.949Z",
+      "promptSha256": "25f4ea80831d76a0be4ed8ed064765e547fc2acfee7e37127da61b2cf6290cc5",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "e4b89b5c-8862-4310-88b2-79aba957c524",
+      "at": "2026-11-10T12:56:25.023Z",
+      "promptSha256": "b7be3fbd422cfb56c88d65a3a8ab1b72433bb2b4f2afb1772d5a323aca2d8229",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 14,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "00b08550-4c41-4e4b-b29b-9c70b72f92b6",
+      "at": "2026-11-14T13:28:32.002Z",
+      "promptSha256": "2f8b68e1a32c13c602df1c725362aa4207baed2def8a5d889e0af8eb123a5510",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "c9e89750-3bad-4f0c-b692-c78c4fb02079",
+      "at": "2026-11-12T20:32:59.527Z",
+      "promptSha256": "3b41da2ff7b79862000b14ed9e4f9b6b045ec1767daf2c1fc3a4c501526dc4fd",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "61ad997d-066d-487e-92c0-531eb8f58a0a",
+      "at": "2026-11-12T20:35:00.242Z",
+      "promptSha256": "ca5d717d32bcff88eb855deb4789feae328aa617ff1a3be99ae93bdc7f5f44eb",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "279a7abb-907c-4bde-965e-ac7de803ae32",
+      "at": "2026-11-15T20:40:58.194Z",
+      "promptSha256": "fccd5131ace7e3a6c790db45659f0d4be5fac9b1ad212e5017c8186903b51a19",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "ec746602-68b2-4cca-ab61-6e5dbb5746cf",
+      "at": "2026-11-15T13:01:43.258Z",
+      "promptSha256": "854ac775173ff21ac03d47bd26dd7b231b9a2acdca3ca9107837592c3df92ff8",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "02a78d48-65b3-49cf-a3ed-d894354f9e4d",
+      "at": "2026-11-12T20:04:49.569Z",
+      "promptSha256": "656cbf875867b28c7a7fb2feaa5b46bada4b895ee051f2eb4a94eddcccb02e53",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "9ddef22f-5410-4848-b05d-b24b3a39dfb1",
+      "at": "2026-11-15T19:44:23.356Z",
+      "promptSha256": "7546c5844d1c11cfab99ec371ba0f86e4d7088a00727cc5c1d9c5a82fc074b60",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "bf93ece6-219b-45e5-adc7-9173125cec90",
+      "at": "2026-11-12T20:06:10.392Z",
+      "promptSha256": "2c2e03af71d6d9f2935988c63a6c0d72856def5809dd55a3b1630dd3dabb8b3a",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 55,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "a179d7e6-b322-4bc8-8e2e-1643c771b0e0",
+      "at": "2026-11-12T20:22:44.659Z",
+      "promptSha256": "7cadd8339f3f46eab7f0601f1cc05d297efe80968796de57e84b2f6e7e091525",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "cafb3cc5-464d-4300-98f3-1d0c2c5c92bc",
+      "at": "2026-11-12T20:16:23.910Z",
+      "promptSha256": "c0b15bc8b72f456394259cf0e492d8bdc056bd73ed3e5999c45eb3a91a5b6fa2",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "044b7358-a5f4-40a8-8663-64d09703fca5",
+      "at": "2026-11-15T13:01:20.954Z",
+      "promptSha256": "ddaa73bb4a762b5a7d9c1f8a5f3176056255b80032d472a010c57c3032b4926f",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "884f295b-4e7d-46f8-a99e-f4e84ae6895b",
+      "at": "2026-11-12T20:21:09.395Z",
+      "promptSha256": "8788cd262ad0008cc03faae27818b3809619674f76130d4fed31240dd8070780",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "a69c8c35-60ca-431d-8f67-19f5cb396cc3",
+      "at": "2026-11-13T14:15:42.610Z",
+      "promptSha256": "d8ac099417b0ff42292be3b5276c55864c319058f94b8c775b8d38cd6206ceab",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "44a2203d-104d-4042-80c3-73adb1c799d8",
+      "at": "2026-11-15T19:47:15.784Z",
+      "promptSha256": "9cf28a0e56bfa61d7a5587161ac40a03f1e2df52194f831796671544e79216e9",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "9d508176-18eb-4b21-9a4d-7ee6366fb084",
+      "at": "2026-11-09T19:36:43.362Z",
+      "promptSha256": "b99c1537ef1845cf1f78987c9b22b0c2a5d69b072a1dfd0bcb286142c68e6a1b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 38,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "4e13d522-a897-4b71-b0be-9538638f6077",
+      "at": "2026-11-13T18:15:12.821Z",
+      "promptSha256": "4f5114566e96e7ac57e00cf0abbfc56387172c6362071526f236b84ce47226e3",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "03c6b3dc-71da-4f9a-a69d-fd5f552ad539",
+      "at": "2026-11-15T20:40:10.534Z",
+      "promptSha256": "4e0984ce2fea369de38c05a193ec6c48508735b59a66b767049d582c2c0d56c8",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "fab7a588-06ee-4e64-ac2f-fc68f75277bd",
+      "at": "2026-11-12T20:13:58.467Z",
+      "promptSha256": "be60e1dffdb5ae79f8391749ec45c9e3e4158c384e2769bc6edd1354c4459c2d",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "19b993a4-816f-42e9-9ed1-ffcd62614d4b",
+      "at": "2026-11-12T20:28:01.194Z",
+      "promptSha256": "956afd3ebcc81ff1b778ad4c456510c32909bea239a7829f6908571f2d54948a",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "8f67afb6-5b5f-4193-8909-45e86f63be29",
+      "at": "2026-11-15T19:46:34.027Z",
+      "promptSha256": "982021906de006bee76c016ac0edcc19fb5cd5e4d19ee3117c15370dac172fcb",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "f274c4e9-2ffb-413a-b94b-b9c68f1b388e",
+      "at": "2026-11-12T20:33:56.826Z",
+      "promptSha256": "db05390916272bdacef0d479f09e3d811eb212e60cfd91195db0ea0e445e9c27",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "prune",
+      "session": "a6b53174-e55e-40c6-acf8-4cad9dcd3de4",
+      "at": "2026-11-17T06:21:02.542Z",
+      "promptSha256": "05a3c0dfc34e3ec4f6512eb3ce83ac687598d2eb7b14112f83a585dcda9015e7",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "0798bf39-dc02-4d40-a0bd-d00d6d6c29e8",
+      "at": "2026-11-18T23:05:11.806Z",
+      "promptSha256": "88869d127c6aead03baca2ed3615a6e6292e9c8c1ec13659ebd48ceab30a4fb5",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "c53edb55-2ee6-422f-99e2-61793004bc19",
+      "at": "2026-11-17T13:02:17.741Z",
+      "promptSha256": "4d83e20832b247946f11c8cdfd82b680e35880808d9ebfb62bed9961fa9d117a",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "d6063e1f-f649-4709-9993-cfeed0260848",
+      "at": "2026-11-18T09:32:25.270Z",
+      "promptSha256": "5dad2e050f620ea2e9182559daef1520cba7008a9d64323a86cc1afb60ef69c8",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "70fd9bcd-75a9-49aa-bfa3-f463594322a3",
+      "at": "2026-11-18T23:00:38.173Z",
+      "promptSha256": "aa37ccbb27f0b6bb7332fdcc2eb10eeb66b88eb6f913965f19a76a434d5f5cbb",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "7e674b35-63cb-42a7-a1bf-061bb0478cce",
+      "at": "2026-11-16T11:55:50.582Z",
+      "promptSha256": "ae847fa6d79cf65e0a362fdd30f1d609e2b93f1baafe51e94c3a4c01f8110e22",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "9dcd3230-c4dd-4c70-94e9-d17ef5140b0e",
+      "at": "2026-11-18T09:21:00.725Z",
+      "promptSha256": "1f68f27d10a5a7d22cd748282b41d8efa7afd94cd9e433871b53725230c7670d",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "6a199987-84d4-4396-8de7-173592797f4b",
+      "at": "2026-11-19T19:18:54.509Z",
+      "promptSha256": "6ef194c0a0acadac6ef12c32fa1c05906c81ab7712a280d1b3d6e736442ecf48",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "eae262c0-b3e6-4c40-b777-8da5c72e0614",
+      "at": "2026-11-17T04:45:39.146Z",
+      "promptSha256": "d5047e6360fe5ef48a07dcd1dcc033d64e49b214aaeb66e136ad043558592394",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "8d447771-53dc-4fc3-bfd8-bd9f78d37c4a",
+      "at": "2026-11-17T06:20:31.946Z",
+      "promptSha256": "38b90113242e9668c6f944dbef17f554580e31347ad1a0c2252ea21f00e2792f",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "a139bac0-d732-4a50-b324-fa712a771e27",
+      "at": "2026-11-18T10:11:41.196Z",
+      "promptSha256": "19f1830ae9a685d50ffda701e349a89944fc07f4d563c5d86f167bf27f99d459",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "4b7b8d6e-dd30-4edb-afec-4969b125732f",
+      "at": "2026-11-18T23:04:35.481Z",
+      "promptSha256": "3f8d609f818b5f6a9c9e0444c6021e1fdec3413146930d1e473d4d6a8f71d298",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "1f4ce967-8919-4c33-8228-94269c8b2ac4",
+      "at": "2026-11-17T06:35:45.114Z",
+      "promptSha256": "6376695399aecf0b0b1e87ebd4473cb172edb26a00ab679a9aeacca786a044eb",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "4777bf80-4f99-4f36-ab10-d907ee854342",
+      "at": "2026-11-19T09:07:18.749Z",
+      "promptSha256": "1e68ebf1a9922d65c239ecdc11963c9343d0f332609ad16ea5f2b5797477aafb",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "8ac1c9fd-7137-4feb-8c51-c8fe67b73e41",
+      "at": "2026-11-19T18:30:06.295Z",
+      "promptSha256": "a5972ff7a7c19910c4eac54441629851c6ec95bee0b366814e3e90c526b831db",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "83bb6afe-12e6-43a3-b9e2-a5ccd9b690d5",
+      "at": "2026-11-18T21:04:47.450Z",
+      "promptSha256": "c35f35af40bc2670272bf5f6a8eb4fb60c61e604938e7366bd64c8cfc079c0e1",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "7cdb508a-ce01-45fd-a2aa-868e2792d675",
+      "at": "2026-11-19T19:57:34.321Z",
+      "promptSha256": "483b14eebfd22540eac6117f3ecce4fdfc0570166bf3f1ef8472fa6132b849b9",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "900c373e-25ff-45f8-be48-02fa0330739e",
+      "at": "2026-11-17T06:35:55.728Z",
+      "promptSha256": "12c6ba94a6ebed33b97bd5c305c9c39cb995f294f3eaf931843680e609888572",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "d78c968f-2e94-4a3f-b451-0d6fe52266fc",
+      "at": "2026-11-19T20:01:37.116Z",
+      "promptSha256": "e6f65a631296ab5b167f12797f099d1ee041e32b0e603cade51bfb22d6eddced",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "9f3c486c-b5f2-4fd5-bd02-6fa6dc08241b",
+      "at": "2026-11-19T18:30:39.426Z",
+      "promptSha256": "a7e8f933a28673e657b9c4e77df15ccc9df2a9af775fa28219967f6ba2dc9b2b",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "002114b5-ca13-46b5-ae2d-569a2ea7b7ad",
+      "at": "2026-11-19T20:02:09.202Z",
+      "promptSha256": "c8a3c0c49aabd6a4ed73cffd5055abff71798e99a2c9049c58a9ff07a795068d",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "6bcd9132-81a9-45d0-9ae5-93344be256d6",
+      "at": "2026-11-18T10:10:34.290Z",
+      "promptSha256": "34d8f68be4fcd58c7599078607c45d3a200bddbdefe691f00fa6ccb54db24ec6",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "b3ead304-52ed-41dc-8275-28624e3a6917",
+      "at": "2026-11-17T04:45:20.534Z",
+      "promptSha256": "604884bd6b3bc43d102ce0dc1aef221b4da16a656a02a1b9c0884de006ac8bb6",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "542ca713-d2b4-4ba3-896a-ae533a2f7cff",
+      "at": "2026-11-19T06:20:50.530Z",
+      "promptSha256": "fd7bb48532d3ff9acb582878d904a2e5c6aff7ce5e4e8d3fc1061c6c8f739b19",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "2fddcd10-3132-4cfd-be35-4ff27b109d4c",
+      "at": "2026-11-16T12:09:34.674Z",
+      "promptSha256": "5ca9ab3af915b1bb60d67786b80299fb64c1931c0f380581ed4a7fc2c8dbffac",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "8efc306d-0d26-4cc2-b820-cfa79ab10882",
+      "at": "2026-11-17T06:45:33.790Z",
+      "promptSha256": "beff2bd96ca474b2727276654f7c3f2eb434cdf23697a5e75b2cc536f4eb053f",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "f1075942-3857-4154-88f2-df9a5f36529b",
+      "at": "2026-11-18T21:04:26.870Z",
+      "promptSha256": "6c96ad92b0b0a7e03a2f32133c52f71d2d35a643587cc939e656d8d487168e5d",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "0fa6c7a0-afee-4a42-90eb-5199da9c8368",
+      "at": "2026-11-17T05:45:32.423Z",
+      "promptSha256": "8153bbd0f41908c05cc06fd02661a90c968f6aabfe216a183da0a53e751126e3",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "f7aecbc2-84d5-4045-979f-b8a91226ff0d",
+      "at": "2026-11-19T19:01:15.625Z",
+      "promptSha256": "6f75b8449201508e6f13e0370849982cbbe9857bc3b7a012bef9037b4defc039",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "db5d1728-f056-4b0d-a33c-dd0080f28082",
+      "at": "2026-11-19T19:57:43.443Z",
+      "promptSha256": "5743e27a910afb719ca5a89b658088fa9628395ad1688f778e6a16b7db45d69b",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "prune",
+      "session": "09a79514-2ada-4cdd-bc61-a092cda03032",
+      "at": "2026-11-18T09:19:54.338Z",
+      "promptSha256": "3a84c5b2590fdc4b83cd14dcf067e4ea605e4cd884147d17db0db3d430a2b9d2",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 80,
+      "stratum": "2026-11-16/S"
+    },
+    {
+      "job": "extract",
+      "session": "fe466ac0-f27d-47b5-894a-7a45480939fc",
+      "at": "2026-10-25T14:30:07.895Z",
+      "promptSha256": "e22a2c8f2bb3b6c721adb23a32b8d9751e2e177ffefb92c1c073321bd5150477",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 89031,
+      "stratum": "2026-10-19/L"
+    },
+    {
+      "job": "extract",
+      "session": "7ca410f5-11bf-46a7-b4da-1e1fa6cb3662",
+      "at": "2026-10-25T05:53:59.152Z",
+      "promptSha256": "e843073fe55f39ae9300212b1491c42461c8cb18826a7631bd456d2e192bc38e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 115774,
+      "stratum": "2026-10-19/L"
+    },
+    {
+      "job": "extract",
+      "session": "1dd5e4eb-4fbc-48a2-a9bc-18bc70b21d06",
+      "at": "2026-10-22T05:00:08.839Z",
+      "promptSha256": "0e01e2ce04d6bb3614b630388c96ba4bd0087461a9bd998e01bcca4d042774a0",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 88615,
+      "stratum": "2026-10-19/L"
+    },
+    {
+      "job": "extract",
+      "session": "5da6028d-e95a-4986-8dc4-7c0e07b67780",
+      "at": "2026-10-21T05:00:08.844Z",
+      "promptSha256": "13d245e41bcfd816360bb8e548bfc2d40ac5caf0d9aed84859e7c54452533c62",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 64810,
+      "stratum": "2026-10-19/M"
+    },
+    {
+      "job": "extract",
+      "session": "22341b58-1975-4e0c-9116-d0966c699a18",
+      "at": "2026-10-22T00:30:08.580Z",
+      "promptSha256": "d092ccbae4a6a10666c2202689db38a37fc5c1c7d2e0c7c902d4c40a8aa837ab",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 82468,
+      "stratum": "2026-10-19/M"
+    },
+    {
+      "job": "extract",
+      "session": "4a42e53c-9bb2-4c3a-9af5-4ea0c64836cd",
+      "at": "2026-10-22T07:55:08.662Z",
+      "promptSha256": "1949146e015358b830898203e3bd36fd96048968ae1f5a63ebd108718235c7ed",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 71908,
+      "stratum": "2026-10-19/M"
+    },
+    {
+      "job": "extract",
+      "session": "7ea71cb8-dd34-40f7-9828-fd67bbe07946",
+      "at": "2026-10-21T07:21:49.118Z",
+      "promptSha256": "5598b32c298c3466320f00edb0a1fe04c2f788030ca0c831fc411dee5f9e8e53",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 57577,
+      "stratum": "2026-10-19/M"
+    },
+    {
+      "job": "extract",
+      "session": "7e889cc9-429f-4509-b59b-b6022084523f",
+      "at": "2026-10-20T20:06:10.548Z",
+      "promptSha256": "c1ace66c9bfc6723cbf894d76f8856bf5ba19e08d15054c7f62e2032dbd8cb50",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 6466,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "extract",
+      "session": "5acc28e9-e022-49fa-a3df-be112fd78747",
+      "at": "2026-10-22T08:10:51.927Z",
+      "promptSha256": "3214627f291a53037d7a578f0eac212381f0bd8b7a5ffe63e21132fd4c02ade5",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 22188,
+      "stratum": "2026-10-19/S"
+    },
+    {
+      "job": "extract",
+      "session": "ba2e557e-e92e-43b8-9430-e60fbf2c7dc7",
+      "at": "2026-10-30T06:00:09.342Z",
+      "promptSha256": "a34bb3f3240ddd65e8ff0ec2e6382b8e115a3bef81c7f0fe795d1a2e41349638",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 91166,
+      "stratum": "2026-10-26/L"
+    },
+    {
+      "job": "extract",
+      "session": "e5fe7c67-5b97-4306-a1b3-b0521459b33d",
+      "at": "2026-10-26T18:30:09.167Z",
+      "promptSha256": "87daf826468124c44f5ed47fc3508370c7d44a82d7c9f40638c2a19df7725bed",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 89029,
+      "stratum": "2026-10-26/L"
+    },
+    {
+      "job": "extract",
+      "session": "638c0a4e-fb85-474b-9fde-89fbedfe1a0d",
+      "at": "2026-10-28T18:30:10.603Z",
+      "promptSha256": "98f7ff6251bdb8c98141ad15e366d4a088c5a3f76d8aee08c86b8f8f4bfbb22f",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 87693,
+      "stratum": "2026-10-26/M"
+    },
+    {
+      "job": "extract",
+      "session": "9926c935-746e-4384-869c-4973db254bde",
+      "at": "2026-10-26T01:30:10.044Z",
+      "promptSha256": "60aa68b36b23f3d9111452e2da55ef7086c757286c618d0d82fa97fbae933625",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 82466,
+      "stratum": "2026-10-26/M"
+    },
+    {
+      "job": "extract",
+      "session": "f42e3fe4-4a82-40bf-837a-ea560310a98e",
+      "at": "2026-10-29T07:00:15.665Z",
+      "promptSha256": "9927133e32b4ba9a9c4dd14543991029f8b1a6341bf7867eeeab0c2875259778",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 46760,
+      "stratum": "2026-10-26/M"
+    },
+    {
+      "job": "extract",
+      "session": "42009ad0-4e61-4ff0-873f-0c8d6c5a8ee6",
+      "at": "2026-10-27T01:30:06.752Z",
+      "promptSha256": "9081fdb2ec35e3e8b7b19078c5b8026baa3fa89a918c2d5648f6d2a67c892d9e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 81118,
+      "stratum": "2026-10-26/M"
+    },
+    {
+      "job": "extract",
+      "session": "9060c2e3-aaf0-4bac-bca7-428377b7f19a",
+      "at": "2026-10-27T10:30:08.107Z",
+      "promptSha256": "42f8b64152e443f895c68d9b637565eeefbe1edc0f1938066c1689d2525d33ae",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 87689,
+      "stratum": "2026-10-26/M"
+    },
+    {
+      "job": "extract",
+      "session": "37f4fa17-47f3-432c-9b56-178effddec90",
+      "at": "2026-10-26T05:00:20.572Z",
+      "promptSha256": "73437a0f071134f98b34df84ece8afe299b77d40c3b0d7e04e29e47d92172c3e",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 17497,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "31f90789-cdc5-4cc6-9e80-8b9d32241ceb",
+      "at": "2026-11-01T13:00:17.422Z",
+      "promptSha256": "533bbec68ec3627f3c1036e8d9440c89de5d45ad1d308c99c5d4d11b7b81e36b",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 42714,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "dfc007eb-7fc3-4489-a770-b8aae468b701",
+      "at": "2026-11-01T16:00:25.211Z",
+      "promptSha256": "92191b4d6e9178d7e40830732125244fea33e00eeaba13ae03490e356ea7cbbe",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 33539,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "607b2a82-30bd-4e13-b78a-6349a1a5fb91",
+      "at": "2026-10-28T23:00:45.076Z",
+      "promptSha256": "af65124f51e3dc679b135ec4df3bb676b283f6025933fbc4d9f8e2550534b00d",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 40724,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "bc12261f-3267-4377-ad91-039bbe3676fe",
+      "at": "2026-10-29T23:01:09.602Z",
+      "promptSha256": "5caf2922428bfb66376aae06757b3a84f50a28ae5ae8df6dce64288378935ebc",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 42124,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "ea46d629-441a-48c8-ae40-7cae05342fc5",
+      "at": "2026-11-01T11:00:26.510Z",
+      "promptSha256": "4d2f5b7f81e9aff3ad57520dbdd4f027a99c6acc153acd04594009b4325dc3f4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 40518,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "75c712fc-484b-449d-8876-1a2a078e5f93",
+      "at": "2026-10-27T09:00:30.599Z",
+      "promptSha256": "40adc8dfd6f99cc79a7e7485647f821f80638730221c63945109a4aa8af3dd29",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 28418,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "30eef27e-39ce-485a-9a86-9ba3e4436705",
+      "at": "2026-10-29T10:07:48.225Z",
+      "promptSha256": "26047a419fd9fcd642d00889cf9214b9d2a6695485ad1a7355db97164bc11f9a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 20460,
+      "stratum": "2026-10-26/S"
+    },
+    {
+      "job": "extract",
+      "session": "d039b589-ebaf-4a0e-a990-665c281d0ae5",
+      "at": "2026-11-02T18:30:07.313Z",
+      "promptSha256": "5a73901ddde14f6b90ccfdc04abdb14feb9e6530ec07aa4b670ba1f4bc278ac8",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 88100,
+      "stratum": "2026-11-02/L"
+    },
+    {
+      "job": "extract",
+      "session": "aae0bdd1-9bad-476e-a19f-129b10ca2ad4",
+      "at": "2026-11-05T05:29:52.634Z",
+      "promptSha256": "116ca64267bcd7b54f3c760d392e3843fb3e373518e48af63cc24832d2fa01da",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 89975,
+      "stratum": "2026-11-02/L"
+    },
+    {
+      "job": "extract",
+      "session": "06d72270-1618-4798-a9cc-db2d739208f8",
+      "at": "2026-11-04T20:06:49.267Z",
+      "promptSha256": "e66c72c342284f2a638c59232084a24c351d0bb0d419ed56f92789dd94b800da",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 95219,
+      "stratum": "2026-11-02/L"
+    },
+    {
+      "job": "extract",
+      "session": "21e929c4-9bce-4fe0-b5c3-85a11583a7bf",
+      "at": "2026-11-03T10:30:10.702Z",
+      "promptSha256": "e30d410cf8135c179957f194612cd22cbda15c3becb031100c139c9ca32c15b1",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 88002,
+      "stratum": "2026-11-02/L"
+    },
+    {
+      "job": "extract",
+      "session": "096f307f-e3fd-404a-9df7-7cef4f6cefe7",
+      "at": "2026-11-02T10:30:07.161Z",
+      "promptSha256": "6037f0137151f2f6e161067c9b96dfa9dffd9dfb97d4ca5decb50ea348d95998",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 88052,
+      "stratum": "2026-11-02/L"
+    },
+    {
+      "job": "extract",
+      "session": "e6d3b175-0aab-4b13-bb3b-94f52157fa7a",
+      "at": "2026-11-05T20:25:38.190Z",
+      "promptSha256": "846d7ad4b90065fee6edf4497b5affb5c2134eea425c5dc75e7a750ab3c0446a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 61497,
+      "stratum": "2026-11-02/M"
+    },
+    {
+      "job": "extract",
+      "session": "3842f775-c330-473c-8e8f-c42a674e9989",
+      "at": "2026-11-02T01:13:51.644Z",
+      "promptSha256": "4a41380687128f1db18e1acb265ec2e282101d13796e51f43e475919e80ccfa2",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 3399,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "extract",
+      "session": "50f0b1c2-1d1e-4d7b-8f4d-6f2e31a4046c",
+      "at": "2026-11-05T20:27:26.636Z",
+      "promptSha256": "3cfe6a873743449ccb76fba1c648ec88695d39925b89221b253a77555d1a3117",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 35376,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "extract",
+      "session": "c8f33003-43f7-4185-ac27-73f27b4b259b",
+      "at": "2026-11-05T13:55:48.612Z",
+      "promptSha256": "a70a847b41debe90015ee6451656337851ca0a7852a349aac8f3b6d0bcd7728a",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 40950,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "extract",
+      "session": "5682a4cf-a709-48a1-afd5-a4649a709dc0",
+      "at": "2026-11-03T06:20:18.332Z",
+      "promptSha256": "30a306526c2f1ac0d7ae9360a14b73747a92a7dd5d8f42ad8a4cc3512ed84787",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 31113,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "extract",
+      "session": "6ca25e72-5744-415c-be93-1296cc3b0e2f",
+      "at": "2026-11-03T05:00:31.223Z",
+      "promptSha256": "cd2d7f683eba3e5070b99605600610f954346c33cd515b655ef1cdcd44ee4e69",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 18650,
+      "stratum": "2026-11-02/S"
+    },
+    {
+      "job": "extract",
+      "session": "8d6ace0a-3ac7-40dd-a1e8-bda8f17453e2",
+      "at": "2026-11-10T19:28:09.738Z",
+      "promptSha256": "1a36c400142da2fab3e6080882cde160aebee324a0f942a97e12cf132037fcf8",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 149207,
+      "stratum": "2026-11-09/L"
+    },
+    {
+      "job": "extract",
+      "session": "54baa950-b440-434e-9d99-a77c3a5fa646",
+      "at": "2026-11-10T08:37:33.918Z",
+      "promptSha256": "0797c977d9217808ba4da8e7cac7ec591f877ce5b5711d2451444e4ffae42cea",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 114027,
+      "stratum": "2026-11-09/L"
+    },
+    {
+      "job": "extract",
+      "session": "ebec625f-387f-421b-bcff-27808ac3a494",
+      "at": "2026-11-10T19:27:50.575Z",
+      "promptSha256": "33df80a45d0ef5aad5eff61e3446d0cdf81427cb3ebd777cf7b9dc5554056ba4",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 137588,
+      "stratum": "2026-11-09/L"
+    },
+    {
+      "job": "extract",
+      "session": "00c27005-1224-4464-bc23-1a6d1e2dced9",
+      "at": "2026-11-10T12:57:35.545Z",
+      "promptSha256": "006eafb3685b752e9c0414106825e8a74172e26c74666035c7cd602d609012c4",
+      "referenceModel": "claude-haiku-4-5-20251001",
+      "size": 16367,
+      "stratum": "2026-11-09/S"
+    },
+    {
+      "job": "extract",
+      "session": "eba79bf8-e695-4639-92d1-318c92a9c837",
+      "at": "2026-11-16T23:04:54.875Z",
+      "promptSha256": "bb8a3a6b59c82a0288f5187b41542d64c5e4563056e82ba5b1daf49fe784c846",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 104190,
+      "stratum": "2026-11-16/L"
+    },
+    {
+      "job": "extract",
+      "session": "66b083a0-ae98-4bb8-a8b9-4c681ebeac25",
+      "at": "2026-11-18T10:08:59.280Z",
+      "promptSha256": "6b2ea8ee45204262913bdec70c86014cb0e8cc90ed1dbe90d1cddff1b7aeae20",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 116709,
+      "stratum": "2026-11-16/L"
+    },
+    {
+      "job": "extract",
+      "session": "118acae4-0ef1-406f-9448-4cf3f20e9012",
+      "at": "2026-11-18T23:08:11.808Z",
+      "promptSha256": "3b6d2c04868cbc1bc1d3750856976b38a0ed26477aeecae9d98df6585bfd67c4",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 123662,
+      "stratum": "2026-11-16/L"
+    },
+    {
+      "job": "extract",
+      "session": "1dd4e5e2-6c16-4bd4-a139-6437e4395c59",
+      "at": "2026-11-17T06:20:31.892Z",
+      "promptSha256": "584948a17bf39e91785781831df3555c4f9779d3c36e46289c66fcf3a93fb3a9",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 96517,
+      "stratum": "2026-11-16/L"
+    },
+    {
+      "job": "extract",
+      "session": "cd5abd8b-1c55-4862-a349-e5d4f6eb9ed1",
+      "at": "2026-11-17T02:00:18.786Z",
+      "promptSha256": "037d504cdd1971c30f8be00c9acfd1cd50409b0b70f8770b4a9c04da8ab4af6e",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 53014,
+      "stratum": "2026-11-16/M"
+    },
+    {
+      "job": "extract",
+      "session": "033cedb3-3d65-4da1-9f62-2205590c91c8",
+      "at": "2026-11-17T00:30:22.171Z",
+      "promptSha256": "46fb732f01d6a32e0dce65a42e9cd8ff61f9dce49f6e60d796d4759a1c117a8b",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 57275,
+      "stratum": "2026-11-16/M"
+    },
+    {
+      "job": "extract",
+      "session": "d5e84226-de0a-4925-b1dc-ff11dd473a37",
+      "at": "2026-11-17T02:45:20.487Z",
+      "promptSha256": "df75e0c77735cce5ed28901b04c0f1f4b31db590458b36d05ace8c8163a27edf",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 54594,
+      "stratum": "2026-11-16/M"
+    },
+    {
+      "job": "extract",
+      "session": "6456513d-2f5d-4776-a0f4-9ff937e8d0f9",
+      "at": "2026-11-17T03:45:14.863Z",
+      "promptSha256": "ac9b56a84aa8804e0cd6b99bf1570e7d11115228f6aaa97eb58ebd4b783662ba",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 53095,
+      "stratum": "2026-11-16/M"
+    },
+    {
+      "job": "extract",
+      "session": "b343a3cf-700e-46fa-a3fc-1964ba928c28",
+      "at": "2026-11-17T03:30:14.174Z",
+      "promptSha256": "56875886ed227e7d4e612c31f12664e5d455ed1542a070ce7aaa599e6de3a6f0",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 53302,
+      "stratum": "2026-11-16/M"
+    },
+    {
+      "job": "extract",
+      "session": "515a1494-d0d7-4c72-b143-e18a889a2273",
+      "at": "2026-11-16T23:45:15.726Z",
+      "promptSha256": "e462eec5eb677c18e88e027b2ceb53516357faeea9c0271927124019de106222",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 51200,
+      "stratum": "2026-11-16/M"
+    },
+    {
+      "job": "extract",
+      "session": "2eaa880e-e4dd-4f4e-8c8e-8c55c6d4421f",
+      "at": "2026-11-17T01:30:08.028Z",
+      "promptSha256": "837c27e010237db2f34daa1e8d229682265de66190c146e0e698725b75b94d68",
+      "referenceModel": "claude-haiku-5-5",
+      "size": 30672,
+      "stratum": "2026-11-16/S"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# bun install
+node_modules
+
+# Corpus, responses and reports carry memory and transcript text. They live in
+# ~/.local/share/bench/cortex-pipeline/; only protocols/ (ids and hashes) is committed.
+out
+*.jsonl
+report.md
