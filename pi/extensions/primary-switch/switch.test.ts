@@ -226,10 +226,10 @@ describe("running a switch", () => {
 
 	it("reports status without probing or touching the session model", async () => {
 		const { ports, calls } = fakePorts({
-			run: { code: 0, stdout: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:warmind\n", stderr: "", killed: false },
+			run: { code: 0, stdout: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:uncensored\n", stderr: "", killed: false },
 		});
 		const outcome = await runPrimarySwitch("status", ports, timing);
-		expect(outcome).toEqual({ kind: "status", text: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:warmind" });
+		expect(outcome).toEqual({ kind: "status", text: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:uncensored" });
 		expect(calls.probes).toBe(0);
 		expect(calls.selected).toEqual([]);
 	});

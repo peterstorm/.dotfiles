@@ -2,8 +2,8 @@
 # Unit tests for switch-primary.sh's functional core (primary_decide and the
 # served-id mapping). Pure: sources the script without running main, so no
 # Docker, GPU or ssh. Exhaustive over the input space rather than examples:
-# every (request, active, last, glm_partner) combination is checked against the
-# properties the switcher relies on.
+# every (request, active, last) combination is checked against the properties
+# the switcher relies on.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,81 +24,69 @@ PRIMARIES=(glm uncensored warmind deepseek)
 REQUESTS=(toggle glm uncensored warmind deepseek bogus "")
 ACTIVES=(glm uncensored warmind deepseek none multiple other:qwen38-27b-bf16 weird "")
 LASTS=(glm uncensored warmind deepseek none "")
-GLM_PARTNERS=(warmind deepseek "" junk)
 engine() { case "$1" in glm | uncensored) echo hyperflare ;; warmind | deepseek) echo ds4-native ;; *) echo none ;; esac; }
+# Whether a primary is its model's stock release or its uncensored build (dealignai's GLM, WARMIND).
+alignment() { case "$1" in glm | deepseek) echo stock ;; uncensored | warmind) echo uncensored ;; *) echo none ;; esac; }
 
 for request in "${REQUESTS[@]}"; do
   for active in "${ACTIVES[@]}"; do
     for last in "${LASTS[@]}"; do
-      for glm_partner in "${GLM_PARTNERS[@]}"; do
-        d="$(primary_decide "$request" "$active" "$last" "$glm_partner")"
-        ctx="request='$request' active='$active' last='$last' glm_partner='$glm_partner' -> '$d'"
-        # Totality: exactly one well-formed line.
-        check "total: $ctx" '[[ "$d" =~ ^(start:(glm|uncensored|warmind|deepseek)|noop:(glm|uncensored|warmind|deepseek)|error:.+)$ ]]'
-        # Never "start" what already serves.
-        check "no self-start: $ctx" '[ "$d" != "start:$active" ]'
-        # More than one primary, or a foreign profile, on the GPUs is always refused.
-        if [ "$active" = multiple ] || [[ "$active" == other:* ]]; then
-          check "refuse foreign/multiple: $ctx" '[[ "$d" == error:* ]]'
-        fi
-        case "$active" in glm | uncensored | warmind | deepseek | none) valid_active=1 ;; *) valid_active=0 ;; esac
-        if [ "$valid_active" = 1 ]; then
-          case "$request" in
-            glm | uncensored | warmind | deepseek)
-              # An explicit request lands on exactly that primary.
-              check "explicit: $ctx" '[ "$d" = "noop:$request" ] || [ "$d" = "start:$request" ]'
-              check "noop iff already: $ctx" '[ "$active" != "$request" ] || [ "$d" = "noop:$request" ]'
-              ;;
-            toggle)
-              if [ "$active" != none ]; then
-                # Toggle always crosses to the other engine.
-                check "toggle crosses engines: $ctx" \
-                  '[[ "$d" == start:* ]] && [ "$(engine "${d#start:}")" != "$(engine "$active")" ]'
-              fi
-              if [ "$active" = glm ] || [ "$active" = uncensored ]; then
-                expected="$glm_partner"; case "$expected" in warmind | deepseek) ;; *) expected=warmind ;; esac
-                check "a Hyperflare primary toggles to GLM's partner: $ctx" '[ "$d" = "start:$expected" ]'
-              fi
-              if [ "$active" = none ]; then
-                case "$last" in
-                  glm | uncensored | warmind | deepseek) check "resume last: $ctx" '[ "$d" = "start:$last" ]' ;;
-                  *) check "nothing to resume: $ctx" '[[ "$d" == error:* ]]' ;;
-                esac
-              fi
-              ;;
-            *) check "unknown request refused: $ctx" '[[ "$d" == error:* ]]' ;;
-          esac
-        fi
-      done
+      d="$(primary_decide "$request" "$active" "$last")"
+      ctx="request='$request' active='$active' last='$last' -> '$d'"
+      # Totality: exactly one well-formed line.
+      check "total: $ctx" '[[ "$d" =~ ^(start:(glm|uncensored|warmind|deepseek)|noop:(glm|uncensored|warmind|deepseek)|error:.+)$ ]]'
+      # Never "start" what already serves.
+      check "no self-start: $ctx" '[ "$d" != "start:$active" ]'
+      # More than one primary, or a foreign profile, on the GPUs is always refused.
+      if [ "$active" = multiple ] || [[ "$active" == other:* ]]; then
+        check "refuse foreign/multiple: $ctx" '[[ "$d" == error:* ]]'
+      fi
+      case "$active" in glm | uncensored | warmind | deepseek | none) valid_active=1 ;; *) valid_active=0 ;; esac
+      if [ "$valid_active" = 1 ]; then
+        case "$request" in
+          glm | uncensored | warmind | deepseek)
+            # An explicit request lands on exactly that primary.
+            check "explicit: $ctx" '[ "$d" = "noop:$request" ] || [ "$d" = "start:$request" ]'
+            check "noop iff already: $ctx" '[ "$active" != "$request" ] || [ "$d" = "noop:$request" ]'
+            ;;
+          toggle)
+            if [ "$active" != none ]; then
+              # Toggle stays on the engine that serves and flips stock <-> uncensored: the counterpart.
+              check "toggle stays on its engine: $ctx" \
+                '[[ "$d" == start:* ]] && [ "$(engine "${d#start:}")" = "$(engine "$active")" ]'
+              check "toggle flips stock/uncensored: $ctx" '[ "$(alignment "${d#start:}")" != "$(alignment "$active")" ]'
+              check "toggle ignores the last primary while one serves: $ctx" \
+                '[ "$d" = "$(primary_decide toggle "$active" none)" ]'
+            fi
+            if [ "$active" = none ]; then
+              case "$last" in
+                glm | uncensored | warmind | deepseek) check "resume last: $ctx" '[ "$d" = "start:$last" ]' ;;
+                *) check "nothing to resume: $ctx" '[[ "$d" == error:* ]]' ;;
+              esac
+            fi
+            ;;
+          *) check "unknown request refused: $ctx" '[[ "$d" == error:* ]]' ;;
+        esac
+      fi
     done
   done
 done
 
-# Toggle's engine graph: WARMIND -> uncensored (the GLM uncensored build) and
-# DeepSeek -> glm, whatever GLM's partner is; every hop crosses engines. With the
-# default partner WARMIND that makes WARMIND and uncensored toggle back and forth,
-# and a toggle from GLM enters that cycle instead of returning; with DeepSeek as
-# the partner, GLM and DeepSeek are the involution.
-for glm_partner in warmind deepseek; do
-  check "toggle from WARMIND goes to uncensored (partner $glm_partner)" \
-    '[ "$(primary_decide toggle warmind none "$glm_partner")" = start:uncensored ]'
-  check "toggle from DeepSeek goes to glm (partner $glm_partner)" \
-    '[ "$(primary_decide toggle deepseek none "$glm_partner")" = start:glm ]'
-  first="$(primary_decide toggle glm none "$glm_partner")"
-  second="$(primary_decide toggle "${first#start:}" none "$glm_partner")"
-  expected=uncensored; [ "$glm_partner" = deepseek ] && expected=glm
-  check "GLM toggles to its partner, then to that partner's fixed target ($first, $second)" \
-    '[ "$first" = "start:$glm_partner" ] && [ "$second" = "start:$expected" ]'
-  first="$(primary_decide toggle uncensored none "$glm_partner")"
-  second="$(primary_decide toggle "${first#start:}" none "$glm_partner")"
-  expected=uncensored; [ "$glm_partner" = deepseek ] && expected=glm
-  check "uncensored toggles to GLM's partner ($first)" '[ "$first" = "start:$glm_partner" ]'
-  check "the partner then toggles to its fixed target ($second)" '[ "$second" = "start:$expected" ]'
+# Toggle's pairs: each model's stock release and its uncensored build, on one engine.
+check "toggle from GLM goes to uncensored" '[ "$(primary_decide toggle glm none)" = start:uncensored ]'
+check "toggle from uncensored goes to GLM" '[ "$(primary_decide toggle uncensored none)" = start:glm ]'
+check "toggle from DeepSeek goes to WARMIND" '[ "$(primary_decide toggle deepseek none)" = start:warmind ]'
+check "toggle from WARMIND goes to DeepSeek" '[ "$(primary_decide toggle warmind none)" = start:deepseek ]'
+# An involution: two toggles return to where they began.
+for p in "${PRIMARIES[@]}"; do
+  first="$(primary_decide toggle "$p" none)"
+  second="$(primary_decide toggle "${first#start:}" none)"
+  check "toggling twice from $p returns to it ($first, $second)" '[ "$second" = "start:$p" ]'
 done
-first="$(primary_decide toggle warmind none warmind)"
-second="$(primary_decide toggle "${first#start:}" none warmind)"
-check "WARMIND and uncensored toggle back and forth under the default partner ($first, $second)" \
-  '[ "$first" = start:uncensored ] && [ "$second" = start:warmind ]'
+# The counterpart is defined for the primaries only.
+for x in none multiple other:qwen38-27b-bf16 weird ""; do
+  check "no counterpart for '$x'" '[ -z "$(counterpart_of "$x")" ]'
+done
 
 # Sourcing must never run main, whatever $0 is: on 2026-11-14 a test sourced the
 # script as `bash -c 'source "$0"; …' SCRIPT`, the old BASH_SOURCE==$0 guard
@@ -112,10 +100,6 @@ PATH="$guard_bin:$PATH" bash -c 'source "$0" glm' "$ROOT/scripts/inference/switc
 PATH="$guard_bin:$PATH" bash -c 'source "$1" warmind' bash "$ROOT/scripts/inference/switch-primary.sh" >/dev/null 2>&1 || true
 check "sourcing never runs main (no hostname or ssh call)" '[ ! -e "$guard_bin/calls" ]'
 rm -rf "$guard_bin"
-
-# GLM's toggle partner is the fixed GLM_TOGGLE_TARGET (run_request's tests below
-# prove the shell passes it, not the ds41 container's last weights).
-check "GLM toggle target is WARMIND" '[ "$GLM_TOGGLE_TARGET" = warmind ]'
 
 # --- report: the exact lines pi's /switch parses -----------------------------
 # pi/extensions/primary-switch/switch.test.ts runs this same function's output
@@ -299,25 +283,30 @@ run() {
 state; running[$GLM_CONTAINER]=0; label[$DS41_CONTAINER]=deepseek-v4.1-flash-native
 finished[$DS41_CONTAINER]=2026-11-14T10:00:00Z
 run status
-check "status names the served id and toggles GLM to WARMIND despite last DeepSeek" \
-  '[ "$request_rc" = 0 ] && [ "$request_out" = "active:     glm (glm-5.3-flash-hyperflare-tp2-v16)"$'"'"'\n'"'"'"last:       deepseek"$'"'"'\n'"'"'"toggle ->   start:warmind" ] && [ -z "$calls" ]'
+check "status names the served id and toggles GLM to uncensored whatever ran last" \
+  '[ "$request_rc" = 0 ] && [ "$request_out" = "active:     glm (glm-5.3-flash-hyperflare-tp2-v16)"$'"'"'\n'"'"'"last:       deepseek"$'"'"'\n'"'"'"toggle ->   start:uncensored" ] && [ -z "$calls" ]'
 run toggle
-check "toggle from GLM switches to WARMIND" \
-  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:glm gpus start:warmind report:warmind" ]'
+check "toggle from GLM switches to uncensored through the Hyperflare switcher" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
 run glm
 check "already-serving request reports without switching" '[ "$request_rc" = 0 ] && [ "$calls" = "report:glm" ]'
 state; running[$DS41_CONTAINER]=0; label[$DS41_CONTAINER]=warmind-1017-native
 run toggle
-check "toggle from WARMIND switches to uncensored" '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
+check "toggle from WARMIND swaps the ds41 weights to DeepSeek" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:warmind gpus start:deepseek report:deepseek" ]'
 run status
 check "status with nothing to suffix" '[[ "$request_out" == *"active:     warmind (warmind-1017-native)"* ]]'
+state; running[$DS41_CONTAINER]=0; label[$DS41_CONTAINER]=deepseek-v4.1-flash-native
+run toggle
+check "toggle from DeepSeek swaps the ds41 weights to WARMIND" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:deepseek gpus start:warmind report:warmind" ]'
 state; running[$UNCENSORED_CONTAINER]=0
 run status
-check "status names uncensored's served id and toggles uncensored to WARMIND" \
-  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     uncensored (glm-5.3-flash-hyperflare-tp2-uncensored)"* ]] && [[ "$request_out" == *"toggle ->   start:warmind"* ]]'
+check "status names uncensored's served id and toggles uncensored to GLM" \
+  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     uncensored (glm-5.3-flash-hyperflare-tp2-uncensored)"* ]] && [[ "$request_out" == *"toggle ->   start:glm"* ]]'
 run toggle
-check "toggle from uncensored crosses engines to WARMIND" \
-  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:uncensored gpus start:warmind report:warmind" ]'
+check "toggle from uncensored switches to GLM through the Hyperflare switcher" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "start:glm report:glm" ]'
 run uncensored
 check "an already-serving uncensored reports without switching" '[ "$request_rc" = 0 ] && [ "$calls" = "report:uncensored" ]'
 run glm

@@ -25,12 +25,11 @@ WEIGHTS. Served ids:
 
 ## The decision (`primary_decide`, pure, unit-tested)
 
-- `toggle` always **crosses engines** — it never returns to the model you left:
-  - glm or uncensored → `GLM_TOGGLE_TARGET` (fixed **warmind** by operator choice, 2026-11-14;
-    set `deepseek` in the script to land on stock DeepSeek instead)
-  - warmind → **uncensored** (operator choice, 2026-11-16: WARMIND's toggle enters the
-    WARMIND/uncensored cycle)
-  - deepseek → **glm**
+- `toggle` **stays on the engine that serves and flips stock ↔ uncensored** (`counterpart_of`;
+  operator choice, 2026-11-19). The pairs are an involution, so two toggles return where they began:
+  - glm ↔ **uncensored** (Hyperflare; the GLM switcher swaps the variant)
+  - deepseek ↔ **warmind** (ds4-native; stop, wait for the GPUs, relaunch with the other WEIGHTS)
+  - crossing engines is always a named request (`… glm`, `… warmind`, …)
   - nothing active → bring back whichever primary stopped **last** (from the containers'
     `FinishedAt`, a ds41 stop counting as the weights it last served); with no history, error.
 - Named requests: `noop:<p>` when already active, else `start:<p>`.
@@ -62,8 +61,8 @@ WEIGHTS. Served ids:
   only after acceptance) — it comes back with Docker at boot until stopped by name.
 - The unit test (`tests/switch-primary-unit.sh`) stubs the effects and pins `primary_decide`'s
   full input→output table; change the toggle matrix there first, then the script.
-- `GLM_TOGGLE_TARGET` and the toggle graph are operator choices recorded in the script header;
-  changing them is a runbook+script+test same-commit change.
+- The toggle pairs (`counterpart_of`) are an operator choice recorded in the script; changing them
+  is a runbook+script+test same-commit change.
 
 ## History
 
@@ -72,3 +71,6 @@ WEIGHTS. Served ids:
 - 2026-11-15: `uncensored` variant added to the Hyperflare switcher (dealignai build converted to
   v16 storage).
 - 2026-11-16: warmind→uncensored toggle edge fixed (operator choice).
+- 2026-11-19: toggle no longer crosses engines: it flips each model between its stock release and
+  its uncensored build (glm ↔ uncensored, deepseek ↔ warmind). `GLM_TOGGLE_TARGET` and
+  `primary_decide`'s fourth argument removed (operator choice).

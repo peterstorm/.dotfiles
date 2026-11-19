@@ -7,8 +7,8 @@
 #   deepseek    deepseek-v4.1-flash-native               ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
 #
 # Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]   (default: toggle)
-#   toggle    GLM or uncensored -> GLM_TOGGLE_TARGET (WARMIND), WARMIND -> uncensored (the GLM
-#             uncensored build), DeepSeek -> GLM; with nothing running, bring back whichever
+#   toggle    stock <-> uncensored on the engine that serves: GLM <-> uncensored (Hyperflare),
+#             DeepSeek <-> WARMIND (ds4-native); with nothing running, bring back whichever
 #             primary stopped last
 #   glm|uncensored|warmind|deepseek
 #             make that one the primary (no-op if it already is)
@@ -33,12 +33,6 @@ PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$UNCENSORED_CONTAINER" "$DS41_CONTAINER")
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
 SERVING_HOST="desktop"
-# The ds41 primary a Hyperflare toggle starts from. Fixed rather than taken from whichever
-# weights ran last, so toggle is predictable (operator choice, 2026-11-14). Set it to
-# deepseek to toggle to stock DeepSeek-V4.1 instead; `switch-primary.sh deepseek`
-# reaches it either way. The reverse hops are fixed in primary_decide: WARMIND toggles to
-# uncensored (the GLM uncensored build; operator choice, 2026-11-16) and DeepSeek to glm.
-GLM_TOGGLE_TARGET="warmind"
 
 # --- functional core -------------------------------------------------------
 
@@ -69,19 +63,28 @@ variant_of_primary() {
   esac
 }
 
-# primary_decide REQUEST ACTIVE LAST GLM_PARTNER -> exactly one line:
+# A primary's counterpart: the same model on the same engine, stock <-> uncensored (dealignai's
+# GLM build, jcartu's WARMIND). Toggle's whole graph (operator choice, 2026-11-19); empty for
+# anything that is not a primary.
+counterpart_of() {
+  case "$1" in
+    glm) echo uncensored ;;
+    uncensored) echo glm ;;
+    deepseek) echo warmind ;;
+    warmind) echo deepseek ;;
+  esac
+}
+
+# primary_decide REQUEST ACTIVE LAST -> exactly one line:
 #   start:<glm|uncensored|warmind|deepseek> | noop:<primary> | error:<reason>
 #   REQUEST    toggle | glm | uncensored | warmind | deepseek
 #   ACTIVE     glm | uncensored | warmind | deepseek | none | multiple | other:<container>
 #   LAST       glm | uncensored | warmind | deepseek | none   (the primary that stopped most recently)
-#   GLM_PARTNER warmind | deepseek                   (the ds41 primary a Hyperflare toggle starts from)
-# Toggle always crosses engines: a Hyperflare primary (glm, uncensored) goes to GLM_PARTNER, WARMIND to
-# uncensored and DeepSeek to glm. uncensored is reached by name and as WARMIND's toggle target, so a
-# toggle from GLM enters the WARMIND/uncensored cycle instead of returning.
+# Toggle goes to the active primary's counterpart, so it stays on the engine that serves and two
+# toggles return to where they began; with nothing active it brings back LAST.
 # Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
-  local request="$1" active="$2" last="$3" glm_partner="$4"
-  case "$glm_partner" in warmind | deepseek) ;; *) glm_partner=warmind ;; esac
+  local request="$1" active="$2" last="$3"
   case "$active" in
     multiple) echo "error:more than one primary is running; stop all but one by hand"; return ;;
     other:*) echo "error:${active#other:} holds the GPUs; stop it before switching primaries"; return ;;
@@ -91,9 +94,7 @@ primary_decide() {
   case "$request" in
     toggle)
       case "$active" in
-        glm | uncensored) echo "start:$glm_partner" ;;
-        warmind) echo "start:uncensored" ;;
-        deepseek) echo "start:glm" ;;
+        glm | uncensored | warmind | deepseek) echo "start:$(counterpart_of "$active")" ;;
         none)
           case "$last" in
             glm | uncensored | warmind | deepseek) echo "start:$last" ;;
@@ -271,11 +272,11 @@ run_request() {
     case "$active" in glm | uncensored | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
     echo "active:     $active$suffix"
     echo "last:       $last"
-    echo "toggle ->   $(primary_decide toggle "$active" "$last" "$GLM_TOGGLE_TARGET")"
+    echo "toggle ->   $(primary_decide toggle "$active" "$last")"
     return 0
   fi
 
-  decision="$(primary_decide "$request" "$active" "$last" "$GLM_TOGGLE_TARGET")"
+  decision="$(primary_decide "$request" "$active" "$last")"
   case "$decision" in
     noop:*) report "${decision#noop:}" noop ;;
     start:*) echo "switching: $active -> ${decision#start:}"; switch_to "${decision#start:}" "$active" ;;

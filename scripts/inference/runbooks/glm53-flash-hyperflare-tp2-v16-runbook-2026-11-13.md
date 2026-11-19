@@ -97,9 +97,9 @@ export and run scripts check.
    cache lines), promote to `unless-stopped`; any failure restores the previous
    profile set.
 5. **Switching primaries** (GLM v16, the uncensored GLM, WARMIND and stock DeepSeek-V4.1 are
-   the primaries): `scripts/inference/switch-primary.sh` toggles GLM or uncensored
-   to WARMIND (`GLM_TOGGLE_TARGET`) and either ds41 model back to GLM; `… glm|uncensored|warmind|deepseek`
-   picks one (`toggle` never lands on uncensored); `… status` reports. Pi's `/switch` runs the
+   the primaries): `scripts/inference/switch-primary.sh` toggles stock ↔ uncensored on the
+   engine that serves (GLM ↔ uncensored, DeepSeek ↔ WARMIND; since 2026-11-19); `… glm|uncensored|warmind|deepseek`
+   picks one, which is how to cross engines; `… status` reports. Pi's `/switch` runs the
    same script. It idle-gates :8000, stops the active engine through its own launcher,
    starts the other, and restores the previous primary if the start fails. Both
    Hyperflare primaries go through this one switcher (`VARIANT=v16|uncensored`),
@@ -338,7 +338,8 @@ reasoning parse exactly as they do on the other Hyperflare primaries.
   `/models` was left with 51 GiB free.
 - **Serve**: the `uncensored` primary: `switch-primary.sh uncensored` (or `/switch uncensored`)
   serves container `glm53-flash-hyperflare-tp2-uncensored` as
-  `glm-5.3-flash-hyperflare-tp2-uncensored`; `toggle` never lands on it. First start
+  `glm-5.3-flash-hyperflare-tp2-uncensored`; since 2026-11-19 it is also GLM's `toggle`
+  counterpart (and GLM its). First start
   2026-11-15 17:50Z: preflight PASS, acceptance (`ready`), promoted to `unless-stopped`.
   `Plan cache. per GPU: 86.37 GiB loaded` (v16 86.46) and `Allocate cache. 15.6 GiB ·
   2271744 KV tokens · 88 shared snapshot slots` (v16 15.4 GiB, 2,240,000, 86): the
