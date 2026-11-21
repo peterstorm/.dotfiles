@@ -1,13 +1,22 @@
 # GLM-5.3 full (753B) on ds4-native — runbook (2026-11-21)
 
-Primary `glm-native`, served id `glm-5.3-uncensored-native`: kitaniai's
-`GLM-5.3-UNCENSORED-MXFP4` (GLM-5.3 full, 753B MoE, 78 layers, 256 routed Experts a layer, top-8)
-on ds4-native's GLM engine (`ds4n-glm53-serve`, repo `peterstorm/ds4-native`, branch
-`glm53/engine-core`) behind Project Maya's OpenAI-compatible server on `:8000`.
+GLM-5.3 full (753B MoE, 78 layers, 256 routed Experts a layer, top-8) on ds4-native's GLM engine
+(`ds4n-glm53-serve`, repo `peterstorm/ds4-native`, branch `glm53/engine-core`) behind Project
+Maya's OpenAI-compatible server on `:8000`. Three primaries share the container `glm53-native`, the
+Expert store (kitaniai's `GLM-5.3-UNCENSORED-MXFP4` Experts, which no surgery touches) and the
+engine; each serves its own Backbone (the dense weights):
 
-Launcher: `scripts/inference/glm53/glm53-native/run-glm53-native.sh`.
-Contract: `tests/glm53-native-contract.sh`. Switch: `switch-primary.sh glm-native`.
-Engine report with receipts: ds4-native `docs/bench/glm53-serve/2026-11-21-serve.md`.
+| primary | served id | `WEIGHTS` | Backbone |
+|---|---|---|---|
+| `glm-native` | `glm-5.3-native` | `stock` | zai's release (Backbone C) |
+| `uncensored-native` | `glm-5.3-uncensored-native` | `uncensored` | kitaniai's own: dealignai's UNCENSORED surgery (Backbone A) |
+| `cyber-native` | `glm-5.3-cyber-native` | `cyber` | dealignai's CYBERSECURITY surgery (Backbone B) |
+
+Launcher: `scripts/inference/glm53/glm53-native/run-glm53-native.sh` (`WEIGHTS` defaults to
+`uncensored`). Contract: `tests/glm53-native-contract.sh`. Switch: `switch-primary.sh glm-native`,
+`switch-primary.sh uncensored-native`, `switch-primary.sh cyber-native`.
+Engine report with receipts: ds4-native `docs/bench/glm53-serve/2026-11-21-serve.md`; Backbone C's
+build: ds4-native `docs/bench/glm53-backbone-c/`.
 
 ## Why this profile exists
 
@@ -24,6 +33,7 @@ quality, not speed.
 | Expert store (all 78 layers' routed Experts, one file) | `/models/glm53-store/experts.ds4n` (dataset `rpool/models/glm53-store`, recordsize 1M, compression zle) |
 | Backbone A (kitaniai's own dense weights, 88 parts) | `/models/glm53-store/backbone-uncensored/` |
 | Backbone B (dealignai CYBERSECURITY edits on A, 124 tensors) | `/models/glm53-store/backbone-cyber/` + `VARIANT.json` |
+| Backbone C (zai's stock weights for those 124 tensors on A) | `/models/glm53-store/backbone-stock/` + `VARIANT.json` |
 | checkpoint metadata (config, tokenizer, template) | `/models/glm53-native/kitaniai/` (revision `559df987`) |
 | engine binary per commit | `/models/glm53-native/serve/bin/ds4n-glm53-serve-<commit12>` (+ `.commit`) |
 | tokenizer in Maya's form | `/models/glm53-native/serve/tokenizer/` |
@@ -43,7 +53,23 @@ quality, not speed.
 - Maya `b3fa99ec` + `deepseek/ds41-1017-native/maya-serve-keepalive.patch`: the same patched copy
   as the DS4.1 launcher (keyed by commit and patch hash; whichever installs first builds it).
 - Backbone provenance at every launch: A has 88 parts and no variant record; `WEIGHTS=cyber`
-  requires `VARIANT.json` naming `dealignai/GLM-5.3-CYBERSECURITY-FP8@5915c1b8` built on A.
+  requires `VARIANT.json` naming `dealignai/GLM-5.3-CYBERSECURITY-FP8@5915c1b8` built on A, and
+  `WEIGHTS=stock` one naming `zai-org/GLM-5.3-BF16@abf42e6c` built on A.
+
+## Where the three Backbones come from
+
+Both dealignai surgeries (CRACK) edit the same 124 tensors of zai's GLM-5.3: `self_attn.o_proj` in
+layers 12-77 and `mlp.shared_experts.down_proj` in layers 20-77, the writers into the residual
+stream. Their base is JANGQ-AI's FP8 of zai's BF16 (128×128 blocks, FP32 scale = amax / 448, codes
+rounded to nearest-even E4M3). kitaniai converted the UNCENSORED one to MXFP4 (Quark) as A.
+
+- B (cyber): the 124 CYBERSECURITY tensors through kitaniai's recipe onto a reflink of A.
+- C (stock): the same 124 tensors re-made from zai's BF16 (`abf42e6c`) the way JANGQ made the
+  surgeries' base, then kitaniai's recipe. The chain is proven: on the 29 tensors the surgeries
+  leave alone (o_proj 0-11, shared down_proj 3-19), it reproduces A bit for bit. Each re-made
+  tensor is cross-checked against zai's own FP8 release (a different quantizer): the build aborts
+  under 95% identical E4M3 codes (measured ~99.9%).
+- The routed Experts are zai's in all three: no surgery touches them.
 
 ## Settings (and why)
 
@@ -64,21 +90,29 @@ quality, not speed.
 scripts/inference/glm53/glm53-native/run-glm53-native.sh --install
 # check every pin
 scripts/inference/glm53/glm53-native/run-glm53-native.sh --preflight
-# make it the primary (idle gate, stop the current primary, wait for free GPUs, launch, roll back on failure)
-scripts/inference/switch-primary.sh glm-native
+# make one the primary (idle gate, stop the current primary, wait for free GPUs, launch, roll back on failure)
+scripts/inference/switch-primary.sh glm-native          # stock
+scripts/inference/switch-primary.sh uncensored-native   # uncensored
+scripts/inference/switch-primary.sh cyber-native        # cyber
 # from Pi
 /switch glm-native
 ```
 
-`switch-primary.sh toggle` refuses on `glm-native`: GLM-5.3 full has no stock build here, so it has
-no stock/uncensored counterpart. Name the primary to leave it.
+`switch-primary.sh toggle` swaps `glm-native` and `uncensored-native` (stock and uncensored, as for
+the other engines). It refuses on `cyber-native`, which has no counterpart: name the primary to
+leave it. Changing Backbone restarts the container (~80 s); the switcher reads which one serves
+from the container's `served-model` label.
+
+By hand, without the switcher (`--stop` first if another Backbone serves):
+
+```bash
+WEIGHTS=stock scripts/inference/glm53/glm53-native/run-glm53-native.sh --launch
+WEIGHTS=uncensored scripts/inference/glm53/glm53-native/run-glm53-native.sh --launch
+WEIGHTS=cyber scripts/inference/glm53/glm53-native/run-glm53-native.sh --launch
+```
 
 Loading takes ~80 s (the Backbone, the VRAM Slots, then the RAM tier's pinning). The launcher waits
 until `/v1/models` lists the served id, then promotes the container to `restart=unless-stopped`.
-
-The cyber Backbone serves with `WEIGHTS=cyber scripts/inference/glm53/glm53-native/run-glm53-native.sh --launch`
-as `glm-5.3-cyber-native`. It is not a primary: Pi's catalog does not offer it, and the switcher
-counts the container serving it as foreign (`other:glm53-native`). Stop it by hand.
 
 ## Gates (as the DS4.1 launcher)
 
@@ -112,8 +146,9 @@ tokens routes to, so 27 tokens read ~as many Experts as a few hundred.
 
 ## Pi
 
-`pi/models.json` carries `glm-5.3-uncensored-native` (64K context, text, reasoning). The GLM guard
-gives it the tuned-build profile (its id contains `uncensored`), which is inert here: Maya forwards
+`pi/models.json` carries the three served ids (64K context, text, reasoning). The GLM guard gives
+`glm-5.3-uncensored-native` the tuned-build profile (its id contains `uncensored`) and the other two
+upstream GLM's; both are inert here: Maya forwards
 only `enable_thinking` and `reasoning_effort` from `chat_template_kwargs` and reads no
 `thinking_token_budget`. Maya's own `thinking_budget` (8192) bounds reasoning, and past reasoning
 stays in the prompt, so a chat's next turn is a pure append to the cached tokens.
@@ -121,7 +156,7 @@ stays in the prompt, so a chat's next turn is a pure append to the cached tokens
 ## Monitoring
 
 The ds4-native metrics bridge (`:8010`) is engine-agnostic and labels series with the served id:
-`ds4:*{model_name="glm-5.3-uncensored-native"}`.
+`ds4:*{model_name="glm-5.3-native"}` (or `-uncensored-native`, `-cyber-native`).
 
 ## Troubleshooting
 
@@ -140,3 +175,7 @@ The ds4-native metrics bridge (`:8010`) is engine-agnostic and labels series wit
   template tokens was freed, losing that conversation) and fixed in the planner (`26ea3db`);
   `min_lost` 64 → 16 (`6866989`) because short conversations were never kept. Primary `glm-native`
   added to `switch-primary.sh`, the profile catalog and Pi.
+- 2026-11-21: three Backbones, three primaries. Backbone C (zai's stock) built; `glm-native` now
+  serves it as `glm-5.3-native`; the uncensored Backbone became `uncensored-native` (served id
+  unchanged) and the cyber one `cyber-native`. The cyber surgery's FP8 delta (the download B was
+  built from) was deleted for disk, owner-approved; B itself is kept.

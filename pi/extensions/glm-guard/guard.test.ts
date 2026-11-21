@@ -48,6 +48,11 @@ describe("profileFor: what a served model gets", () => {
 		expect(profileFor("glm-5.3-uncensored-native")).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
 	});
 
+	it("guards GLM-5.3 full's stock and cyber Backbones as upstream GLM: the budgets were calibrated on the uncensored tune", () => {
+		expect(profileFor("glm-5.3-native")).toEqual({ kind: "glm" });
+		expect(profileFor("glm-5.3-cyber-native")).toEqual({ kind: "glm" });
+	});
+
 	it("treats the retired CYBERSECURITY hybrids as upstream GLM: no catalog or primary serves them", () => {
 		expect(profileFor("glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16")).toEqual({ kind: "glm" });
 	});

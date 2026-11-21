@@ -1,12 +1,13 @@
 # switch-primary runbook — the desktop's primary-model switcher (2026-11-19)
 
-`switch-primary.sh` decides and sequences which of the five primaries serves :8000. It holds no
+`switch-primary.sh` decides and sequences which of the seven primaries serves :8000. It holds no
 engine logic: a pure decision (`primary_decide`), the shared idle gate, and each engine's own
 launcher with its gates, acceptance and rollback. Run from any machine — off desktop it re-runs
 itself there over ssh.
 
 ```bash
-~/.dotfiles/scripts/inference/switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]
+~/.dotfiles/scripts/inference/switch-primary.sh [toggle|PRIMARY|status]
+# PRIMARY: glm, uncensored, warmind, deepseek, glm-native, uncensored-native or cyber-native
 ```
 
 ## The primaries
@@ -14,9 +15,11 @@ itself there over ssh.
 `glm` and `uncensored` are the Hyperflare engine's two variants (one switcher, `VARIANT` decides;
 see [ds41-1017-native runbook](ds41-1017-native-runbook-2026-11-19.md) for the ds4-native side and
 the v16 runbook for Hyperflare). `warmind` and `deepseek` are the ds4-native launcher's two
-WEIGHTS. `glm-native` is GLM-5.3 full (753B) on ds4-native's GLM engine, its own launcher
-(`glm53/glm53-native/run-glm53-native.sh`, always `WEIGHTS=uncensored`;
-[glm53-native runbook](glm53-native-runbook-2026-11-21.md)). Served ids:
+WEIGHTS. `glm-native`, `uncensored-native` and `cyber-native` are GLM-5.3 full (753B) on
+ds4-native's GLM engine with each of its three Backbones: one launcher
+(`glm53/glm53-native/run-glm53-native.sh`, `WEIGHTS=stock|uncensored|cyber` from
+`weights_of_primary`; [glm53-native runbook](glm53-native-runbook-2026-11-21.md)) and one
+container, told apart by its served-model label. Served ids:
 
 | primary | served id |
 |---|---|
@@ -24,7 +27,9 @@ WEIGHTS. `glm-native` is GLM-5.3 full (753B) on ds4-native's GLM engine, its own
 | uncensored | `glm-5.3-flash-hyperflare-tp2-uncensored` |
 | warmind | `warmind-1017-native` |
 | deepseek | `deepseek-v4.1-flash-native` |
-| glm-native | `glm-5.3-uncensored-native` |
+| glm-native | `glm-5.3-native` |
+| uncensored-native | `glm-5.3-uncensored-native` |
+| cyber-native | `glm-5.3-cyber-native` |
 
 ## The decision (`primary_decide`, pure, unit-tested)
 
@@ -32,12 +37,14 @@ WEIGHTS. `glm-native` is GLM-5.3 full (753B) on ds4-native's GLM engine, its own
   operator choice, 2026-11-19). The pairs are an involution, so two toggles return where they began:
   - glm ↔ **uncensored** (Hyperflare; the GLM switcher swaps the variant)
   - deepseek ↔ **warmind** (ds4-native; stop, wait for the GPUs, relaunch with the other WEIGHTS)
+  - glm-native ↔ **uncensored-native** (GLM-5.3 full; stop, wait for the GPUs, relaunch with the
+    other Backbone)
   - crossing engines is always a named request (`… glm`, `… warmind`, …)
-  - glm-native has no counterpart (no stock GLM-5.3 full is deployed): toggling it is an error
-    naming the primaries to choose from, and the GPUs are left alone
+  - cyber-native has no counterpart (a security tuning, neither stock nor uncensored): toggling
+    it is an error naming the primaries to choose from, and the GPUs are left alone
   - nothing active → bring back whichever primary stopped **last** (from the containers'
     `FinishedAt`, a ds4-native stop counting as the weights its served-model label names, else
-    that launcher's default: warmind, glm-native); with no history, error.
+    that launcher's default: warmind, uncensored-native); with no history, error.
 - Named requests: `noop:<p>` when already active, else `start:<p>`.
 - Error states (fail closed): more than one primary running; an unrecognised container holding a
   GPU; unknown request. Container inspection failures abort rather than guess.
@@ -48,7 +55,7 @@ WEIGHTS. `glm-native` is GLM-5.3 full (753B) on ds4-native's GLM engine, its own
 2. Hyperflare targets: the GLM switcher does everything itself (its own idle gate, quiesce,
    acceptance, rollback). `VARIANT` is always passed explicitly so an inherited value cannot pick
    the wrong profile.
-3. ds4-native targets (warmind, deepseek, glm-native): require the **idle endpoint** first (only when something is running), stop the
+3. ds4-native targets (warmind, deepseek, and the three GLM-5.3 full primaries): require the **idle endpoint** first (only when something is running), stop the
    active primary, then wait for both GPUs ≤1024 MiB (`GPU_FREE_TIMEOUT_SECONDS`, 90 s default,
    numeric `nvidia-smi` readings only — a failed reading keeps polling rather than comparing
    empty as 0), then launch.
@@ -84,3 +91,8 @@ WEIGHTS. `glm-native` is GLM-5.3 full (753B) on ds4-native's GLM engine, its own
   counterpart; its container `glm53-native` joined the profile catalog, so the Hyperflare switcher
   quiesces and restores it like any profile. Its cyber Backbone (`glm-5.3-cyber-native`) is
   read as a foreign profile.
+- 2026-11-21: seven primaries. GLM-5.3 full gained zai's stock Backbone: `glm-native` now serves
+  it (`glm-5.3-native`), the uncensored Backbone became `uncensored-native` (served id unchanged)
+  and toggles with it, and the cyber one became `cyber-native` (no counterpart). `is_primary` and
+  `weights_of_primary` keep the list and the dispatch in one place each (operator choice: "cyber,
+  uncensored and normal glm available").

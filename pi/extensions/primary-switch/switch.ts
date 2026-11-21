@@ -13,22 +13,32 @@ import type { Result } from "../model-routing/policy.js";
 export const PRIMARY_PROVIDER = "desktop-vllm";
 
 /** The primaries switch-primary.sh can report (it owns which served id each has). */
-export const PRIMARIES = ["glm", "uncensored", "warmind", "deepseek", "glm-native"] as const;
+export const PRIMARIES = [
+	"glm",
+	"uncensored",
+	"warmind",
+	"deepseek",
+	"glm-native",
+	"uncensored-native",
+	"cyber-native",
+] as const;
 export type Primary = (typeof PRIMARIES)[number];
 
-/** The script's vocabulary (`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]`). */
+/** The script's vocabulary (`switch-primary.sh [toggle|PRIMARY|status]`). */
 export const SWITCH_REQUESTS = ["toggle", ...PRIMARIES, "status"] as const;
 export type SwitchRequest = (typeof SWITCH_REQUESTS)[number];
 
 const isPrimary = (word: string): word is Primary => (PRIMARIES as readonly string[]).includes(word);
 
 const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
-	toggle: "stock <-> uncensored on the engine that serves: GLM <-> uncensored, DeepSeek <-> WARMIND",
+	toggle: "stock <-> uncensored on the engine that serves: GLM <-> uncensored, DeepSeek <-> WARMIND, glm-native <-> uncensored-native",
 	glm: "GLM-5.3 v16 on Hyperflare",
 	uncensored: "GLM-5.3 uncensored on Hyperflare (dealignai's UNCENSORED build in v16's storage)",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",
-	"glm-native": "GLM-5.3 full (753B) uncensored on ds4-native: slow (~4-7 tok/s), 64K ctx, no toggle counterpart",
+	"glm-native": "GLM-5.3 full (753B) stock on ds4-native: slow (~6-7 tok/s), 64K ctx",
+	"uncensored-native": "GLM-5.3 full (753B) uncensored (dealignai's UNCENSORED) on ds4-native: slow, 64K ctx",
+	"cyber-native": "GLM-5.3 full (753B) cyber (dealignai's CYBERSECURITY) on ds4-native: slow, 64K ctx, no toggle counterpart",
 	status: "what serves now, and what toggle would do",
 };
 

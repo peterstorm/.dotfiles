@@ -166,6 +166,70 @@
             "requiresReasoningContentOnAssistantMessages": true,
             "thinkingFormat": "deepseek"
           }
+        },
+        {
+          "id": "glm-5.3-native",
+          "name": "GLM-5.3 full (753B, zai stock Backbone, kitaniai MXFP4 Experts) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 64K ctx, conversations kept as KV checkpoints, ~4-7 tok/s) behind Project Maya's server",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 65536,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
+        },
+        {
+          "id": "glm-5.3-cyber-native",
+          "name": "GLM-5.3 full (753B, dealignai CYBERSECURITY Backbone, kitaniai MXFP4 Experts) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 64K ctx, conversations kept as KV checkpoints, ~4-7 tok/s) behind Project Maya's server",
+          "reasoning": true,
+          "defaultThinkingLevel": "max",
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 65536,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": true,
+            "maxTokensField": "max_tokens",
+            "requiresReasoningContentOnAssistantMessages": true,
+            "thinkingFormat": "deepseek"
+          }
         }
       ]
     }

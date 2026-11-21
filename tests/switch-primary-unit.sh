@@ -20,16 +20,31 @@ check() {
   fi
 }
 
-PRIMARIES=(glm uncensored warmind deepseek glm-native)
+PRIMARIES=(glm uncensored warmind deepseek glm-native uncensored-native cyber-native)
+PRIMARY_RE='(glm|uncensored|warmind|deepseek|glm-native|uncensored-native|cyber-native)'
 # The primaries toggle pairs up: each model's stock release and its uncensored build on one engine.
-# GLM-5.3 full (glm-native) has no stock build here, so it has no counterpart.
-PAIRED=(glm uncensored warmind deepseek)
-REQUESTS=(toggle glm uncensored warmind deepseek glm-native bogus "")
-ACTIVES=(glm uncensored warmind deepseek glm-native none multiple other:qwen38-27b-bf16 weird "")
-LASTS=(glm uncensored warmind deepseek glm-native none "")
-engine() { case "$1" in glm | uncensored) echo hyperflare ;; warmind | deepseek) echo ds4-native ;; glm-native) echo ds4-native-glm53 ;; *) echo none ;; esac; }
-# Whether a primary is its model's stock release or its uncensored build (dealignai's GLM, WARMIND).
-alignment() { case "$1" in glm | deepseek) echo stock ;; uncensored | warmind | glm-native) echo uncensored ;; *) echo none ;; esac; }
+# cyber-native (a security tuning of GLM-5.3 full) has no counterpart.
+PAIRED=(glm uncensored warmind deepseek glm-native uncensored-native)
+REQUESTS=("${PRIMARIES[@]}" toggle bogus "")
+ACTIVES=("${PRIMARIES[@]}" none multiple other:qwen38-27b-bf16 weird "")
+LASTS=("${PRIMARIES[@]}" none "")
+engine() {
+  case "$1" in
+    glm | uncensored) echo hyperflare ;;
+    warmind | deepseek) echo ds4-native ;;
+    glm-native | uncensored-native | cyber-native) echo ds4-native-glm53 ;;
+    *) echo none ;;
+  esac
+}
+# Whether a primary is its model's stock release or a dealigned build (dealignai's GLM, WARMIND).
+alignment() {
+  case "$1" in
+    glm | deepseek | glm-native) echo stock ;;
+    uncensored | warmind | uncensored-native) echo uncensored ;;
+    cyber-native) echo cyber ;;
+    *) echo none ;;
+  esac
+}
 
 for request in "${REQUESTS[@]}"; do
   for active in "${ACTIVES[@]}"; do
@@ -37,23 +52,22 @@ for request in "${REQUESTS[@]}"; do
       d="$(primary_decide "$request" "$active" "$last")"
       ctx="request='$request' active='$active' last='$last' -> '$d'"
       # Totality: exactly one well-formed line.
-      check "total: $ctx" '[[ "$d" =~ ^(start:(glm|uncensored|warmind|deepseek|glm-native)|noop:(glm|uncensored|warmind|deepseek|glm-native)|error:.+)$ ]]'
+      check "total: $ctx" '[[ "$d" =~ ^(start:${PRIMARY_RE}|noop:${PRIMARY_RE}|error:.+)$ ]]'
       # Never "start" what already serves.
       check "no self-start: $ctx" '[ "$d" != "start:$active" ]'
       # More than one primary, or a foreign profile, on the GPUs is always refused.
       if [ "$active" = multiple ] || [[ "$active" == other:* ]]; then
         check "refuse foreign/multiple: $ctx" '[[ "$d" == error:* ]]'
       fi
-      case "$active" in glm | uncensored | warmind | deepseek | glm-native | none) valid_active=1 ;; *) valid_active=0 ;; esac
-      if [ "$valid_active" = 1 ]; then
+      if [[ "$active" =~ ^${PRIMARY_RE}$ ]] || [ "$active" = none ]; then
         case "$request" in
-          glm | uncensored | warmind | deepseek | glm-native)
+          glm | uncensored | warmind | deepseek | glm-native | uncensored-native | cyber-native)
             # An explicit request lands on exactly that primary.
             check "explicit: $ctx" '[ "$d" = "noop:$request" ] || [ "$d" = "start:$request" ]'
             check "noop iff already: $ctx" '[ "$active" != "$request" ] || [ "$d" = "noop:$request" ]'
             ;;
           toggle)
-            if [ "$active" = glm-native ]; then
+            if [ "$active" = cyber-native ]; then
               # No counterpart: refused, naming the primaries to choose from.
               check "toggle refused without a counterpart: $ctx" '[[ "$d" == error:*"name a primary"* ]]'
             elif [ "$active" != none ]; then
@@ -65,10 +79,11 @@ for request in "${REQUESTS[@]}"; do
                 '[ "$d" = "$(primary_decide toggle "$active" none)" ]'
             fi
             if [ "$active" = none ]; then
-              case "$last" in
-                glm | uncensored | warmind | deepseek | glm-native) check "resume last: $ctx" '[ "$d" = "start:$last" ]' ;;
-                *) check "nothing to resume: $ctx" '[[ "$d" == error:* ]]' ;;
-              esac
+              if [[ "$last" =~ ^${PRIMARY_RE}$ ]]; then
+                check "resume last: $ctx" '[ "$d" = "start:$last" ]'
+              else
+                check "nothing to resume: $ctx" '[[ "$d" == error:* ]]'
+              fi
             fi
             ;;
           *) check "unknown request refused: $ctx" '[[ "$d" == error:* ]]' ;;
@@ -83,6 +98,8 @@ check "toggle from GLM goes to uncensored" '[ "$(primary_decide toggle glm none)
 check "toggle from uncensored goes to GLM" '[ "$(primary_decide toggle uncensored none)" = start:glm ]'
 check "toggle from DeepSeek goes to WARMIND" '[ "$(primary_decide toggle deepseek none)" = start:warmind ]'
 check "toggle from WARMIND goes to DeepSeek" '[ "$(primary_decide toggle warmind none)" = start:deepseek ]'
+check "toggle from GLM-5.3 full stock goes to its uncensored" '[ "$(primary_decide toggle glm-native none)" = start:uncensored-native ]'
+check "toggle from GLM-5.3 full uncensored goes to stock" '[ "$(primary_decide toggle uncensored-native none)" = start:glm-native ]'
 # An involution: two toggles return to where they began.
 for p in "${PAIRED[@]}"; do
   first="$(primary_decide toggle "$p" none)"
@@ -90,9 +107,16 @@ for p in "${PAIRED[@]}"; do
   check "toggling twice from $p returns to it ($first, $second)" '[ "$second" = "start:$p" ]'
 done
 # The counterpart is defined for the paired primaries only.
-for x in glm-native none multiple other:qwen38-27b-bf16 weird ""; do
+for x in cyber-native none multiple other:qwen38-27b-bf16 weird ""; do
   check "no counterpart for '$x'" '[ -z "$(counterpart_of "$x")" ]'
 done
+# Every primary is either paired or cyber-native: no primary is forgotten by the toggle graph.
+for p in "${PRIMARIES[@]}"; do
+  check "$p is paired or is cyber-native" '[ -n "$(counterpart_of "$p")" ] || [ "$p" = cyber-native ]'
+done
+# is_primary is exactly the primaries.
+for p in "${PRIMARIES[@]}"; do check "is_primary $p" 'is_primary "$p"'; done
+for x in none multiple toggle status glm53-native other:x ""; do check "not a primary: '$x'" '! is_primary "$x"'; done
 
 # Sourcing must never run main, whatever $0 is: on 2026-11-14 a test sourced the
 # script as `bash -c 'source "$0"; …' SCRIPT`, the old BASH_SOURCE==$0 guard
@@ -126,11 +150,19 @@ check "unknown served id" '[ -z "$(primary_of_served qwen3.8-27b)" ]'
 # The two Hyperflare primaries are told apart by served id alone.
 check "glm serves the v16 id" '[ "$(served_of_primary glm)" = glm-5.3-flash-hyperflare-tp2-v16 ]'
 check "uncensored serves its variant's id" '[ "$(served_of_primary uncensored)" = glm-5.3-flash-hyperflare-tp2-uncensored ]'
-check "glm-native serves GLM-5.3 full's uncensored id" '[ "$(served_of_primary glm-native)" = glm-5.3-uncensored-native ]'
-check "the cyber Backbone's id is no primary" '[ -z "$(primary_of_served glm-5.3-cyber-native)" ]'
+check "glm-native serves GLM-5.3 full's stock id" '[ "$(served_of_primary glm-native)" = glm-5.3-native ]'
+check "uncensored-native serves GLM-5.3 full's uncensored id" '[ "$(served_of_primary uncensored-native)" = glm-5.3-uncensored-native ]'
+check "cyber-native serves GLM-5.3 full's cyber id" '[ "$(served_of_primary cyber-native)" = glm-5.3-cyber-native ]'
 check "the uncensored variant's id is uncensored" '[ "$(primary_of_served glm-5.3-flash-hyperflare-tp2-uncensored)" = uncensored ]'
 check "each Hyperflare primary has its own variant" \
   '[ "$(variant_of_primary glm)" = v16 ] && [ "$(variant_of_primary uncensored)" = uncensored ] && [ -z "$(variant_of_primary warmind)" ]'
+check "each GLM-5.3 full primary has its own Backbone" \
+  '[ "$(weights_of_primary glm-native)" = stock ] && [ "$(weights_of_primary uncensored-native)" = uncensored ] &&
+   [ "$(weights_of_primary cyber-native)" = cyber ] && [ -z "$(weights_of_primary glm)" ] && [ -z "$(weights_of_primary warmind)" ]'
+# A primary has a variant, a Backbone, or neither (DS4.1's launcher takes WEIGHTS=<primary>), never both.
+for p in "${PRIMARIES[@]}"; do
+  check "$p has at most one of variant/Backbone" '[ -z "$(variant_of_primary "$p")" ] || [ -z "$(weights_of_primary "$p")" ]'
+done
 # Each Hyperflare primary's container is the one the variant table derives for its variant,
 # and every primary is in the real profile catalog (the Hyperflare switcher quiesces only
 # catalog profiles). The cyber-hybrid variants were retired on 2026-11-15: no longer a
@@ -170,10 +202,15 @@ check "start warmind launches the ds41 weights" '[ "$(start_primary warmind)" = 
 check "start deepseek launches the ds41 weights" '[ "$(start_primary deepseek)" = "ds41-run VARIANT=unset WEIGHTS=deepseek --launch" ]'
 check "stop warmind stops ds41" '[ "$(stop_primary warmind)" = "ds41-run VARIANT=unset WEIGHTS=unset --stop" ]'
 check "stop none does nothing" '[ -z "$(stop_primary none)" ]'
-check "start glm-native launches the uncensored Backbone" '[ "$(start_primary glm-native)" = "glm-native-run VARIANT=unset WEIGHTS=uncensored --launch" ]'
+check "start glm-native launches the stock Backbone" '[ "$(start_primary glm-native)" = "glm-native-run VARIANT=unset WEIGHTS=stock --launch" ]'
+check "start uncensored-native launches the uncensored Backbone" \
+  '[ "$(start_primary uncensored-native)" = "glm-native-run VARIANT=unset WEIGHTS=uncensored --launch" ]'
+check "start cyber-native launches the cyber Backbone" '[ "$(start_primary cyber-native)" = "glm-native-run VARIANT=unset WEIGHTS=cyber --launch" ]'
 check "an inherited WEIGHTS cannot pick glm-native's Backbone" \
-  '[ "$(WEIGHTS=cyber start_primary glm-native)" = "glm-native-run VARIANT=unset WEIGHTS=uncensored --launch" ]'
-check "stop glm-native stops its container" '[ "$(stop_primary glm-native)" = "glm-native-run VARIANT=unset WEIGHTS=unset --stop" ]'
+  '[ "$(WEIGHTS=cyber start_primary glm-native)" = "glm-native-run VARIANT=unset WEIGHTS=stock --launch" ]'
+for p in glm-native uncensored-native cyber-native; do
+  check "stop $p stops the GLM-5.3 container" '[ "$(stop_primary "$p")" = "glm-native-run VARIANT=unset WEIGHTS=unset --stop" ]'
+done
 rm -rf "$dispatch_dir"
 
 # --- wait_for_free_gpus: only a numeric reading proves the GPUs free ---------
@@ -214,16 +251,22 @@ state; running[$UNCENSORED_CONTAINER]=0; running[$DS41_CONTAINER]=0
 check "uncensored and ds41 up" '[ "$(read_active)" = multiple ]'
 state; running[qwen38-27b-bf16]=0
 check "foreign profile on the GPUs" '[ "$(read_active)" = "other:qwen38-27b-bf16" ]'
+state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-native
+check "active glm-native (stock Backbone)" '[ "$(read_active)" = glm-native ]'
 state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-uncensored-native
-check "active glm-native" '[ "$(read_active)" = glm-native ]'
+check "active uncensored-native" '[ "$(read_active)" = uncensored-native ]'
 state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-cyber-native
-check "the GLM container on its cyber Backbone is foreign" '[[ "$(read_active)" == other:"$GLM_NATIVE_CONTAINER"* ]]'
+check "active cyber-native" '[ "$(read_active)" = cyber-native ]'
+state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=mystery
+check "the GLM container with an unknown label is foreign" '[[ "$(read_active)" == other:"$GLM_NATIVE_CONTAINER"* ]]'
 state; running[$GLM_NATIVE_CONTAINER]=0; running[$DS41_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-uncensored-native
-check "glm-native and ds41 up" '[ "$(read_active)" = multiple ]'
+check "uncensored-native and ds41 up" '[ "$(read_active)" = multiple ]'
 state; finished[$DS41_CONTAINER]=2026-11-14T09:00:00Z; finished[$GLM_NATIVE_CONTAINER]=2026-11-14T10:00:00Z
-check "glm-native stopped last without a label defaults to glm-native" '[ "$(read_last)" = glm-native ]'
+check "the GLM container stopped last without a label defaults to its launcher's uncensored" '[ "$(read_last)" = uncensored-native ]'
 state; finished[$GLM_NATIVE_CONTAINER]=2026-11-14T10:00:00Z; label[$GLM_NATIVE_CONTAINER]=glm-5.3-cyber-native
-check "glm-native stopped last on its cyber Backbone resumes as glm-native" '[ "$(read_last)" = glm-native ]'
+check "the GLM container stopped last on its cyber Backbone resumes as cyber-native" '[ "$(read_last)" = cyber-native ]'
+state; finished[$GLM_NATIVE_CONTAINER]=2026-11-14T10:00:00Z; label[$GLM_NATIVE_CONTAINER]=glm-5.3-native
+check "the GLM container stopped last on its stock Backbone resumes as glm-native" '[ "$(read_last)" = glm-native ]'
 state
 check "nothing running" '[ "$(read_active)" = none ]'
 state; finished[$GLM_CONTAINER]=2026-11-14T10:00:00Z; finished[$DS41_CONTAINER]=2026-11-14T09:00:00Z
@@ -352,15 +395,25 @@ check "toggle with nothing running resumes uncensored" '[ "$request_rc" = 0 ] &&
 state
 run uncensored
 check "uncensored from nothing goes straight to its switcher" '[ "$request_rc" = 0 ] && [ "$calls" = "start:uncensored report:uncensored" ]'
-state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-uncensored-native
+state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-native
 run status
-check "status names glm-native's served id and that toggle has nowhere to go" \
-  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     glm-native (glm-5.3-uncensored-native)"* ]] && [[ "$request_out" == *"toggle ->   error:"* ]]'
+check "status names glm-native's stock id and toggles it to uncensored-native" \
+  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     glm-native (glm-5.3-native)"* ]] && [[ "$request_out" == *"toggle ->   start:uncensored-native"* ]]'
 run toggle
-check "toggle from glm-native is refused and touches nothing" '[ "$request_rc" = 1 ] && [ -z "$calls" ]'
+check "toggle from glm-native swaps the Backbone to uncensored" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:glm-native gpus start:uncensored-native report:uncensored-native" ]'
 run warmind
 check "glm-native to warmind: gate, stop glm-native, wait, start, report" \
   '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:glm-native gpus start:warmind report:warmind" ]'
+state; running[$GLM_NATIVE_CONTAINER]=0; label[$GLM_NATIVE_CONTAINER]=glm-5.3-cyber-native
+run status
+check "status names cyber-native's id and that toggle has nowhere to go" \
+  '[ "$request_rc" = 0 ] && [[ "$request_out" == *"active:     cyber-native (glm-5.3-cyber-native)"* ]] && [[ "$request_out" == *"toggle ->   error:"* ]]'
+run toggle
+check "toggle from cyber-native is refused and touches nothing" '[ "$request_rc" = 1 ] && [ -z "$calls" ]'
+run glm-native
+check "cyber-native to glm-native swaps the Backbone" \
+  '[ "$request_rc" = 0 ] && [ "$calls" = "idle stop:cyber-native gpus start:glm-native report:glm-native" ]'
 state; running[qwen38-27b-bf16]=0
 run toggle
 check "a foreign profile refuses the switch and touches nothing" \

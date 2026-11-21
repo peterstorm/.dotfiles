@@ -6,14 +6,15 @@ in `runbooks/` are the source of truth for rationale; the contract tests in
 `tests/` are the source of truth for the pins. [INDEX.md](INDEX.md) maps primaries,
 launchers, runbooks and contracts; retired runbooks live in `runbooks/archive/`.
 
-**Primaries (since 2026-11-14).** Pi offers exactly five local models: `warmind-1017-native`
+**Primaries (since 2026-11-14).** Pi offers exactly seven local models: `warmind-1017-native`
 and `deepseek-v4.1-flash-native` (ds4-native, `deepseek/ds41-1017-native/`),
 `glm-5.3-flash-hyperflare-tp2-v16` plus `glm-5.3-flash-hyperflare-tp2-uncensored`,
 dealignai's UNCENSORED build converted into v16's storage (Hyperflare, `glm53/`; one
 launcher set, one `VARIANT`, named in `glm53/hyperflare-variants.sh`), and since
-2026-11-21 `glm-5.3-uncensored-native`, GLM-5.3 full (753B) on ds4-native's GLM engine
-(`glm53/glm53-native/`).
-Switch between them with `switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]`
+2026-11-21 GLM-5.3 full (753B) on ds4-native's GLM engine (`glm53/glm53-native/`, one
+launcher, one `WEIGHTS`) with each of its three Backbones: `glm-5.3-native` (zai's stock),
+`glm-5.3-uncensored-native` and `glm-5.3-cyber-native` (dealignai's two surgeries).
+Switch between them with `switch-primary.sh [toggle|PRIMARY|status]`
 from any machine: a pure decision (`primary_decide`, `tests/switch-primary-unit.sh`)
 over the live containers, the shared idle gate, then each engine's own launcher with
 its gates, acceptance and rollback. Every other profile below stays launchable but is

@@ -5,7 +5,8 @@
 # Since 2026-11-14 the primaries (warmind-1017-native,
 # deepseek-v4.1-flash-native, glm-5.3-flash-hyperflare-tp2-v16, and since
 # 2026-11-15 glm-5.3-flash-hyperflare-tp2-uncensored, and since 2026-11-21
-# glm-5.3-uncensored-native) are the only
+# GLM-5.3 full's glm-5.3-native, glm-5.3-uncensored-native and
+# glm-5.3-cyber-native) are the only
 # local models Pi offers (scripts/inference/switch-primary.sh). Retired profiles
 # stay launchable; restore a profile's catalog entry from git history before
 # pointing Pi at it.

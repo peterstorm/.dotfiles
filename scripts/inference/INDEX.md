@@ -12,7 +12,7 @@ The map for this folder. Three sources of truth, in this order of authority:
 ## Primaries (the models Pi offers)
 
 One engine on both GPUs at a time; switch with
-`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]`
+`switch-primary.sh [toggle|PRIMARY|status]`
 ([runbook](runbooks/switch-primary-runbook-2026-11-19.md)).
 
 | primary | served id | engine | launcher | runbook | contract / unit tests | key pins |
@@ -21,7 +21,9 @@ One engine on both GPUs at a time; switch with
 | `uncensored` | `glm-5.3-flash-hyperflare-tp2-uncensored` | Hyperflare, same launcher (VARIANT=uncensored) | same switcher | v16 runbook + `glm53/hyperflare-variants.sh` header | same contract (variant table pinned) | dealignai NVFP4 `@745aac2` → `glm53-uncensored-convert.py` → export receipt |
 | `warmind` | `warmind-1017-native` | ds4-native + Maya | `deepseek/ds41-1017-native/run-ds41-1017-native.sh` (WEIGHTS=warmind) | [ds41-1017-native runbook](runbooks/ds41-1017-native-runbook-2026-11-19.md) | `switch-primary-unit.sh`, ds4-native repo tests | engine `DS4N_COMMIT=d3274aa`, Maya `b3fa99ec`, WARMIND v1.1 `@a6382f22` |
 | `deepseek` | `deepseek-v4.1-flash-native` | ds4-native + Maya, same launcher (WEIGHTS=deepseek) | same launcher | same runbook | same | DeepSeek `@1bae0e10` |
-| `glm-native` | `glm-5.3-uncensored-native` | ds4-native GLM engine (`ds4n-glm53-serve`) + Maya; GLM-5.3 full 753B, 64K, ~6-7 tok/s; no toggle counterpart | `glm53/glm53-native/run-glm53-native.sh` (WEIGHTS=uncensored; `cyber` serves `glm-5.3-cyber-native`, not a primary) | [glm53-native runbook](runbooks/glm53-native-runbook-2026-11-21.md) | `glm53-native-contract.sh`, `switch-primary-unit.sh`, ds4-native repo tests | engine `DS4N_COMMIT=68669899`, Maya `b3fa99ec`, kitaniai `@559df987`, λ 0.03 |
+| `glm-native` | `glm-5.3-native` | ds4-native GLM engine (`ds4n-glm53-serve`) + Maya; GLM-5.3 full 753B, 64K, ~6-7 tok/s; zai's stock Backbone | `glm53/glm53-native/run-glm53-native.sh` (WEIGHTS=stock) | [glm53-native runbook](runbooks/glm53-native-runbook-2026-11-21.md) | `glm53-native-contract.sh`, `switch-primary-unit.sh`, ds4-native repo tests | engine `DS4N_COMMIT=68669899`, Maya `b3fa99ec`, kitaniai Experts `@559df987`, zai BF16 `@abf42e6c`, λ 0.03 |
+| `uncensored-native` | `glm-5.3-uncensored-native` | same engine and container; dealignai's UNCENSORED Backbone (kitaniai's own) | same launcher (WEIGHTS=uncensored, its default) | same runbook | same | kitaniai `@559df987` |
+| `cyber-native` | `glm-5.3-cyber-native` | same engine and container; dealignai's CYBERSECURITY Backbone; no toggle counterpart | same launcher (WEIGHTS=cyber) | same runbook | same | dealignai CYBERSECURITY `@5915c1b8` |
 
 Engine code lives in its own repos, pinned by commit: `~/dev/ds4-native` (the engine; GitHub
 `peterstorm/ds4-native`) and Project Maya (donor server, vendored checkout under `/models/ds41/`).

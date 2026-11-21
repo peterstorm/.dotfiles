@@ -221,8 +221,8 @@ contains "$ROOT/scripts/inference/switch-primary.sh" "GLM_CONTAINER=\"$CONTAINER
 contains "$ROOT/scripts/inference/switch-primary.sh" "UNCENSORED_CONTAINER=\"$UNCENSORED_CONTAINER\""
 contains "$ROOT/scripts/inference/switch-primary.sh" "uncensored) echo $UNCENSORED_SERVED_MODEL ;;"
 contains "$ROOT/scripts/inference/switch-primary.sh" 'VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start'
-jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-flash-hyperflare-tp2-uncensored","glm-5.3-flash-hyperflare-tp2-v16","glm-5.3-uncensored-native","warmind-1017-native"]' \
-  "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the five primaries"
+jq -e '[.providers["desktop-vllm"].models[].id] | sort == ["deepseek-v4.1-flash-native","glm-5.3-cyber-native","glm-5.3-flash-hyperflare-tp2-uncensored","glm-5.3-flash-hyperflare-tp2-v16","glm-5.3-native","glm-5.3-uncensored-native","warmind-1017-native"]' \
+  "$PI_MODELS" >/dev/null || fail "pi/models.json must list exactly the seven primaries"
 jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-native"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's default model must be a primary (warmind-1017-native)"
 
@@ -231,7 +231,7 @@ jq -e '.defaultProvider == "desktop-vllm" and .defaultModel == "warmind-1017-nat
 # the ds41 engine's own default for requests that name no effort.
 jq -e '.defaultThinkingLevel == "max"' "$ROOT/pi/settings.json" >/dev/null ||
   fail "pi's global defaultThinkingLevel must be max"
-jq -e '[.providers["desktop-vllm"].models[].defaultThinkingLevel] | length == 5 and all(. == "max")' \
+jq -e '[.providers["desktop-vllm"].models[].defaultThinkingLevel] | length == 7 and all(. == "max")' \
   "$PI_MODELS" >/dev/null || fail "every primary must default to max thinking"
 jq -e '.targets["served-max"] == {"served": "desktop-vllm", "thinkingLevel": "max"}
   and any(.rules[]; .when.parentClass == "cloud" and .use.target == "served-max")' \

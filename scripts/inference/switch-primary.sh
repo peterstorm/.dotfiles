@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Switch desktop's primary model. The primaries are five served models on three
+# Switch desktop's primary model. The primaries are seven served models on three
 # engines, one engine on both GPUs at a time:
-#   glm         glm-5.3-flash-hyperflare-tp2-v16         NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
-#   uncensored  glm-5.3-flash-hyperflare-tp2-uncensored  NVIDIA Hyperflare  (same switcher, VARIANT=uncensored: dealignai's UNCENSORED build in v16's storage)
-#   warmind     warmind-1017-native                      ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
-#   deepseek    deepseek-v4.1-flash-native               ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
-#   glm-native  glm-5.3-uncensored-native                ds4-native GLM-5.3 full + Maya  (glm53/glm53-native/run-glm53-native.sh, WEIGHTS=uncensored)
+#   glm                glm-5.3-flash-hyperflare-tp2-v16         NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
+#   uncensored         glm-5.3-flash-hyperflare-tp2-uncensored  NVIDIA Hyperflare  (same switcher, VARIANT=uncensored: dealignai's UNCENSORED build in v16's storage)
+#   warmind            warmind-1017-native                      ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
+#   deepseek           deepseek-v4.1-flash-native               ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
+#   glm-native         glm-5.3-native                           ds4-native GLM-5.3 full + Maya  (glm53/glm53-native/run-glm53-native.sh, WEIGHTS=stock: zai's release)
+#   uncensored-native  glm-5.3-uncensored-native                same launcher, WEIGHTS=uncensored (kitaniai's: dealignai's UNCENSORED surgery)
+#   cyber-native       glm-5.3-cyber-native                     same launcher, WEIGHTS=cyber (dealignai's CYBERSECURITY surgery)
 #
-# Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]   (default: toggle)
+# Usage: switch-primary.sh [toggle|PRIMARY|status]   (default: toggle)
 #   toggle    stock <-> uncensored on the engine that serves: GLM <-> uncensored (Hyperflare),
-#             DeepSeek <-> WARMIND (ds4-native); with nothing running, bring back whichever
-#             primary stopped last. GLM-5.3 full has no stock build here: toggling it is refused
-#   glm|uncensored|warmind|deepseek|glm-native
+#             DeepSeek <-> WARMIND (ds4-native), glm-native <-> uncensored-native (GLM-5.3 full);
+#             with nothing running, bring back whichever primary stopped last. cyber-native has
+#             no counterpart: toggling it is refused
+#   PRIMARY   glm, uncensored, warmind, deepseek, glm-native, uncensored-native or cyber-native:
 #             make that one the primary (no-op if it already is)
 #   status    what serves now, and what toggle would do
 #
@@ -46,7 +49,9 @@ primary_of_served() {
     glm-5.3-flash-hyperflare-tp2-uncensored) echo uncensored ;;
     warmind-1017-native) echo warmind ;;
     deepseek-v4.1-flash-native) echo deepseek ;;
-    glm-5.3-uncensored-native) echo glm-native ;;
+    glm-5.3-native) echo glm-native ;;
+    glm-5.3-uncensored-native) echo uncensored-native ;;
+    glm-5.3-cyber-native) echo cyber-native ;;
     *) echo "" ;;
   esac
 }
@@ -56,7 +61,18 @@ served_of_primary() {
     uncensored) echo glm-5.3-flash-hyperflare-tp2-uncensored ;;
     warmind) echo warmind-1017-native ;;
     deepseek) echo deepseek-v4.1-flash-native ;;
-    glm-native) echo glm-5.3-uncensored-native ;;
+    glm-native) echo glm-5.3-native ;;
+    uncensored-native) echo glm-5.3-uncensored-native ;;
+    cyber-native) echo glm-5.3-cyber-native ;;
+  esac
+}
+
+# Whether a name is a primary: the one list every decision below checks against.
+PRIMARY_NAMES="glm, uncensored, warmind, deepseek, glm-native, uncensored-native or cyber-native"
+is_primary() {
+  case "$1" in
+    glm | uncensored | warmind | deepseek | glm-native | uncensored-native | cyber-native) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -68,58 +84,65 @@ variant_of_primary() {
   esac
 }
 
+# The Backbone a GLM-5.3 full primary serves (run-glm53-native.sh's WEIGHTS); empty for the others.
+weights_of_primary() {
+  case "$1" in
+    glm-native) echo stock ;;
+    uncensored-native) echo uncensored ;;
+    cyber-native) echo cyber ;;
+  esac
+}
+
 # A primary's counterpart: the same model on the same engine, stock <-> uncensored (dealignai's
-# GLM build, jcartu's WARMIND). Toggle's whole graph (operator choice, 2026-11-19); empty for
-# anything that is not a primary, and for glm-native (kitaniai's GLM-5.3 full is uncensored only).
+# GLM builds, jcartu's WARMIND). Toggle's whole graph (operator choice, 2026-11-19); empty for
+# anything that is not a primary, and for cyber-native (a security tuning, reached by name).
 counterpart_of() {
   case "$1" in
     glm) echo uncensored ;;
     uncensored) echo glm ;;
     deepseek) echo warmind ;;
     warmind) echo deepseek ;;
+    glm-native) echo uncensored-native ;;
+    uncensored-native) echo glm-native ;;
   esac
 }
 
 # primary_decide REQUEST ACTIVE LAST -> exactly one line:
-#   start:<glm|uncensored|warmind|deepseek|glm-native> | noop:<primary> | error:<reason>
-#   REQUEST    toggle | glm | uncensored | warmind | deepseek | glm-native
-#   ACTIVE     glm | uncensored | warmind | deepseek | glm-native | none | multiple | other:<container>
-#   LAST       glm | uncensored | warmind | deepseek | glm-native | none   (the primary that stopped most recently)
+#   start:<primary> | noop:<primary> | error:<reason>
+#   REQUEST    toggle | <primary>
+#   ACTIVE     <primary> | none | multiple | other:<container>
+#   LAST       <primary> | none   (the primary that stopped most recently)
 # Toggle goes to the active primary's counterpart, so it stays on the engine that serves and two
-# toggles return to where they began; a primary without one (glm-native) refuses it; with nothing
+# toggles return to where they began; a primary without one (cyber-native) refuses it; with nothing
 # active it brings back LAST. Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
   local request="$1" active="$2" last="$3" counterpart
   case "$active" in
     multiple) echo "error:more than one primary is running; stop all but one by hand"; return ;;
     other:*) echo "error:${active#other:} holds the GPUs; stop it before switching primaries"; return ;;
-    glm | uncensored | warmind | deepseek | glm-native | none) ;;
-    *) echo "error:unknown active state '$active'"; return ;;
+    none) ;;
+    *) is_primary "$active" || { echo "error:unknown active state '$active'"; return; } ;;
   esac
-  case "$request" in
-    toggle)
-      case "$active" in
-        glm | uncensored | warmind | deepseek | glm-native)
-          counterpart="$(counterpart_of "$active")"
-          if [ -n "$counterpart" ]; then
-            echo "start:$counterpart"
-          else
-            echo "error:$active has no stock/uncensored counterpart to toggle to; name a primary: glm, uncensored, warmind or deepseek"
-          fi
-          ;;
-        none)
-          case "$last" in
-            glm | uncensored | warmind | deepseek | glm-native) echo "start:$last" ;;
-            *) echo "error:nothing serves and no primary has run yet; name one: glm, uncensored, warmind, deepseek or glm-native" ;;
-          esac
-          ;;
-      esac
-      ;;
-    glm | uncensored | warmind | deepseek | glm-native)
-      if [ "$active" = "$request" ]; then echo "noop:$request"; else echo "start:$request"; fi
-      ;;
-    *) echo "error:unknown request '$request' (toggle, glm, uncensored, warmind, deepseek, glm-native or status)" ;;
-  esac
+  if [ "$request" = toggle ]; then
+    if [ "$active" = none ]; then
+      if is_primary "$last"; then
+        echo "start:$last"
+      else
+        echo "error:nothing serves and no primary has run yet; name one: $PRIMARY_NAMES"
+      fi
+      return
+    fi
+    counterpart="$(counterpart_of "$active")"
+    if [ -n "$counterpart" ]; then
+      echo "start:$counterpart"
+    else
+      echo "error:$active has no stock/uncensored counterpart to toggle to; name a primary: $PRIMARY_NAMES"
+    fi
+  elif is_primary "$request"; then
+    if [ "$active" = "$request" ]; then echo "noop:$request"; else echo "start:$request"; fi
+  else
+    echo "error:unknown request '$request' (toggle, $PRIMARY_NAMES, or status)"
+  fi
 }
 
 # --- imperative shell ------------------------------------------------------
@@ -169,8 +192,8 @@ labelled_primary() {
 }
 
 # The primary a primary container serves: fixed for a Hyperflare container, and
-# for a ds4-native one the weights its launcher labelled it with (empty when
-# unknown: the GLM container serving its cyber Backbone is no primary).
+# for a ds4-native one the weights its launcher labelled it with (empty when the
+# label is missing or names no primary).
 primary_of_container() {
   case "$1" in
     "$GLM_CONTAINER") echo glm ;;
@@ -192,7 +215,7 @@ read_last() {
   [ -n "$newest" ] || { echo none; return; }
   primary="$(primary_of_container "$newest")"
   if [ -z "$primary" ]; then
-    case "$newest" in "$GLM_NATIVE_CONTAINER") primary=glm-native ;; *) primary=warmind ;; esac
+    case "$newest" in "$GLM_NATIVE_CONTAINER") primary=uncensored-native ;; *) primary=warmind ;; esac
   fi
   echo "$primary"
 }
@@ -223,7 +246,7 @@ stop_primary() {
   case "$1" in
     glm | uncensored) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" stop ;;
     warmind | deepseek) "$DS41_RUN" --stop ;;
-    glm-native) "$GLM_NATIVE_RUN" --stop ;;
+    glm-native | uncensored-native | cyber-native) "$GLM_NATIVE_RUN" --stop ;;
     none) ;;
   esac
 }
@@ -235,8 +258,8 @@ start_primary() {
     # the caller's environment cannot pick the wrong profile.
     glm | uncensored) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start ;;
     warmind | deepseek) WEIGHTS="$1" "$DS41_RUN" --launch ;;
-    # WEIGHTS explicit, as VARIANT above: an inherited WEIGHTS=cyber cannot pick the Backbone.
-    glm-native) WEIGHTS=uncensored "$GLM_NATIVE_RUN" --launch ;;
+    # WEIGHTS explicit, as VARIANT above: an inherited WEIGHTS cannot pick the Backbone.
+    glm-native | uncensored-native | cyber-native) WEIGHTS="$(weights_of_primary "$1")" "$GLM_NATIVE_RUN" --launch ;;
   esac
 }
 
@@ -289,7 +312,7 @@ run_request() {
   last="$(read_last)" || return 1
   if [ "$request" = status ]; then
     local suffix=""
-    case "$active" in glm | uncensored | warmind | deepseek | glm-native) suffix=" ($(served_of_primary "$active"))" ;; esac
+    if is_primary "$active"; then suffix=" ($(served_of_primary "$active"))"; fi
     echo "active:     $active$suffix"
     echo "last:       $last"
     echo "toggle ->   $(primary_decide toggle "$active" "$last")"

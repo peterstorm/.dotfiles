@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# GLM-5.3 full (753B, kitaniai's GLM-5.3-UNCENSORED-MXFP4) on ds4-native (peterstorm/ds4-native,
-# branch glm53/engine-core): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
+# GLM-5.3 full (753B: kitaniai's GLM-5.3-UNCENSORED-MXFP4 Experts, which no CRACK surgery touches, and
+# one of three Backbones: zai's stock, dealignai's UNCENSORED, dealignai's CYBERSECURITY) on ds4-native
+# (peterstorm/ds4-native, branch glm53/engine-core): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
 # pinned RAM tier on the two RTX PRO 6000s, the dense Backbone resident, behind Project Maya's
 # OpenAI-compatible server. Served on :8000 like every other profile, with the shared inference key.
 #
@@ -62,10 +63,13 @@ SERVE_DIR="$GLM_DIR/serve"
 ENGINE="$SERVE_DIR/bin/ds4n-glm53-serve-${DS4N_COMMIT:0:12}"
 TOKENIZER="$SERVE_DIR/tokenizer"
 CONFIG="$SERVE_DIR/glm53-native.json"
-# Whose dense weights the Backbone carries; the routed Experts are kitaniai's in both:
+# Whose dense weights the Backbone carries; the routed Experts are kitaniai's in all three (the
+# surgeries edit only o_proj and the shared Expert's down_proj, so the Experts are zai's own):
 #   uncensored  kitaniai's own (dealignai's UNCENSORED surgery, Quark MXFP4): Backbone A. The default.
 #   cyber       dealignai's GLM-5.3-CYBERSECURITY edits on Backbone A (124 tensors re-converted with
 #               kitaniai's recipe, bit-exact on the weights both leave unedited; its VARIANT.json).
+#   stock       zai's release: Backbone A with those 124 tensors from zai's BF16, quantized as the
+#               surgeries' FP8 base was, then kitaniai's recipe (bit-exact on the 29 unedited weights).
 WEIGHTS="${WEIGHTS:-uncensored}"
 case "$WEIGHTS" in
   uncensored)
@@ -78,7 +82,12 @@ case "$WEIGHTS" in
     BACKBONE_SOURCE="dealignai/GLM-5.3-CYBERSECURITY-FP8@5915c1b88f998a9c1e1a0c83688e285a08ae3ca5"
     SERVED_MODEL="glm-5.3-cyber-native"
     ;;
-  *) echo "error: WEIGHTS is uncensored or cyber: $WEIGHTS" >&2; exit 2 ;;
+  stock)
+    BACKBONE="$STORE_DIR/backbone-stock"
+    BACKBONE_SOURCE="zai-org/GLM-5.3-BF16@abf42e6c0e53bc29a875511301e7b7fcd220315b"
+    SERVED_MODEL="glm-5.3-native"
+    ;;
+  *) echo "error: WEIGHTS is uncensored, cyber or stock: $WEIGHTS" >&2; exit 2 ;;
 esac
 # Positions every layer's KV cache holds: the context Maya reports (its dashboard reloads the engine
 # with another). Each 1K positions take ~0.2 GB of VRAM a GPU (caches and a prompt sweep's rows),
@@ -138,14 +147,14 @@ done
 [ "$(head -1 "$CHECKPOINT/.cache/huggingface/download/config.json.metadata" 2>/dev/null)" = "${CHECKPOINT_SOURCE#*@}" ] \
   || die "$CHECKPOINT is not ${CHECKPOINT_SOURCE}'s download"
 # The Backbone's provenance: A is the checkpoint's (its 88 parts, no variant record); a variant names
-# its source and that it was built on A.
+# its source and that it was built on A (its base's directory: each build saw the store at its own mount).
 [ "$(find "$BACKBONE" -maxdepth 1 -name 'backbone-*.safetensors' | wc -l)" = 88 ] || die "$BACKBONE does not hold the 88 Backbone parts"
 case "$WEIGHTS" in
   uncensored) [ ! -e "$BACKBONE/VARIANT.json" ] || die "$BACKBONE carries a variant record: it is not Backbone A" ;;
   *)
     [ "$(jq -r '.source.repo + "@" + .source.revision' "$BACKBONE/VARIANT.json" 2>/dev/null)" = "$BACKBONE_SOURCE" ] \
       || die "$BACKBONE is not ${BACKBONE_SOURCE}'s variant (WEIGHTS=$WEIGHTS)"
-    [ "$(jq -r .base "$BACKBONE/VARIANT.json")" = /store/backbone-uncensored ] || die "$BACKBONE was not built on Backbone A"
+    [ "$(jq -r '.base | split("/") | last' "$BACKBONE/VARIANT.json")" = backbone-uncensored ] || die "$BACKBONE was not built on Backbone A"
     ;;
 esac
 
