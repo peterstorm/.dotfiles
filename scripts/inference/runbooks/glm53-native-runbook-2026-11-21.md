@@ -85,6 +85,11 @@ counts the container serving it as foreign (`other:glm53-native`). Stop it by ha
 comfyui stopped; exactly two idle RTX PRO 6000s (≤ 1 GiB used each); no other running `glm53-*`
 container (the RAM tier must not share host memory with a CPU replay or another load); port 8000 free.
 
+The idle-GPU gate also keeps the Expert Slots reproducible. GLM's engine has no Ledger yet: it sizes
+its Slots from the VRAM still free after everything else is loaded (83 per Sparse layer at 64K, the
+same on every launch so far). Anything else on a GPU at launch would silently cost Slots, and so
+speed (ds4-native plan, Phase 4).
+
 ## Measured (2026-11-21, 64K, λ 0.03, through Maya)
 
 | case | result |
@@ -99,7 +104,7 @@ container (the RAM tier must not share host memory with a CPU replay or another 
 | client disconnect mid-stream | engine cancelled after 39 tokens |
 | bit-exactness (ds4n-glm53-serve-check) | save/rewind/restore and resumed turns: 0 of ~46.5M logits differ from reading again |
 
-Receipts: ds4-native `docs/bench/glm53-serve/` (`2026-11-21-maya-e2e-engine.log`,
+Receipts: ds4-native `docs/bench/glm53-serve/` (`2026-11-21-maya-e2e-engine.err.txt`,
 `2026-11-21-maya-e2e-responses.jsonl`, `2026-11-21-servecheck.*`, `2026-11-21-serve-smoke.*`).
 
 Short prompts cost seconds whatever their length: a prompt sweep reads every Expert any of its
@@ -123,7 +128,9 @@ The ds4-native metrics bridge (`:8010`) is engine-agnostic and labels series wit
 - `engine ... is not installed`: run `--install` (the binary is keyed by `DS4N_COMMIT`).
 - `glm53-* containers are running`: a Hyperflare GLM primary is up; switch with `switch-primary.sh`, which stops it first.
 - The engine exits 2 with `failed` lines in the log: a Decoder (CUDA) failure; the caches and Slots
-  may disagree, so the engine does not continue. `docker logs glm53-native`, then relaunch.
+  may disagree, so the engine does not continue. Maya starts it again at the next request
+  (`[maya] the engine had stopped (exit code 2); starting it again`, ~80 s) and the held
+  conversations are gone. Read `glm53-native.log` for the failure; a repeat needs the engine fixed.
 - A request answered `ERR ... not finite`: that request's logits were NaN/Inf; its conversation was
   dropped and the engine stays up.
 
