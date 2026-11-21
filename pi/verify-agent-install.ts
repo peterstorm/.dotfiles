@@ -192,8 +192,9 @@ const expectRoute = (
     fail(`${message}: ${JSON.stringify(route.ok ? route.value.effective : route.error)}`);
   }
 };
-// A local parent's children follow the served model, keeping the parent's effort,
-// even when the parent session is pinned to the other primary.
+// A desktop parent's children follow the served model at max effort, whatever the parent's
+// own effort, even when the parent session is pinned to another primary (model-routing.json
+// `served-max`; owner's change 2026-11-17, 4732782d — before it, children kept the parent's effort).
 expectRoute(
   routeTo({ model: warmindModel.value, thinkingLevel: "max" }, servedAs(glmModel.value)),
   { provider: "desktop-vllm", id: "glm-5.3-flash-hyperflare-tp2-v16", thinkingLevel: "max" },
@@ -201,8 +202,8 @@ expectRoute(
 );
 expectRoute(
   routeTo({ model: glmModel.value, thinkingLevel: "low" }, servedAs(warmindModel.value)),
-  { provider: "desktop-vllm", id: "warmind-1017-native", thinkingLevel: "low" },
-  "a GLM-pinned parent's child does not follow the served WARMIND",
+  { provider: "desktop-vllm", id: "warmind-1017-native", thinkingLevel: "max" },
+  "a low-effort GLM-pinned parent's child does not follow the served WARMIND at max",
 );
 // Only desktop-vllm parents follow what desktop-vllm serves; another local
 // provider's children stay on their parent, whatever the desktop is serving.
