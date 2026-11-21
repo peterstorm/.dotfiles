@@ -242,13 +242,16 @@ in
   #     upstream direct-attach P2P notes record as working
   #     (`amd_iommu=on iommu=pt` with ACS disabled in firmware).
   #
-  # The third parameter is unrelated to P2P. zfs_arc_max caps the ARC at 16 GiB;
+  # The third parameter is unrelated to P2P. zfs_arc_max caps the ARC at 4 GiB;
   # OpenZFS on Linux otherwise takes half of RAM, which is exactly the half this
-  # box needs for something else. Under `--ipc=host` the vLLM KV offload region
+  # box needs for something else. 16 GiB until 2026-11-21: the GLM-5.3 engine
+  # (ds4-native) reads its Expert store with O_DIRECT, which bypasses the ARC,
+  # and turns every freed GiB into its pinned RAM tier (1.5 GiB = one more
+  # Expert per layer), so the ARC keeps only /nix and metadata. Under `--ipc=host` the vLLM KV offload region
   # is an mmap in the host's /dev/shm, and the model load streams a ~155 GiB
   # checkpoint that is read once per start, sequentially, off a 1M-recordsize
   # dataset — so an unbounded ARC evicts pages that are reused to cache data
-  # nobody reads twice. 16 GiB is ample for /nix and metadata.
+  # nobody reads twice. 4 GiB is ample for /nix and metadata.
   # pcie_aspm=off: disable PCIe Active State Power Management. The recurrent
   # failure on this box is Xid 79 "GPU has fallen off the bus" (GPU0, at both
   # 450 W and 400 W caps — see scripts/inference/runbooks/gpu-inference-crash-triage.md).
@@ -267,7 +270,7 @@ in
   # engram dataset (2026-10-26): 10 -> 107k IOPS, 32 -> 181k, 64 -> 199k,
   # 128 -> 192k; 18.8 MB expert reads unchanged (10.8 GB/s, 2.3 ms at QD1).
   # The raw partition does ~1M IOPS, so the remaining gap is ZFS per-IO cost.
-  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=17179869184" "pcie_aspm=off" "zfs.zfs_vdev_sync_read_max_active=64" ];
+  boot.kernelParams = [ "iommu=pt" "amd_iommu=on" "zfs.zfs_arc_max=4294967296" "pcie_aspm=off" "zfs.zfs_vdev_sync_read_max_active=64" ];
   boot.extraModprobeConfig = ''
     options nvidia_uvm uvm_disable_hmm=1
     options nvidia NVreg_RegistryDwords="ForceP2P=0x11;RMForceP2PType=1;RMPcieP2PType=2;GrdmaPciTopoCheckOverride=1;EnableResizableBar=1"
