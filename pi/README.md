@@ -10,6 +10,7 @@ pi/
 ├── extensions/       # Custom extensions (→ ~/.pi/agent/extensions/)
 │   ├── creative-project-scope/ # Trusted ~/dev/creative subtree resources
 │   ├── glm-guard/    # Keeps a served GLM's reasoning from poisoning its own context
+│   ├── glm-native-compaction/ # Compacts on GLM-5.3 full (ds4-native) without thinking
 │   ├── monitor/      # Background monitors whose completion wakes the session
 │   ├── model-routing/ # Pure child-model routing policy
 │   ├── subagent/     # Generic subagent tool with skill injection
@@ -266,6 +267,40 @@ request untouched) and `PI_GLM_GUARD=off` disables it. A session picks it up on 
 request afterwards re-prefills the shorter prompt once. `clear_thinking` clears reasoning from
 *earlier user turns*; reasoning inside the current tool chain stays, and a budget bounds a runaway
 thinking block without preventing it. Probe and evidence: `scripts/inference/shared/probe-glm-drift.py`.
+
+### glm-native-compaction: compaction without thinking on GLM-5.3 full (`extensions/glm-native-compaction/`)
+
+Pi compacts with the session's thinking level (`max` for the GLM-5.3 full primaries) and Maya caps a
+reply's thinking at 8,192 tokens. At ~6 tok/s that made compaction the slowest thing the session did.
+On 2026-11-21 four compactions of one uncensored-native session (50-56K tokens each, all split turns,
+so two summary requests apiece) wrote **10.6K-18.7K tokens** for summaries of 1.7K-6K: 30-50 minutes
+each, most of it thinking. Reading the prompt took about a minute of that.
+
+Turning Pi's thinking off is not enough on its own. For these models Pi says "off" as
+`thinking: {type: "disabled"}` (the `deepseek` thinking format), which Maya's OpenAI path does not
+read, so Maya's own default effort (`high`) applies. Maya does read `reasoning_effort: "none"`: the GLM
+template then writes its `Low` header and a closed think block, and the model writes the summary
+directly.
+
+A `session_before_compact` hook: when the session's model is on `desktop-vllm` and the server reports
+serving GLM-5.3 full (`glm-5.3-native`, `glm-5.3-uncensored-native`, `glm-5.3-cyber-native`; asked, not
+assumed from the session's id, as glm-guard does), it runs Pi's own exported `compact()` (the same
+prompts, cut point, split-turn handling and failure checks) with thinking off, sending every summary
+request with `reasoning_effort: "none"`. Expected: the summary tokens only, so 5-17 minutes instead of
+30-50 for summaries of the sizes above. Hyperflare's GLM-5.3-Flash and the DeepSeek primaries keep
+Pi's own compaction.
+
+Any failure (no key, the server refusing, a summary that tries to call a tool) hands the compaction back
+to Pi unchanged, with a warning; an aborted compaction is cancelled rather than retried.
+`PI_GLM_COMPACTION=off` disables it, and a session picks it up on `/reload`.
+
+Why not continue the cached conversation instead, so the engine reuses its prompt? Two things in the
+current stack make that impossible: the GLM template writes the effort into the prompt's first line
+(`<|system|>Reasoning Effort: Max`), so any change of effort changes the whole prompt; and Maya
+rewrites a late system message as a user message, which moves the template's last-user marker and
+drops the current turn's reasoning from the prompt. Saving the ~1 minute prompt read would cost the
+thinking this extension removes. At a much longer context (400K) the read grows to 10+ minutes and the
+trade reverses; that needs a Maya change first.
 
 Every other local profile (DeepSeek V4 Flash and Vision, the GLM-5.3 v10–v15 vLLM
 builds, Qwen3.8 27B/Blackfrost/Flash-Next, the Maya EXL3 DeepSeek-V4.1) left the
