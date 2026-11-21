@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Switch desktop's primary model. The primaries are four served models on two
+# Switch desktop's primary model. The primaries are five served models on three
 # engines, one engine on both GPUs at a time:
 #   glm         glm-5.3-flash-hyperflare-tp2-v16         NVIDIA Hyperflare  (glm53/switch-glm53-hyperflare-tp2-v16.sh, VARIANT=v16)
 #   uncensored  glm-5.3-flash-hyperflare-tp2-uncensored  NVIDIA Hyperflare  (same switcher, VARIANT=uncensored: dealignai's UNCENSORED build in v16's storage)
 #   warmind     warmind-1017-native                      ds4-native + Maya  (deepseek/ds41-1017-native/run-ds41-1017-native.sh)
 #   deepseek    deepseek-v4.1-flash-native               ds4-native + Maya  (same launcher, WEIGHTS=deepseek)
+#   glm-native  glm-5.3-uncensored-native                ds4-native GLM-5.3 full + Maya  (glm53/glm53-native/run-glm53-native.sh, WEIGHTS=uncensored)
 #
-# Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]   (default: toggle)
+# Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]   (default: toggle)
 #   toggle    stock <-> uncensored on the engine that serves: GLM <-> uncensored (Hyperflare),
 #             DeepSeek <-> WARMIND (ds4-native); with nothing running, bring back whichever
-#             primary stopped last
-#   glm|uncensored|warmind|deepseek
+#             primary stopped last. GLM-5.3 full has no stock build here: toggling it is refused
+#   glm|uncensored|warmind|deepseek|glm-native
 #             make that one the primary (no-op if it already is)
 #   status    what serves now, and what toggle would do
 #
@@ -18,7 +19,7 @@
 # its own launcher, gates, acceptance and rollback; this script only decides
 # (primary_decide, pure, tests/switch-primary-unit.sh) and sequences them. A
 # cutover first requires :8000 to be idle, and a failed start brings the previous
-# primary back. Both engines answer any model id, so a pi session pinned to one
+# primary back. Every engine answers any model id, so a pi session pinned to one
 # id keeps working after a switch with that entry's limits; the script prints
 # the id that matches what now serves.
 set -euo pipefail
@@ -27,11 +28,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLM_CONTAINER="glm53-flash-hyperflare-tp2-v16"
 UNCENSORED_CONTAINER="glm53-flash-hyperflare-tp2-uncensored"
 DS41_CONTAINER="ds41-1017-native"
+GLM_NATIVE_CONTAINER="glm53-native"
 # Every container that can be a primary; the catalog's other profiles are foreign to the switcher.
-PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$UNCENSORED_CONTAINER" "$DS41_CONTAINER")
+PRIMARY_CONTAINERS=("$GLM_CONTAINER" "$UNCENSORED_CONTAINER" "$DS41_CONTAINER" "$GLM_NATIVE_CONTAINER")
 # The Hyperflare primaries share one switcher; it serves the variant it is given.
 GLM_SWITCH="$SCRIPT_DIR/glm53/switch-glm53-hyperflare-tp2-v16.sh"
 DS41_RUN="$SCRIPT_DIR/deepseek/ds41-1017-native/run-ds41-1017-native.sh"
+GLM_NATIVE_RUN="$SCRIPT_DIR/glm53/glm53-native/run-glm53-native.sh"
 SERVING_HOST="desktop"
 
 # --- functional core -------------------------------------------------------
@@ -43,6 +46,7 @@ primary_of_served() {
     glm-5.3-flash-hyperflare-tp2-uncensored) echo uncensored ;;
     warmind-1017-native) echo warmind ;;
     deepseek-v4.1-flash-native) echo deepseek ;;
+    glm-5.3-uncensored-native) echo glm-native ;;
     *) echo "" ;;
   esac
 }
@@ -52,10 +56,11 @@ served_of_primary() {
     uncensored) echo glm-5.3-flash-hyperflare-tp2-uncensored ;;
     warmind) echo warmind-1017-native ;;
     deepseek) echo deepseek-v4.1-flash-native ;;
+    glm-native) echo glm-5.3-uncensored-native ;;
   esac
 }
 
-# The Hyperflare variant a Hyperflare primary serves (hyperflare-variants.sh names it); empty for ds41's.
+# The Hyperflare variant a Hyperflare primary serves (hyperflare-variants.sh names it); empty for ds4-native's.
 variant_of_primary() {
   case "$1" in
     glm) echo v16 ;;
@@ -65,7 +70,7 @@ variant_of_primary() {
 
 # A primary's counterpart: the same model on the same engine, stock <-> uncensored (dealignai's
 # GLM build, jcartu's WARMIND). Toggle's whole graph (operator choice, 2026-11-19); empty for
-# anything that is not a primary.
+# anything that is not a primary, and for glm-native (kitaniai's GLM-5.3 full is uncensored only).
 counterpart_of() {
   case "$1" in
     glm) echo uncensored ;;
@@ -76,37 +81,44 @@ counterpart_of() {
 }
 
 # primary_decide REQUEST ACTIVE LAST -> exactly one line:
-#   start:<glm|uncensored|warmind|deepseek> | noop:<primary> | error:<reason>
-#   REQUEST    toggle | glm | uncensored | warmind | deepseek
-#   ACTIVE     glm | uncensored | warmind | deepseek | none | multiple | other:<container>
-#   LAST       glm | uncensored | warmind | deepseek | none   (the primary that stopped most recently)
+#   start:<glm|uncensored|warmind|deepseek|glm-native> | noop:<primary> | error:<reason>
+#   REQUEST    toggle | glm | uncensored | warmind | deepseek | glm-native
+#   ACTIVE     glm | uncensored | warmind | deepseek | glm-native | none | multiple | other:<container>
+#   LAST       glm | uncensored | warmind | deepseek | glm-native | none   (the primary that stopped most recently)
 # Toggle goes to the active primary's counterpart, so it stays on the engine that serves and two
-# toggles return to where they began; with nothing active it brings back LAST.
-# Total over its inputs: every combination yields one of the three forms.
+# toggles return to where they began; a primary without one (glm-native) refuses it; with nothing
+# active it brings back LAST. Total over its inputs: every combination yields one of the three forms.
 primary_decide() {
-  local request="$1" active="$2" last="$3"
+  local request="$1" active="$2" last="$3" counterpart
   case "$active" in
     multiple) echo "error:more than one primary is running; stop all but one by hand"; return ;;
     other:*) echo "error:${active#other:} holds the GPUs; stop it before switching primaries"; return ;;
-    glm | uncensored | warmind | deepseek | none) ;;
+    glm | uncensored | warmind | deepseek | glm-native | none) ;;
     *) echo "error:unknown active state '$active'"; return ;;
   esac
   case "$request" in
     toggle)
       case "$active" in
-        glm | uncensored | warmind | deepseek) echo "start:$(counterpart_of "$active")" ;;
+        glm | uncensored | warmind | deepseek | glm-native)
+          counterpart="$(counterpart_of "$active")"
+          if [ -n "$counterpart" ]; then
+            echo "start:$counterpart"
+          else
+            echo "error:$active has no stock/uncensored counterpart to toggle to; name a primary: glm, uncensored, warmind or deepseek"
+          fi
+          ;;
         none)
           case "$last" in
-            glm | uncensored | warmind | deepseek) echo "start:$last" ;;
-            *) echo "error:nothing serves and no primary has run yet; name one: glm, uncensored, warmind or deepseek" ;;
+            glm | uncensored | warmind | deepseek | glm-native) echo "start:$last" ;;
+            *) echo "error:nothing serves and no primary has run yet; name one: glm, uncensored, warmind, deepseek or glm-native" ;;
           esac
           ;;
       esac
       ;;
-    glm | uncensored | warmind | deepseek)
+    glm | uncensored | warmind | deepseek | glm-native)
       if [ "$active" = "$request" ]; then echo "noop:$request"; else echo "start:$request"; fi
       ;;
-    *) echo "error:unknown request '$request' (toggle, glm, uncensored, warmind, deepseek or status)" ;;
+    *) echo "error:unknown request '$request' (toggle, glm, uncensored, warmind, deepseek, glm-native or status)" ;;
   esac
 }
 
@@ -150,25 +162,27 @@ read_active() {
   echo none
 }
 
-# The primary the ds41 container serves (or last served), from the label its
-# launcher sets; empty when the label is missing or unrecognised.
-ds41_served_primary() {
-  primary_of_served "$(container_label "$DS41_CONTAINER" ai.peterstorm.inference.served-model)"
+# The primary a container serves (or last served), from the served-model label
+# its launcher sets; empty when the label is missing or names no primary.
+labelled_primary() {
+  primary_of_served "$(container_label "$1" ai.peterstorm.inference.served-model)"
 }
 
 # The primary a primary container serves: fixed for a Hyperflare container, and
-# for the ds41 one the weights its launcher labelled it with (empty when unknown).
+# for a ds4-native one the weights its launcher labelled it with (empty when
+# unknown: the GLM container serving its cyber Backbone is no primary).
 primary_of_container() {
   case "$1" in
     "$GLM_CONTAINER") echo glm ;;
     "$UNCENSORED_CONTAINER") echo uncensored ;;
-    "$DS41_CONTAINER") ds41_served_primary ;;
+    "$DS41_CONTAINER" | "$GLM_NATIVE_CONTAINER") labelled_primary "$1" ;;
   esac
 }
 
 # LAST: of the primary containers that exist, the one that stopped most recently
-# (RFC 3339 UTC timestamps sort lexically); a ds41 stop counts as the weights it
-# last served, WARMIND when its label is missing.
+# (RFC 3339 UTC timestamps sort lexically); a ds4-native stop counts as the
+# weights it last served, its launcher's default (WARMIND, GLM-5.3 uncensored)
+# when the label is missing or names no primary.
 read_last() {
   local container stopped_at primary newest="" newest_at="0001-01-01T00:00:00Z"
   for container in "${PRIMARY_CONTAINERS[@]}"; do
@@ -177,7 +191,10 @@ read_last() {
   done
   [ -n "$newest" ] || { echo none; return; }
   primary="$(primary_of_container "$newest")"
-  echo "${primary:-warmind}"
+  if [ -z "$primary" ]; then
+    case "$newest" in "$GLM_NATIVE_CONTAINER") primary=glm-native ;; *) primary=warmind ;; esac
+  fi
+  echo "$primary"
 }
 
 # Returns 1 (does not exit) so the rollback path can still run after a timeout.
@@ -206,6 +223,7 @@ stop_primary() {
   case "$1" in
     glm | uncensored) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" stop ;;
     warmind | deepseek) "$DS41_RUN" --stop ;;
+    glm-native) "$GLM_NATIVE_RUN" --stop ;;
     none) ;;
   esac
 }
@@ -217,6 +235,8 @@ start_primary() {
     # the caller's environment cannot pick the wrong profile.
     glm | uncensored) VARIANT="$(variant_of_primary "$1")" "$GLM_SWITCH" start ;;
     warmind | deepseek) WEIGHTS="$1" "$DS41_RUN" --launch ;;
+    # WEIGHTS explicit, as VARIANT above: an inherited WEIGHTS=cyber cannot pick the Backbone.
+    glm-native) WEIGHTS=uncensored "$GLM_NATIVE_RUN" --launch ;;
   esac
 }
 
@@ -243,8 +263,8 @@ switch_to() {
       return 0
       ;;
   esac
-  # To ds41: gate on idle, stop what serves, launch, and on failure bring the
-  # previous primary back with its own launcher.
+  # To a ds4-native primary: gate on idle, stop what serves, launch, and on
+  # failure bring the previous primary back with its own launcher.
   if [ "$active" != none ]; then
     inference_require_idle_endpoint || return 1
   fi
@@ -269,7 +289,7 @@ run_request() {
   last="$(read_last)" || return 1
   if [ "$request" = status ]; then
     local suffix=""
-    case "$active" in glm | uncensored | warmind | deepseek) suffix=" ($(served_of_primary "$active"))" ;; esac
+    case "$active" in glm | uncensored | warmind | deepseek | glm-native) suffix=" ($(served_of_primary "$active"))" ;; esac
     echo "active:     $active$suffix"
     echo "last:       $last"
     echo "toggle ->   $(primary_decide toggle "$active" "$last")"

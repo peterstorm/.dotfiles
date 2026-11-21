@@ -32,6 +32,7 @@ INFERENCE_PROFILE_CONTAINERS=(
   qwen38-27b-blackfrost-abliterated-bf16-vllm
   ds41-1017-maya-exl35
   ds41-1017-native
+  glm53-native
 )
 
 # Running + waiting requests from one bridge's /metrics (series prefixed

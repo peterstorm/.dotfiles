@@ -12,7 +12,7 @@ The map for this folder. Three sources of truth, in this order of authority:
 ## Primaries (the models Pi offers)
 
 One engine on both GPUs at a time; switch with
-`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]`
+`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]`
 ([runbook](runbooks/switch-primary-runbook-2026-11-19.md)).
 
 | primary | served id | engine | launcher | runbook | contract / unit tests | key pins |
@@ -21,6 +21,7 @@ One engine on both GPUs at a time; switch with
 | `uncensored` | `glm-5.3-flash-hyperflare-tp2-uncensored` | Hyperflare, same launcher (VARIANT=uncensored) | same switcher | v16 runbook + `glm53/hyperflare-variants.sh` header | same contract (variant table pinned) | dealignai NVFP4 `@745aac2` → `glm53-uncensored-convert.py` → export receipt |
 | `warmind` | `warmind-1017-native` | ds4-native + Maya | `deepseek/ds41-1017-native/run-ds41-1017-native.sh` (WEIGHTS=warmind) | [ds41-1017-native runbook](runbooks/ds41-1017-native-runbook-2026-11-19.md) | `switch-primary-unit.sh`, ds4-native repo tests | engine `DS4N_COMMIT=d3274aa`, Maya `b3fa99ec`, WARMIND v1.1 `@a6382f22` |
 | `deepseek` | `deepseek-v4.1-flash-native` | ds4-native + Maya, same launcher (WEIGHTS=deepseek) | same launcher | same runbook | same | DeepSeek `@1bae0e10` |
+| `glm-native` | `glm-5.3-uncensored-native` | ds4-native GLM engine (`ds4n-glm53-serve`) + Maya; GLM-5.3 full 753B, 64K, ~6-7 tok/s; no toggle counterpart | `glm53/glm53-native/run-glm53-native.sh` (WEIGHTS=uncensored; `cyber` serves `glm-5.3-cyber-native`, not a primary) | [glm53-native runbook](runbooks/glm53-native-runbook-2026-11-21.md) | `glm53-native-contract.sh`, `switch-primary-unit.sh`, ds4-native repo tests | engine `DS4N_COMMIT=68669899`, Maya `b3fa99ec`, kitaniai `@559df987`, λ 0.03 |
 
 Engine code lives in its own repos, pinned by commit: `~/dev/ds4-native` (the engine; GitHub
 `peterstorm/ds4-native`) and Project Maya (donor server, vendored checkout under `/models/ds41/`).
@@ -30,7 +31,7 @@ The dotfiles own deployment: launchers, pins, runbooks, contracts, systemd bridg
 
 | family | runbook |
 |---|---|
-| ds4-native | `ds41-1017-native-runbook-2026-11-19.md` (warmind + deepseek, the native engine) |
+| ds4-native | `ds41-1017-native-runbook-2026-11-19.md` (warmind + deepseek, the native engine), `glm53-native-runbook-2026-11-21.md` (GLM-5.3 full on its GLM engine) |
 | glm53 | `glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md` (v16 + uncensored variant; v14/v15 rollback sections inside), `glm53-flash-spark-tp2-v14-runbook-2026-09-19.md`, `glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md`, `glm53-flash-exl3-k4-vllm-sm120-v10-runbook-2026-08-31.md` (exl3 rollback pin) |
 | qwen38 | `qwen38-27b-runbook-2026-08-18.md`, dflash2 (runbook, official, vllm-official, tp1-bf16kv-v3), flash-next fp8 v1/v2, blackfrost bf16 |
 | deepseek | `ds4-infernal-invocation-r18-runbook-2026-08-22.md` (r18 rollback), `ds4-flash-vision-r21-v1-runbook-2026-09-01.md`, `ds4-flash-vision-karmic-kraken-v1-runbook-2026-09-21.md`, `ds41-1017-maya-exl35-runbook-2026-10-21.md` (EXL3 predecessor) |

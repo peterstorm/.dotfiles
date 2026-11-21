@@ -40,6 +40,14 @@ describe("profileFor: what a served model gets", () => {
 		expect(profileFor("GLM-5.3-Flash-UNCENSORED-NVFP4")).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
 	});
 
+	it("guards GLM-5.3 full on ds4-native as a tuned build (kitaniai's uncensored conversion)", () => {
+		// Inert there and harmless: Maya forwards only enable_thinking and reasoning_effort from
+		// chat_template_kwargs and reads no thinking_token_budget; its own run config caps reasoning
+		// (run-glm53-native.sh: thinking_budget 8192), and earlier reasoning stays in the prompt,
+		// which keeps a chat's next turn a pure append to its cached tokens.
+		expect(profileFor("glm-5.3-uncensored-native")).toEqual({ kind: "tuned-glm", budgets: TUNED_BUDGETS });
+	});
+
 	it("treats the retired CYBERSECURITY hybrids as upstream GLM: no catalog or primary serves them", () => {
 		expect(profileFor("glm-5.3-flash-hyperflare-tp2-cyber-hybrid-bf16")).toEqual({ kind: "glm" });
 	});

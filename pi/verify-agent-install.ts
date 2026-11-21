@@ -138,14 +138,16 @@ if (resolve(dirname(routingLink), readlinkSync(routingLink)) !== expectedRouting
 
 const loadedRouting = loadModelRoutingPolicy(agentDir);
 if (!loadedRouting.ok) fail(`invalid model routing policy: ${loadedRouting.error.message}`);
-// The local catalog is exactly the four primaries' served ids: WARMIND and
-// stock DeepSeek-V4.1-Flash-1017 on ds4-native, and GLM-5.3 v16 and its
-// uncensored build (dealignai's UNCENSORED in v16's storage, variant uncensored) on Hyperflare.
+// The local catalog is exactly the five primaries' served ids: WARMIND and
+// stock DeepSeek-V4.1-Flash-1017 on ds4-native, GLM-5.3 v16 and its
+// uncensored build (dealignai's UNCENSORED in v16's storage, variant uncensored) on Hyperflare,
+// and GLM-5.3 full (kitaniai's uncensored MXFP4, 753B) on ds4-native's GLM engine.
 const primaryModels = [
   "warmind-1017-native",
   "deepseek-v4.1-flash-native",
   "glm-5.3-flash-hyperflare-tp2-v16",
   "glm-5.3-flash-hyperflare-tp2-uncensored",
+  "glm-5.3-uncensored-native",
 ] as const;
 const warmindModel = parseModelReference("desktop-vllm/warmind-1017-native");
 const glmModel = parseModelReference("desktop-vllm/glm-5.3-flash-hyperflare-tp2-v16");
@@ -257,6 +259,9 @@ const expectedContext: Readonly<Record<(typeof primaryModels)[number], number>> 
   // degenerate reasoning, so Pi must compact well before that.
   "glm-5.3-flash-hyperflare-tp2-v16": 400_000,
   "glm-5.3-flash-hyperflare-tp2-uncensored": 400_000,
+  // The launcher's served context (run-glm53-native.sh CONTEXT): 64K is what its RAM tier and
+  // KV Checkpoints fit beside a 753B model's Backbone on two GPUs.
+  "glm-5.3-uncensored-native": 65_536,
 };
 for (const id of primaryModels) {
   const model = localModels.find((entry) => entry.id === id);
@@ -751,7 +756,7 @@ if (designer) {
 }
 
 process.stdout.write(
-  `Pi install verified: primary local catalog (WARMIND, DeepSeek-V4.1 native, GLM v16, GLM uncensored) and local-aware routing, ` +
+  `Pi install verified: primary local catalog (WARMIND, DeepSeek-V4.1 native, GLM v16, GLM uncensored, GLM-5.3 full native) and local-aware routing, ` +
     `Obsidian skill, ${discovered.length} agents, ` +
     `${packageAgentDirs.length} package agent dir(s), ${renderedAgents.size} current Loom render(s), ` +
     `panel roster available.\n`,

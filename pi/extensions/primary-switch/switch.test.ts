@@ -27,6 +27,7 @@ const SERVED: Readonly<Record<Primary, string>> = {
 	uncensored: UNCENSORED,
 	warmind: WARMIND,
 	deepseek: "deepseek-v4.1-flash-native",
+	"glm-native": "glm-5.3-uncensored-native",
 };
 const SCRIPT = join(import.meta.dir, "../../../scripts/inference/switch-primary.sh");
 const CATALOG = join(import.meta.dir, "../../models.json");
@@ -101,7 +102,8 @@ describe("parsing the /switch request", () => {
 
 	it("completes request words by prefix, each with a description", () => {
 		expect(switchCompletions("").map((item) => item.value)).toEqual([...SWITCH_REQUESTS]);
-		expect(switchCompletions("g").map((item) => item.value)).toEqual(["glm"]);
+		expect(switchCompletions("g").map((item) => item.value)).toEqual(["glm", "glm-native"]);
+		expect(switchCompletions("glm-").map((item) => item.value)).toEqual(["glm-native"]);
 		expect(switchCompletions("u").map((item) => item.value)).toEqual(["uncensored"]);
 		expect(switchCompletions("x")).toEqual([]);
 		expect(switchCompletions("").every((item) => item.description.length > 0)).toBe(true);
@@ -143,7 +145,7 @@ describe("parsing the switch-primary.sh report", () => {
 				value: { primary, servedId: SERVED[primary], unchanged: true },
 			});
 		}
-		expect(readFileSync(SCRIPT, "utf8")).toContain("Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]");
+		expect(readFileSync(SCRIPT, "utf8")).toContain("Usage: switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]");
 	});
 
 	it("has a catalog model for every primary's served id", () => {

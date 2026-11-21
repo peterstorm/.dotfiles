@@ -14,9 +14,11 @@
 # new tokens; a conversation another one displaced comes back from its KV checkpoint in host RAM
 # (CHECKPOINT_GB of them, ~95 KB a token), bit-identical to reading it again (ds4n-glm53-serve-check).
 #
-# Speed (2026-11-21, ds4-native docs/bench/glm53-serve): decode ~4 tok/s on a fresh conversation and
-# faster as its Experts settle into VRAM, a prompt's new tokens ~10-60 tok/s by length: decode is bound
-# by Expert reads from the NVMe (the 753B's routed Experts are 375 GiB; VRAM holds a quarter of them).
+# Speed (2026-11-21, measured through this server at 64K and λ 0.03; ds4-native
+# docs/bench/glm53-serve/2026-11-21-serve.md): decode 6-7 tok/s (6.2 after a 4.5K-token prompt, 13%
+# of its Expert reads missing VRAM and RAM); a long prompt's new tokens ~200 tok/s (4,519 in 22.9 s),
+# a short one a few seconds whatever its length (a first 30-token chat: 14 s). Decode is bound by
+# Expert reads from the NVMe (the 753B's routed Experts are 375 GiB; VRAM holds a quarter of them).
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS), checked against its provenance record at every launch;
@@ -82,7 +84,10 @@ esac
 # with another). Each 1K positions take ~0.2 GB of VRAM a GPU (caches and a prompt sweep's rows),
 # about a quarter of a VRAM Slot per Sparse layer: 64K costs ~14 Slots per layer against 16K.
 CONTEXT="${CONTEXT:-65536}"
-[[ "$CONTEXT" =~ ^[0-9]+$ ]] && ((CONTEXT >= 4096 && CONTEXT <= 202752)) || { echo "error: CONTEXT is 4096 to 202752: $CONTEXT" >&2; exit 2; }
+if ! [[ "$CONTEXT" =~ ^[0-9]+$ ]] || ((CONTEXT < 4096 || CONTEXT > 202752)); then
+  echo "error: CONTEXT is 4096 to 202752: $CONTEXT" >&2
+  exit 2
+fi
 # Cache-conditional routing for the reply's tokens (owner's choice 2026-11-20, "go with λ 0.03"): a
 # resident Expert's router score gets +λ before the top-8, so fewer Experts are read from the NVMe;
 # prompts route exactly. LAMBDA=0 serves the model's exact routing.

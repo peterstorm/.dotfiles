@@ -13,10 +13,10 @@ import type { Result } from "../model-routing/policy.js";
 export const PRIMARY_PROVIDER = "desktop-vllm";
 
 /** The primaries switch-primary.sh can report (it owns which served id each has). */
-export const PRIMARIES = ["glm", "uncensored", "warmind", "deepseek"] as const;
+export const PRIMARIES = ["glm", "uncensored", "warmind", "deepseek", "glm-native"] as const;
 export type Primary = (typeof PRIMARIES)[number];
 
-/** The script's vocabulary (`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|status]`). */
+/** The script's vocabulary (`switch-primary.sh [toggle|glm|uncensored|warmind|deepseek|glm-native|status]`). */
 export const SWITCH_REQUESTS = ["toggle", ...PRIMARIES, "status"] as const;
 export type SwitchRequest = (typeof SWITCH_REQUESTS)[number];
 
@@ -28,6 +28,7 @@ const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
 	uncensored: "GLM-5.3 uncensored on Hyperflare (dealignai's UNCENSORED build in v16's storage)",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",
+	"glm-native": "GLM-5.3 full (753B) uncensored on ds4-native: slow (~4-7 tok/s), 64K ctx, no toggle counterpart",
 	status: "what serves now, and what toggle would do",
 };
 
