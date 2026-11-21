@@ -148,12 +148,12 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        # 2026-11-16: back on the Claude CLI backend per user request. Claude runs
-        # use ~/.claude OAuth and the CLI's default model (~/.claude/settings.json);
-        # the RECLAW_PI_* pins below only reach Pi runs, so they stay for the
-        # skills that still declare `backend: pi` (discount-watch,
-        # espresso-price-watch).
-        AGENT_BACKEND = "claude";
+        # 2026-11-21: back on the Pi backend at the owner's current model
+        # (desktop-vllm / WARMIND-1017; see the RECLAW_PI_* pins below), per
+        # user request. Claude CLI stays wired as the per-skill fallback
+        # (`fallback: { backend: claude, model: sonnet }`), so Claude's OAuth
+        # still authenticates those runs.
+        AGENT_BACKEND = "pi";
         # Each agent run gets its own transient scope in reclaw-agents.slice
         # (defined above). A timed-out run is torn down as a whole cgroup, which
         # also reaches setsid/nohup descendants that a PID signal never could.
@@ -180,7 +180,11 @@
         # :low thinking suffix: the model's defaultThinkingLevel is max — a
         # plain pin means long Telegram replies; pi's parseModelPattern honours
         # the :low suffix (thinkingLevelMap maps low → low) for responsive replies.
-        RECLAW_PI_PROVIDER = "github-copilot";
+        # 2026-11-21: desktop-vllm — the provider pi itself runs interactively
+        # on this host (192.168.0.80:8000, Project Maya's ds4-native WARMIND
+        # server). The pin matters: without it pi falls back to
+        # ~/.pi/agent/settings.json, whose default can drift silently.
+        RECLAW_PI_PROVIDER = "desktop-vllm";
         # 2026-10-05: back on GLM v14 (desktop container glm53-flash-spark-tp2-v14,
         # served as glm-5.3-flash-spark-tp2-v14) after the Qwen3.8 27B trial
         # container exited and v14 took both GPUs. Vision-capable, so Telegram
@@ -203,10 +207,17 @@
         # sessions share; it went max on 2026-11-03 20:02 UTC and every scheduled
         # run inherited it (5-30x slower, per-skill timeouts tripped).
         # 2026-11-14: claude-opus-5.5 at :high (same github-copilot provider), per user request.
-        RECLAW_PI_MODEL = "claude-opus-5.5:high";
-        # 2026-11-14: scheduled skills run on sonnet at :medium (provider shared with chat) —
-        # only chat (RECLAW_PI_MODEL) gets opus. Use :low for fast, simple skills if timeouts bite.
-        RECLAW_PI_SCHEDULED_MODEL = "claude-sonnet-5.5:medium";
+        # 2026-11-21: warmind-1017-native, the model pi runs interactively on
+        # this host (jcartu's abliterated DeepSeek-V4.1-Flash-1017 on ds4-native,
+        # 256K ctx). It is text-only, unlike the previous GLM/Maya pins, so
+        # Telegram photos lose image understanding until a vision model is
+        # served again. Its thinkingLevelMap supports only low/high/max; chat
+        # stays at :high rather than inheriting defaultThinkingLevel max.
+        RECLAW_PI_MODEL = "warmind-1017-native:high";
+        # 2026-11-21: scheduled skills run at :low (provider shared with chat).
+        # :medium does not exist for this model, and max tripped per-skill
+        # timeouts before (see 2026-11-05 above).
+        RECLAW_PI_SCHEDULED_MODEL = "warmind-1017-native:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
