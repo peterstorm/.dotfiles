@@ -7,10 +7,11 @@
  * compactions wrote 10.6K-18.7K tokens each for summaries of 1.7K-6K, 30-50 minutes apiece.
  *
  * Pi's own "off" does not reach Maya: for these models Pi sends `thinking: {type: "disabled"}`
- * (the deepseek thinking format), which Maya's OpenAI path does not read, so the run config's
- * default effort applies. Maya does read `reasoning_effort: "none"`: the GLM template then
+ * (the deepseek thinking format), which Maya's OpenAI path does not read, so Maya's own default
+ * effort (`high`) applies. Maya does read `reasoning_effort: "none"`: the GLM template then
  * writes its `Low` header and a closed think block, and the summary is written directly.
  */
+import type { Result } from "../model-routing/policy.js";
 
 /**
  * GLM-5.3 full as ds4-native serves it: `glm-5.3-native` (stock), `glm-5.3-uncensored-native`,
@@ -42,10 +43,13 @@ export function withoutDeletedHeaders(
 }
 
 /**
- * A chat-completion payload asking Maya for no thinking, or undefined to leave anything else as
- * Pi built it. Never mutates its input.
+ * A summary request's chat-completion payload, asking Maya for no thinking. Anything else is an
+ * error, never passed on unchanged: that request would think at the session's effort, the cost
+ * this extension exists to remove. Never mutates its input.
  */
-export function withoutThinking(payload: unknown): Record<string, unknown> | undefined {
-	if (!isRecord(payload) || !Array.isArray(payload.messages)) return undefined;
-	return { ...payload, reasoning_effort: NO_THINKING };
+export function withoutThinking(payload: unknown): Result<Record<string, unknown>, string> {
+	if (!isRecord(payload) || !Array.isArray(payload.messages)) {
+		return { ok: false, error: "the summary request is not a chat completion (no messages list), so it cannot ask Maya for no thinking" };
+	}
+	return { ok: true, value: { ...payload, reasoning_effort: NO_THINKING } };
 }

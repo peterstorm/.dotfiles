@@ -1,19 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { catalogIds } from "./catalog.testkit";
 import { NO_THINKING, servesGlmNative, withoutDeletedHeaders, withoutThinking } from "./compaction";
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** Every model id Pi's catalog lists under desktop-vllm: the ids the server can report. */
-const catalogIds = (): readonly string[] => {
-	const raw: unknown = JSON.parse(readFileSync(join(import.meta.dir, "../../models.json"), "utf8"));
-	const provider = isRecord(raw) && isRecord(raw.providers) ? raw.providers["desktop-vllm"] : undefined;
-	const models: unknown = isRecord(provider) ? provider.models : undefined;
-	if (!Array.isArray(models)) throw new Error("pi/models.json lists no desktop-vllm models");
-	return models.flatMap((model: unknown) => (isRecord(model) && typeof model.id === "string" ? [model.id] : []));
-};
 
 const GLM_NATIVE_IDS = ["glm-5.3-native", "glm-5.3-uncensored-native", "glm-5.3-cyber-native"];
 
@@ -63,8 +50,8 @@ describe("withoutThinking", () => {
 					...(thinking === undefined ? {} : { thinking }),
 				});
 				const out = withoutThinking(payload);
-				expect(out).toEqual({ ...payload, reasoning_effort: NO_THINKING });
-				expect(out).not.toBe(payload);
+				expect(out).toEqual({ ok: true, value: { ...payload, reasoning_effort: NO_THINKING } });
+				if (out.ok) expect(out.value).not.toBe(payload);
 			}
 		}
 	});
@@ -86,7 +73,9 @@ describe("withoutThinking", () => {
 		[{}],
 		[{ messages: "not a list" }],
 		[{ prompt: "legacy completion" }],
-	])("leaves %p as Pi built it", (payload) => {
-		expect(withoutThinking(payload)).toBeUndefined();
+	])("refuses %p rather than letting it think", (payload) => {
+		const out = withoutThinking(payload);
+		expect(out.ok).toBe(false);
+		if (!out.ok) expect(out.error).toContain("not a chat completion");
 	});
 });

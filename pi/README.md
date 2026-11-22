@@ -290,9 +290,12 @@ request with `reasoning_effort: "none"`. Expected: the summary tokens only, so 5
 30-50 for summaries of the sizes above. Hyperflare's GLM-5.3-Flash and the DeepSeek primaries keep
 Pi's own compaction.
 
-Any failure (no key, the server refusing, a summary that tries to call a tool) hands the compaction back
-to Pi unchanged, with a warning; an aborted compaction is cancelled rather than retried.
-`PI_GLM_COMPACTION=off` disables it, and a session picks it up on `/reload`.
+Any failure hands the compaction back to Pi unchanged, with a warning that Pi is about to compact the
+slow way. That covers no key, the server refusing, a summary that tries to call a tool, a served-model
+probe that cannot say what `desktop-vllm` serves, and a summary request that is not a chat completion
+(it is failed, never sent with thinking). The warning goes to the UI, or to stderr in print and RPC
+sessions. An aborted compaction is cancelled rather than retried, even when Pi's `compact()` came back
+with an empty summary. `PI_GLM_COMPACTION=off` disables it, and a session picks it up on `/reload`.
 
 Why not continue the cached conversation instead, so the engine reuses its prompt? Two things in the
 current stack make that impossible: the GLM template writes the effort into the prompt's first line
