@@ -1,7 +1,7 @@
 # GLM-5.3 full (753B) on ds4-native — runbook (2026-11-21)
 
 GLM-5.3 full (753B MoE, 78 layers, 256 routed Experts a layer, top-8) on ds4-native's GLM engine
-(`ds4n-glm53-serve`, repo `peterstorm/ds4-native`, branch `glm53/engine-core`) behind Project
+(`ds4n-glm53-serve`, repo `peterstorm/ds4-native`, branch `glm53/counter-eviction`) behind Project
 Maya's OpenAI-compatible server on `:8000`. Three primaries share the container `glm53-native`, the
 Expert store (kitaniai's `GLM-5.3-UNCENSORED-MXFP4` Experts, which no surgery touches) and the
 engine; each serves its own Backbone (the dense weights):
@@ -15,16 +15,17 @@ engine; each serves its own Backbone (the dense weights):
 Launcher: `scripts/inference/glm53/glm53-native/run-glm53-native.sh` (`WEIGHTS` defaults to
 `uncensored`). Contract: `tests/glm53-native-contract.sh`. Switch: `switch-primary.sh glm-native`,
 `switch-primary.sh uncensored-native`, `switch-primary.sh cyber-native`.
-Engine report with receipts: ds4-native `docs/bench/glm53-serve/2026-11-21-serve.md`; Backbone C's
-build: ds4-native `docs/bench/glm53-backbone-c/`.
+Engine report with receipts: ds4-native `docs/bench/glm53-serve/2026-11-21-serve.md`; the speed
+settings (eviction, Slot shape, VRAM reserve, λ): `docs/bench/glm53-counter/2026-11-22-frontier-report.md`;
+Backbone C's build: ds4-native `docs/bench/glm53-backbone-c/`.
 
 ## Why this profile exists
 
 The four other primaries are GLM-5.3 *Flash* builds and DeepSeek-V4.1-Flash. This one is the full
 GLM-5.3: about 20x the routed Expert weight of Flash, too large for two 96 GB GPUs. ds4-native
 already streamed DeepSeek's Experts from the NVMe; the GLM engine applies the same idea to a model
-whose Experts (375 GiB in MXFP4) are four times VRAM. It is slow (6-7 tok/s) and is served for
-quality, not speed.
+whose Experts (375 GiB in MXFP4) are four times VRAM. It is slow (6-7 tok/s served on 2026-11-21;
+~8 tok/s measured on the engine with the 2026-11-22 settings) and is served for quality, not speed.
 
 ## Layout on desktop
 
@@ -44,9 +45,11 @@ quality, not speed.
 
 ## Pins
 
-- Engine `DS4N_COMMIT=686698997171a6264b9004f6708497c4209930a0` (sessions `min_lost` 16). `--install`
-  builds it from that commit of `~/dev/ds4-native` in `ds4-native-dev:2`, runs the core tests
-  (17M Sessions assertions among them), installs the binary by commit.
+- Engine `DS4N_COMMIT=fec4e0c1d1bc415fc6580afa08173611817bdacb` (branch `glm53/counter-eviction`:
+  Cohorts, the GLM Ledger, `--eviction`, `--slot-profile`, `--runtime-reserve-gib`; before it
+  `6866989971`, sessions `min_lost` 16). `--install` fetches `~/dev/ds4-native`'s origin, builds that
+  commit in `ds4-native-dev:2`, runs the core tests (17M Sessions assertions among them), installs
+  the binary by commit.
 - Tokenizer: `--install` runs ds4-native `tools/glm53-serve/write_tokenizer.py` on the checkpoint's
   `tokenizer.json` with `--check`: Maya's tokenizer and HF `tokenizers` agree id for id over 36
   texts (28,223 ids, 0 differ), including chats rendered by both templates.
@@ -75,8 +78,11 @@ rounded to nearest-even E4M3). kitaniai converted the UNCENSORED one to MXFP4 (Q
 
 | setting | default | why |
 |---|---|---|
-| `CONTEXT` | 65536 | Each 1K positions cost ~0.2 GB VRAM a GPU, about a quarter of a VRAM Slot per Sparse layer; 64K leaves 83 Slots per layer (16K: 97). |
-| `LAMBDA` | 0.03 | **λ 0.03** cache-conditional routing for written tokens (owner's choice 2026-11-20): a resident Expert's score gets +λ before the top-8, so fewer Experts are read from the NVMe. Prompts route exactly. `LAMBDA=0` is the model's exact routing. |
+| `CONTEXT` | 65536 | The Ledger plans every GPU allocation from the card's size, then fills the rest with Expert Slots: 92 a layer at 64K with the reserve below (4K: 101; 128K: 83; 202,752, the maximum: 74; `ds4n-glm53-ledger --capacity N --reserve-gib 2.25`). |
+| `LAMBDA` | 0.03 | **λ 0.03** cache-conditional routing for written tokens (owner's choice 2026-11-20): a resident Expert's score gets +λ before the top-8, so fewer Experts are read from the NVMe. Prompts route exactly. `LAMBDA=0` is the model's exact routing (with `SLOT_SHAPE=equal`). λ 0.035 and 0.04 were measured on 2026-11-22: +5-7% decode, but most positions' KL worse; rejected. |
+| `EVICTION` | counter:55 | Each resident Expert keeps a use count, halved every 55 tokens; a miss evicts the lowest. ~10% faster than `lru` at λ 0.03; timing only at λ 0. |
+| `RUNTIME_RESERVE_GIB` | 2.25 | VRAM a GPU keeps for what the Ledger does not plan (CUDA context, workspaces). 2.25 gives 92 Slots at 64K (the engine's 3.75: 90); a 39,200-token prompt at 92 peaked 1.7 GiB under the card. |
+| `SLOT_SHAPE` | fitted | Spreads the Ledger's Slots over the Sparse layers by `glm53/glm53-native/slot-profile-l0.03-counter55.txt`: 4% fewer VRAM misses than `equal`, no measured KL cost. Fitted for λ 0.03 under counter:55 only; another λ or policy is refused unless `SLOT_SHAPE=equal`. |
 | `RAM_RESERVE_GIB` | 10 | The RAM tier pins what is available at load less this and the checkpoints; the reserve keeps the OS and ZFS ARC (capped at 4 GiB) alive. Pinned RAM wedged this host once. |
 | `CHECKPOINT_GB` | 4 | Host RAM for conversations set aside (~95.2 KB a token: ~42K tokens). |
 | `REASONING_EFFORT` | high | GLM's template default is max; at a few tok/s max is hours. A request's own effort wins. |
@@ -119,10 +125,10 @@ until `/v1/models` lists the served id, then promotes the container to `restart=
 comfyui stopped; exactly two idle RTX PRO 6000s (≤ 1 GiB used each); no other running `glm53-*`
 container (the RAM tier must not share host memory with a CPU replay or another load); port 8000 free.
 
-The idle-GPU gate also keeps the Expert Slots reproducible. GLM's engine has no Ledger yet: it sizes
-its Slots from the VRAM still free after everything else is loaded (83 per Sparse layer at 64K, the
-same on every launch so far). Anything else on a GPU at launch would silently cost Slots, and so
-speed (ds4-native plan, Phase 4).
+The idle-GPU gate also keeps the Expert Slots reproducible. The engine's Ledger plans the Slots from
+the card's size (CUDA's total rounded down to whole 256 MiB) and the runtime reserve, never from free
+memory, and refuses to open if an allocation drifts from its plan or if less than 1 GiB is left after
+opening. Something else on a GPU at launch makes the open fail instead of silently costing Slots.
 
 ## Measured (2026-11-21, 64K, λ 0.03, through Maya)
 
@@ -143,6 +149,21 @@ Receipts: ds4-native `docs/bench/glm53-serve/` (`2026-11-21-maya-e2e-engine.err.
 
 Short prompts cost seconds whatever their length: a prompt sweep reads every Expert any of its
 tokens routes to, so 27 tokens read ~as many Experts as a few hundred.
+
+## Measured on the engine (2026-11-22, the current settings; not yet through Maya)
+
+`ds4n-glm53-decode` at 64K, λ 0.03, RAM tier 38, 256 tokens on each of the four corpus prompts (the
+frontier report, receipts beside it):
+
+| configuration | decode, pooled | teacher-forced misses | KL vs exact, top-1 |
+|---|---|---|---|
+| LRU, 90 equal Slots | 6.91 tok/s | 15.0% (84 Slots) | 0.068, 89.4% (84 Slots) |
+| **counter:55, 92 fitted Slots (served)** | **7.95 tok/s** | **12.1%** | **0.071, 89.6%** |
+
+KL differences under ~±0.004 between residency settings are re-rolled Routes, not quality (the
+report's paired test). Gates: `--check` with these settings is bit-identical to the oracle on all 78
+layers and the head; the 92-Slot open passes the Ledger's drift check. The first launch should record
+the served decode speed here.
 
 ## Pi
 
@@ -179,3 +200,7 @@ The ds4-native metrics bridge (`:8010`) is engine-agnostic and labels series wit
   serves it as `glm-5.3-native`; the uncensored Backbone became `uncensored-native` (served id
   unchanged) and the cyber one `cyber-native`. The cyber surgery's FP8 delta (the download B was
   built from) was deleted for disk, owner-approved; B itself is kept.
+- 2026-11-22: speed settings (owner: "more speed at an acceptable quality loss"). Engine `fec4e0c1`:
+  Cohorts and the Ledger (83 → 90 Slots at 64K), then `EVICTION=counter:55`, `SLOT_SHAPE=fitted`
+  and `RUNTIME_RESERVE_GIB=2.25` (92 Slots): 7.95 tok/s on the engine against LRU-90's 6.91. λ stays
+  0.03; 0.035 and 0.04 measured and rejected.

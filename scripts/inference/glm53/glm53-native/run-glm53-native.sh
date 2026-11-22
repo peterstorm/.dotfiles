@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GLM-5.3 full (753B: kitaniai's GLM-5.3-UNCENSORED-MXFP4 Experts, which no CRACK surgery touches, and
 # one of three Backbones: zai's stock, dealignai's UNCENSORED, dealignai's CYBERSECURITY) on ds4-native
-# (peterstorm/ds4-native, branch glm53/engine-core): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
+# (peterstorm/ds4-native, branch glm53/counter-eviction): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
 # pinned RAM tier on the two RTX PRO 6000s, the dense Backbone resident, behind Project Maya's
 # OpenAI-compatible server. Served on :8000 like every other profile, with the shared inference key.
 #
@@ -20,6 +20,9 @@
 # of its Expert reads missing VRAM and RAM); a long prompt's new tokens ~200 tok/s (4,519 in 22.9 s),
 # a short one a few seconds whatever its length (a first 30-token chat: 14 s). Decode is bound by
 # Expert reads from the NVMe (the 753B's routed Experts are 375 GiB; VRAM holds a quarter of them).
+# That was 83 Slots a layer under LRU. Since 2026-11-22 (Cohorts, the Ledger, and the residency
+# settings below) the engine opens 92 in a fitted shape under counter:55: ds4n-glm53-decode measured
+# 7.95 tok/s at 64K and λ 0.03 (the frontier report); not yet re-measured through this server.
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS), checked against its provenance record at every launch;
@@ -29,7 +32,8 @@
 #     (ds4-native tools/glm53-serve/write_tokenizer.py), checked id for id against HF `tokenizers`;
 #   - the Maya server by commit (MAYA_COMMIT + maya-serve-keepalive.patch): the same patched copy the
 #     DS4.1 launcher installs (keyed by commit and patch, so either launcher's install serves both);
-#   - the engine's settings: context, λ, the RAM tier's reserve, checkpoints;
+#   - the engine's settings: context, λ, the eviction policy, the VRAM and RAM tiers' reserves,
+#     checkpoints;
 #   - the workstation gates: two idle RTX PRO 6000s, comfyui stopped, port 8000 free, no other glm53-*
 #     container running (the RAM tier pins most of the host's memory: a CPU replay beside it once
 #     wedged this host).
@@ -48,7 +52,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-686698997171a6264b9004f6708497c4209930a0}"
+DS4N_COMMIT="${DS4N_COMMIT:-fec4e0c1d1bc415fc6580afa08173611817bdacb}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MAYA_DIR="/models/ds41/project-maya"
@@ -102,6 +106,39 @@ fi
 # prompts route exactly. LAMBDA=0 serves the model's exact routing.
 LAMBDA="${LAMBDA:-0.03}"
 [[ "$LAMBDA" =~ ^0(\.[0-9]+)?$ ]] || { echo "error: LAMBDA is a number in [0, 1): $LAMBDA" >&2; exit 2; }
+# The three residency settings below are the owner's brief of 2026-11-22 ("more speed at an acceptable
+# quality loss"; ds4-native docs/bench/glm53-counter/2026-11-22-frontier-report.md). Together at λ
+# 0.03: 7.95 tok/s pooled over four prompts against LRU's 6.91 at 90 equal Slots, KL 0.071 and top-1
+# 89.6% against the exact model, the same quality class as LRU's (a residency change re-rolls some
+# Routes; the paired test finds no shift). λ 0.035 and 0.04 were measured too and rejected.
+#
+# Which resident Expert a miss evicts: counter:55 keeps a use count per Expert, halved every 55
+# tokens, and evicts the lowest; lru the least recently used. counter:55 decodes ~10% faster at λ
+# 0.03 (90 Slots, four prompts) and changes only timing at λ 0.
+EVICTION="${EVICTION:-counter:55}"
+[[ "$EVICTION" =~ ^(lru|counter:[1-9][0-9]*)$ ]] || { echo "error: EVICTION is lru or counter:N: $EVICTION" >&2; exit 2; }
+# VRAM each GPU keeps back for what the Ledger does not plan (CUDA's context, library workspaces): the
+# rest of the card is Expert Slots. 2.25 GiB opens 92 Slots a layer at 64K (3.75 GiB, the engine's
+# default, 90); serving a 39,200-token prompt at 92 peaked at 95,504 MiB, 1.7 GiB under the card.
+RUNTIME_RESERVE_GIB="${RUNTIME_RESERVE_GIB:-2.25}"
+[[ "$RUNTIME_RESERVE_GIB" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "error: RUNTIME_RESERVE_GIB is a number of GiB: $RUNTIME_RESERVE_GIB" >&2; exit 2; }
+# How the Ledger's Slots are spread over the 75 Sparse layers. fitted: in proportion above the 64-Slot
+# floor to slot-profile-l0.03-counter55.txt (ds4-native --slot-profile; fitted offline on λ 0.03 Routes
+# under counter:55, the late layers get more), so one profile serves any CONTEXT. Against equal Slots
+# at 92 it misses VRAM 4% less at no measured KL (paired Δ +0.0003). It is that routing's shape only
+# (at λ 0 the early layers want the most), so another λ or policy must set SLOT_SHAPE=equal.
+SLOT_SHAPE="${SLOT_SHAPE:-fitted}"
+case "$SLOT_SHAPE" in
+  equal) SLOT_PROFILE="" ;;
+  fitted)
+    [ "$LAMBDA" = 0.03 ] && [ "$EVICTION" = counter:55 ] || {
+      echo "error: SLOT_SHAPE=fitted was fitted for LAMBDA=0.03 and EVICTION=counter:55 (got $LAMBDA, $EVICTION): set SLOT_SHAPE=equal" >&2
+      exit 2
+    }
+    SLOT_PROFILE="$(<"$SCRIPT_DIR/slot-profile-l0.03-counter55.txt")"
+    ;;
+  *) echo "error: SLOT_SHAPE is fitted or equal: $SLOT_SHAPE" >&2; exit 2 ;;
+esac
 # Host memory: the RAM tier takes what is available at load less RAM_RESERVE_GIB and CHECKPOINT_GB.
 # With the server loaded (~3 GB) the reserve stays free for the OS, ZFS's ARC (capped at 4 GiB) and
 # the conversations set aside (~95 KB a token: 4 GB hold ~42K tokens of them).
@@ -198,7 +235,7 @@ fi
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
 
 if [ "$MODE" = --preflight ]; then
-  echo "GLM-5.3 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, context $CONTEXT, λ $LAMBDA)"
+  echo "GLM-5.3 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, context $CONTEXT, λ $LAMBDA, eviction $EVICTION, VRAM reserve $RUNTIME_RESERVE_GIB GiB, $SLOT_SHAPE Slots)"
   exit 0
 fi
 
@@ -222,12 +259,15 @@ fi
 
 # --- the server's config (rewritten each launch from the values above) ------------------------
 jq -n --arg exe "$ENGINE" --arg config "$CHECKPOINT/config.json" --arg backbone "$BACKBONE" --arg store "$STORE" \
-  --arg context "$CONTEXT" --arg lambda "$LAMBDA" --arg reserve "$RAM_RESERVE_GIB" --arg ckpt "$CHECKPOINT_GB" \
+  --arg context "$CONTEXT" --arg lambda "$LAMBDA" --arg eviction "$EVICTION" --arg vram "$RUNTIME_RESERVE_GIB" \
+  --arg profile "$SLOT_PROFILE" --arg reserve "$RAM_RESERVE_GIB" --arg ckpt "$CHECKPOINT_GB" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/glm53-native.log" \
   --arg effort "$REASONING_EFFORT" --argjson budget "$THINKING_BUDGET" --argjson port "$PORT" '{
     exe: $exe,
     args: ["--config", $config, "--backbone", $backbone, "--store", $store, "--max-context", $context,
-           "--lambda", $lambda, "--ram-per-layer", "auto", "--ram-reserve-gib", $reserve, "--checkpoint-gb", $ckpt],
+           "--lambda", $lambda, "--eviction", $eviction, "--runtime-reserve-gib", $vram,
+           "--ram-per-layer", "auto", "--ram-reserve-gib", $reserve, "--checkpoint-gb", $ckpt]
+          + (if $profile == "" then [] else ["--slot-profile", $profile] end),
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     # As the generation_config.json of the checkpoint.
     sampling: {temperature: 1.0, top_p: 0.95, repetition_penalty: 1.1},
@@ -261,6 +301,9 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.maya-serve="${MAYA_SERVE##*/}" \
   --label ai.peterstorm.inference.context="$CONTEXT" \
   --label ai.peterstorm.inference.lambda="$LAMBDA" \
+  --label ai.peterstorm.inference.eviction="$EVICTION" \
+  --label ai.peterstorm.inference.runtime-reserve-gib="$RUNTIME_RESERVE_GIB" \
+  --label ai.peterstorm.inference.slot-shape="$SLOT_SHAPE" \
   --label ai.peterstorm.inference.extra-env="$NATIVE_EXTRA_ENV" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \

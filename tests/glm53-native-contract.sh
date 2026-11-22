@@ -57,7 +57,7 @@ contains "$RUN" "CHECKPOINT_SOURCE=\"$CHECKPOINT_SOURCE\""
 # One arm of the launcher's case: the lines from "  LABEL)" through its ";;".
 weights_arm() { sed -n "/^  $1)\$/,/^    ;;\$/p" "$RUN"; }
 contains "$RUN" 'WEIGHTS="${WEIGHTS:-uncensored}"'
-[ "$(sed -n 's/^  \([a-z]*\))$/\1/p' "$RUN" | paste -sd' ')" = "uncensored cyber stock" ] ||
+[ "$(sed -n '/^case "$WEIGHTS" in$/,/^esac$/s/^  \([a-z]*\))$/\1/p' "$RUN" | paste -sd' ')" = "uncensored cyber stock" ] ||
   fail "the weights table must be exactly uncensored, cyber and stock"
 [ "$(weights_arm stock)" = "  stock)
     BACKBONE=\"\$STORE_DIR/backbone-stock\"
@@ -81,21 +81,51 @@ contains "$RUN" '[ "$(jq -r '"'"'.base | split("/") | last'"'"' "$BACKBONE/VARIA
 # Settings: the owner's defaults, and refusals before any I/O (exit 2, no docker, no GPU).
 contains "$RUN" "CONTEXT=\"\${CONTEXT:-$CONTEXT}\""
 contains "$RUN" 'LAMBDA="${LAMBDA:-0.03}"'
+contains "$RUN" 'EVICTION="${EVICTION:-counter:55}"'
+contains "$RUN" 'RUNTIME_RESERVE_GIB="${RUNTIME_RESERVE_GIB:-2.25}"'
+contains "$RUN" 'SLOT_SHAPE="${SLOT_SHAPE:-fitted}"'
+# The fitted profile: one Slot count per Sparse layer (75), each in [64, 256] (moe_plan's floor, a
+# layer's Experts), comma-separated as ds4n-glm53-serve --slot-profile reads it.
+PROFILE_FILE="$(dirname "$RUN")/slot-profile-l0.03-counter55.txt"
+[ -f "$PROFILE_FILE" ] || fail "missing ${PROFILE_FILE#"$ROOT"/}"
+tr ',' '\n' <"$PROFILE_FILE" | awk '!/^[0-9]+$/ || $1 < 64 || $1 > 256 {bad++} END {exit !(NR == 75 && !bad)}' ||
+  fail "${PROFILE_FILE#"$ROOT"/} must hold 75 comma-separated counts in [64, 256]"
 contains "$RUN" 'REASONING_EFFORT="${REASONING_EFFORT:-high}"'
 contains "$RUN" 'THINKING_BUDGET="${THINKING_BUDGET:-8192}"'
-refused() { # ENV... -- ARGS: the launcher exits 2
+launcher_exit() { # ENV... -- ARGS: the launcher's exit code
   local rc=0 env=()
   while [ "$1" != -- ]; do env+=("$1"); shift; done
   shift
   env "${env[@]}" bash "$RUN" "$@" >/dev/null 2>&1 || rc=$?
-  [ "$rc" -eq 2 ] || fail "run-glm53-native.sh ${env[*]} $* must exit 2 before any I/O (got $rc)"
+  echo "$rc"
+}
+refused() { # ENV... -- ARGS: the launcher exits 2
+  local rc
+  rc="$(launcher_exit "$@")"
+  [ "$rc" -eq 2 ] || fail "run-glm53-native.sh $* must exit 2 before any I/O (got $rc)"
 }
 refused WEIGHTS=bogus -- --preflight
 refused CONTEXT=1024 -- --preflight
 refused CONTEXT=64k -- --preflight
-refused LAMBDA=1.5 -- --preflight
-refused LAMBDA=-0.1 -- --preflight
+# SLOT_SHAPE=equal where the fitted shape's own guard would refuse the same value and mask the check.
+refused LAMBDA=1.5 SLOT_SHAPE=equal -- --preflight
+refused LAMBDA=-0.1 SLOT_SHAPE=equal -- --preflight
 refused CHECKPOINT_GB=4.5 -- --preflight
+refused EVICTION=lfu SLOT_SHAPE=equal -- --preflight
+refused EVICTION=counter:0 SLOT_SHAPE=equal -- --preflight
+refused EVICTION=counter: SLOT_SHAPE=equal -- --preflight
+refused RUNTIME_RESERVE_GIB=-1 -- --preflight
+refused RUNTIME_RESERVE_GIB=2GiB -- --preflight
+refused SLOT_SHAPE=bogus -- --preflight
+refused LAMBDA=0 -- --preflight                  # the fitted shape is λ 0.03's only
+refused EVICTION=lru -- --preflight              # ... and counter:55's
+refused LAMBDA=0.035 SLOT_SHAPE=fitted -- --preflight
+# A setting that is refused must not be all a setting can be: these pass the settings (exit not 2).
+accepted() { # ENV... -- ARGS: the launcher gets past its settings
+  [ "$(launcher_exit "$@")" -ne 2 ] || fail "run-glm53-native.sh $* must pass its settings (got 2)"
+}
+accepted LAMBDA=0 SLOT_SHAPE=equal -- --preflight
+accepted EVICTION=lru SLOT_SHAPE=equal RUNTIME_RESERVE_GIB=3.75 -- --preflight
 refused REASONING_EFFORT=xhigh -- --preflight
 refused WEIGHTS=uncensored -- --bogus
 
@@ -107,7 +137,13 @@ contains "$RUN" 'docker run -d --name "$NAME" --restart no'
 contains "$RUN" 'docker update --restart=unless-stopped "$NAME"'
 contains "$RUN" '--label ai.peterstorm.inference.served-model="$SERVED_MODEL"'
 contains "$RUN" '--ulimit memlock=-1 --security-opt seccomp=unconfined'
+contains "$RUN" '"--lambda", $lambda, "--eviction", $eviction, "--runtime-reserve-gib", $vram,'
 contains "$RUN" '"--ram-per-layer", "auto", "--ram-reserve-gib", $reserve, "--checkpoint-gb", $ckpt'
+contains "$RUN" '--label ai.peterstorm.inference.eviction="$EVICTION"'
+contains "$RUN" '--label ai.peterstorm.inference.runtime-reserve-gib="$RUNTIME_RESERVE_GIB"'
+contains "$RUN" '--label ai.peterstorm.inference.slot-shape="$SLOT_SHAPE"'
+contains "$RUN" '+ (if $profile == "" then [] else ["--slot-profile", $profile] end),'
+contains "$RUN" 'SLOT_PROFILE="$(<"$SCRIPT_DIR/slot-profile-l0.03-counter55.txt")"'
 contains "$RUN" 'source "$SCRIPT_DIR/../../shared/inference-api-key.sh"'
 
 # The switcher, the profile catalog (Hyperflare's switcher quiesces and restores it) and Pi's catalog.
