@@ -24,7 +24,8 @@
 # settings below) the engine opens 92 in a fitted shape under counter:55: ds4n-glm53-decode measured
 # 7.95 tok/s at 64K and λ 0.03 (the frontier report). Since 2026-11-23 the engine's reads land on CUDA
 # events (+1.8%, the same tokens) and reply tokens defer their low-ranked Misses one layer (DEFER, below):
-# ds4n-glm53-decode measured 8.61 tok/s at equal reads against 7.92 without.
+# ds4n-glm53-decode measured 8.61 tok/s at equal reads against 7.92 without; served through this
+# server, 8.50 (four 300-token chats, 2026-11-23).
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS), checked against its provenance record at every launch;

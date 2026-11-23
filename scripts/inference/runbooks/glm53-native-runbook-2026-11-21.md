@@ -167,7 +167,24 @@ report's paired test). Gates: `--check` with these settings is bit-identical to 
 layers and the head; the 92-Slot open passes the Ledger's drift check. The first launch should record
 the served decode speed here.
 
-## Measured on the engine (2026-11-23, deferral; not yet through Maya)
+## Measured through Maya (2026-11-23, the current settings)
+
+`uncensored-native` at `70f446d3` (engine `1ceb9d49`): ready in 77 s, 92 Slots per Sparse layer
+(profile), RAM tier 37, `deferral protect 4`; GPU 0 1.95 GB free after open. Four chats in turn, 300
+tokens each, no reasoning (ds4-native `docs/bench/glm53-defer/2026-11-23-served-speed.sh`):
+
+| reply | decode | store reads a token |
+|---|---|---|
+| B-tree balancing | 8.15 tok/s | 37.8 |
+| ISO 8601 duration parser | 8.39 tok/s | 37.4 |
+| the 1929 crash | 8.80 tok/s | 33.8 |
+| TLS 1.3 key exchange | 8.68 tok/s | 34.0 |
+| **pooled** | **8.50 tok/s** | 35.7 |
+
+Against 6.2–7.1 served on 2026-11-21 (83 Slots, LRU) and the engine bench's 8.61 at 35.9 reads (below).
+A 30-token prompt takes 6–7 s after the first (15.5 s cold), as before.
+
+## Measured on the engine (2026-11-23, deferral)
 
 The same shape, the four corpus prompts, compared at equal store reads (each setting writes its own
 text under λ, so its own Misses: one common 2.34 ms a read, read at 35.9 reads a token; ds4-native
@@ -225,3 +242,4 @@ The ds4-native metrics bridge (`:8010`) is engine-agnostic and labels series wit
 - 2026-11-23: deferral (owner: "go ahead with --defer 4"). Engine branch `glm53/deferred-misses`:
   Expert reads land on CUDA events (+1.8%, the same tokens), and `DEFER=4` defers a written token's
   low-ranked Misses one Sparse layer: 8.61 tok/s on the engine at equal reads against 7.92.
+  Relaunched as `uncensored-native`: **8.50 tok/s served** through Maya.
