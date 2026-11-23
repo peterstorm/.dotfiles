@@ -2,7 +2,7 @@
 // with a live HTTP stub as desktop-vllm's /v1/models. Covers what switch.test.ts
 // (the pure flow over fakes) cannot: the idle wait, and every port's error arm.
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -22,6 +22,8 @@ beforeEach(() => {
 	dir = mkdtempSync(join(tmpdir(), "primary-switch-"));
 	writeFileSync(join(dir, "switch-primary.sh"), "#!/usr/bin/env bash\n");
 	process.env.PI_SWITCH_PRIMARY_SCRIPT = join(dir, "switch-primary.sh");
+	// Never the operator's real file: these tests must not reach the live ARTEX.
+	process.env.PI_ARTEX_CREDENTIALS = join(dir, "artex.json");
 	servedIds.splice(0, servedIds.length, GLM);
 	server = Bun.serve({
 		port: 0,
@@ -34,7 +36,10 @@ afterEach(() => {
 	server?.stop(true);
 	rmSync(dir, { recursive: true, force: true });
 	delete process.env.PI_SWITCH_PRIMARY_SCRIPT;
+	delete process.env.PI_ARTEX_CREDENTIALS;
 });
+
+const NO_ARTEX = () => ({ message: `ARTEX not synced: no ARTEX credentials at ${join(dir, "artex.json")}.`, type: "info" });
 
 /** Register the extension against a stub API and return its handler plus a call log. */
 function harness(options: Readonly<{
@@ -75,7 +80,9 @@ function harness(options: Readonly<{
 		modelRegistry: {
 			getAll: () => [{ provider: "desktop-vllm", baseUrl: `http://127.0.0.1:${server?.port}/v1` }],
 			find: (provider: string, id: string) =>
-				provider === "desktop-vllm" && ++lookups <= (options.catalogHits ?? Infinity) ? { provider, id } : undefined,
+				provider === "desktop-vllm" && ++lookups <= (options.catalogHits ?? Infinity)
+					? { provider, id, baseUrl: "http://192.168.0.80:8000/v1", contextWindow: 400_000 }
+					: undefined,
 			getApiKeyForProvider: async () => "key",
 		},
 	};
@@ -90,20 +97,30 @@ describe("/switch handler", () => {
 		const { run, log, notices } = harness({ idle: false });
 		await run("glm");
 		expect(log).toEqual(["waitForIdle", "exec:glm", `setModel:${GLM}`]);
-		expect(notices.at(-1)).toEqual({
-			message: `Primary: glm (served after 0 s). This session now uses desktop-vllm/${GLM}.`,
-			type: "info",
-		});
+		expect(notices.slice(-2)).toEqual([
+			{ message: `Primary: glm (served after 0 s). This session now uses desktop-vllm/${GLM}.`, type: "info" },
+			NO_ARTEX(),
+		]);
+	});
+
+	it("warns about an unusable ARTEX credentials file, and still reports the switch", async () => {
+		const path = join(dir, "artex.json");
+		writeFileSync(path, JSON.stringify({ url: "https://artex.invalid", username: "u", password: "p" }));
+		chmodSync(path, 0o644);
+		const { run, notices } = harness();
+		await run("glm");
+		expect(notices.at(-2)?.type).toBe("info");
+		expect(notices.at(-1)).toEqual({ message: `ARTEX sync failed: ${path} is readable by others; chmod 600 it`, type: "warning" });
 	});
 
 	it("reads status without waiting for a busy session or touching the model", async () => {
 		const { run, log, notices } = harness({
 			idle: false,
-			exec: async () => ({ stdout: "active:     glm\n", stderr: "", code: 0, killed: false, truncated: false }),
+			exec: async () => ({ stdout: `active:     glm (${GLM})\n`, stderr: "", code: 0, killed: false, truncated: false }),
 		});
 		await run("status");
 		expect(log).toEqual(["exec:status"]);
-		expect(notices).toEqual([{ message: "active:     glm", type: "info" }]);
+		expect(notices).toEqual([{ message: `active:     glm (${GLM})\n${NO_ARTEX().message}`, type: "info" }]);
 	});
 
 	it("refuses an unknown argument without running anything", async () => {

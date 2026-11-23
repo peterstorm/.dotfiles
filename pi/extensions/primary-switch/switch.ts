@@ -4,10 +4,12 @@
  * scripts/inference/switch-primary.sh owns the decision, the idle gate, the
  * cutover and the rollback; it also owns which served id each primary has and
  * reports it. This module only parses the request and that report, then polls
- * the provider until it serves the reported id, and selects that model. Every
- * effect goes through SwitchPorts, so the whole flow runs against plain fakes.
+ * the provider until it serves the reported id, selects that model, and brings
+ * ARTEX onto it (artex.ts). Every effect goes through SwitchPorts, so the whole
+ * flow runs against plain fakes.
  */
 import type { Result } from "../model-routing/policy.js";
+import type { ArtexMode, ArtexSync } from "./artex.js";
 
 /** The provider pi/models.json serves the primaries under; the verifier checks routing agrees. */
 export const PRIMARY_PROVIDER = "desktop-vllm";
@@ -39,7 +41,7 @@ const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
 	"glm-native": "GLM-5.3 full (753B) stock on ds4-native: slow (~6-7 tok/s), 198K ctx",
 	"uncensored-native": "GLM-5.3 full (753B) uncensored (dealignai's UNCENSORED) on ds4-native: slow, 198K ctx",
 	"cyber-native": "GLM-5.3 full (753B) cyber (dealignai's CYBERSECURITY) on ds4-native: slow, 198K ctx, no toggle counterpart",
-	status: "what serves now, and what toggle would do",
+	status: "what serves now, what toggle would do, and whether ARTEX matches",
 };
 
 export const SWITCH_USAGE = `usage: /switch [${SWITCH_REQUESTS.join("|")}]  (default: toggle)`;
@@ -78,6 +80,14 @@ export function parseSwitchReport(stdout: string): Result<SwitchReport, string> 
 	return { ok: true, value: Object.freeze({ primary, servedId: match[2], unchanged: stdout.includes(NOOP_LINE) }) };
 }
 
+/** What `status` reports as serving: `active:     <primary> (<served-id>)`, when a primary serves. */
+const STATUS_ACTIVE_LINE = /^active:\s+(\S+) \((\S+)\)$/m;
+
+export function parseStatusActive(stdout: string): Readonly<{ primary: Primary; servedId: string }> | undefined {
+	const match = STATUS_ACTIVE_LINE.exec(stdout);
+	return match && isPrimary(match[1]) ? Object.freeze({ primary: match[1], servedId: match[2] }) : undefined;
+}
+
 /** The last meaningful lines of a failed run, without ssh's own banner warnings. */
 export function failureTail(stdout: string, stderr: string, lines: number = 6): string {
 	const pick = (text: string) =>
@@ -108,6 +118,8 @@ export type SwitchPorts = Readonly<{
 	probeServed: () => Promise<Result<string, string>>;
 	/** Make the session use the catalog model with this served id; returns its `provider/id`. */
 	selectModel: (servedId: string) => Promise<Result<string, string>>;
+	/** Bring ARTEX onto this primary (apply) or say how far it is (check). Never throws. */
+	artex: (primary: Primary, servedId: string, mode: ArtexMode) => Promise<ArtexSync>;
 	sleep: (ms: number) => Promise<void>;
 	now: () => number;
 	/** Footer progress; undefined clears it. */
@@ -120,9 +132,13 @@ export const DEFAULT_TIMING: SwitchTiming = Object.freeze({ pollIntervalMs: 3_00
 
 export type SwitchFailureStage = "script" | "report" | "serve" | "model";
 
+/**
+ * A switch that served and selected its model has succeeded, whatever ARTEX did:
+ * ARTEX's sync is reported beside it, never as the switch's failure.
+ */
 export type SwitchOutcome =
-	| Readonly<{ kind: "status"; text: string }>
-	| Readonly<{ kind: "switched"; primary: Primary; model: string; unchanged: boolean; waitedMs: number }>
+	| Readonly<{ kind: "status"; text: string; artex: ArtexSync }>
+	| Readonly<{ kind: "switched"; primary: Primary; model: string; unchanged: boolean; waitedMs: number; artex: ArtexSync }>
 	| Readonly<{ kind: "failed"; stage: SwitchFailureStage; message: string }>;
 
 /** Poll until the provider serves `targetId` or the deadline passes. */
@@ -156,7 +172,13 @@ export async function runPrimarySwitch(
 			const why = run.killed ? "switch-primary.sh was stopped (timeout)" : `switch-primary.sh exited ${run.code}`;
 			return { kind: "failed", stage: "script", message: `${why}:\n${failureTail(run.stdout, run.stderr)}` };
 		}
-		if (request === "status") return { kind: "status", text: run.stdout.trim() };
+		if (request === "status") {
+			const active = parseStatusActive(run.stdout);
+			const artex: ArtexSync = active
+				? await ports.artex(active.primary, active.servedId, "check")
+				: { kind: "skipped", reason: "no primary serves" };
+			return { kind: "status", text: run.stdout.trim(), artex };
+		}
 
 		const report = parseSwitchReport(run.stdout);
 		if (!report.ok) return { kind: "failed", stage: "report", message: `${report.error}:\n${failureTail(run.stdout, "")}` };
@@ -167,12 +189,15 @@ export async function runPrimarySwitch(
 		const model = await ports.selectModel(report.value.servedId);
 		if (!model.ok) return { kind: "failed", stage: "model", message: model.error };
 
+		ports.progress(`syncing ARTEX to ${report.value.servedId}`);
+		const artex = await ports.artex(report.value.primary, report.value.servedId, "apply");
 		return {
 			kind: "switched",
 			primary: report.value.primary,
 			model: model.value,
 			unchanged: report.value.unchanged,
 			waitedMs: served.value,
+			artex,
 		};
 	} finally {
 		ports.progress(undefined);

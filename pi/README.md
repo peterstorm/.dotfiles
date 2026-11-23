@@ -220,18 +220,55 @@ From inside Pi, `/switch` does the same and moves the session along
 
 ```text
 /switch                 toggle, like the script with no argument
-/switch glm             or uncensored / warmind / deepseek: exactly that one
-/switch status          what serves now, and what toggle would do
+/switch glm             or uncensored / warmind / deepseek / glm-native / uncensored-native / cyber-native
+/switch status          what serves now, what toggle would do, and whether ARTEX matches
 ```
 
 It waits for the current turn to finish (the cutover is idle-gated), runs
 `switch-primary.sh` (whose gates, acceptance and rollback apply unchanged), reads the
 served id from the script's `PRIMARY:` report, polls `desktop-vllm`'s `/v1/models` every
 3 s until that id is served (up to 5 min), then selects `desktop-vllm/<id>` for this
-session. The id comes from the script, so the extension keeps no copy of the primaries
-table. Progress shows in the footer; a failed stage (`script`, `report`, `serve`,
-`model`) is reported with its reason and leaves the session model unchanged. With the
-primary already serving it is a no-op on desktop that still moves the session onto it.
+session. The served id comes from the script, so the extension keeps no copy of it.
+Progress shows in the footer; a failed stage (`script`, `report`, `serve`, `model`) is
+reported with its reason and leaves the session model unchanged. With the primary
+already serving it is a no-op on desktop that still moves the session onto it.
+
+**ARTEX follows the primary** (`artex.ts`, `artex-http.ts`). Once the session is on the
+new model, `/switch` points ARTEX (artex.peterstorm.io) at it and sets how many agents
+ARTEX runs at once, all through ARTEX's HTTP API, hot-applied, no restart:
+
+- **The model.** `/switch` owns one ARTEX LLM profile, `desktop-primary`, and makes it the
+  active one with the served id, `desktop-vllm`'s base URL and the catalog's context
+  window (in ARTEX's K of 1,000 tokens, rounded down: 202K for GLM-5.3 full). It creates
+  the profile on first use with `desktop-vllm`'s key; later updates keep the stored key.
+  ARTEX's other profiles are never edited, only deactivated by the activation.
+- **The agent shape.** Each engine decodes a fixed number of requests at once (its Lanes,
+  read from the launchers by the tests): Hyperflare 8, ds4-native 4, GLM-5.3 full 1. An
+  ARTEX task calls the model from one planner plus `workers` workers, so `/switch` sets
+  the widest shape whose callers fit, with task concurrency on:
+
+  | primaries | Lanes | workers a task | tasks at once |
+  |---|---|---|---|
+  | `glm`, `uncensored` (Hyperflare) | 8 | 3 | 2 |
+  | `warmind`, `deepseek` (ds4-native) | 4 | 3 | 1 |
+  | `glm-native`, `uncensored-native`, `cyber-native` (GLM-5.3 full) | 1 | 1 | 1 |
+
+  GLM-5.3 full gets ARTEX's floor (two callers on one Lane, queued by the engine): it
+  serves one request at a time and sets aside only ~42K tokens of other conversations,
+  so parallel agents would re-read each other's prompts from scratch. ARTEX reads the
+  worker count when a task starts, so running tasks keep theirs.
+
+The sync is idempotent and keyed on the profile's name: an ARTEX already on target gets
+no writes, and a sync cut off mid-way converges on the next run instead of creating a
+second profile. It re-reads ARTEX afterwards and reports anything that did not stick. A
+failed sync is a warning beside a successful switch, never the switch's failure; repeat
+`/switch <current primary>` to retry it. `/switch status` checks without writing.
+
+Credentials are a local file, never the repo: `~/.config/artex/credentials.json` (or
+`$PI_ARTEX_CREDENTIALS`), `{ "url": "https://artex.peterstorm.io", "username": "…",
+"password": "…" }`, mode 600 (`/switch` refuses a file others can read). Without the file
+ARTEX is left alone, so machines that do not drive ARTEX need nothing. A switch made with
+`switch-primary.sh` from a shell does not sync ARTEX; run `/switch <primary>` in Pi after it.
 
 ### glm-guard: GLM thinking that cannot run away (`extensions/glm-guard/`)
 

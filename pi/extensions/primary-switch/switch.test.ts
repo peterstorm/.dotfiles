@@ -2,11 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Result } from "../model-routing/policy";
+import type { ArtexMode, ArtexSync } from "./artex";
 import {
 	failureTail,
 	observe,
 	PRIMARIES,
 	PRIMARY_PROVIDER,
+	parseStatusActive,
 	parseSwitchReport,
 	parseSwitchRequest,
 	runPrimarySwitch,
@@ -51,14 +53,26 @@ function catalogModelIds(): readonly string[] {
 const reportOf = (primary: string, served: string, extra = ""): string =>
 	`switching: warmind -> ${primary}\nPRIMARY: ${primary} (${served} on :8000)\npi:      pi --model desktop-vllm/${served}\n${extra}`;
 
+/** What the fake ARTEX port answers unless a test says otherwise. */
+const ARTEX_SYNCED: ArtexSync = { kind: "skipped", reason: "fake ARTEX" };
+
 /** Plain fakes: a scripted run, a queue of probe answers, a fake clock that sleep advances. */
 function fakePorts(options: Readonly<{
 	run?: ScriptRun;
 	probes?: ReadonlyArray<Result<string, string>>;
 	select?: Result<string, string>;
+	artex?: ArtexSync;
 }> = {}) {
 	let clock = 0;
-	const calls = { scripts: [] as SwitchRequest[], probes: 0, selected: [] as string[], progress: [] as Array<string | undefined> };
+	const calls = {
+		scripts: [] as SwitchRequest[],
+		probes: 0,
+		selected: [] as string[],
+		artex: [] as Array<readonly [Primary, string, ArtexMode]>,
+		/** Every port call in order, to check what happens before what. */
+		order: [] as string[],
+		progress: [] as Array<string | undefined>,
+	};
 	const probes = [...(options.probes ?? [{ ok: true, value: GLM }])];
 	const ports: SwitchPorts = {
 		runScript: async (request) => {
@@ -71,7 +85,13 @@ function fakePorts(options: Readonly<{
 		},
 		selectModel: async (servedId) => {
 			calls.selected.push(servedId);
+			calls.order.push("select");
 			return options.select ?? { ok: true, value: `desktop-vllm/${servedId}` };
+		},
+		artex: async (primary, servedId, mode) => {
+			calls.artex.push([primary, servedId, mode]);
+			calls.order.push(`artex:${mode}`);
+			return options.artex ?? ARTEX_SYNCED;
 		},
 		sleep: async (ms) => {
 			clock += ms;
@@ -162,6 +182,25 @@ describe("parsing the switch-primary.sh report", () => {
 		for (const primary of PRIMARIES) expect(offered).toContain(SERVED[primary]);
 	});
 
+	it("reads the active primary from what the script's own status prints", () => {
+		// Golden across the seam: run_request status with the container reads stubbed.
+		const status = (active: string): string => {
+			const run = Bun.spawnSync([
+				"bash",
+				"-c",
+				'ACTIVE="$2"; source "$1"; read_active() { echo "$ACTIVE"; }; read_last() { echo glm; }; run_request status',
+				"bash",
+				SCRIPT,
+				active,
+			]);
+			if (run.exitCode !== 0) throw new Error(run.stderr.toString());
+			return run.stdout.toString();
+		};
+		for (const primary of PRIMARIES) expect(parseStatusActive(status(primary))).toEqual({ primary, servedId: SERVED[primary] });
+		expect(parseStatusActive(status("none"))).toBeUndefined();
+		expect(parseStatusActive(status("multiple"))).toBeUndefined();
+	});
+
 	it("refuses a report naming a primary the script does not have", () => {
 		expect(parseSwitchReport("PRIMARY: x (y on :8000)\n")).toEqual({
 			ok: false,
@@ -199,10 +238,13 @@ describe("running a switch", () => {
 			],
 		});
 		const outcome = await runPrimarySwitch("glm", ports, timing);
-		expect(outcome).toEqual({ kind: "switched", primary: "glm", model: `desktop-vllm/${GLM}`, unchanged: false, waitedMs: 6_000 });
+		expect(outcome).toEqual({ kind: "switched", primary: "glm", model: `desktop-vllm/${GLM}`, unchanged: false, waitedMs: 6_000, artex: ARTEX_SYNCED });
 		expect(calls.scripts).toEqual(["glm"]);
 		expect(calls.probes).toBe(3);
 		expect(calls.selected).toEqual([GLM]);
+		// ARTEX moves only once the model serves and this session is on it.
+		expect(calls.order).toEqual(["select", "artex:apply"]);
+		expect(calls.artex).toEqual([["glm", GLM, "apply"]]);
 		expect(calls.progress.at(-1)).toBeUndefined();
 		expect(calls.progress).toContain(`waiting for ${GLM}: still serving ${WARMIND}`);
 	});
@@ -217,7 +259,7 @@ describe("running a switch", () => {
 			],
 		});
 		const outcome = await runPrimarySwitch("uncensored", ports, timing);
-		expect(outcome).toEqual({ kind: "switched", primary: "uncensored", model: `desktop-vllm/${UNCENSORED}`, unchanged: false, waitedMs: 3_000 });
+		expect(outcome).toEqual({ kind: "switched", primary: "uncensored", model: `desktop-vllm/${UNCENSORED}`, unchanged: false, waitedMs: 3_000, artex: ARTEX_SYNCED });
 		expect(calls.scripts).toEqual(["uncensored"]);
 		expect(calls.progress).toContain(`waiting for ${UNCENSORED}: still serving ${GLM}`);
 		expect(calls.selected).toEqual([UNCENSORED]);
@@ -229,18 +271,39 @@ describe("running a switch", () => {
 			probes: [{ ok: true, value: WARMIND }],
 		});
 		const outcome = await runPrimarySwitch("warmind", ports, timing);
-		expect(outcome).toEqual({ kind: "switched", primary: "warmind", model: `desktop-vllm/${WARMIND}`, unchanged: true, waitedMs: 0 });
+		expect(outcome).toEqual({ kind: "switched", primary: "warmind", model: `desktop-vllm/${WARMIND}`, unchanged: true, waitedMs: 0, artex: ARTEX_SYNCED });
 		expect(calls.selected).toEqual([WARMIND]);
+		// A no-op switch still re-syncs ARTEX: `/switch <current>` is how to repair it.
+		expect(calls.artex).toEqual([["warmind", WARMIND, "apply"]]);
 	});
 
-	it("reports status without probing or touching the session model", async () => {
+	it("succeeds when ARTEX fails, and carries ARTEX's failure beside it", async () => {
+		const failed: ArtexSync = { kind: "failed", error: { kind: "request", call: "read profiles", detail: "ECONNREFUSED" } };
+		const { ports } = fakePorts({ artex: failed });
+		const outcome = await runPrimarySwitch("glm", ports, timing);
+		expect(outcome).toEqual({ kind: "switched", primary: "glm", model: `desktop-vllm/${GLM}`, unchanged: false, waitedMs: 0, artex: failed });
+	});
+
+	it("reports status, checking ARTEX against the active primary without touching the session model", async () => {
 		const { ports, calls } = fakePorts({
 			run: { code: 0, stdout: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:uncensored\n", stderr: "", killed: false },
 		});
 		const outcome = await runPrimarySwitch("status", ports, timing);
-		expect(outcome).toEqual({ kind: "status", text: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:uncensored" });
+		expect(outcome).toEqual({
+			kind: "status",
+			text: "active:     glm (glm-5.3)\nlast:       warmind\ntoggle ->   start:uncensored",
+			artex: ARTEX_SYNCED,
+		});
 		expect(calls.probes).toBe(0);
 		expect(calls.selected).toEqual([]);
+		expect(calls.artex).toEqual([["glm", "glm-5.3", "check"]]);
+	});
+
+	it("reports status with nothing serving without asking ARTEX", async () => {
+		const { ports, calls } = fakePorts({ run: { code: 0, stdout: "active:     none\nlast:       glm\n", stderr: "", killed: false } });
+		const outcome = await runPrimarySwitch("status", ports, timing);
+		expect(outcome).toEqual({ kind: "status", text: "active:     none\nlast:       glm", artex: { kind: "skipped", reason: "no primary serves" } });
+		expect(calls.artex).toEqual([]);
 	});
 
 	it("stops at a failed script with its reason, leaving the session model alone", async () => {
@@ -287,6 +350,19 @@ describe("running a switch", () => {
 		const { ports } = fakePorts({ select: { ok: false, error: `desktop-vllm/${GLM} is served but missing from pi/models.json` } });
 		const outcome = await runPrimarySwitch("glm", ports, timing);
 		expect(outcome).toEqual({ kind: "failed", stage: "model", message: `desktop-vllm/${GLM} is served but missing from pi/models.json` });
+	});
+
+	it("leaves ARTEX alone whenever the switch itself fails", async () => {
+		const failing = [
+			fakePorts({ run: { code: 1, stdout: "", stderr: "error: busy\n", killed: false } }),
+			fakePorts({ run: { code: 0, stdout: "something else\n", stderr: "", killed: false } }),
+			fakePorts({ probes: [{ ok: true, value: WARMIND }] }),
+			fakePorts({ select: { ok: false, error: "no credentials for desktop-vllm" } }),
+		];
+		for (const { ports, calls } of failing) {
+			expect((await runPrimarySwitch("glm", ports, timing)).kind).toBe("failed");
+			expect(calls.artex).toEqual([]);
+		}
 	});
 
 	it("clears progress even when a port throws", async () => {

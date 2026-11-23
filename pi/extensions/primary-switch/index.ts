@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { errorMessage, probeServedModels, servedModelSourceFromRegistry } from "../model-routing/served.js";
+import { type ArtexSync, describeArtexSync } from "./artex.js";
+import { defaultCredentialsPath, syncArtexToPrimary } from "./artex-http.js";
 import {
 	PRIMARY_PROVIDER as PROVIDER,
 	parseSwitchRequest,
@@ -50,6 +52,8 @@ function ports(pi: ExtensionAPI, ctx: ExtensionCommandContext): SwitchPorts {
 			}
 			return { ok: true, value: `${PROVIDER}/${servedId}` };
 		},
+		artex: (primary, servedId, mode) =>
+			syncArtexToPrimary(primary, servedId, mode, { registry: ctx.modelRegistry, credentialsPath: defaultCredentialsPath() }),
 		sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 		now: () => Date.now(),
 		progress: (text) => ctx.ui.setStatus(STATUS_KEY, text),
@@ -57,14 +61,18 @@ function ports(pi: ExtensionAPI, ctx: ExtensionCommandContext): SwitchPorts {
 	return Object.freeze(wired);
 }
 
+/** A failed ARTEX sync warns: the switch itself succeeded. */
+const artexLevel = (sync: ArtexSync): "info" | "warning" => (sync.kind === "failed" ? "warning" : "info");
+
 function render(outcome: SwitchOutcome, ctx: ExtensionCommandContext): void {
 	switch (outcome.kind) {
 		case "status":
-			ctx.ui.notify(outcome.text, "info");
+			ctx.ui.notify(`${outcome.text}\n${describeArtexSync(outcome.artex)}`, artexLevel(outcome.artex));
 			return;
 		case "switched": {
 			const how = outcome.unchanged ? "already the primary" : `served after ${Math.round(outcome.waitedMs / 1000)} s`;
 			ctx.ui.notify(`Primary: ${outcome.primary} (${how}). This session now uses ${outcome.model}.`, "info");
+			ctx.ui.notify(describeArtexSync(outcome.artex), artexLevel(outcome.artex));
 			return;
 		}
 		case "failed":
