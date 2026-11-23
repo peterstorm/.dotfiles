@@ -45,7 +45,7 @@ whose Experts (375 GiB in MXFP4) are four times VRAM. It is slow (6-7 tok/s serv
 
 ## Pins
 
-- Engine `DS4N_COMMIT=d398fae043df6e50e5023bb3d463b533d558591d` (branch `glm53/latent-split`: the
+- Engine `DS4N_COMMIT=d398fae043df6e50e5023bb3d463b533d558591d` (branch `glm53/latent-split`, merged into ds4-native main as `090ccf0` on 2026-11-23: the
   Latent split, each GPU holding half the KV cache's Latent rows, bit-identical (ds4-native
   `docs/bench/glm53-split/2026-11-23-split-report.md`); on `glm53/deferred-misses`' Loads on CUDA
   events and `--defer`, on `glm53/counter-eviction`'s Cohorts, GLM Ledger, `--eviction`,

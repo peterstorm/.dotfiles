@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GLM-5.3 full (753B: kitaniai's GLM-5.3-UNCENSORED-MXFP4 Experts, which no CRACK surgery touches, and
 # one of three Backbones: zai's stock, dealignai's UNCENSORED, dealignai's CYBERSECURITY) on ds4-native
-# (peterstorm/ds4-native, branch glm53/latent-split): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
+# (peterstorm/ds4-native, main since 090ccf0; the GLM engine under src/*/glm53): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
 # pinned RAM tier on the two RTX PRO 6000s, the dense Backbone resident, behind Project Maya's
 # OpenAI-compatible server. Served on :8000 like every other profile, with the shared inference key.
 #
