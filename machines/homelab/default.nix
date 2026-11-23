@@ -1,5 +1,7 @@
 { pkgs, lib, config, ...}:
 {
+  imports = [ ./network.nix ];
+
 
   fileSystems."/" =
     { device = "/dev/disk/by-uuid/d49bbbf1-ce0c-43a4-acc6-d34f4cb6ff29";

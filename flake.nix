@@ -181,7 +181,9 @@
               { username = "homelab"; roles = [ "core-apps" ]; }
             ];
             machine = [ "homelab" ];
-            NICs = [ "wlp3s0" ];
+            # Empty on purpose: NetworkManager owns both NICs (machines/homelab/network.nix);
+            # a dhcpcd lease on wlp3s0 used to duplicate .29 with a second default route.
+            NICs = [ ];
             initrdAvailableMods = [ "xhci_pci" "nvme" "ahci" "sd_mod" "usbhid" ];
             initrdMods = [];
             kernelMods = [ "kvm-amd" ];
