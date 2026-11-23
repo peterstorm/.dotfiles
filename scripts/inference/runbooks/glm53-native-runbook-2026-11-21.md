@@ -45,10 +45,12 @@ whose Experts (375 GiB in MXFP4) are four times VRAM. It is slow (6-7 tok/s serv
 
 ## Pins
 
-- Engine `DS4N_COMMIT=1ceb9d49bf5df09ce5fccfbf39b2c56204f7bab4` (branch `glm53/deferred-misses`:
-  Loads on CUDA events and `--defer`, on `glm53/counter-eviction`'s Cohorts, GLM Ledger, `--eviction`,
-  `--slot-profile`, `--runtime-reserve-gib`; before it `fec4e0c1d1`, and before that `6866989971`,
-  sessions `min_lost` 16). `--install` fetches `~/dev/ds4-native`'s origin, builds that
+- Engine `DS4N_COMMIT=d398fae043df6e50e5023bb3d463b533d558591d` (branch `glm53/latent-split`: the
+  Latent split, each GPU holding half the KV cache's Latent rows, bit-identical (ds4-native
+  `docs/bench/glm53-split/2026-11-23-split-report.md`); on `glm53/deferred-misses`' Loads on CUDA
+  events and `--defer`, on `glm53/counter-eviction`'s Cohorts, GLM Ledger, `--eviction`,
+  `--slot-profile`, `--runtime-reserve-gib`; before it `1ceb9d49bf`, `fec4e0c1d1`, and before that
+  `6866989971`, sessions `min_lost` 16). `--install` fetches `~/dev/ds4-native`'s origin, builds that
   commit in `ds4-native-dev:2`, runs the core tests (17M Sessions assertions among them), installs
   the binary by commit.
 - Tokenizer: `--install` runs ds4-native `tools/glm53-serve/write_tokenizer.py` on the checkpoint's
@@ -79,10 +81,10 @@ rounded to nearest-even E4M3). kitaniai converted the UNCENSORED one to MXFP4 (Q
 
 | setting | default | why |
 |---|---|---|
-| `CONTEXT` | 202752 | The Ledger plans every GPU allocation from the card's size, then fills the rest with Expert Slots: 74 a layer at 202,752 (the launcher's maximum) with the reserve below (4K: 101; 64K: 92; 128K: 83; `ds4n-glm53-ledger --capacity N --reserve-gib 2.25`). Raised from 65536 on 2026-11-23 (owner: "i needed that upped"); served at 202,752 it decodes **6.84 tok/s** against 8.50 at 64K (−19.5%; the replay said −22%), and a 165,942-token prompt read at 448.7 tok/s and peaked at 95,166 MiB on GPU 0 (ds4-native `docs/bench/glm53-context/2026-11-23-context-cost.md`). `CONTEXT=65536` serves the faster 92-Slot shape. Conversations longer than ~42K tokens do not fit `CHECKPOINT_GB`: one another request displaces is read again when it returns. |
+| `CONTEXT` | 202752 | The Ledger plans every GPU allocation from the card's size, then fills the rest with Expert Slots: since the Latent split, 86 a layer at 202,752 (the launcher's maximum; the owner: enough for now) with the reserve below (64K: 95; `ds4n-glm53-ledger --capacity N --reserve-gib 2.25`; the engine opens 409,600 at 72). Raised from 65536 on 2026-11-23 (owner: "i needed that upped"); before the split, served at 202,752 (74 Slots) it decoded **6.84 tok/s** against 8.50 at 64K (−19.5%), and a 165,942-token prompt read at 448.7 tok/s and peaked at 95,166 MiB on GPU 0 (ds4-native `docs/bench/glm53-context/2026-11-23-context-cost.md`). Conversations longer than ~42K tokens do not fit `CHECKPOINT_GB`: one another request displaces is read again when it returns. |
 | `LAMBDA` | 0.03 | **λ 0.03** cache-conditional routing for written tokens (owner's choice 2026-11-20): a resident Expert's score gets +λ before the top-8, so fewer Experts are read from the NVMe. Prompts route exactly. `LAMBDA=0` is the model's exact routing (with `SLOT_SHAPE=equal`). λ 0.035 and 0.04 were measured on 2026-11-22: +5-7% decode, but most positions' KL worse; rejected. |
 | `EVICTION` | counter:55 | Each resident Expert keeps a use count, halved every 55 tokens; a miss evicts the lowest. ~10% faster than `lru` at λ 0.03; timing only at λ 0. |
-| `RUNTIME_RESERVE_GIB` | 2.25 | VRAM a GPU keeps for what the Ledger does not plan (CUDA context, workspaces). 2.25 gives 92 Slots at 64K (the engine's 3.75: 90); a 39,200-token prompt at 92 peaked 1.7 GiB under the card. |
+| `RUNTIME_RESERVE_GIB` | 2.25 | VRAM a GPU keeps for what the Ledger does not plan (CUDA context, workspaces). 2.25 gave 92 Slots at 64K before the Latent split (the engine's 3.75: 90); a 39,200-token prompt at 92 peaked 1.7 GiB under the card. |
 | `SLOT_SHAPE` | fitted | Spreads the Ledger's Slots over the Sparse layers by `glm53/glm53-native/slot-profile-l0.03-counter55.txt`: 4% fewer VRAM misses than `equal`, no measured KL cost. Fitted for λ 0.03 under counter:55 only; another λ or policy is refused unless `SLOT_SHAPE=equal`. |
 | `DEFER` | 4 | Expert Deferral for written tokens (owner, 2026-11-23): an Expert that missed VRAM, outside the token's 4 heaviest of 8 Route slots, waits one Sparse layer, its read overlapping that layer's compute. +8.7% decode at equal reads; KL free (0.0699 vs 0.0710, paired), top-1 88.75% vs 89.57% (−23 of 2,800, p 0.15: at the 89% bar's edge, the owner's call). `2` and `0` are faster but cost real quality (KL +11% / +81%). `off` serves without it. Prompts never defer. |
 | `RAM_RESERVE_GIB` | 10 | The RAM tier pins what is available at load less this and the checkpoints; the reserve keeps the OS and ZFS ARC (capped at 4 GiB) alive. Pinned RAM wedged this host once. |

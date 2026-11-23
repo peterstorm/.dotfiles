@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GLM-5.3 full (753B: kitaniai's GLM-5.3-UNCENSORED-MXFP4 Experts, which no CRACK surgery touches, and
 # one of three Backbones: zai's stock, dealignai's UNCENSORED, dealignai's CYBERSECURITY) on ds4-native
-# (peterstorm/ds4-native, branch glm53/deferred-misses): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
+# (peterstorm/ds4-native, branch glm53/latent-split): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
 # pinned RAM tier on the two RTX PRO 6000s, the dense Backbone resident, behind Project Maya's
 # OpenAI-compatible server. Served on :8000 like every other profile, with the shared inference key.
 #
@@ -26,7 +26,8 @@
 # events (+1.8%, the same tokens) and reply tokens defer their low-ranked Misses one layer (DEFER, below):
 # ds4n-glm53-decode measured 8.61 tok/s at equal reads against 7.92 without; served through this
 # server, 8.50 (four 300-token chats, 2026-11-23). At this launcher's 202,752 context (74 Slots), the
-# same chats: 6.84 (CONTEXT, below).
+# same chats: 6.84 (CONTEXT, below). Since the Latent split (2026-11-23, each GPU holds half the KV
+# cache's Latent rows, bit-identical) 202,752 opens 86 Slots (CONTEXT, below).
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS), checked against its provenance record at every launch;
@@ -56,7 +57,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-1ceb9d49bf5df09ce5fccfbf39b2c56204f7bab4}"
+DS4N_COMMIT="${DS4N_COMMIT:-d398fae043df6e50e5023bb3d463b533d558591d}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MAYA_DIR="/models/ds41/project-maya"
@@ -99,13 +100,15 @@ case "$WEIGHTS" in
 esac
 # Positions every layer's KV cache holds: the context Maya reports (its dashboard reloads the engine
 # with another). Since Cohorts (prompts swept 16K at a time, so the sweep's rows no longer scale with
-# CONTEXT) each position takes ~95 KB of VRAM a GPU, mostly the Latent row held on both GPUs: 1K
-# positions cost ~0.13 Slots per Sparse layer. At the 2.25 GiB reserve the Ledger opens 92 Slots a layer
-# at 65,536, 83 at 131,072 and 74 at 202,752. The owner asked for more context (2026-11-23) and took
-# 202,752: served, it decodes 6.84 tok/s against 8.50 at 65,536 (−19.5%; the replay said −22%), and a
-# 165,942-token prompt peaked at 95,166 MiB (ds4-native docs/bench/glm53-context/2026-11-23-context-cost.md). The cap is this launcher's (GLM-5.3 allows 1M);
-# past it the Slots fall to the 64 floor near 270K. Splitting the Latent rows across the GPUs would put
-# 202,752 at ~86 Slots and 400K at ~74 (engine work).
+# CONTEXT) and the Latent split (each GPU holds the Latent rows of half the positions; ds4-native
+# docs/bench/glm53-split/2026-11-23-split-report.md) a position takes 51,488 B of VRAM a GPU (95,264
+# before the split): 1K positions cost ~0.07 Slots per Sparse layer. At the 2.25 GiB reserve the
+# Ledger opens 95 Slots a layer at 65,536 and 86 at 202,752 (74 before the split). The owner asked for
+# more context (2026-11-23) and took 202,752: before the split it served 6.84 tok/s against 8.50 at
+# 65,536 (−19.5%), and a 165,942-token prompt peaked at 95,166 MiB (ds4-native
+# docs/bench/glm53-context/2026-11-23-context-cost.md); the split's engine runs measured +2% to +19%
+# by conversation over that. The cap is this launcher's (GLM-5.3 allows 1M; the owner: 202,752 is
+# enough for now); the engine opens 409,600 at 72 Slots.
 CONTEXT="${CONTEXT:-202752}"
 if ! [[ "$CONTEXT" =~ ^[0-9]+$ ]] || ((CONTEXT < 4096 || CONTEXT > 202752)); then
   echo "error: CONTEXT is 4096 to 202752: $CONTEXT" >&2
