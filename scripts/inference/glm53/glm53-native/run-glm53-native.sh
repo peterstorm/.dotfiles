@@ -25,7 +25,8 @@
 # 7.95 tok/s at 64K and λ 0.03 (the frontier report). Since 2026-11-23 the engine's reads land on CUDA
 # events (+1.8%, the same tokens) and reply tokens defer their low-ranked Misses one layer (DEFER, below):
 # ds4n-glm53-decode measured 8.61 tok/s at equal reads against 7.92 without; served through this
-# server, 8.50 (four 300-token chats, 2026-11-23).
+# server, 8.50 (four 300-token chats, 2026-11-23). At this launcher's 202,752 context (74 Slots), the
+# same chats: 6.84 (CONTEXT, below).
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS), checked against its provenance record at every launch;
@@ -97,9 +98,15 @@ case "$WEIGHTS" in
   *) echo "error: WEIGHTS is uncensored, cyber or stock: $WEIGHTS" >&2; exit 2 ;;
 esac
 # Positions every layer's KV cache holds: the context Maya reports (its dashboard reloads the engine
-# with another). Each 1K positions take ~0.2 GB of VRAM a GPU (caches and a prompt sweep's rows),
-# about a quarter of a VRAM Slot per Sparse layer: 64K costs ~14 Slots per layer against 16K.
-CONTEXT="${CONTEXT:-65536}"
+# with another). Since Cohorts (prompts swept 16K at a time, so the sweep's rows no longer scale with
+# CONTEXT) each position takes ~95 KB of VRAM a GPU, mostly the Latent row held on both GPUs: 1K
+# positions cost ~0.13 Slots per Sparse layer. At the 2.25 GiB reserve the Ledger opens 92 Slots a layer
+# at 65,536, 83 at 131,072 and 74 at 202,752. The owner asked for more context (2026-11-23) and took
+# 202,752: served, it decodes 6.84 tok/s against 8.50 at 65,536 (−19.5%; the replay said −22%), and a
+# 165,942-token prompt peaked at 95,166 MiB (ds4-native docs/bench/glm53-context/2026-11-23-context-cost.md). The cap is this launcher's (GLM-5.3 allows 1M);
+# past it the Slots fall to the 64 floor near 270K. Splitting the Latent rows across the GPUs would put
+# 202,752 at ~86 Slots and 400K at ~74 (engine work).
+CONTEXT="${CONTEXT:-202752}"
 if ! [[ "$CONTEXT" =~ ^[0-9]+$ ]] || ((CONTEXT < 4096 || CONTEXT > 202752)); then
   echo "error: CONTEXT is 4096 to 202752: $CONTEXT" >&2
   exit 2
@@ -122,7 +129,8 @@ EVICTION="${EVICTION:-counter:55}"
 [[ "$EVICTION" =~ ^(lru|counter:[1-9][0-9]*)$ ]] || { echo "error: EVICTION is lru or counter:N: $EVICTION" >&2; exit 2; }
 # VRAM each GPU keeps back for what the Ledger does not plan (CUDA's context, library workspaces): the
 # rest of the card is Expert Slots. 2.25 GiB opens 92 Slots a layer at 64K (3.75 GiB, the engine's
-# default, 90); serving a 39,200-token prompt at 92 peaked at 95,504 MiB, 1.7 GiB under the card.
+# default, 90); serving a 39,200-token prompt at 92 peaked at 95,504 MiB, 1.7 GiB under the card, and a
+# 165,942-token prompt at 202,752 (74 Slots) at 95,166 MiB.
 RUNTIME_RESERVE_GIB="${RUNTIME_RESERVE_GIB:-2.25}"
 [[ "$RUNTIME_RESERVE_GIB" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "error: RUNTIME_RESERVE_GIB is a number of GiB: $RUNTIME_RESERVE_GIB" >&2; exit 2; }
 # How the Ledger's Slots are spread over the 75 Sparse layers. fitted: in proportion above the 64-Slot

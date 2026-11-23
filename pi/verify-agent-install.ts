@@ -263,11 +263,11 @@ const expectedContext: Readonly<Record<(typeof primaryModels)[number], number>> 
   // degenerate reasoning, so Pi must compact well before that.
   "glm-5.3-flash-hyperflare-tp2-v16": 400_000,
   "glm-5.3-flash-hyperflare-tp2-uncensored": 400_000,
-  // The launcher's served context (run-glm53-native.sh CONTEXT): 64K is what its RAM tier and
-  // KV Checkpoints fit beside a 753B model's Backbone on two GPUs.
-  "glm-5.3-native": 65_536,
-  "glm-5.3-uncensored-native": 65_536,
-  "glm-5.3-cyber-native": 65_536,
+  // The launcher's served context (run-glm53-native.sh CONTEXT): its cap, 202,752, at 74 Expert
+  // Slots a layer (owner, 2026-11-23; 64K before, at 92).
+  "glm-5.3-native": 202_752,
+  "glm-5.3-uncensored-native": 202_752,
+  "glm-5.3-cyber-native": 202_752,
 };
 for (const id of primaryModels) {
   const model = localModels.find((entry) => entry.id === id);

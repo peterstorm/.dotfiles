@@ -28,7 +28,7 @@ STOCK_SERVED_MODEL="glm-5.3-native"
 CHECKPOINT_SOURCE="kitaniai/GLM-5.3-UNCENSORED-MXFP4@559df987aa258cad0395f9749d27915e235b970a"
 CYBER_SOURCE="dealignai/GLM-5.3-CYBERSECURITY-FP8@5915c1b88f998a9c1e1a0c83688e285a08ae3ca5"
 STOCK_SOURCE="zai-org/GLM-5.3-BF16@abf42e6c0e53bc29a875511301e7b7fcd220315b"
-CONTEXT=65536
+CONTEXT=202752
 # primary  weights  served id: the switcher's three GLM-5.3 full primaries.
 GLM_PRIMARIES="glm-native stock $STOCK_SERVED_MODEL
 uncensored-native uncensored $SERVED_MODEL

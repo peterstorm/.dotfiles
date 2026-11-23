@@ -79,7 +79,7 @@ rounded to nearest-even E4M3). kitaniai converted the UNCENSORED one to MXFP4 (Q
 
 | setting | default | why |
 |---|---|---|
-| `CONTEXT` | 65536 | The Ledger plans every GPU allocation from the card's size, then fills the rest with Expert Slots: 92 a layer at 64K with the reserve below (4K: 101; 128K: 83; 202,752, the maximum: 74; `ds4n-glm53-ledger --capacity N --reserve-gib 2.25`). |
+| `CONTEXT` | 202752 | The Ledger plans every GPU allocation from the card's size, then fills the rest with Expert Slots: 74 a layer at 202,752 (the launcher's maximum) with the reserve below (4K: 101; 64K: 92; 128K: 83; `ds4n-glm53-ledger --capacity N --reserve-gib 2.25`). Raised from 65536 on 2026-11-23 (owner: "i needed that upped"); served at 202,752 it decodes **6.84 tok/s** against 8.50 at 64K (−19.5%; the replay said −22%), and a 165,942-token prompt read at 448.7 tok/s and peaked at 95,166 MiB on GPU 0 (ds4-native `docs/bench/glm53-context/2026-11-23-context-cost.md`). `CONTEXT=65536` serves the faster 92-Slot shape. Conversations longer than ~42K tokens do not fit `CHECKPOINT_GB`: one another request displaces is read again when it returns. |
 | `LAMBDA` | 0.03 | **λ 0.03** cache-conditional routing for written tokens (owner's choice 2026-11-20): a resident Expert's score gets +λ before the top-8, so fewer Experts are read from the NVMe. Prompts route exactly. `LAMBDA=0` is the model's exact routing (with `SLOT_SHAPE=equal`). λ 0.035 and 0.04 were measured on 2026-11-22: +5-7% decode, but most positions' KL worse; rejected. |
 | `EVICTION` | counter:55 | Each resident Expert keeps a use count, halved every 55 tokens; a miss evicts the lowest. ~10% faster than `lru` at λ 0.03; timing only at λ 0. |
 | `RUNTIME_RESERVE_GIB` | 2.25 | VRAM a GPU keeps for what the Ledger does not plan (CUDA context, workspaces). 2.25 gives 92 Slots at 64K (the engine's 3.75: 90); a 39,200-token prompt at 92 peaked 1.7 GiB under the card. |
@@ -202,7 +202,7 @@ to the oracle on all 78 layers and the head (ds4-native `1ceb9d4`).
 
 ## Pi
 
-`pi/models.json` carries the three served ids (64K context, text, reasoning). The GLM guard gives
+`pi/models.json` carries the three served ids (202,752 context, text, reasoning). The GLM guard gives
 `glm-5.3-uncensored-native` the tuned-build profile (its id contains `uncensored`) and the other two
 upstream GLM's; both are inert here: Maya forwards
 only `enable_thinking` and `reasoning_effort` from `chat_template_kwargs` and reads no

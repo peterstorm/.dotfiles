@@ -137,7 +137,7 @@
         },
         {
           "id": "glm-5.3-uncensored-native",
-          "name": "GLM-5.3 full (753B, kitaniai UNCENSORED-MXFP4) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 64K ctx, conversations kept as KV checkpoints, ~4-7 tok/s) behind Project Maya's server",
+          "name": "GLM-5.3 full (753B, kitaniai UNCENSORED-MXFP4) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 198K ctx, conversations kept as KV checkpoints, ~6-7 tok/s) behind Project Maya's server",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
@@ -151,7 +151,7 @@
           "input": [
             "text"
           ],
-          "contextWindow": 65536,
+          "contextWindow": 202752,
           "maxTokens": 65536,
           "cost": {
             "input": 0,
@@ -169,7 +169,7 @@
         },
         {
           "id": "glm-5.3-native",
-          "name": "GLM-5.3 full (753B, zai stock Backbone, kitaniai MXFP4 Experts) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 64K ctx, conversations kept as KV checkpoints, ~4-7 tok/s) behind Project Maya's server",
+          "name": "GLM-5.3 full (753B, zai stock Backbone, kitaniai MXFP4 Experts) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 198K ctx, conversations kept as KV checkpoints, ~6-7 tok/s) behind Project Maya's server",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
@@ -183,7 +183,7 @@
           "input": [
             "text"
           ],
-          "contextWindow": 65536,
+          "contextWindow": 202752,
           "maxTokens": 65536,
           "cost": {
             "input": 0,
@@ -201,7 +201,7 @@
         },
         {
           "id": "glm-5.3-cyber-native",
-          "name": "GLM-5.3 full (753B, dealignai CYBERSECURITY Backbone, kitaniai MXFP4 Experts) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 64K ctx, conversations kept as KV checkpoints, ~4-7 tok/s) behind Project Maya's server",
+          "name": "GLM-5.3 full (753B, dealignai CYBERSECURITY Backbone, kitaniai MXFP4 Experts) on ds4-native's GLM engine (Experts streamed from NVMe + RAM tier, λ 0.03 cache-conditional routing, 198K ctx, conversations kept as KV checkpoints, ~6-7 tok/s) behind Project Maya's server",
           "reasoning": true,
           "defaultThinkingLevel": "max",
           "thinkingLevelMap": {
@@ -215,7 +215,7 @@
           "input": [
             "text"
           ],
-          "contextWindow": 65536,
+          "contextWindow": 202752,
           "maxTokens": 65536,
           "cost": {
             "input": 0,

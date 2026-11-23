@@ -36,9 +36,9 @@ const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
 	uncensored: "GLM-5.3 uncensored on Hyperflare (dealignai's UNCENSORED build in v16's storage)",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",
-	"glm-native": "GLM-5.3 full (753B) stock on ds4-native: slow (~6-7 tok/s), 64K ctx",
-	"uncensored-native": "GLM-5.3 full (753B) uncensored (dealignai's UNCENSORED) on ds4-native: slow, 64K ctx",
-	"cyber-native": "GLM-5.3 full (753B) cyber (dealignai's CYBERSECURITY) on ds4-native: slow, 64K ctx, no toggle counterpart",
+	"glm-native": "GLM-5.3 full (753B) stock on ds4-native: slow (~6-7 tok/s), 198K ctx",
+	"uncensored-native": "GLM-5.3 full (753B) uncensored (dealignai's UNCENSORED) on ds4-native: slow, 198K ctx",
+	"cyber-native": "GLM-5.3 full (753B) cyber (dealignai's CYBERSECURITY) on ds4-native: slow, 198K ctx, no toggle counterpart",
 	status: "what serves now, and what toggle would do",
 };
 
