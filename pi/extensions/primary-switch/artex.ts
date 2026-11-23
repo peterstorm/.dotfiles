@@ -31,9 +31,10 @@ export const ENGINE_OF: Readonly<Record<Primary, Engine>> = Object.freeze({
 });
 
 /**
- * Requests each engine decodes at once, as its launcher configures it (artex.test.ts
- * reads each launcher): Hyperflare's package has 8 slots, ds4-native runs LANES=4 by
- * default, and GLM-5.3 full serves one request at a time.
+ * Requests each engine decodes at once, as its launcher configures it, checked against
+ * the launchers by artex.test.ts: Hyperflare's package has 8 slots and ds4-native runs
+ * LANES=4 (both numbers read from the launcher), while the GLM-5.3 full launcher is
+ * checked only for its one-request-at-a-time statement.
  */
 export const ENGINE_LANES: Readonly<Record<Engine, number>> = Object.freeze({
 	hyperflare: 8,
@@ -119,7 +120,8 @@ export type ArtexError =
 	/** Every write was accepted, yet ARTEX still differs from the target. */
 	| Readonly<{ kind: "unsettled"; drift: readonly string[] }>;
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+/** The one object-shape guard for this module; the adapter, fake and tests import it. */
+export const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
@@ -167,6 +169,8 @@ export function parseSettings(body: unknown): Result<ArtexSettings, string> {
 	const { workers, task_concurrency_enabled: enabled, task_concurrency_limit: limit } = body;
 	if (!isCount(workers) || workers < 1) return err("no positive workers count");
 	if (typeof enabled !== "boolean" || !isCount(limit)) return err("no task_concurrency_enabled/limit");
+	// ARTEX's SetConcurrency rejects a non-positive limit, so a running "limited" state cannot hold 0.
+	if (enabled && limit < 1) return err("task_concurrency_limit must be positive when enabled");
 	const taskLimit: TaskLimit = enabled ? { kind: "limited", tasks: limit } : { kind: "unlimited" };
 	return ok(Object.freeze({ workers, taskLimit }));
 }
@@ -217,10 +221,10 @@ function profileDrift(current: ArtexProfile, want: ProfileFields): readonly stri
 const describeLimit = (limit: TaskLimit): string => (limit.kind === "limited" ? String(limit.tasks) : "unlimited");
 
 function shapeDrift(settings: ArtexSettings, shape: AgentShape): readonly string[] {
-	const limit = describeLimit(settings.taskLimit);
+	const tasksMatch = settings.taskLimit.kind === "limited" && settings.taskLimit.tasks === shape.tasks;
 	return [
 		...(settings.workers === shape.workers ? [] : [`workers ${settings.workers} → ${shape.workers}`]),
-		...(limit === String(shape.tasks) ? [] : [`tasks at once ${limit} → ${shape.tasks}`]),
+		...(tasksMatch ? [] : [`tasks at once ${describeLimit(settings.taskLimit)} → ${shape.tasks}`]),
 	];
 }
 

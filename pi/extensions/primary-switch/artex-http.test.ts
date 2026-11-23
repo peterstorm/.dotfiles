@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { MANAGED_PROFILE, type ProfileId } from "./artex";
 import {
 	type ArtexRegistry,
+	artexHttpPort,
 	loadArtexCredentials,
 	parseArtexCredentials,
 	profileBody,
@@ -196,5 +197,34 @@ describe("syncing over HTTP", () => {
 		const path = credentialsFile({ url: "http://127.0.0.1:1", username: USER, password: PASSWORD });
 		const sync = await syncArtexToPrimary("glm", "glm-5.3-flash-hyperflare-tp2-v16", "apply", { registry: registry(), credentialsPath: path });
 		expect(sync.kind === "failed" && sync.error.kind).toBe("request");
+	});
+
+	it("fails without writing when the provider has no key for a new managed profile", async () => {
+		const sync = await syncArtexToPrimary("uncensored-native", "glm-5.3-uncensored-native", "apply", {
+			registry: { ...registry(), getApiKeyForProvider: async () => undefined },
+			credentialsPath: goodCredentials(),
+		});
+		expect(sync).toEqual({
+			kind: "failed",
+			error: { kind: "request", call: "save profile", detail: "no API key for desktop-vllm to give the new profile" },
+		});
+		expect(fake.writes).toEqual([]);
+	});
+});
+
+describe("the HTTP port's timeout", () => {
+	it("aborts a stalled ARTEX instead of hanging forever", async () => {
+		const stalled = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Promise<Response>(() => {}) });
+		try {
+			const port = artexHttpPort(
+				{ url: `http://127.0.0.1:${stalled.port}`, username: USER, password: PASSWORD },
+				async () => "k",
+				fetch,
+				50,
+			);
+			await expect(port.readProfiles()).rejects.toThrow();
+		} finally {
+			stalled.stop(true);
+		}
 	});
 });

@@ -8,7 +8,7 @@
  * Bodies go in and out as JSON values, so one fake backs both an ArtexPort (through
  * the adapter's own body builders) and the HTTP stub in artex-http.test.ts.
  */
-import type { ArtexCall, ArtexPort } from "./artex";
+import { type ArtexCall, type ArtexPort, isRecord } from "./artex";
 import { profileBody, shapeBody } from "./artex-http";
 
 export type FakeRow = Readonly<{
@@ -35,9 +35,6 @@ export class FakeHttpError extends Error {
 		super(message);
 	}
 }
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 const integer = (value: unknown): number => (typeof value === "number" && Number.isInteger(value) ? value : 0);

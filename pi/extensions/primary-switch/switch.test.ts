@@ -306,6 +306,18 @@ describe("running a switch", () => {
 		expect(calls.artex).toEqual([]);
 	});
 
+	it("surfaces an active line it cannot parse instead of reading it as nothing serving", async () => {
+		// `none` means nothing serves; any other unparseable active line is a drift to show, not hide.
+		const { ports, calls } = fakePorts({ run: { code: 0, stdout: "active:     multiple\nlast:       glm\n", stderr: "", killed: false } });
+		const outcome = await runPrimarySwitch("status", ports, timing);
+		expect(outcome).toEqual({
+			kind: "status",
+			text: "active:     multiple\nlast:       glm",
+			artex: { kind: "skipped", reason: "status had no parseable active: line" },
+		});
+		expect(calls.artex).toEqual([]);
+	});
+
 	it("stops at a failed script with its reason, leaving the session model alone", async () => {
 		const { ports, calls } = fakePorts({
 			run: { code: 1, stdout: "switching: glm -> warmind\n", stderr: "error: warmind failed to start; restoring glm\n", killed: false },

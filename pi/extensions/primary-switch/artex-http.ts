@@ -18,15 +18,13 @@ import {
 	type ArtexPort,
 	type ArtexSync,
 	artexTarget,
+	isRecord,
 	type ProfileWrite,
 	syncArtex,
 } from "./artex.js";
 import { PRIMARY_PROVIDER, type Primary } from "./switch.js";
 
 export type ArtexCredentials = Readonly<{ url: string; username: string; password: string }>;
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** The credentials file's content. The password never appears in an error. */
 export function parseArtexCredentials(raw: unknown): Result<ArtexCredentials, string> {
@@ -46,7 +44,7 @@ export type CredentialsLookup =
 	| Readonly<{ kind: "found"; credentials: ArtexCredentials }>
 	| Readonly<{ kind: "unusable"; detail: string }>;
 
-/** Read the credentials file: absent is not an error; others able to read it is. */
+/** Read the credentials file. A missing file is `absent`, not an error; a file with group or other permission bits, unreadable, or invalid is `unusable`. */
 export async function loadArtexCredentials(path: string): Promise<CredentialsLookup> {
 	let text: string;
 	try {

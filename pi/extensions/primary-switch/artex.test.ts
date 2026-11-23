@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
 	agentShapeFor,
 	type ArtexCall,
+	type ArtexPort,
 	type ArtexProfile,
 	type ArtexSync,
 	type ArtexTarget,
@@ -11,6 +12,7 @@ import {
 	contextWindowK,
 	describeArtexSync,
 	type Engine,
+	isRecord,
 	ENGINE_LANES,
 	ENGINE_OF,
 	MANAGED_PROFILE,
@@ -32,9 +34,6 @@ const read = (path: string): string => readFileSync(join(REPO, path), "utf8");
 const BASE = "http://192.168.0.80:8000/v1";
 /** A profile id as the parser mints it. */
 const pid = (id: number): ProfileId => id as ProfileId;
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Pi's catalog entries under the primaries' provider: id -> contextWindow, parsed, never cast. */
 function catalogWindows(): ReadonlyMap<string, number> {
@@ -184,7 +183,12 @@ describe("parsing ARTEX's replies", () => {
 			ok: true,
 			value: { workers: 1, taskLimit: { kind: "limited", tasks: 1 } },
 		});
-		for (const body of [null, { workers: 0, task_concurrency_enabled: true, task_concurrency_limit: 1 }, { workers: 2 }]) {
+		for (const body of [
+			null,
+			{ workers: 0, task_concurrency_enabled: true, task_concurrency_limit: 1 },
+			{ workers: 1, task_concurrency_enabled: true, task_concurrency_limit: 0 },
+			{ workers: 2 },
+		]) {
 			expect(parseSettings(body).ok).toBe(false);
 		}
 	});
@@ -362,6 +366,35 @@ describe("syncing ARTEX when calls misbehave", () => {
 		const port = fakeArtexPort(fake, { key: async () => { throw new Error("no API key for desktop-vllm"); } });
 		const sync = await syncArtex(targetFor("glm"), port, "apply");
 		expect(sync).toEqual({ kind: "failed", error: { kind: "request", call: "save profile", detail: "no API key for desktop-vllm" } });
+		expect(fake.writes).toEqual([]);
+	});
+
+	it("maps a reply that does not parse to a reply error, writing nothing", async () => {
+		const profiles = fresh();
+		const badProfiles: ArtexPort = { ...fakeArtexPort(profiles), readProfiles: async () => ({ profiles: "x" }) };
+		expect(await syncArtex(targetFor("glm"), badProfiles, "apply")).toEqual({
+			kind: "failed",
+			error: { kind: "reply", call: "read profiles", detail: "no profiles list" },
+		});
+		expect(profiles.writes).toEqual([]);
+
+		const settings = fresh();
+		const badSettings: ArtexPort = { ...fakeArtexPort(settings), readSettings: async () => ({ workers: 0 }) };
+		expect(await syncArtex(targetFor("glm"), badSettings, "apply")).toEqual({
+			kind: "failed",
+			error: { kind: "reply", call: "read settings", detail: "no positive workers count" },
+		});
+		expect(settings.writes).toEqual([]);
+	});
+
+	it("refuses an ambiguous managed profile, writing nothing", async () => {
+		const fake = fakeArtex({
+			rows: [desktopRow(4, MANAGED_PROFILE, "glm-5.3-native"), desktopRow(5, MANAGED_PROFILE, "glm-5.3-uncensored-native")],
+		});
+		expect(await syncArtex(targetFor("glm"), fakeArtexPort(fake), "apply")).toEqual({
+			kind: "failed",
+			error: { kind: "ambiguous", count: 2 },
+		});
 		expect(fake.writes).toEqual([]);
 	});
 });

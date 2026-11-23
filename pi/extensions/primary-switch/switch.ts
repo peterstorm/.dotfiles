@@ -38,9 +38,9 @@ const REQUEST_HELP: Readonly<Record<SwitchRequest, string>> = {
 	uncensored: "GLM-5.3 uncensored on Hyperflare (dealignai's UNCENSORED build in v16's storage)",
 	warmind: "WARMIND on ds4-native",
 	deepseek: "stock DeepSeek-V4.1-Flash on ds4-native",
-	"glm-native": "GLM-5.3 full (753B) stock on ds4-native: slow (~6-7 tok/s), 198K ctx",
-	"uncensored-native": "GLM-5.3 full (753B) uncensored (dealignai's UNCENSORED) on ds4-native: slow, 198K ctx",
-	"cyber-native": "GLM-5.3 full (753B) cyber (dealignai's CYBERSECURITY) on ds4-native: slow, 198K ctx, no toggle counterpart",
+	"glm-native": "GLM-5.3 full (753B) stock on glm53-native: slow (~8 tok/s), 202K ctx",
+	"uncensored-native": "GLM-5.3 full (753B) uncensored (dealignai's UNCENSORED) on glm53-native: slow (~8 tok/s), 202K ctx",
+	"cyber-native": "GLM-5.3 full (753B) cyber (dealignai's CYBERSECURITY) on glm53-native: slow (~8 tok/s), 202K ctx, no toggle counterpart",
 	status: "what serves now, what toggle would do, and whether ARTEX matches",
 };
 
@@ -174,9 +174,13 @@ export async function runPrimarySwitch(
 		}
 		if (request === "status") {
 			const active = parseStatusActive(run.stdout);
+			// The script prints `active:     none` when nothing serves; any other unparseable
+			// active line (an unknown name, a `multiple` state, a format drift) must surface,
+			// not be read as "nothing serves".
+			const nothingServes = /^active:\s+none\s*$/m.test(run.stdout);
 			const artex: ArtexSync = active
 				? await ports.artex(active.primary, active.servedId, "check")
-				: { kind: "skipped", reason: "no primary serves" };
+				: { kind: "skipped", reason: nothingServes ? "no primary serves" : "status had no parseable active: line" };
 			return { kind: "status", text: run.stdout.trim(), artex };
 		}
 
