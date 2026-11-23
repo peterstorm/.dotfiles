@@ -169,7 +169,27 @@ report's paired test). Gates: `--check` with these settings is bit-identical to 
 layers and the head; the 92-Slot open passes the Ledger's drift check. The first launch should record
 the served decode speed here.
 
-## Measured through Maya (2026-11-23, the current settings)
+## Measured through Maya (2026-11-23 night, the Latent split at 202,752: the current settings)
+
+`uncensored-native` at `9feeacf6` (engine `d398fae0`): ready in 78 s, **86 Slots** per Sparse layer
+(profile), RAM tier 37, `deferral protect 4`; claims 34.21 GB a GPU (43.06 before the split), GPU 0
+2.18 GB free after open. The same four chats (ds4-native
+`docs/bench/glm53-context/2026-11-23-served-speed.sh`; receipt
+`docs/bench/glm53-split/receipts/served-202752.out`), while another client's ~46K-token prompts ran
+between them:
+
+| reply | decode | store reads a token |
+|---|---|---|
+| B-tree balancing (first after open, cold) | 7.55 tok/s | 42.1 |
+| ISO 8601 duration parser | 8.40 tok/s | 37.4 |
+| the 1929 crash | 8.32 tok/s | 36.6 |
+| TLS 1.3 key exchange | 8.43 tok/s | 35.0 |
+| **pooled** | **8.16 tok/s** | 37.8 |
+
+Against **6.84 tok/s** (49.0 reads a token) at 202,752 before the split: **+19%**, close to the 64K
+shape's 8.50 at 2.5× its context.
+
+## Measured through Maya (2026-11-23, 64K, before the context raise)
 
 `uncensored-native` at `70f446d3` (engine `1ceb9d49`): ready in 77 s, 92 Slots per Sparse layer
 (profile), RAM tier 37, `deferral protect 4`; GPU 0 1.95 GB free after open. Four chats in turn, 300
@@ -245,3 +265,7 @@ The ds4-native metrics bridge (`:8010`) is engine-agnostic and labels series wit
   Expert reads land on CUDA events (+1.8%, the same tokens), and `DEFER=4` defers a written token's
   low-ranked Misses one Sparse layer: 8.61 tok/s on the engine at equal reads against 7.92.
   Relaunched as `uncensored-native`: **8.50 tok/s served** through Maya.
+- 2026-11-23: `CONTEXT` 65,536 → 202,752 (owner: "i needed that upped"): 74 Slots, 6.84 tok/s.
+- 2026-11-23: the Latent split (owner: "serve the split, but we're fine at 200k for now"). Engine
+  `d398fae0` (`glm53/latent-split`): each GPU holds half the Latent rows, bit-identical; 86 Slots at
+  202,752; **8.16 tok/s served** (+19%).
