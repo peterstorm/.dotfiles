@@ -84,6 +84,7 @@ contains "$RUN" 'LAMBDA="${LAMBDA:-0.03}"'
 contains "$RUN" 'EVICTION="${EVICTION:-counter:55}"'
 contains "$RUN" 'RUNTIME_RESERVE_GIB="${RUNTIME_RESERVE_GIB:-2.25}"'
 contains "$RUN" 'SLOT_SHAPE="${SLOT_SHAPE:-fitted}"'
+contains "$RUN" 'DEFER="${DEFER:-4}"'
 # The fitted profile: one Slot count per Sparse layer (75), each in [64, 256] (moe_plan's floor, a
 # layer's Experts), comma-separated as ds4n-glm53-serve --slot-profile reads it.
 PROFILE_FILE="$(dirname "$RUN")/slot-profile-l0.03-counter55.txt"
@@ -120,12 +121,20 @@ refused SLOT_SHAPE=bogus -- --preflight
 refused LAMBDA=0 -- --preflight                  # the fitted shape is λ 0.03's only
 refused EVICTION=lru -- --preflight              # ... and counter:55's
 refused LAMBDA=0.035 SLOT_SHAPE=fitted -- --preflight
+refused DEFER=9 -- --preflight                   # a token has 8 Route slots
+refused DEFER=-1 -- --preflight
+refused DEFER=on -- --preflight
+refused DEFER=04 -- --preflight
 # A setting that is refused must not be all a setting can be: these pass the settings (exit not 2).
 accepted() { # ENV... -- ARGS: the launcher gets past its settings
   [ "$(launcher_exit "$@")" -ne 2 ] || fail "run-glm53-native.sh $* must pass its settings (got 2)"
 }
 accepted LAMBDA=0 SLOT_SHAPE=equal -- --preflight
 accepted EVICTION=lru SLOT_SHAPE=equal RUNTIME_RESERVE_GIB=3.75 -- --preflight
+accepted DEFER=off -- --preflight
+accepted DEFER=0 -- --preflight
+accepted DEFER=8 -- --preflight
+accepted DEFER= -- --preflight                   # empty is the default, as for every setting
 refused REASONING_EFFORT=xhigh -- --preflight
 refused WEIGHTS=uncensored -- --bogus
 
@@ -142,7 +151,9 @@ contains "$RUN" '"--ram-per-layer", "auto", "--ram-reserve-gib", $reserve, "--ch
 contains "$RUN" '--label ai.peterstorm.inference.eviction="$EVICTION"'
 contains "$RUN" '--label ai.peterstorm.inference.runtime-reserve-gib="$RUNTIME_RESERVE_GIB"'
 contains "$RUN" '--label ai.peterstorm.inference.slot-shape="$SLOT_SHAPE"'
-contains "$RUN" '+ (if $profile == "" then [] else ["--slot-profile", $profile] end),'
+contains "$RUN" '+ (if $profile == "" then [] else ["--slot-profile", $profile] end)'
+contains "$RUN" '+ (if $defer == "off" then [] else ["--defer", $defer] end),'
+contains "$RUN" '--label ai.peterstorm.inference.defer="$DEFER"'
 contains "$RUN" 'SLOT_PROFILE="$(<"$SCRIPT_DIR/slot-profile-l0.03-counter55.txt")"'
 contains "$RUN" 'source "$SCRIPT_DIR/../../shared/inference-api-key.sh"'
 

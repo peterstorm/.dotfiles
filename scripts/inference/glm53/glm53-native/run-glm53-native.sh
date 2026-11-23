@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GLM-5.3 full (753B: kitaniai's GLM-5.3-UNCENSORED-MXFP4 Experts, which no CRACK surgery touches, and
 # one of three Backbones: zai's stock, dealignai's UNCENSORED, dealignai's CYBERSECURITY) on ds4-native
-# (peterstorm/ds4-native, branch glm53/counter-eviction): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
+# (peterstorm/ds4-native, branch glm53/deferred-misses): the MXFP4 Experts streamed from the NVMe into a VRAM Expert cache and a
 # pinned RAM tier on the two RTX PRO 6000s, the dense Backbone resident, behind Project Maya's
 # OpenAI-compatible server. Served on :8000 like every other profile, with the shared inference key.
 #
@@ -22,7 +22,9 @@
 # Expert reads from the NVMe (the 753B's routed Experts are 375 GiB; VRAM holds a quarter of them).
 # That was 83 Slots a layer under LRU. Since 2026-11-22 (Cohorts, the Ledger, and the residency
 # settings below) the engine opens 92 in a fitted shape under counter:55: ds4n-glm53-decode measured
-# 7.95 tok/s at 64K and λ 0.03 (the frontier report); not yet re-measured through this server.
+# 7.95 tok/s at 64K and λ 0.03 (the frontier report). Since 2026-11-23 the engine's reads land on CUDA
+# events (+1.8%, the same tokens) and reply tokens defer their low-ranked Misses one layer (DEFER, below):
+# ds4n-glm53-decode measured 8.61 tok/s at equal reads against 7.92 without.
 #
 # What the repository owns:
 #   - the Backbone by source (WEIGHTS), checked against its provenance record at every launch;
@@ -32,7 +34,7 @@
 #     (ds4-native tools/glm53-serve/write_tokenizer.py), checked id for id against HF `tokenizers`;
 #   - the Maya server by commit (MAYA_COMMIT + maya-serve-keepalive.patch): the same patched copy the
 #     DS4.1 launcher installs (keyed by commit and patch, so either launcher's install serves both);
-#   - the engine's settings: context, λ, the eviction policy, the VRAM and RAM tiers' reserves,
+#   - the engine's settings: context, λ, the eviction policy, the VRAM and RAM tiers' reserves, deferral,
 #     checkpoints;
 #   - the workstation gates: two idle RTX PRO 6000s, comfyui stopped, port 8000 free, no other glm53-*
 #     container running (the RAM tier pins most of the host's memory: a CPU replay beside it once
@@ -52,7 +54,7 @@ source "$SCRIPT_DIR/../../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../../shared/inference-profile-catalog.sh"
 
 IMAGE="ds4-native-dev:2"
-DS4N_COMMIT="${DS4N_COMMIT:-fec4e0c1d1bc415fc6580afa08173611817bdacb}"
+DS4N_COMMIT="${DS4N_COMMIT:-1ceb9d49bf5df09ce5fccfbf39b2c56204f7bab4}"
 DS4N_SRC="${DS4N_SRC:-$HOME/dev/ds4-native}"
 MAYA_COMMIT="b3fa99ec244e7885ec04ef456eac0d52474dba95"
 MAYA_DIR="/models/ds41/project-maya"
@@ -139,6 +141,14 @@ case "$SLOT_SHAPE" in
     ;;
   *) echo "error: SLOT_SHAPE is fitted or equal: $SLOT_SHAPE" >&2; exit 2 ;;
 esac
+# Deferral (owner, 2026-11-23: "go ahead with --defer 4"; ds4-native
+# docs/bench/glm53-defer/2026-11-23-defer-report.md): a reply token's Expert that missed VRAM, outside its
+# DEFER heaviest Route slots of 8, waits one Sparse layer, its read overlapping that layer's compute.
+# At 4: +8.7% decode at equal reads, KL 0.0699 against λ 0.03's 0.0710 (paired: free), top-1 88.75%
+# against 89.57% (−23 of 2,800 positions, p 0.15). 2 and 0 cost real quality (KL +11% / +81%). off
+# serves without it. Prompts never defer (they are read as sweeps).
+DEFER="${DEFER:-4}"
+[[ "$DEFER" =~ ^(off|[0-8])$ ]] || { echo "error: DEFER is off or the protected Route slots, 0 to 8: $DEFER" >&2; exit 2; }
 # Host memory: the RAM tier takes what is available at load less RAM_RESERVE_GIB and CHECKPOINT_GB.
 # With the server loaded (~3 GB) the reserve stays free for the OS, ZFS's ARC (capped at 4 GiB) and
 # the conversations set aside (~95 KB a token: 4 GB hold ~42K tokens of them).
@@ -235,7 +245,7 @@ fi
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
 
 if [ "$MODE" = --preflight ]; then
-  echo "GLM-5.3 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, context $CONTEXT, λ $LAMBDA, eviction $EVICTION, VRAM reserve $RUNTIME_RESERVE_GIB GiB, $SLOT_SHAPE Slots)"
+  echo "GLM-5.3 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, context $CONTEXT, λ $LAMBDA, eviction $EVICTION, VRAM reserve $RUNTIME_RESERVE_GIB GiB, $SLOT_SHAPE Slots, defer $DEFER)"
   exit 0
 fi
 
@@ -260,14 +270,15 @@ fi
 # --- the server's config (rewritten each launch from the values above) ------------------------
 jq -n --arg exe "$ENGINE" --arg config "$CHECKPOINT/config.json" --arg backbone "$BACKBONE" --arg store "$STORE" \
   --arg context "$CONTEXT" --arg lambda "$LAMBDA" --arg eviction "$EVICTION" --arg vram "$RUNTIME_RESERVE_GIB" \
-  --arg profile "$SLOT_PROFILE" --arg reserve "$RAM_RESERVE_GIB" --arg ckpt "$CHECKPOINT_GB" \
+  --arg profile "$SLOT_PROFILE" --arg reserve "$RAM_RESERVE_GIB" --arg ckpt "$CHECKPOINT_GB" --arg defer "$DEFER" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/glm53-native.log" \
   --arg effort "$REASONING_EFFORT" --argjson budget "$THINKING_BUDGET" --argjson port "$PORT" '{
     exe: $exe,
     args: ["--config", $config, "--backbone", $backbone, "--store", $store, "--max-context", $context,
            "--lambda", $lambda, "--eviction", $eviction, "--runtime-reserve-gib", $vram,
            "--ram-per-layer", "auto", "--ram-reserve-gib", $reserve, "--checkpoint-gb", $ckpt]
-          + (if $profile == "" then [] else ["--slot-profile", $profile] end),
+          + (if $profile == "" then [] else ["--slot-profile", $profile] end)
+          + (if $defer == "off" then [] else ["--defer", $defer] end),
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     # As the generation_config.json of the checkpoint.
     sampling: {temperature: 1.0, top_p: 0.95, repetition_penalty: 1.1},
@@ -304,6 +315,7 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.eviction="$EVICTION" \
   --label ai.peterstorm.inference.runtime-reserve-gib="$RUNTIME_RESERVE_GIB" \
   --label ai.peterstorm.inference.slot-shape="$SLOT_SHAPE" \
+  --label ai.peterstorm.inference.defer="$DEFER" \
   --label ai.peterstorm.inference.extra-env="$NATIVE_EXTRA_ENV" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
