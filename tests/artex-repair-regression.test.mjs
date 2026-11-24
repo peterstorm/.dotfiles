@@ -12,6 +12,14 @@
  * re-push of the mutable tag cannot silently replace the audited build.
  * Historical RED: case 4 fails against the pre-fix tag reference.
  *
+ * Group `group.artex-audited-identity` (v0.7.0 upgrade, 2026-11-24): the
+ * audited tag+sha is written ONLY in the build script; the workflow carries
+ * no copy of it, so a version bump cannot leave a stale identity behind.
+ *
+ * Group `group.artex-secret-key-from-sops` (v0.7.0 upgrade): the at-rest
+ * encryption key comes from the sops secret, never from the artex-data PVC
+ * that the rollback path deletes.
+ *
  * Runs under the enrolled manifest check:
  *   node --test --test-reporter=junit \
  *     --test-reporter-destination=.loom/completion-reports/artex-repair-regression.xml \
@@ -26,10 +34,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SCRIPT = path.join(repoRoot, "scripts/artex/build-artex-image-v0-6-0.sh");
+const SCRIPT = path.join(repoRoot, "scripts/artex/build-artex-image.sh");
 const DEPLOYMENT = path.join(repoRoot, "k8s/argocd-homelab/artex/deployment.yaml");
+const WORKFLOW = path.join(repoRoot, ".github/workflows/build-artex-image.yml");
+const SECRETS = path.join(repoRoot, "k8s/argocd-homelab/artex/secrets.enc.yaml");
 
-/** One fixture git repo at tag v0.6.0; returns its absolute path. */
+/** One fixture git repo at tag v0.7.0; returns its absolute path. */
 function makeFixture() {
   const dir = mkdtempSync(path.join(tmpdir(), "artex-fixture-"));
   const run = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
@@ -39,7 +49,7 @@ function makeFixture() {
   writeFileSync(path.join(dir, "README.md"), "# fixture\n");
   run(["add", "README.md"]);
   run(["commit", "--quiet", "-m", "fixture"]);
-  run(["tag", "v0.6.0"]);
+  run(["tag", "v0.7.0"]);
   return dir;
 }
 
@@ -52,7 +62,7 @@ function runAssert(src) {
       ...process.env,
       ARTX_SRC: src,
       ARTX_ASSERT_ONLY: "1",
-      ARTX_EXPECTED_TAG: "v0.6.0",
+      ARTX_EXPECTED_TAG: "v0.7.0",
       ARTX_EXPECTED_SHA: head,
     },
   });
@@ -108,4 +118,26 @@ test("deployment pins the artex image by digest, not by mutable tag", () => {
       `artex image reference must be a digest pin: ${ref}`,
     );
   }
+});
+
+test("the audited identity lives only in the build script, not in the workflow", () => {
+  const script = readFileSync(SCRIPT, "utf8");
+  const tag = script.match(/^TAG="\$\{ARTX_EXPECTED_TAG:-(v\d+\.\d+\.\d+)\}"$/m);
+  const sha = script.match(/^FULL="\$\{ARTX_EXPECTED_SHA:-([0-9a-f]{40})\}"$/m);
+  assert.ok(tag && sha, "the build script must pin a release tag and a full 40-hex sha");
+  const workflow = readFileSync(WORKFLOW, "utf8");
+  assert.ok(!workflow.includes(tag[1]), `workflow must not repeat the audited tag ${tag[1]}`);
+  assert.ok(!workflow.includes(sha[1].slice(0, 8)), `workflow must not repeat the audited sha ${sha[1].slice(0, 8)}`);
+  assert.match(workflow, /bash scripts\/artex\/build-artex-image\.sh/);
+});
+
+test("ARTEX_SECRET_KEY comes from the sops secret, not the artex-data volume", () => {
+  const text = readFileSync(DEPLOYMENT, "utf8");
+  assert.match(
+    text,
+    /- name: ARTEX_SECRET_KEY\n\s+valueFrom:\n\s+secretKeyRef:\n\s+name: artex-secrets\n\s+key: secret-key\n/,
+    "ARTEX_SECRET_KEY must be wired from artex-secrets/secret-key",
+  );
+  // The encrypted file names its keys in clear: the key must exist there.
+  assert.match(readFileSync(SECRETS, "utf8"), /^\s+secret-key: ENC\[/m);
 });

@@ -2,8 +2,9 @@ name: build-artex-image
 
 # Build the ARTEX pentest-harness image from the audited upstream checkout
 # (BaaRai/ARTEX) and publish it to GHCR. WHAT is built is pinned by the
-# checked-in build script (tag v0.6.0 + full sha + clean worktree = the
-# 2026-11-15 planted-code/backdoor audit bond). Beyond running that script,
+# checked-in build script (audited tag + full sha + clean worktree = the
+# planted-code/backdoor audit bond; the identity lives ONLY in that script,
+# which hands it to the publish steps via GITHUB_ENV). Beyond running it,
 # this workflow adds: the runner's Docker data-root move onto /mnt, the GHCR
 # login (GITHUB_TOKEN, packages: write), an OPTIONAL Docker Hub login
 # (DOCKERHUB_USERNAME + DOCKERHUB_TOKEN — base-image pull rate limits), the
@@ -37,8 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      LOCAL_IMAGE: peterstorm/artex:sha-a13c68cb
-      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/artex:sha-a13c68cb
+      GHCR_REPO: ghcr.io/${{ github.repository_owner }}
       # Mapped from a secret so the step `if` can test it (secrets context is
       # not allowed directly in `if`). Empty when the secret is unset.
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -78,14 +78,15 @@ jobs:
 
       - name: Build + verify (reuses the checked-in build script)
         run: |
-          chmod +x scripts/artex/build-artex-image-v0-6-0.sh
-          bash scripts/artex/build-artex-image-v0-6-0.sh
+          bash scripts/artex/build-artex-image.sh
           df -h / /mnt
 
       - name: Tag + push to GHCR
         if: ${{ inputs.push }}
         run: |
-          docker tag "$LOCAL_IMAGE" "$GHCR_IMAGE"
+          GHCR_IMAGE="$GHCR_REPO/${ARTX_LOCAL_IMAGE#*/}"
+          echo "GHCR_IMAGE=$GHCR_IMAGE" >> "$GITHUB_ENV"
+          docker tag "$ARTX_LOCAL_IMAGE" "$GHCR_IMAGE"
           docker push "$GHCR_IMAGE"
           echo "Published: $GHCR_IMAGE"
           docker inspect --format 'RepoDigests: {{json .RepoDigests}}' "$GHCR_IMAGE"
@@ -98,7 +99,7 @@ jobs:
             echo ""
             echo '```'
             echo "$GHCR_IMAGE"
-            echo "provenance: BaaRai/ARTEX @ v0.6.0 (a13c68cb7078d43b66fb398db3d610e513b6d77a)"
+            echo "provenance: BaaRai/ARTEX @ $ARTX_TAG ($ARTX_SHA)"
             docker inspect --format 'digest: {{index .RepoDigests 0}}' "$GHCR_IMAGE" 2>/dev/null || echo "digest: unavailable (inspect failed — the receipt must say so)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

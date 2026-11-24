@@ -3,30 +3,32 @@
 # Runs locally AND under .github/workflows/build-artex-image.yml (which adds
 # the GHCR login + tag/publish steps — this script stays publish-agnostic).
 #
-# The audit bond (2026-11-15 planted-code/backdoor audit): the source is
-# pinned to the audited tag AND full SHA, and the worktree must be clean —
-# "image ≠ audited source" is unrepresentable. The binary is stamped with the
-# same version the release binaries job uses.
+# The audit bond: the source is pinned to the audited tag AND full SHA, and
+# the worktree must be clean — "image ≠ audited source" is unrepresentable.
+# The binary is stamped with the same version the release binaries job uses.
+# TAG/FULL below are the only place the audited identity is written; moving to
+# a new upstream release = a new audit, recorded in docs/plans, then these two
+# lines. Audit history: v0.6.0 (a13c68cb) 2026-11-15; v0.7.0 (22ae88af)
+# 2026-11-24, docs/plans/2026-11-24-artex-v0.7.0-upgrade.md.
 #
 # Security posture (the CERT-In lesson, institutionalized): no Docker Hub
 # artex images — the only foreign inputs are the audited Dockerfile's own
-# bases (node:22, golang:1.26, debian, python) with checksum-verified scanner
-# and node-tarball downloads.
+# bases (node:22, golang:1.26, debian, python) and its scanner and Node
+# downloads, each verified against a SHA-256 pinned in that Dockerfile.
 #
 # Usage:
 #   # under Actions (fresh clone into ./artex-src):
-#   bash scripts/artex/build-artex-image-v0-6-0.sh
+#   bash scripts/artex/build-artex-image.sh
 #   # locally, from the audited checkout:
-#   ARTX_SRC=~/dev/artex/src bash scripts/artex/build-artex-image-v0-6-0.sh
+#   ARTX_SRC=~/dev/artex/src-v0.7.0 bash scripts/artex/build-artex-image.sh
 set -euo pipefail
 
 # The audited identity. ARTX_EXPECTED_TAG/ARTX_EXPECTED_SHA exist so the
 # regression test can point the same assert block at fixture repos; unset
 # (every real invocation, including the workflow) they are exactly these.
-TAG="${ARTX_EXPECTED_TAG:-v0.6.0}"
-FULL="${ARTX_EXPECTED_SHA:-a13c68cb7078d43b66fb398db3d610e513b6d77a}"
-SHORT="a13c68cb"
-LOCAL_IMAGE="peterstorm/artex:sha-$SHORT"
+TAG="${ARTX_EXPECTED_TAG:-v0.7.0}"
+FULL="${ARTX_EXPECTED_SHA:-22ae88afabf66e47e73644a0528d8b427c4c80b8}"
+LOCAL_IMAGE="peterstorm/artex:sha-${FULL:0:8}"
 SRC="${ARTX_SRC:-$PWD/artex-src}"
 
 # --- provenance: the audit bond --------------------------------------------
@@ -76,5 +78,15 @@ toolbox_missing="$(docker run --rm --entrypoint /bin/sh "$LOCAL_IMAGE" \
       done')" || { echo "FAIL: scanner toolbox probe failed" >&2; exit 1; }
 [ -z "$toolbox_missing" ] || { echo "FAIL: scanner toolbox incomplete, missing: $(printf '%s ' $toolbox_missing)" >&2; exit 1; }
 echo "toolbox: all present"
+
+# Hand the verified identity to the workflow's publish steps, so the image
+# name and the provenance line are never typed a second time there.
+if [ -n "${GITHUB_ENV:-}" ]; then
+  {
+    echo "ARTX_LOCAL_IMAGE=$LOCAL_IMAGE"
+    echo "ARTX_TAG=$actual_tag"
+    echo "ARTX_SHA=$actual_sha"
+  } >> "$GITHUB_ENV"
+fi
 
 echo "done: $LOCAL_IMAGE"

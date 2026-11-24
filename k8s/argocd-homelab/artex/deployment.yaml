@@ -78,6 +78,17 @@ spec:
             # minimum and verify boot health after any PVC rebuild.
             - name: ARTEX_JWT_KEY_DIR
               value: /app/keys
+            # At-rest encryption key (0.7.0+: LLM keys, task credentials, MCP
+            # env, … are AES-256-GCM in Postgres). From sops, NOT minted into
+            # /app/keys: the rollback path deletes artex-data, and once
+            # encrypted rows exist a lost key means ARTEX refuses to start.
+            # 32 bytes, base64. The server re-execs itself with this var
+            # stripped from its environment block (/proc/<pid>/environ).
+            - name: ARTEX_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: artex-secrets
+                  key: secret-key
             # Login rate-limit trusts X-Forwarded-For from the two in-path
             # proxies: k3s pod CIDR (cloudflared) and the LAN (cilium ingress).
             - name: ARTEX_TRUSTED_PROXIES
