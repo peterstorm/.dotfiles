@@ -45,6 +45,12 @@ data:
       # policy this line publishes the model to the internet.
       - hostname: vllm-tcp.peterstorm.io
         service: tcp://192.168.0.80:8000
+      # SSH to `desktop`, for clients that cannot route the LAN (the corporate
+      # Mac): reached with `cloudflared access ssh` as a ProxyCommand. Gated by
+      # its own Access service-token policy (ssh_desktop in terraform) — without
+      # it this line publishes sshd to the internet.
+      - hostname: ssh-desktop.peterstorm.io
+        service: ssh://192.168.0.80:22
       - hostname: artex.peterstorm.io
         service: http://artex.artex:8787
       - service: http_status:404

@@ -102,3 +102,15 @@ output "vllm_access_client_secret" {
   value     = module.cloudflare.vllm_access_client_secret
   sensitive = true
 }
+
+# Same for the ssh-desktop Access application (its own token, not vllm's):
+# store as ssh_desktop_client_id / ssh_desktop_client_secret in the same file.
+output "ssh_desktop_access_client_id" {
+  value     = module.cloudflare.ssh_desktop_access_client_id
+  sensitive = true
+}
+
+output "ssh_desktop_access_client_secret" {
+  value     = module.cloudflare.ssh_desktop_access_client_secret
+  sensitive = true
+}
