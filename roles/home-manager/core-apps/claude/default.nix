@@ -48,8 +48,12 @@ let
   # plugins, CLI-added marketplaces) survive while these managed keys are
   # enforced from the dotfiles.
   managedSettings = {
-    model = "opus[1m]";
-    effortLevel = "high";
+    # 2026-11-24: opus-5.5 at medium effort (was opus[1m]/high). This is the
+    # machine-wide Claude Code default — the reclaw service, switched back to
+    # AGENT_BACKEND=claude today, takes it for every run without a per-skill
+    # model pin.
+    model = "claude-opus-5.5";
+    effortLevel = "medium";
     autoCompactEnabled = true;
     env = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1"; };
     statusLine = {

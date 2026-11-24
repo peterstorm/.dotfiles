@@ -148,12 +148,15 @@
         WORKSPACE_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace";
         SKILLS_DIR = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/skills";
         PERSONALITY_PATH = "/home/peterstorm/dev/claude-plugins/reclaw/workspace/personality.md";
-        # 2026-11-21: back on the Pi backend at the owner's current model
-        # (desktop-vllm / WARMIND-1017; see the RECLAW_PI_* pins below), per
-        # user request. Claude CLI stays wired as the per-skill fallback
-        # (`fallback: { backend: claude, model: sonnet }`), so Claude's OAuth
-        # still authenticates those runs.
-        AGENT_BACKEND = "pi";
+        # 2026-11-24: back on the Claude Code backend per user request (was
+        # pi since 2026-11-21). Runs without a per-skill model take the CLI
+        # default from ~/.claude/settings.json — managed in
+        # roles/home-manager/core-apps/claude, pinned to claude-opus-5.5 at
+        # effortLevel medium (same change, 2026-11-24). Claude uses ~/.claude
+        # OAuth (.credentials.json), not sops keys. The RECLAW_PI_* pins below
+        # only reach Pi runs (skills declaring `backend: pi`), so they stay —
+        # switching back is a one-line change.
+        AGENT_BACKEND = "claude";
         # Each agent run gets its own transient scope in reclaw-agents.slice
         # (defined above). A timed-out run is torn down as a whole cgroup, which
         # also reaches setsid/nohup descendants that a PID signal never could.
