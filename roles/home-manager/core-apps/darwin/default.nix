@@ -101,6 +101,11 @@ in
         user = "peterstorm";
         HostKeyAlias = host;
         ProxyCommand = "${cfAccessSshProxy} ${host}";
+        # A key made for these hosts alone (authorized_keys.txt), offered
+        # exclusively: this laptop's general-purpose ~/.ssh/id_rsa is never sent
+        # to, or authorized on, the home servers.
+        IdentityFile = "~/.ssh/id_ed25519_homelab";
+        IdentitiesOnly = "yes";
       });
     };
 

@@ -286,6 +286,21 @@ Bring-up order matters, because each step needs the one before it:
    "Editing the cloudflared config rolls the pod" below) — no manual restart.
 4. `./hm-apply.sh` on the Mac, then `ssh homelab hostname` and `ssh desktop hostname`.
 
+5. **Authorize the Mac's key on each host.** The Access token only opens the tunnel;
+   sshd still wants a key it knows. The Mac uses a key made for these hosts alone,
+   `~/.ssh/id_ed25519_homelab` (offered with `IdentitiesOnly`, so its general-purpose
+   `id_rsa` is never sent). Its public half is the `hansen142-corp-mac` line in
+   `authorized_keys.txt`, which every NixOS host reads at rebuild — so each host
+   takes it with a rebuild (`./system-apply.sh` on that host). Until then
+   `ssh <host>` reaches sshd and answers `Permission denied (publickey)`: the
+   tunnel is fine, the key is just not authorized yet. Once `homelab` has it, the
+   rest can be driven from the Mac (`ssh homelab 'cd ~/.dotfiles && git pull &&
+   ./system-apply.sh'`, the same for `desktop`).
+
+   The private key has no passphrase, so that nobody has to type one for pi's
+   `/switch`; add one with `ssh-keygen -p -f ~/.ssh/id_ed25519_homelab` and load it
+   into the agent if you would rather.
+
 The first connection to each host prompts to trust its host key; verify it against
 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on that host. Make the first
 connection from a terminal *before* using `/switch`: pi runs the script without a

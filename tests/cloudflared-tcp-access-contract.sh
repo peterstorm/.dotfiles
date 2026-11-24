@@ -106,6 +106,15 @@ if grep -E 'cloudflared.*access ssh.*--service-token' "$DARWIN" >/dev/null; then
   fail "service-token flags put the secret in the process table; use TUNNEL_SERVICE_TOKEN_*"
 fi
 
+# The Mac offers only the key made for these hosts, never its general-purpose one,
+# and that key's public half is what the servers authorize.
+grep -Fq 'IdentityFile = "~/.ssh/id_ed25519_homelab";' "$DARWIN" \
+  || fail "darwin ssh hosts must use the dedicated ~/.ssh/id_ed25519_homelab identity"
+grep -Fq 'IdentitiesOnly = "yes";' "$DARWIN" \
+  || fail "darwin ssh hosts must set IdentitiesOnly so no other key is offered"
+grep -Eq '^ssh-ed25519 [A-Za-z0-9+/=]+ hansen142-corp-mac' "$ROOT/authorized_keys.txt" \
+  || fail "authorized_keys.txt must carry the Mac's dedicated homelab key (comment hansen142-corp-mac...)"
+
 # --- a config edit rolls the cloudflared pod ---------------------------------
 
 # The Deployment mounts the config with subPath, which Kubernetes never
