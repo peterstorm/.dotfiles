@@ -37,12 +37,14 @@ spec:
             - name: pgdata
               mountPath: /var/lib/postgresql/data
         - name: artex
-          # Digest pin, not the mutable tag: what runs IS the audited v0.6.0
-          # build (tag sha-a13c68cb, built by run 43685680995 from the audited
-          # checkout). A GHCR re-push of the tag cannot silently replace it;
-          # moving to a new build is a deliberate manifest change ArgoCD
-          # applies (and every image bump = the brief Recreate outage).
-          image: ghcr.io/peterstorm/artex@sha256:519e58f274b3a96cb16e83a43d30741c67e31443305ba17572ac11d8df9313b4
+          # Digest pin, not the mutable tag: what runs IS the audited v0.7.0
+          # build (tag sha-22ae88af, built by run 45460789269 from the audited
+          # checkout; audit in docs/plans/2026-11-24-artex-v0.7.0-upgrade.md).
+          # A GHCR re-push of the tag cannot silently replace it; moving to a
+          # new build is a deliberate manifest change ArgoCD applies (and every
+          # image bump = the brief Recreate outage). Previous: v0.6.0
+          # sha256:519e58f2… (rollback also needs the pre-0.7.0 pg_dump).
+          image: ghcr.io/peterstorm/artex@sha256:a7e1c18e7c99236e07775be72675c991c81a604239388a3eba4e9eb17bc2f1b0
           ports:
             - containerPort: 8787
           env:
