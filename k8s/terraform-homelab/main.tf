@@ -103,14 +103,15 @@ output "vllm_access_client_secret" {
   sensitive = true
 }
 
-# Same for the ssh-desktop Access application (its own token, not vllm's):
-# store as ssh_desktop_client_id / ssh_desktop_client_secret in the same file.
-output "ssh_desktop_access_client_id" {
-  value     = module.cloudflare.ssh_desktop_access_client_id
+# The ssh-<host> Access applications' tokens, keyed by host name (desktop,
+# homelab): each has its own token. Store as ssh_<host>_client_id /
+# ssh_<host>_client_secret in the same sops file.
+output "ssh_access_client_ids" {
+  value     = module.cloudflare.ssh_access_client_ids
   sensitive = true
 }
 
-output "ssh_desktop_access_client_secret" {
-  value     = module.cloudflare.ssh_desktop_access_client_secret
+output "ssh_access_client_secrets" {
+  value     = module.cloudflare.ssh_access_client_secrets
   sensitive = true
 }

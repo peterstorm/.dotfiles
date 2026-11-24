@@ -1,8 +1,15 @@
 {pkgs, config, lib, util, inputs, ...}:
 
+let
+  # LAN hosts reachable over ssh through the Access-gated tunnel, one Access
+  # token each (terraform local.ssh_hosts; ingress in argocd-homelab/cloudflared/
+  # config.yaml). This one list drives the sops secrets, the env templates, the
+  # proxy's host table and the ssh blocks below, so a host cannot be half-added.
+  sshHosts = [ "desktop" "homelab" ];
+in
 (util.sops.mkSecretsAndTemplatesConfig
   # Define secrets
-  [
+  ([
     (util.sops.userSecret "oc-dev-server" "openshift.yaml" "dev_server")
     (util.sops.userSecret "oc-stage-server" "openshift.yaml" "stage_server")
     (util.sops.userSecret "oc-prod-server" "openshift.yaml" "prod_server")
@@ -15,17 +22,19 @@
     (util.sops.userSecret "keycloak-admin-password-opr" "keycloak.yaml" "keycloak_admin_password_opr")
     (util.sops.userSecret "cf-access-vllm-id" "cloudflare-access.yaml" "vllm_client_id")
     (util.sops.userSecret "cf-access-vllm-secret" "cloudflare-access.yaml" "vllm_client_secret")
-    # ssh-desktop has its own Access token (see terraform ssh_desktop): a leaked
-    # or rotated vLLM token must not open a path to sshd.
-    (util.sops.userSecret "cf-access-ssh-id" "cloudflare-access.yaml" "ssh_desktop_client_id")
-    (util.sops.userSecret "cf-access-ssh-secret" "cloudflare-access.yaml" "ssh_desktop_client_secret")
     # Kept separate from the long-lived Cloudflare service-token file so an
     # inference-only rotation can be shipped through dotfiles and applied atomically.
     (util.sops.userSecret "vllm-api-key" "inference-api.yaml" "vllm_api_key")
   ]
+  # Every ssh host has its own Access token (terraform local.ssh_hosts): a leaked
+  # or rotated vLLM token, or another host's, must not open a path to this sshd.
+  ++ lib.concatMap (host: [
+    (util.sops.userSecret "cf-access-ssh-${host}-id" "cloudflare-access.yaml" "ssh_${host}_client_id")
+    (util.sops.userSecret "cf-access-ssh-${host}-secret" "cloudflare-access.yaml" "ssh_${host}_client_secret")
+  ]) sshHosts)
   
   # Define templates
-  [
+  ([
     (util.sops.envTemplate "openshift-env" {
       OC_DEV_SERVER = "oc-dev-server";
       OC_STAGE_SERVER = "oc-stage-server";
@@ -44,10 +53,6 @@
       CF_ACCESS_CLIENT_ID = "cf-access-vllm-id";
       CF_ACCESS_CLIENT_SECRET = "cf-access-vllm-secret";
     })
-    (util.sops.envTemplate "cf-access-ssh-env" {
-      CF_ACCESS_SSH_CLIENT_ID = "cf-access-ssh-id";
-      CF_ACCESS_SSH_CLIENT_SECRET = "cf-access-ssh-secret";
-    })
     # OpenAI-compatible client env: with `vllm-forward` running, any client
     # (claude, curl, ...) works with zero flags.
     (util.sops.configTemplate "vllm-env" ''
@@ -55,36 +60,48 @@
       export OPENAI_BASE_URL='http://localhost:8000/v1'
     '')
   ]
+  ++ map (host: util.sops.envTemplate "cf-access-ssh-${host}-env" {
+    CF_ACCESS_SSH_CLIENT_ID = "cf-access-ssh-${host}-id";
+    CF_ACCESS_SSH_CLIENT_SECRET = "cf-access-ssh-${host}-secret";
+  }) sshHosts)
   
   # Configuration
   (let
-    # ssh ProxyCommand for hosts behind the Access-gated tunnel: `desktopSshProxy
-    # <access-hostname>` speaks ssh over stdin/stdout through `cloudflared access
-    # ssh`. Credentials come from sops and reach cloudflared via TUNNEL_SERVICE_
-    # TOKEN_* so they never sit in argv — ssh runs this as a child process, and
-    # command lines are visible to `ps` and to EDR on this machine. Same
-    # reasoning as vllm-forward below.
-    desktopSshProxy = pkgs.writeShellScript "desktop-ssh-proxy" ''
+    # ssh ProxyCommand for the hosts behind the Access-gated tunnel:
+    # `cf-access-ssh-proxy <host>` speaks ssh over stdin/stdout through
+    # `cloudflared access ssh`, with that host's own token. The token comes from
+    # sops and reaches cloudflared via TUNNEL_SERVICE_TOKEN_* so it never sits in
+    # argv — ssh runs this as a child process, and command lines are visible to
+    # `ps` and to EDR on this machine. Same reasoning as vllm-forward below. A
+    # name outside sshHosts is refused, never defaulted to another host's token.
+    cfAccessSshProxy = pkgs.writeShellScript "cf-access-ssh-proxy" ''
       set -euo pipefail
-      source ${config.sops.templates."cf-access-ssh-env".path}
+      case "''${1:-}" in
+      ${lib.concatMapStrings (host: ''
+        ${host}) env_file=${config.sops.templates."cf-access-ssh-${host}-env".path} ;;
+      '') sshHosts}
+        *) echo "cf-access-ssh-proxy: unknown host '$1' (known: ${lib.concatStringsSep ", " sshHosts})" >&2; exit 2 ;;
+      esac
+      source "$env_file"
       export TUNNEL_SERVICE_TOKEN_ID="$CF_ACCESS_SSH_CLIENT_ID"
       export TUNNEL_SERVICE_TOKEN_SECRET="$CF_ACCESS_SSH_CLIENT_SECRET"
-      exec ${pkgs.cloudflared}/bin/cloudflared access ssh --hostname "$1"
+      exec ${pkgs.cloudflared}/bin/cloudflared access ssh --hostname "ssh-$1.peterstorm.io"
     '';
   in {
     # `ssh desktop` — and so switch-primary.sh / pi's /switch, which re-run
-    # themselves there — works from this machine with no LAN route, over the
-    # tunnel. HostKeyAlias keeps the known_hosts identity "desktop" no matter
+    # themselves there — and `ssh homelab` (the k3s node: terraform state and
+    # kubectl) work from this machine with no LAN route, over the tunnel.
+    # HostKeyAlias keeps the known_hosts identity the bare host name no matter
     # which path reaches it, so the same host key is trusted on the LAN too.
     programs.ssh = {
       enable = true;
       enableDefaultConfig = false;
-      settings.desktop = {
-        hostname = "ssh-desktop.peterstorm.io";
+      settings = lib.genAttrs sshHosts (host: {
+        hostname = "ssh-${host}.peterstorm.io";
         user = "peterstorm";
-        HostKeyAlias = "desktop";
-        ProxyCommand = "${desktopSshProxy} %h";
-      };
+        HostKeyAlias = host;
+        ProxyCommand = "${cfAccessSshProxy} ${host}";
+      });
     };
 
     # Fix: sops-nix launchd agent needs /usr/bin in PATH for getconf

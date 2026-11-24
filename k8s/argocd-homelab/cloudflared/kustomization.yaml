@@ -2,6 +2,16 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - deployment.yaml
-  - configmap.yaml
 generators:
   - secret-generator.yaml
+# The tunnel config is generated, not a hand-written ConfigMap, so its name
+# carries a hash of its content (cloudflared-config-<hash>) and kustomize
+# rewrites the Deployment's reference to match. Editing config.yaml therefore
+# changes the pod template, and the Deployment rolls on the next ArgoCD sync.
+# Deployment mounts it with subPath, which Kubernetes never refreshes in a
+# running pod — a plain ConfigMap edit would be Synced and Healthy while
+# cloudflared kept serving the old ingress list.
+configMapGenerator:
+  - name: cloudflared-config
+    files:
+      - config.yaml

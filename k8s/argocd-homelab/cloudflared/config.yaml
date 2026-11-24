@@ -1,0 +1,54 @@
+tunnel: homelab-k8s
+credentials-file: /etc/cloudflared/credentials.json
+no-autoupdate: true
+# Carries WARP traffic for the 192.168.0.0/24 private network route declared
+# in terraform-homelab/cloudflare/main.tf. Both halves are required: this
+# flag makes the tunnel willing, the route tells Cloudflare where the LAN is.
+# Services on `desktop` (vllm :8000, vllm-stats :8090) are reached this way
+# rather than via ingress, so they stay off the public internet.
+warp-routing:
+  enabled: true
+ingress:
+  - hostname: echo-server.peterstorm.io
+    service: http://echo-server.echo-server:80
+  - hostname: argocd.peterstorm.io
+    service: http://argocd-server.argocd:80
+  - hostname: grafana.peterstorm.io
+    service: http://kube-prometheus-stack-grafana.monitoring:80
+  - hostname: sonarr.peterstorm.io
+    service: http://sonarr.sonarr:8989
+  - hostname: radarr.peterstorm.io
+    service: http://radarr.radarr:7878
+  - hostname: prowlarr.peterstorm.io
+    service: http://prowlarr.prowlarr:9696
+  - hostname: overseerr.peterstorm.io
+    service: http://overseerr.overseerr:5055
+  - hostname: transmission.peterstorm.io
+    service: http://transmission.transmission:80
+  - hostname: dotslash.dev
+    service: http://dotslash-dev.dotslash-dev:3000
+  # SemIf (formerly OpenJev) browser demo — static site; WebGPU inference
+  # happens in the client's browser, so this only serves files. Runs as a
+  # plain Docker container on the host (no k8s, no GPU needed).
+  - hostname: semif.peterstorm.io
+    service: http://192.168.0.28:8093
+  # Raw TCP to the inference API, for clients that cannot route the LAN
+  # (full-tunnel corporate VPN, or no admin rights to install WARP).
+  # Gated by a Cloudflare Access service-token policy — see the
+  # cloudflare_zero_trust_access_application in terraform. Without that
+  # policy this line publishes the model to the internet.
+  - hostname: vllm-tcp.peterstorm.io
+    service: tcp://192.168.0.80:8000
+  # SSH to the two LAN hosts, for clients that cannot route the LAN (the
+  # corporate Mac): reached with `cloudflared access ssh` as a ProxyCommand.
+  # Each is gated by its own Access service-token policy (local.ssh_hosts in
+  # terraform) — without it a line here publishes sshd to the internet.
+  # Add a host in both places; tests/cloudflared-tcp-access-contract.sh fails
+  # when only this side exists.
+  - hostname: ssh-desktop.peterstorm.io
+    service: ssh://192.168.0.80:22
+  - hostname: ssh-homelab.peterstorm.io
+    service: ssh://192.168.0.28:22
+  - hostname: artex.peterstorm.io
+    service: http://artex.artex:8787
+  - service: http_status:404
