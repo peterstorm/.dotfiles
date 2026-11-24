@@ -98,6 +98,17 @@ case "$WEIGHTS" in
   *) echo "error: WEIGHTS is deepseek, warmind or warmind-v1.0: $WEIGHTS" >&2; exit 2 ;;
 esac
 STORE="$NATIVE/experts.ds4n"
+# Store replicas: copies of experts.ds4n on other NVMe drives (space-separated paths), read beside
+# STORE so the drives' bandwidth adds up; each goes on a drive of its own, and the engine refuses one
+# that is not a copy (ds4-native serving.md, Store replicas: header, size and sampled pages). Each
+# drive takes at most REPLICA_DEPTH 1 MiB reads at once (the engine's default, 16, when empty), so
+# the faster takes more. The engine must know Store replicas (the launch refuses one that does not). The second
+# drive goes in M.2_3 or M.2_4, never M.2_2 (it takes lanes from GPU 2). Empty: STORE alone.
+STORE_REPLICAS="${STORE_REPLICAS:-}"
+REPLICA_DEPTH="${REPLICA_DEPTH:-}"
+[[ -z "$REPLICA_DEPTH" || "$REPLICA_DEPTH" =~ ^[1-9][0-9]*$ ]] || { echo "error: REPLICA_DEPTH is a positive count: $REPLICA_DEPTH" >&2; exit 2; }
+read -r -a store_replicas <<<"$STORE_REPLICAS"
+STORES="$(IFS=,; echo "$STORE${store_replicas[*]:+,${store_replicas[*]}}")"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"
 HF="$MODELS_DIR/hf-1017-mtp"
 # The DSpark head (its three mtp.* shards): DeepSeek's released one in $HF, or another in the same
@@ -172,8 +183,14 @@ mountpoint -q "$MODELS_DIR" || die "$MODELS_DIR is not mounted (rpool/models/ds4
 # wherever the Maya profile pins it; the commit only has to be in its history.
 git -C "$MAYA_DIR" cat-file -e "$MAYA_COMMIT^{commit}" 2>/dev/null || die "Maya checkout at $MAYA_DIR has no commit $MAYA_COMMIT"
 [ -f "$MAYA_DIR/.venv/pyvenv.cfg" ] || die "Maya's .venv is missing ($MAYA_DIR/.venv; its python is the image's)"
-for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
+for f in "$BACKBONE" "$STORE" "${store_replicas[@]}" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
   [ -f "$f" ] || die "missing $f"
+done
+replica_mounts=()  # each replica's directory, read-only, where MODELS_DIR does not hold it
+for r in "${store_replicas[@]}"; do
+  [[ "$r" == /* && "$r" != *,* ]] || die "STORE_REPLICAS takes absolute paths without commas: $r"
+  [ "$(stat -c %s "$r")" = "$(stat -c %s "$STORE")" ] || die "$r is not the size of $STORE: not a copy of it"
+  [[ "$r" == "$MODELS_DIR"/* ]] || replica_mounts+=(-v "$(dirname "$r"):$(dirname "$r"):ro")
 done
 # The source hf-backbone recorded in the Backbone's safetensors header (__metadata__.source).
 backbone_source() {
@@ -217,9 +234,11 @@ fi
 [ -x "$ENGINE" ] && [ "$(cat "$ENGINE.commit" 2>/dev/null)" = "$DS4N_COMMIT" ] || die "engine $ENGINE is not installed: ${0##*/} --install"
 [ -f "$TOKENIZER/vocab.json" ] && [ -f "$TOKENIZER/chat_template.jinja" ] || die "tokenizer $TOKENIZER is missing: ${0##*/} --install"
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
+# An engine from before Store replicas would take the joined paths for one file name.
+((${#store_replicas[@]} == 0)) || grep -aqF -- --replica-depth "$ENGINE" || die "engine ${DS4N_COMMIT:0:12} predates Store replicas: pin one that has them, or unset STORE_REPLICAS"
 
 if [ "$MODE" = --preflight ]; then
-  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present)"
+  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present, store $STORES)"
   exit 0
 fi
 
@@ -240,15 +259,16 @@ if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
 fi
 
 # --- the server's config (rewritten each launch from the values above) ------------------------
-jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
+jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORES" --arg depth "$REPLICA_DEPTH" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
   --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg ram_policy "$RAM_POLICY" --arg sweep "$SWEEP_MIN" \
   --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" --arg lanes "$LANES" --arg sweep_slots "$SWEEP_SLOTS" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
-    args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
+    args: (["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
            "--ram-records", $ram, "--prior", $profile, "--ram-policy", $ram_policy, "--sweep-min", $sweep,
-           "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots],
+           "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots]
+          + (if $depth == "" then [] else ["--replica-depth", $depth] end)),
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     # A request that names no effort gets max (Maya accepts none/low/high/max); pi always names one.
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "max",
@@ -287,9 +307,10 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.dspark="$DSPARK" \
   --label ai.peterstorm.inference.ram-policy="$RAM_POLICY" \
   --label ai.peterstorm.inference.lanes="$LANES" \
+  --label ai.peterstorm.inference.store-replicas="$STORE_REPLICAS" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
-  "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
+  "${container_run[@]}" "${replica_mounts[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
   "exec '$MAYA_DIR/.venv/bin/python' serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null
 echo "launched $NAME (model $SERVED_MODEL on :$PORT; loading takes a few minutes); logs: docker logs -f $NAME, $SERVE_DIR/ds4-native.log"
 
