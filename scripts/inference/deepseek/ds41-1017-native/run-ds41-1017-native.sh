@@ -102,13 +102,12 @@ STORE="$NATIVE/experts.ds4n"
 # STORE so the drives' bandwidth adds up; each goes on a drive of its own, and the engine refuses one
 # that is not a copy (ds4-native serving.md, Store replicas: header, size and sampled pages). Each
 # drive takes at most REPLICA_DEPTH 1 MiB reads at once (the engine's default, 16, when empty), so
-# the faster takes more. The engine must know Store replicas (the launch refuses one that does not). The second
-# drive goes in M.2_3 or M.2_4, never M.2_2 (it takes lanes from GPU 2). Empty: STORE alone.
+# the faster takes more; REPLICA_DEPTH without STORE_REPLICAS is refused, as STORE alone takes a
+# step's reads all at once. The engine must know Store replicas (the launch refuses one that does
+# not). The second drive goes in M.2_3 or M.2_4, never M.2_2 (it takes lanes from GPU 2). Empty:
+# STORE alone. Checked, and the launch's --store, mounts and depth derived, under "Store replicas" below.
 STORE_REPLICAS="${STORE_REPLICAS:-}"
 REPLICA_DEPTH="${REPLICA_DEPTH:-}"
-[[ -z "$REPLICA_DEPTH" || "$REPLICA_DEPTH" =~ ^[1-9][0-9]*$ ]] || { echo "error: REPLICA_DEPTH is a positive count: $REPLICA_DEPTH" >&2; exit 2; }
-read -r -a store_replicas <<<"$STORE_REPLICAS"
-STORES="$(IFS=,; echo "$STORE${store_replicas[*]:+,${store_replicas[*]}}")"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"
 HF="$MODELS_DIR/hf-1017-mtp"
 # The DSpark head (its three mtp.* shards): DeepSeek's released one in $HF, or another in the same
@@ -183,15 +182,41 @@ mountpoint -q "$MODELS_DIR" || die "$MODELS_DIR is not mounted (rpool/models/ds4
 # wherever the Maya profile pins it; the commit only has to be in its history.
 git -C "$MAYA_DIR" cat-file -e "$MAYA_COMMIT^{commit}" 2>/dev/null || die "Maya checkout at $MAYA_DIR has no commit $MAYA_COMMIT"
 [ -f "$MAYA_DIR/.venv/pyvenv.cfg" ] || die "Maya's .venv is missing ($MAYA_DIR/.venv; its python is the image's)"
-for f in "$BACKBONE" "$STORE" "${store_replicas[@]}" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
+for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
   [ -f "$f" ] || die "missing $f"
 done
-replica_mounts=()  # each replica's directory, read-only, where MODELS_DIR does not hold it
-for r in "${store_replicas[@]}"; do
-  [[ "$r" == /* && "$r" != *,* ]] || die "STORE_REPLICAS takes absolute paths without commas: $r"
-  [ "$(stat -c %s "$r")" = "$(stat -c %s "$STORE")" ] || die "$r is not the size of $STORE: not a copy of it"
-  [[ "$r" == "$MODELS_DIR"/* ]] || replica_mounts+=(-v "$(dirname "$r"):$(dirname "$r"):ro")
+
+# --- Store replicas: checked once, and everything the launch takes from them -----------------------
+# store_replicas (each resolved, so the path the container opens is the file checked here), STORES
+# (the engine's --store), replica_mounts (each replica directory MODELS_DIR does not hold, once,
+# read-only) and REPLICA_DEPTH (only beside replicas) come from this step and nowhere else.
+read -r -a replicas_named <<<"$STORE_REPLICAS"
+if ((${#replicas_named[@]} == 0)); then
+  [ -z "$REPLICA_DEPTH" ] || die "REPLICA_DEPTH=$REPLICA_DEPTH without STORE_REPLICAS: STORE alone takes a step's reads all at once"
+else
+  [[ -z "$REPLICA_DEPTH" || "$REPLICA_DEPTH" =~ ^[1-9][0-9]*$ ]] || die "REPLICA_DEPTH is a positive count: $REPLICA_DEPTH"
+fi
+# A replica is another file than STORE and than every other replica: by device and inode, so a
+# symlink or hard link to one of them is the file it names (it would add no drive).
+declare -A store_file=(["$(stat -L -c %d:%i "$STORE")"]="$STORE") replica_dir_mounted=()
+store_replicas=() replica_mounts=()
+for named in "${replicas_named[@]}"; do
+  [[ "$named" == /* && "$named" != *,* ]] || die "STORE_REPLICAS takes absolute paths without commas: $named"
+  [ -f "$named" ] || die "missing $named"
+  r="$(realpath -e "$named")"
+  [[ "$r" != *,* ]] || die "STORE_REPLICAS: $named resolves to $r, a path with a comma"
+  id="$(stat -L -c %d:%i "$r")"
+  [ -z "${store_file[$id]:-}" ] || die "STORE_REPLICAS: $named is the file ${store_file[$id]} is, not a copy on another drive"
+  store_file[$id]="$named"
+  [ "$(stat -c %s "$r")" = "$(stat -L -c %s "$STORE")" ] || die "$named is not the size of $STORE: not a copy of it"
+  store_replicas+=("$r")
+  dir="$(dirname "$r")"
+  if [[ "$r" != "$MODELS_DIR"/* && -z "${replica_dir_mounted[$dir]:-}" ]]; then
+    replica_dir_mounted[$dir]=1
+    replica_mounts+=(-v "$dir:$dir:ro")
+  fi
 done
+STORES="$(IFS=,; echo "$STORE${store_replicas[*]:+,${store_replicas[*]}}")"
 # The source hf-backbone recorded in the Backbone's safetensors header (__metadata__.source).
 backbone_source() {
   local header
