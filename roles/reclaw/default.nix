@@ -156,7 +156,11 @@
         # OAuth (.credentials.json), not sops keys. The RECLAW_PI_* pins below
         # only reach Pi runs (skills declaring `backend: pi`), so they stay —
         # switching back is a one-line change.
-        AGENT_BACKEND = "claude";
+        # 2026-11-24 (afternoon): back on pi per user request, onto the local
+        # DeepSeek primary (see RECLAW_PI_MODEL below). A chat conversation
+        # keeps the backend it captured at ingress until /new, so this flips
+        # new conversations and scheduled skills; claude stays the CLI default.
+        AGENT_BACKEND = "pi";
         # Each agent run gets its own transient scope in reclaw-agents.slice
         # (defined above). A timed-out run is torn down as a whole cgroup, which
         # also reaches setsid/nohup descendants that a PID signal never could.
@@ -216,11 +220,15 @@
         # Telegram photos lose image understanding until a vision model is
         # served again. Its thinkingLevelMap supports only low/high/max; chat
         # stays at :high rather than inheriting defaultThinkingLevel max.
-        RECLAW_PI_MODEL = "warmind-1017-native:high";
+        # 2026-11-24: deepseek-v4.1-flash-native (stock DeepSeek-V4.1-Flash-1017
+        # on the same ds4-native launcher, switch-primary.sh `deepseek`). ds4-native
+        # answers any model id, so the pin chooses pi's catalog entry (window,
+        # thinkingLevelMap low/high/max, text-only), not what the GPUs serve.
+        RECLAW_PI_MODEL = "deepseek-v4.1-flash-native:high";
         # 2026-11-21: scheduled skills run at :low (provider shared with chat).
         # :medium does not exist for this model, and max tripped per-skill
         # timeouts before (see 2026-11-05 above).
-        RECLAW_PI_SCHEDULED_MODEL = "warmind-1017-native:low";
+        RECLAW_PI_SCHEDULED_MODEL = "deepseek-v4.1-flash-native:low";
         AUTHORIZED_USER_IDS = "5061662914";
         OBSIDIAN_VAULT_PATH = "/home/peterstorm/dev/notes/remotevault";
         TZ = "Europe/Copenhagen";
