@@ -205,6 +205,75 @@ output "vllm_access_client_secret" {
   sensitive = true
 }
 
+# ---------------------------------------------------------------------------
+# ssh-desktop: Access-gated SSH path to `desktop`, same transport as vllm-tcp.
+#
+# Lets a machine that cannot route 192.168.0.0/24 (the corporate Mac behind
+# full-tunnel Cisco) run `ssh desktop` — which is what scripts/inference/
+# switch-primary.sh, and so pi's /switch, does off-host. Reached with
+# `cloudflared access ssh` as an ssh ProxyCommand; see the darwin role.
+#
+# Shell access is a bigger prize than an inference endpoint, so this gets its
+# OWN service token rather than sharing vllm-tcp's: a leaked or rotated vLLM
+# token must not open a path to sshd, and the two can be revoked independently.
+# The Access application is not optional here either — a tcp/ssh ingress with no
+# policy publishes sshd to the internet. sshd itself stays the second layer:
+# roles/ssh sets PasswordAuthentication = false, so a stolen service token still
+# needs a private key to get a shell.
+# ---------------------------------------------------------------------------
+resource "cloudflare_dns_record" "ssh_desktop" {
+  zone_id = var.cloudflare_zone_id
+  name    = "ssh-desktop"
+  content = "${var.cloudflare_tunnel_id}.cfargotunnel.com"
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_zero_trust_access_service_token" "ssh_desktop" {
+  account_id = var.cloudflare_account_id
+  name       = "ssh-desktop-client"
+  duration   = "8760h" # 1 year; rotate by tainting this resource
+}
+
+resource "cloudflare_zero_trust_access_policy" "ssh_desktop" {
+  account_id = var.cloudflare_account_id
+  name       = "ssh-desktop service token"
+  decision   = "non_identity"
+
+  include = [{
+    service_token = {
+      token_id = cloudflare_zero_trust_access_service_token.ssh_desktop.id
+    }
+  }]
+}
+
+resource "cloudflare_zero_trust_access_application" "ssh_desktop" {
+  account_id       = var.cloudflare_account_id
+  name             = "desktop SSH"
+  domain           = "ssh-desktop.peterstorm.io"
+  type             = "self_hosted"
+  session_duration = "24h"
+
+  policies = [{
+    id         = cloudflare_zero_trust_access_policy.ssh_desktop.id
+    precedence = 1
+  }]
+}
+
+# Read once with `terraform output -raw ssh_desktop_access_client_id` (and
+# _secret), then put both into secrets/users/hansen142/cloudflare-access.yaml
+# as ssh_desktop_client_id / ssh_desktop_client_secret via sops.
+output "ssh_desktop_access_client_id" {
+  value     = cloudflare_zero_trust_access_service_token.ssh_desktop.client_id
+  sensitive = true
+}
+
+output "ssh_desktop_access_client_secret" {
+  value     = cloudflare_zero_trust_access_service_token.ssh_desktop.client_secret
+  sensitive = true
+}
+
 # Plex on dedicated LB IP (not proxied)
 resource "cloudflare_dns_record" "plex" {
   zone_id = var.cloudflare_zone_id

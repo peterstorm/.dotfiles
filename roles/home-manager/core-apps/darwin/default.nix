@@ -15,6 +15,10 @@
     (util.sops.userSecret "keycloak-admin-password-opr" "keycloak.yaml" "keycloak_admin_password_opr")
     (util.sops.userSecret "cf-access-vllm-id" "cloudflare-access.yaml" "vllm_client_id")
     (util.sops.userSecret "cf-access-vllm-secret" "cloudflare-access.yaml" "vllm_client_secret")
+    # ssh-desktop has its own Access token (see terraform ssh_desktop): a leaked
+    # or rotated vLLM token must not open a path to sshd.
+    (util.sops.userSecret "cf-access-ssh-id" "cloudflare-access.yaml" "ssh_desktop_client_id")
+    (util.sops.userSecret "cf-access-ssh-secret" "cloudflare-access.yaml" "ssh_desktop_client_secret")
     # Kept separate from the long-lived Cloudflare service-token file so an
     # inference-only rotation can be shipped through dotfiles and applied atomically.
     (util.sops.userSecret "vllm-api-key" "inference-api.yaml" "vllm_api_key")
@@ -40,6 +44,10 @@
       CF_ACCESS_CLIENT_ID = "cf-access-vllm-id";
       CF_ACCESS_CLIENT_SECRET = "cf-access-vllm-secret";
     })
+    (util.sops.envTemplate "cf-access-ssh-env" {
+      CF_ACCESS_SSH_CLIENT_ID = "cf-access-ssh-id";
+      CF_ACCESS_SSH_CLIENT_SECRET = "cf-access-ssh-secret";
+    })
     # OpenAI-compatible client env: with `vllm-forward` running, any client
     # (claude, curl, ...) works with zero flags.
     (util.sops.configTemplate "vllm-env" ''
@@ -49,7 +57,36 @@
   ]
   
   # Configuration
-  {
+  (let
+    # ssh ProxyCommand for hosts behind the Access-gated tunnel: `desktopSshProxy
+    # <access-hostname>` speaks ssh over stdin/stdout through `cloudflared access
+    # ssh`. Credentials come from sops and reach cloudflared via TUNNEL_SERVICE_
+    # TOKEN_* so they never sit in argv — ssh runs this as a child process, and
+    # command lines are visible to `ps` and to EDR on this machine. Same
+    # reasoning as vllm-forward below.
+    desktopSshProxy = pkgs.writeShellScript "desktop-ssh-proxy" ''
+      set -euo pipefail
+      source ${config.sops.templates."cf-access-ssh-env".path}
+      export TUNNEL_SERVICE_TOKEN_ID="$CF_ACCESS_SSH_CLIENT_ID"
+      export TUNNEL_SERVICE_TOKEN_SECRET="$CF_ACCESS_SSH_CLIENT_SECRET"
+      exec ${pkgs.cloudflared}/bin/cloudflared access ssh --hostname "$1"
+    '';
+  in {
+    # `ssh desktop` — and so switch-primary.sh / pi's /switch, which re-run
+    # themselves there — works from this machine with no LAN route, over the
+    # tunnel. HostKeyAlias keeps the known_hosts identity "desktop" no matter
+    # which path reaches it, so the same host key is trusted on the LAN too.
+    programs.ssh = {
+      enable = true;
+      enableDefaultConfig = false;
+      settings.desktop = {
+        hostname = "ssh-desktop.peterstorm.io";
+        user = "peterstorm";
+        HostKeyAlias = "desktop";
+        ProxyCommand = "${desktopSshProxy} %h";
+      };
+    };
+
     # Fix: sops-nix launchd agent needs /usr/bin in PATH for getconf
     launchd.agents.sops-nix.config.EnvironmentVariables.PATH = lib.mkForce "/usr/bin:/bin:/usr/sbin:/sbin";
 
@@ -133,6 +170,6 @@
         }
       '';
     };
-  }
+  })
 ) { inherit config lib; }
 
