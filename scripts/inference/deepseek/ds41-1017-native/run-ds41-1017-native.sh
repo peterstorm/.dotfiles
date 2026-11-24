@@ -98,6 +98,16 @@ case "$WEIGHTS" in
   *) echo "error: WEIGHTS is deepseek, warmind or warmind-v1.0: $WEIGHTS" >&2; exit 2 ;;
 esac
 STORE="$NATIVE/experts.ds4n"
+# Store replicas: copies of experts.ds4n on other NVMe drives (space-separated paths), read beside
+# STORE so the drives' bandwidth adds up; each goes on a drive of its own, and the engine refuses one
+# that is not a copy (ds4-native serving.md, Store replicas: header, size and sampled pages). Each
+# drive takes at most REPLICA_DEPTH 1 MiB reads at once (the engine's default, 16, when empty), so
+# the faster takes more; REPLICA_DEPTH without STORE_REPLICAS is refused, as STORE alone takes a
+# step's reads all at once. The engine must know Store replicas (the launch refuses one that does
+# not). The second drive goes in M.2_3 or M.2_4, never M.2_2 (it takes lanes from GPU 2). Empty:
+# STORE alone. Checked, and the launch's --store, mounts and depth derived, under "Store replicas" below.
+STORE_REPLICAS="${STORE_REPLICAS:-}"
+REPLICA_DEPTH="${REPLICA_DEPTH:-}"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"
 HF="$MODELS_DIR/hf-1017-mtp"
 # The DSpark head (its three mtp.* shards): DeepSeek's released one in $HF, or another in the same
@@ -175,6 +185,38 @@ git -C "$MAYA_DIR" cat-file -e "$MAYA_COMMIT^{commit}" 2>/dev/null || die "Maya 
 for f in "$BACKBONE" "$STORE" "$GGUF" "$PROFILE" "$HF/tokenizer.json" "$DSPARK"/model-0004{4,5,6}-of-00048.safetensors; do
   [ -f "$f" ] || die "missing $f"
 done
+
+# --- Store replicas: checked once, and everything the launch takes from them -----------------------
+# store_replicas (each resolved, so the path the container opens is the file checked here), STORES
+# (the engine's --store), replica_mounts (each replica directory MODELS_DIR does not hold, once,
+# read-only) and REPLICA_DEPTH (only beside replicas) come from this step and nowhere else.
+read -r -a replicas_named <<<"$STORE_REPLICAS"
+if ((${#replicas_named[@]} == 0)); then
+  [ -z "$REPLICA_DEPTH" ] || die "REPLICA_DEPTH=$REPLICA_DEPTH without STORE_REPLICAS: STORE alone takes a step's reads all at once"
+else
+  [[ -z "$REPLICA_DEPTH" || "$REPLICA_DEPTH" =~ ^[1-9][0-9]*$ ]] || die "REPLICA_DEPTH is a positive count: $REPLICA_DEPTH"
+fi
+# A replica is another file than STORE and than every other replica: by device and inode, so a
+# symlink or hard link to one of them is the file it names (it would add no drive).
+declare -A store_file=(["$(stat -L -c %d:%i "$STORE")"]="$STORE") replica_dir_mounted=()
+store_replicas=() replica_mounts=()
+for named in "${replicas_named[@]}"; do
+  [[ "$named" == /* && "$named" != *,* ]] || die "STORE_REPLICAS takes absolute paths without commas: $named"
+  [ -f "$named" ] || die "missing $named"
+  r="$(realpath -e "$named")"
+  [[ "$r" != *,* ]] || die "STORE_REPLICAS: $named resolves to $r, a path with a comma"
+  id="$(stat -L -c %d:%i "$r")"
+  [ -z "${store_file[$id]:-}" ] || die "STORE_REPLICAS: $named is the file ${store_file[$id]} is, not a copy on another drive"
+  store_file[$id]="$named"
+  [ "$(stat -c %s "$r")" = "$(stat -L -c %s "$STORE")" ] || die "$named is not the size of $STORE: not a copy of it"
+  store_replicas+=("$r")
+  dir="$(dirname "$r")"
+  if [[ "$r" != "$MODELS_DIR"/* && -z "${replica_dir_mounted[$dir]:-}" ]]; then
+    replica_dir_mounted[$dir]=1
+    replica_mounts+=(-v "$dir:$dir:ro")
+  fi
+done
+STORES="$(IFS=,; echo "$STORE${store_replicas[*]:+,${store_replicas[*]}}")"
 # The source hf-backbone recorded in the Backbone's safetensors header (__metadata__.source).
 backbone_source() {
   local header
@@ -217,9 +259,11 @@ fi
 [ -x "$ENGINE" ] && [ "$(cat "$ENGINE.commit" 2>/dev/null)" = "$DS4N_COMMIT" ] || die "engine $ENGINE is not installed: ${0##*/} --install"
 [ -f "$TOKENIZER/vocab.json" ] && [ -f "$TOKENIZER/chat_template.jinja" ] || die "tokenizer $TOKENIZER is missing: ${0##*/} --install"
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
+# An engine from before Store replicas would take the joined paths for one file name.
+((${#store_replicas[@]} == 0)) || grep -aqF -- --replica-depth "$ENGINE" || die "engine ${DS4N_COMMIT:0:12} predates Store replicas: pin one that has them, or unset STORE_REPLICAS"
 
 if [ "$MODE" = --preflight ]; then
-  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present)"
+  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present, store $STORES)"
   exit 0
 fi
 
@@ -240,15 +284,16 @@ if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
 fi
 
 # --- the server's config (rewritten each launch from the values above) ------------------------
-jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORE" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
+jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORES" --arg depth "$REPLICA_DEPTH" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
   --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg ram_policy "$RAM_POLICY" --arg sweep "$SWEEP_MIN" \
   --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" --arg lanes "$LANES" --arg sweep_slots "$SWEEP_SLOTS" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
-    args: ["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
+    args: (["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
            "--ram-records", $ram, "--prior", $profile, "--ram-policy", $ram_policy, "--sweep-min", $sweep,
-           "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots],
+           "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots]
+          + (if $depth == "" then [] else ["--replica-depth", $depth] end)),
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     # A request that names no effort gets max (Maya accepts none/low/high/max); pi always names one.
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "max",
@@ -287,9 +332,10 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.dspark="$DSPARK" \
   --label ai.peterstorm.inference.ram-policy="$RAM_POLICY" \
   --label ai.peterstorm.inference.lanes="$LANES" \
+  --label ai.peterstorm.inference.store-replicas="$STORE_REPLICAS" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
-  "${container_run[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
+  "${container_run[@]}" "${replica_mounts[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
   "exec '$MAYA_DIR/.venv/bin/python' serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null
 echo "launched $NAME (model $SERVED_MODEL on :$PORT; loading takes a few minutes); logs: docker logs -f $NAME, $SERVE_DIR/ds4-native.log"
 
