@@ -331,9 +331,13 @@ run_request() {
 main() {
   local request="${1:-toggle}"
   if [ "$(hostname)" != "$SERVING_HOST" ]; then
-    local tty=()
-    [ -t 0 ] && tty=(-t)
-    exec ssh "${tty[@]}" "$SERVING_HOST" "\$HOME/.dotfiles/scripts/inference/switch-primary.sh $(printf '%q ' "$@")"
+    # A scalar flag, not an array: macOS bash 3.2 treats "${empty[@]}" as an
+    # unbound variable under `set -u`, which broke /switch whenever stdin was
+    # not a terminal. ${force_tty:+-t} expands to zero or one word on any bash.
+    local force_tty=""
+    [ -t 0 ] && force_tty=1
+    # shellcheck disable=SC2086 # intentional: the flag is either empty or -t
+    exec ssh ${force_tty:+-t} "$SERVING_HOST" "\$HOME/.dotfiles/scripts/inference/switch-primary.sh $(printf '%q ' "$@")"
   fi
   # shellcheck source=scripts/inference/shared/inference-api-key.sh
   source "$SCRIPT_DIR/shared/inference-api-key.sh"
