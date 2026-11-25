@@ -43,6 +43,7 @@
 #   --install     build the pinned engine (once per DS4N_COMMIT; GPUs not needed)
 #   --launch      start the server container (default); returns once it serves, set to restart at boot
 #   --stop        stop it (and so keep it down at boot)
+#   --write-engram  write the Engram copy to ENGRAM from the GGUF (once; GPUs not needed)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -109,6 +110,19 @@ STORE="$NATIVE/experts.ds4n"
 STORE_REPLICAS="${STORE_REPLICAS:-}"
 REPLICA_DEPTH="${REPLICA_DEPTH:-}"
 GGUF="$MODELS_DIR/engram/DeepSeek-V4.1-Flash-1017-MXFP4.gguf"
+# Engram copy: the GGUF's two Engram tables (~190 GiB) on a drive of their own, read by direct I/O
+# instead of from the GGUF on the pool (ds4-native serving.md, Engram copy). A fresh prompt's 48
+# scattered 264-byte rows a token then cost the NVMe's ~1M reads a second, not ZFS's ~250K, and
+# leave the Expert drive to the Experts. Best a partition of the second NVMe, beside a Store
+# replica (/dev/disk/by-partlabel/...). It must hold no file system and be mounted nowhere. A file
+# also works.
+# --write-engram writes the copy once, using the pinned engine's ds4n-engram-copy (ENGRAM_TOOL,
+# which --install builds when ENGRAM is set). Both the engine at each load and --preflight check
+# it against the GGUF: the header, the size, and sampled rows.
+# Empty: the rows come from the GGUF.
+ENGRAM="${ENGRAM:-}"
+[[ -z "$ENGRAM" || ("$ENGRAM" == /* && "$ENGRAM" != *:*) ]] || { echo "error: ENGRAM is an absolute path without colons: $ENGRAM" >&2; exit 2; }
+ENGRAM_TOOL="$NATIVE/bin/ds4n-engram-copy-${DS4N_COMMIT:0:12}"
 HF="$MODELS_DIR/hf-1017-mtp"
 # The DSpark head (its three mtp.* shards): DeepSeek's released one in $HF, or another in the same
 # layout. Drafts are verified, so the head changes speed only, never the output.
@@ -163,8 +177,8 @@ CONTAINER_HOME="$MODELS_DIR/.home"
 MODE="${1:---launch}"
 
 case "$MODE" in
-  --preflight | --install | --launch | --stop) ;;
-  *) echo "usage: ${0##*/} [--preflight|--install|--launch|--stop]" >&2; exit 2 ;;
+  --preflight | --install | --launch | --stop | --write-engram) ;;
+  *) echo "usage: ${0##*/} [--preflight|--install|--launch|--stop|--write-engram]" >&2; exit 2 ;;
 esac
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -217,6 +231,49 @@ for named in "${replicas_named[@]}"; do
   fi
 done
 STORES="$(IFS=,; echo "$STORE${store_replicas[*]:+,${store_replicas[*]}}")"
+
+# --- Engram copy: checked once, and how a container reaches it -------------------------------------
+# These all come from this step and nowhere else:
+#   - engram: ENGRAM resolved, so the container opens what is checked here;
+#   - engram_read: the read-only access a serving or checking container takes;
+#   - engram_write: the read-write access --write-engram takes.
+# For a partition, the access is the device node with its group. For a file, it is the file's
+# directory when MODELS_DIR does not hold it (read-only unless writing; a replica's mount may
+# already hold it).
+engram="" engram_read=() engram_write=()
+if [ -n "$ENGRAM" ]; then
+  if [ "$MODE" = --write-engram ] && [ ! -e "$ENGRAM" ]; then
+    # A new file for the copy, in a directory that exists.
+    engram="$(realpath -m "$ENGRAM")"
+    [ -d "$(dirname "$engram")" ] || die "ENGRAM: no directory $(dirname "$engram") to write $ENGRAM in"
+  else
+    engram="$(realpath -e "$ENGRAM" 2>/dev/null)" || die "missing $ENGRAM (ENGRAM)"
+  fi
+  [[ "$engram" != *:* ]] || die "ENGRAM: $ENGRAM resolves to $engram, a path with a colon"
+  if [ -b "$engram" ]; then
+    # The copy owns the whole partition, so nothing may be mounted on it or under it. It must hold no
+    # file system or pool member either. No probe knows a copy's own header, so a written copy reads
+    # as empty here; anything else on the device would be overwritten.
+    [ -z "$(lsblk -nro MOUNTPOINTS "$engram" | tr -d '[:space:]')" ] || die "ENGRAM: $engram (or a partition on it) is mounted"
+    fstypes="$(lsblk -nro FSTYPE "$engram" | sort -u | paste -sd' ' | sed 's/^ *//; s/ *$//')"
+    [ -z "$fstypes" ] || die "ENGRAM: $engram holds a file system ($fstypes), not an Engram copy: give a partition of its own"
+    engram_read=(--device "$engram:$engram:r" --group-add "$(stat -c %g "$engram")")
+    engram_write=(--device "$engram:$engram:rw" --group-add "$(stat -c %g "$engram")")
+  elif [ -f "$engram" ] || [ ! -e "$engram" ]; then
+    if [ -e "$engram" ]; then
+      id="$(stat -L -c %d:%i "$engram")"
+      [ "$id" != "$(stat -L -c %d:%i "$GGUF")" ] || die "ENGRAM: $ENGRAM is the GGUF itself, not a copy of its tables"
+      [ -z "${store_file[$id]:-}" ] || die "ENGRAM: $ENGRAM is the file ${store_file[$id]} is"
+    fi
+    dir="$(dirname "$engram")"
+    if [[ "$engram" != "$MODELS_DIR"/* ]]; then
+      [ -n "${replica_dir_mounted[$dir]:-}" ] || engram_read=(-v "$dir:$dir:ro")
+      engram_write=(-v "$dir:$dir")
+    fi
+  else
+    die "ENGRAM: $ENGRAM is neither a partition nor a file"
+  fi
+fi
 # The source hf-backbone recorded in the Backbone's safetensors header (__metadata__.source).
 backbone_source() {
   local header
@@ -231,13 +288,18 @@ mkdir -p "$CONTAINER_HOME" "$NATIVE/bin" "$SERVE_DIR"
 if [ "$MODE" = --install ]; then
   git -C "$DS4N_SRC" fetch -q origin
   git -C "$DS4N_SRC" cat-file -e "$DS4N_COMMIT^{commit}" 2>/dev/null || die "$DS4N_SRC has no commit $DS4N_COMMIT"
+  # The Engram copy's tool is built only when ENGRAM asks for it, and only from an engine that has it.
+  [ -z "$engram" ] || git -C "$DS4N_SRC" cat-file -e "$DS4N_COMMIT:src/tools/engram_copy.cpp" 2>/dev/null ||
+    die "engine ${DS4N_COMMIT:0:12} predates the Engram copy: pin one that has it, or unset ENGRAM"
+  targets="ds4n-serve ds4n_tests${engram:+ ds4n-engram-copy}"
   scratch="$(mktemp -d "$NATIVE/.build-${DS4N_COMMIT:0:12}.XXXXXX")"
   trap 'rm -rf "$scratch"' EXIT
   git -C "$DS4N_SRC" archive "$DS4N_COMMIT" | tar -x -C "$scratch"
   docker run --rm "${container_run[@]}" -v "$scratch:/src" -w /src "$IMAGE" bash -c \
     "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc >/dev/null \
-     && cmake --build build --target ds4n-serve ds4n_tests && build/ds4n_tests >/dev/null"
+     && cmake --build build --target $targets && build/ds4n_tests >/dev/null"
   install -m 755 "$scratch/build/ds4n-serve" "$ENGINE"
+  [ -z "$engram" ] || install -m 755 "$scratch/build/ds4n-engram-copy" "$ENGRAM_TOOL"
   echo "$DS4N_COMMIT" >"$ENGINE.commit"
   # The tokenizer in Maya's form, from the checkpoint's tokenizer.json (Maya's own exporter).
   docker run --rm "${container_run[@]}" -w "$MAYA_DIR/tools/ds4" "$IMAGE" "$MAYA_DIR/.venv/bin/python" -c \
@@ -252,7 +314,7 @@ if [ "$MODE" = --install ]; then
     echo "$MAYA_COMMIT $(sha256sum "$MAYA_PATCH" | cut -d' ' -f1)" >"$MAYA_SERVE.tmp/.installed"
     rm -rf "$MAYA_SERVE" && mv "$MAYA_SERVE.tmp" "$MAYA_SERVE"
   fi
-  echo "installed $ENGINE, $TOKENIZER and $MAYA_SERVE"
+  echo "installed $ENGINE${engram:+, $ENGRAM_TOOL}, $TOKENIZER and $MAYA_SERVE"
   exit 0
 fi
 
@@ -261,9 +323,30 @@ fi
 [ -f "$MAYA_SERVE/.installed" ] || die "the patched server $MAYA_SERVE is not installed: ${0##*/} --install"
 # An engine from before Store replicas would take the joined paths for one file name.
 ((${#store_replicas[@]} == 0)) || grep -aqF -- --replica-depth "$ENGINE" || die "engine ${DS4N_COMMIT:0:12} predates Store replicas: pin one that has them, or unset STORE_REPLICAS"
+# ... and one from before the Engram copy would refuse --engram; its usage line names the flag.
+if [ -n "$engram" ]; then
+  grep -aqF -- '[--engram PATH]' "$ENGINE" || die "engine ${DS4N_COMMIT:0:12} predates the Engram copy: pin one that has it, or unset ENGRAM"
+  [ -x "$ENGRAM_TOOL" ] || die "the Engram copy tool $ENGRAM_TOOL is not installed: ENGRAM=$ENGRAM ${0##*/} --install"
+fi
+# The copy's tool, run in the image: it opens the GGUF through io_uring as the engine does (seccomp lifted).
+engram_tool() { docker run --rm "${container_run[@]}" --security-opt seccomp=unconfined "$@"; }
+
+if [ "$MODE" = --write-engram ]; then
+  [ -n "$engram" ] || die "--write-engram needs ENGRAM: the partition or file to write the copy to"
+  # Never under a server reading it (its label holds the resolved path).
+  [ "$(docker inspect -f '{{.State.Running}} {{index .Config.Labels "ai.peterstorm.inference.engram"}}' "$NAME" 2>/dev/null)" != "true $engram" ] ||
+    die "$NAME is serving from $engram: ${0##*/} --stop first"
+  engram_tool "${engram_write[@]}" "$IMAGE" "$ENGRAM_TOOL" --out "$engram" "$GGUF"
+  echo "wrote the Engram copy $engram from $GGUF, compared row by row (the engine checks it again at each load)"
+  exit 0
+fi
 
 if [ "$MODE" = --preflight ]; then
-  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present, store $STORES)"
+  if [ -n "$engram" ]; then
+    engram_tool "${replica_mounts[@]}" "${engram_read[@]}" "$IMAGE" "$ENGRAM_TOOL" --check "$engram" "$GGUF" >/dev/null ||
+      die "the Engram copy $engram does not check against $GGUF: ENGRAM=$ENGRAM ${0##*/} --write-engram"
+  fi
+  echo "DS4.1-1017 ds4-native preflight: PASS (image $IMAGE, engine ${DS4N_COMMIT:0:12}, Maya ${MAYA_SERVE##*/}, $WEIGHTS Backbone, files present, store $STORES, Engram rows ${engram:-from the GGUF})"
   exit 0
 fi
 
@@ -286,14 +369,15 @@ fi
 # --- the server's config (rewritten each launch from the values above) ------------------------
 jq -n --arg exe "$ENGINE" --arg backbone "$BACKBONE" --arg store "$STORES" --arg depth "$REPLICA_DEPTH" --arg gguf "$GGUF" --arg dspark "$DSPARK" \
   --arg profile "$PROFILE" --arg slots "$SLOTS" --arg ram "$RAM_RECORDS" --arg ram_policy "$RAM_POLICY" --arg sweep "$SWEEP_MIN" \
-  --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" --arg lanes "$LANES" --arg sweep_slots "$SWEEP_SLOTS" \
+  --arg ckpt "$CHECKPOINT_GB" --arg points "$REWIND_POINTS" --arg lanes "$LANES" --arg sweep_slots "$SWEEP_SLOTS" --arg engram "$engram" \
   --arg cwd "$SERVE_DIR" --arg tok "$TOKENIZER" --arg model "$SERVED_MODEL" --arg log "$SERVE_DIR/ds4-native.log" \
   --argjson port "$PORT" '{
     exe: $exe,
     args: (["--backbone", $backbone, "--store", $store, "--gguf", $gguf, "--dspark", $dspark, "--slots", $slots,
            "--ram-records", $ram, "--prior", $profile, "--ram-policy", $ram_policy, "--sweep-min", $sweep,
            "--checkpoint-gb", $ckpt, "--rewind-points", $points, "--lanes", $lanes, "--sweep-slots", $sweep_slots]
-          + (if $depth == "" then [] else ["--replica-depth", $depth] end)),
+          + (if $depth == "" then [] else ["--replica-depth", $depth] end)
+          + (if $engram == "" then [] else ["--engram", $engram] end)),
     cwd: $cwd, tokenizer: $tok, model_name: $model, gpu: [0, 1],
     # A request that names no effort gets max (Maya accepts none/low/high/max); pi always names one.
     sampling: {temperature: 1.0, top_p: 1.0}, reasoning_effort: "max",
@@ -333,9 +417,10 @@ docker run -d --name "$NAME" --restart no \
   --label ai.peterstorm.inference.ram-policy="$RAM_POLICY" \
   --label ai.peterstorm.inference.lanes="$LANES" \
   --label ai.peterstorm.inference.store-replicas="$STORE_REPLICAS" \
+  --label ai.peterstorm.inference.engram="$engram" \
   --env-file "$ENVFILE" "${extra_env[@]}" \
   --gpus all --ipc host --network host --ulimit memlock=-1 --security-opt seccomp=unconfined \
-  "${container_run[@]}" "${replica_mounts[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
+  "${container_run[@]}" "${replica_mounts[@]}" "${engram_read[@]}" -w "$MAYA_SERVE" --entrypoint bash "$IMAGE" -c \
   "exec '$MAYA_DIR/.venv/bin/python' serve/server.py --engine strata --config '$CONFIG' --host 0.0.0.0 --port '$PORT' --fit-max-tokens" >/dev/null
 echo "launched $NAME (model $SERVED_MODEL on :$PORT; loading takes a few minutes); logs: docker logs -f $NAME, $SERVE_DIR/ds4-native.log"
 

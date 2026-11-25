@@ -39,7 +39,8 @@ the container label `ai.peterstorm.inference.served-model` is what the switcher 
 | `hf-1017-mtp/` | DeepSeek's released MTP shards (the DSpark head: `model-00044/45/46-of-00048`) + tokenizer | DSpark input; drafts are verified so any head in this layout only changes speed |
 | `baseline/maya-expert-profile.bin` | the expert-profile prior for the RAM tier | built from real Maya traffic (`tools/expert-profile`) |
 | `native/serve/` | rewritten-at-launch `ds4-native.json` config, tokenizer export, engine log | the config is generated, hand-edits are lost |
-| `native/bin/` | `ds4n-serve-<commit>` + `.commit` stamp | produced by `--install` |
+| `native/bin/` | `ds4n-serve-<commit>` + `.commit` stamp; `ds4n-engram-copy-<commit>` when `ENGRAM` is set | produced by `--install` |
+| `ENGRAM` (off `/models/ds41`) | optional Engram copy: the GGUF's two Engram tables (~190 GiB), on a partition of their own (best: the second NVMe, `/dev/disk/by-partlabel/...`) or in a file | written by `--write-engram`; checked against the GGUF by the engine at every load and by `--preflight` |
 
 ## Operating
 
@@ -51,6 +52,9 @@ scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --preflight 
 scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --install     # build engine + server at pinned commits
 scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --launch      # gated launch + acceptance
 scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --stop
+# Engram copy, once per drive (the engine pin must have it; GPUs not needed):
+ENGRAM=/dev/disk/by-partlabel/ds41-engram scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --install
+ENGRAM=/dev/disk/by-partlabel/ds41-engram scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --write-engram
 ```
 
 - **Gates (fail closed):** image present, `/models/ds41` mounted, Maya commit in history + `.venv`,
@@ -64,6 +68,18 @@ scripts/inference/deepseek/ds41-1017-native/run-ds41-1017-native.sh --stop
   `RAM_POLICY` (victim | popular | recent; victim served best: warm reply 77→135 tok/s vs popular,
   2026-11-04), `SWEEP_MIN` (96), `CHECKPOINT_GB` (6), `REWIND_POINTS` (8), `NATIVE_EXTRA_ENV`
   (K=V engine experiments, passed through).
+  - `STORE_REPLICAS`: copies of `experts.ds4n` on other drives, as absolute paths.
+  - `REPLICA_DEPTH`: only with replicas.
+  - `ENGRAM`: the Engram copy (a partition or a file; empty means the rows come from the GGUF).
+
+  The preflight refuses an `ENGRAM` that is any of these:
+  - relative;
+  - missing;
+  - the GGUF or the store;
+  - a partition that is mounted or holds a file system;
+  - a copy that fails the tool's `--check`.
+
+  It also refuses an engine pin that predates `--engram`.
 - **Metrics:** `ds4-native-metrics.service` polls the engine and serves Prometheus text on :8010
   (TTFT/ITL/e2e histograms, DSpark accept length); `vllm-stats-record.timer` writes the ledger
   every 15 min (`/var/lib/vllm-stats/stats.csv`).
@@ -89,7 +105,15 @@ Mixed agent traffic 44–85 tok/s fleet; single-stream ~60–100. Five reviewers
 - **One GPU-owning process at a time** (flare/uncensored or this; comfyui excluded by gate).
   Every GPU experiment here is downtime for the other primary — schedule it.
 - **The engram GGUF is load-bearing** (see files table). Deleting it to "free space" breaks the
-  next launch — it is the runtime Engram source, the store holds only routed experts.
+  next launch — it is the runtime Engram source, the store holds only routed experts. Even with
+  `ENGRAM` set it stays required: every load checks the copy against it.
+- **`--write-engram` overwrites the whole partition.** The launcher refuses a device that holds a
+  file system or is mounted, and refuses to write under a running server that reads the same copy.
+  It cannot know whether you meant that partition, so check the partlabel first. The tool writes the
+  header last, after comparing every row: an interrupted write leaves a copy no launch accepts. Run
+  `--write-engram` again to finish it.
+- `tests/ds41-1017-native-engram-contract.sh` checks the `ENGRAM` handling without Docker or GPUs.
+  For the partition cases, set `DS41_TEST_BLANK_DEVICE` / `DS41_TEST_FS_DEVICE` to loop devices.
 - `--ulimit memlock=-1 --security-opt seccomp=unconfined` are required (io_uring for store and
   Engram reads; Docker's default seccomp blocks `io_uring_setup/enter`).
 - `--round-graphs-mb` 512/GPU is a measured cap: uncapped Round graphs OOM'd the GPUs after a few
