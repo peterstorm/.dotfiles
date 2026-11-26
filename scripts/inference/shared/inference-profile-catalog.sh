@@ -36,11 +36,15 @@ INFERENCE_PROFILE_CONTAINERS=(
 )
 
 # Running + waiting requests from one bridge's /metrics (series prefixed
-# PREFIX); status 1 when the bridge does not answer.
+# PREFIX); status 1 when the bridge does not answer OR answers without the
+# expected series: a bridge 200 whose body carries neither gauge must not sum
+# to a verified 0, or a renamed series would read as an idle engine while
+# requests wait (the fail-open the engine-metrics path refuses).
 _inference_bridge_inflight() {
   local url="$1" prefix="$2" text
   text="$(curl -fsS --connect-timeout 2 --max-time 5 "$url" 2>/dev/null)" || return 1
-  awk -v pattern="^${prefix}requests_(running|waiting)[{]" '$0 ~ pattern {sum += $NF} END {print sum + 0}' <<<"$text"
+  awk -v pattern="^${prefix}requests_(running|waiting)[{]" \
+    '$0 ~ pattern { seen = 1; sum += $NF } END { if (!seen) exit 2; print sum + 0 }' <<<"$text"
 }
 
 # In-flight (running + waiting) requests on whatever owns :8000, read from the
@@ -126,6 +130,7 @@ inference_require_idle_endpoint() {
     fi
     if [ "$active" = 0 ]; then
       streak=$((streak + 1))
+      busy=0
       if [ "$streak" -ge "$INFERENCE_IDLE_STREAK" ]; then
         echo "IDLE GATE: no running or waiting requests across $streak samples"
         return 0

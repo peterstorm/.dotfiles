@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Safely start/stop the promoted v11.1 upstream-core-port r2.1 profile.
 # v11.1 is v11 plus upstream's admission deadlock fix. The rollback target is
-# v10: v11 (r2) is the release that wedges, so a failed v11.1 acceptance must
-# restore whatever profile set was running before — never v11 by name. Launch
-# remains transactional at restart=no; only a fully accepted target is promoted.
+# whatever profile set was running before — v10 is the safe fallback because
+# v11 (r2) is the release that wedges, and v11 is never restored by name. A
+# failed v11.1 acceptance restores what ran before. Launch remains
+# transactional at restart=no; only a fully accepted target is promoted.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

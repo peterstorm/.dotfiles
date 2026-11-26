@@ -263,7 +263,7 @@ contains "$SWITCH" 'EXPECTED_MODEL="glm-5.3-flash-exl3-k4-vision-fp8kv-mtp-359k-
 contains "$SWITCH" 'RUN="$SCRIPT_DIR/run-glm53-flash-exl3-k4-vllm-sm120-v12.sh"'
 contains "$SWITCH" "SOURCE_PORT=\"$SOURCE_PORT\""
 contains "$SWITCH" 'length == 1 and .[0].id == $expected'
-contains "$SWITCH" 'IDLE GATE: no running or waiting requests across three samples'
+contains "$SWITCH" 'inference_require_idle_endpoint'
 contains "$SWITCH" 'GPU KV cache size:'
 contains "$SWITCH" 'mamba_state_protect_age=%s'
 contains "$SWITCH" 'source_port=%s'

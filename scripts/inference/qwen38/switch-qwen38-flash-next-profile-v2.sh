@@ -126,6 +126,9 @@ case "$MODE" in
         exit 0
       fi
     done
+    if [ "${#previous[@]}" -gt 0 ]; then
+      inference_require_idle_endpoint
+    fi
     stopped=()
     for container in "${previous[@]}"; do
       if ! inference_stop_container_if_present "$container"; then

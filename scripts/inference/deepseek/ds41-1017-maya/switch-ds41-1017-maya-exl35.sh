@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Safely start/stop DeepSeek-V4.1-Flash-1017 on Project Maya (EXL3 3.5 bpw).
 #
-# start: preflight -> idle gate on the running profile (the vLLM profiles'
-# /metrics) -> stop it -> launch Maya -> wait for /health plus an
-# authenticated /v1/models naming exactly deepseek-v4.1-flash -> boot
-# receipt -> restart=unless-stopped. Any failure after the previous profile
-# stopped restarts it (normally GLM v15), so a bad boot leaves the GPUs back
-# on the known-good profile, not idle.
+# start: preflight -> the shared catalog idle gate (model-labelled bridges
+# first, then the engine's /metrics) -> stop it -> launch Maya -> wait for
+# /health plus an authenticated /v1/models naming exactly deepseek-v4.1-flash
+# -> boot receipt -> restart=unless-stopped. Any failure after the previous
+# profile stopped restarts it (normally GLM v15), so a bad boot leaves the
+# GPUs back on the known-good profile, not idle.
 # stop: stops Maya only. Back to v15 afterwards:
 #   scripts/inference/glm53/switch-glm53-qad2-tp2-v15.sh start
 # (with :8000 free, v15's switcher needs no idle gate).
@@ -98,6 +98,9 @@ report_boot_receipt() {
   started_at="$(docker inspect "$TARGET" --format '{{.State.StartedAt}}')" || return 1
   commit="$(docker inspect "$TARGET" --format '{{index .Config.Labels "ai.peterstorm.inference.maya-commit"}}')" || return 1
   placement="$(grep -iE 'expert|vram|ram tier|pinned|page cache|ssd|tensor parallel|dspark|context' <<<"$logs" | tail -n 30)"
+  if [ -z "$placement" ]; then
+    echo "WARNING: no placement line was captured; inspect docker logs $TARGET and re-check where the experts landed" >&2
+  fi
   receipt_dir="$(dirname "$BOOT_RECEIPT")"
   install -d -m 700 "$receipt_dir"
   receipt_tmp="$(mktemp "$receipt_dir/.exl35-boot-receipt.XXXXXX")"

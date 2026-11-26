@@ -181,7 +181,7 @@ fi
 
 contains "$SWITCH" 'TARGET="glm53-flash-exl3-k4-vllm-sm120-v10"'
 contains "$SWITCH" 'length == 1 and .[0].id == $expected'
-contains "$SWITCH" 'IDLE GATE: no running or waiting requests across three samples'
+contains "$SWITCH" 'inference_require_idle_endpoint'
 contains "$SWITCH" 'Configured KV cache memory:'
 contains "$SWITCH" 'ai.peterstorm.inference.kv-cache-memory-bytes-per-gpu'
 contains "$SWITCH" 'GPU KV cache size:'

@@ -67,6 +67,13 @@ expect "vllm without its waiting gauge fails closed" "$(active)" "/1"
 body=([$ENGINE]=$'sglang:num_running_reqs{model_name="q"} 0')
 expect "sglang without its queue gauge fails closed" "$(active)" "/1"
 
+# A bridge 200 that carries neither of its expected series must not sum to a
+# verified 0: a renamed series would read as an idle engine while requests wait.
+body=([$FLARE]=$'hyperflare:requests_total{model_name="glm"} 99')
+expect "a bridge 200 without its request series fails closed" "$(active)" "/1"
+body=([$FLARE]=$'# hyperflare bridge: HTTP Error 401: Unauthorized')
+expect "a bridge 200 with unrelated text fails closed" "$(active)" "/1"
+
 body=()
 expect "nothing answers fails closed" "$(active)" "/1"
 
@@ -151,6 +158,15 @@ expect "the drained cutover took the busy sample plus a full streak" "$sample_ca
 run_gate 0 0 2 0 0 0
 expect "a busy sample restarts the streak" "$sample_calls" 6
 
+# Busy-then-idle at the deadline: the last reading was zero, so the refusal
+# must not claim a request is still running.
+INFERENCE_IDLE_WAIT_SECONDS=2
+DEFAULT_SAMPLE=0
+run_gate 1 0
+expect "busy-then-idle at the deadline does not claim a request is running" \
+  "$gate_out" "error: the engine did not stay idle across 3 samples within 2 s; refusing cutover"
+INFERENCE_IDLE_WAIT_SECONDS=60
+
 # Bounded: a busy engine is still refused, naming the count, the budget and who.
 body=([$FLARE]=$'hyperflare:requests_running{model_name="glm"} 3\nhyperflare:requests_waiting{model_name="glm"} 0')
 SS_OUTPUT=$'0 0 192.168.0.80:8000 192.168.0.28:47802\n0 0 192.168.0.80:8000 192.168.0.30:51000\n0 0 192.168.0.80:8000 192.168.0.28:45406'
@@ -195,23 +211,55 @@ SS_RC=0
 # switcher keeps a local alias, a private body or its own sample loop.
 expect "no switcher keeps a local gate alias" \
   "$(grep -rl '^require_idle_endpoint()' "$ROOT/scripts/inference" | wc -l | tr -d ' ')" 0
-# A switcher about to stop a running profile gates first, by the catalog's name.
-ungated=""
-while IFS= read -r switcher; do
-  guarded="$(awk '
-    index($0, "${#previous[@]}") && index($0, "-gt 0 ]; then") { armed = 1; next }
-    armed && /^[[:space:]]*$/ { next }
-    armed { print; exit }
-  ' "$switcher")"
-  [ -n "$guarded" ] || continue
-  case "$guarded" in
-    *inference_require_idle_endpoint*) ;;
-    *) ungated="$ungated$(basename "$switcher") " ;;
-  esac
-done < <(find "$ROOT/scripts/inference" -name 'switch-*.sh')
-expect "every switcher that stops a running profile gates first" "$ungated" ""
 expect "no switcher carries its own sample loop" \
   "$(grep -rls 'for delay in 0 3 3' "$ROOT/scripts/inference" | wc -l | tr -d ' ')" 0
+
+# --- gate wiring: a switcher that stops running profiles gates first -------
+# Verdict for one switcher file: "ok" (a gate call precedes its quiesce loop),
+# "ungated" (the loop stops running profiles with no gate before it), or "n/a"
+# (no quiesce loop over the previous profiles: nothing to gate). The detector
+# arms on the quiesce loop -- a loop over the previous profiles whose body
+# stops containers -- never on the gate call's own wrapper: the reviewed defect
+# (pr-test-analyzer-1, upheld by the refutation panel) was a detector keyed on
+# the gate's own if-line, which vanished with a deleted gate block and could
+# not see a gate moved after the loop.
+gate_wiring_verdict() {
+  awk '
+    /inference_require_idle_endpoint/ && gate == 0 { gate = NR }
+    index($0, "for container in") && index($0, "${previous[@]}") { loopstart = NR; inprev = 1 }
+    inprev && /inference_stop_container_if_present/ { quiesce = loopstart; obligated = 1 }
+    inprev && /^[[:space:]]*done[[:space:]]*$/ { inprev = 0 }
+    END {
+      if (!obligated) print "n/a"
+      else if (gate > 0 && gate < quiesce) print "ok"
+      else print "ungated"
+    }
+  ' "$1"
+}
+
+# The detector is proven against the regression shapes it exists to catch, so
+# it cannot pass vacuously again. The shapes are mutations of a real switcher
+# (no hand-written marker literals): deleting the gate block, and moving the
+# gate call after the quiesce loop. Both must be judged ungated.
+shapes_dir="$(mktemp -d)"
+trap 'rm -rf "$shapes_dir" "$sample_queue" "$sample_log" "${gate_file:-}"' EXIT
+base_switcher="$ROOT/scripts/inference/glm53/switch-glm53-exl3-profile-v13.sh"
+sed '/^[[:space:]]*inference_require_idle_endpoint/d' "$base_switcher" >"$shapes_dir/gate_removed.sh"
+{ sed '/^[[:space:]]*inference_require_idle_endpoint/d' "$base_switcher"; \
+  printf '%s\n' '      inference_require_idle_endpoint'; } >"$shapes_dir/gate_after_stop.sh"
+printf '%s\n' '  stop)' '    inference_stop_container_if_present "$TARGET"' '    ;;' >"$shapes_dir/stop_mode_only.sh"
+expect "the detector passes the unmutated switcher" "$(gate_wiring_verdict "$base_switcher")" ok
+expect "the detector fails a switcher whose gate block was deleted" "$(gate_wiring_verdict "$shapes_dir/gate_removed.sh")" ungated
+expect "the detector fails a switcher whose gate moved after the quiesce loop" "$(gate_wiring_verdict "$shapes_dir/gate_after_stop.sh")" ungated
+expect "the detector does not obligate a stop-mode-only arm" "$(gate_wiring_verdict "$shapes_dir/stop_mode_only.sh")" n/a
+
+# The real population: every switcher whose quiesce loop stops the running
+# profiles gates before that loop, by the catalog's name.
+ungated=""
+while IFS= read -r switcher; do
+  [ "$(gate_wiring_verdict "$switcher")" = ungated ] && ungated="$ungated$(basename "$switcher") "
+done < <(find "$ROOT/scripts/inference" -name 'switch-*.sh')
+expect "every switcher that stops a running profile gates first" "$ungated" ""
 
 if [ "$failures" -ne 0 ]; then
   echo "idle gate unit: $failures of $cases checks FAILED" >&2

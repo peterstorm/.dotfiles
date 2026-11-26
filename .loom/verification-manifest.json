@@ -56,6 +56,21 @@
         "kind": "required-file",
         "path": ".loom/completion-reports/monitor-regression.xml"
       }
+    },
+    {
+      "id": "project:inference-idle-gate-repair",
+      "scope": "wave",
+      "executable": "bun",
+      "args": [
+        "tests/inference-idle-gate-junit.ts",
+        ".loom/completion-reports/inference-idle-gate-repair.xml"
+      ],
+      "cwd": ".",
+      "timeoutMs": 120000,
+      "report": {
+        "kind": "required-file",
+        "path": ".loom/completion-reports/inference-idle-gate-repair.xml"
+      }
     }
   ]
 }
