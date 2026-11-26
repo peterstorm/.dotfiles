@@ -16,9 +16,10 @@ launcher, one `WEIGHTS`) with each of its three Backbones: `glm-5.3-native` (zai
 `glm-5.3-uncensored-native` and `glm-5.3-cyber-native` (dealignai's two surgeries).
 Switch between them with `switch-primary.sh [toggle|PRIMARY|status]`
 from any machine: a pure decision (`primary_decide`, `tests/switch-primary-unit.sh`)
-over the live containers, the shared idle gate, then each engine's own launcher with
-its gates, acceptance and rollback. Every other profile below stays launchable but is
-not in Pi's catalog.
+over the live containers, the shared idle gate (`tests/inference-idle-gate-unit.sh`: it
+waits for the engine to drain, then refuses if it will not), then each engine's own
+launcher with its gates, acceptance and rollback. Every other profile below stays
+launchable but is not in Pi's catalog.
 
 Layout (by model, then by role):
 

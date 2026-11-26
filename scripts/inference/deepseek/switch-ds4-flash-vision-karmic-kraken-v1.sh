@@ -52,33 +52,6 @@ authenticated_models() {
   } | curl --silent --show-error --config -
 }
 
-require_idle_endpoint() {
-  local delay metrics active
-  for delay in 0 3 3; do
-    sleep "$delay"
-    metrics="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/metrics)" || {
-      echo "error: active profile metrics are unavailable; refusing cutover" >&2
-      return 1
-    }
-    if ! active="$(awk '
-      /vllm:num_requests_running\{/ { running_seen = 1; sum += $NF }
-      /vllm:num_requests_waiting\{/ { waiting_seen = 1; sum += $NF }
-      END {
-        if (!running_seen || !waiting_seen) exit 2
-        print sum + 0
-      }
-    ' <<<"$metrics")"; then
-      echo "error: active profile metrics omitted running/waiting request gauges; refusing cutover" >&2
-      return 1
-    fi
-    if [ "$active" != 0 ]; then
-      echo "error: $active request(s) are running or waiting; refusing cutover" >&2
-      return 1
-    fi
-  done
-  echo "IDLE GATE: no running or waiting requests across three samples"
-}
-
 wait_for_target() {
   local deadline status key models_json restart_count
   deadline=$((SECONDS + STARTUP_TIMEOUT_SECONDS))
@@ -202,7 +175,7 @@ case "$MODE" in
       fi
     done
     if [ "${#previous[@]}" -gt 0 ]; then
-      require_idle_endpoint
+      inference_require_idle_endpoint
     fi
     stopped=()
     for container in "${previous[@]}"; do

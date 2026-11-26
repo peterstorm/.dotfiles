@@ -210,6 +210,7 @@ contains "$RUNBOOK" 'hyperflare-variants.sh'
 
 # The primaries switch: its pure decision core, and the catalog it serves.
 bash "$ROOT/tests/switch-primary-unit.sh" >/dev/null || fail "switch-primary decision core failed its unit tests"
+bash "$ROOT/tests/inference-idle-gate-unit.sh" >/dev/null || fail "the shared idle gate failed its unit tests"
 bash "$ROOT/tests/switch-glm53-hyperflare-receipt-unit.sh" >/dev/null || fail "v16 boot receipt failed its unit tests"
 bash "$ROOT/tests/hyperflare-variants-unit.sh" >/dev/null || fail "the Hyperflare variant table failed its unit tests"
 # Exports run detached from a committed snapshot, with preflight before any stop.

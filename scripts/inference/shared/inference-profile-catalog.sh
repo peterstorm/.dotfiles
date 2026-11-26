@@ -49,31 +49,101 @@ _inference_bridge_inflight() {
 # runtime fails closed (status 1) rather than being treated as idle.
 # A model-labelled bridge answers only while its own engine owns :8000
 # (503 otherwise), so the first one that answers names the runtime.
+# The engine's own metrics must expose BOTH gauges of their family: summing a
+# running series whose waiting series vanished would read as idle while requests
+# wait, which is a fail-open. switch-ds4-flash-vision-karmic-kraken-v1.sh
+# carried that check by itself until the gates were consolidated here.
 inference_active_requests() {
   local text
   _inference_bridge_inflight http://127.0.0.1:8010/metrics 'ds4:' && return 0
   _inference_bridge_inflight http://127.0.0.1:8011/metrics 'hyperflare:' && return 0
   text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/metrics)" || return 1
-  grep -Eq '^(vllm:num_requests_running|sglang:num_running_reqs)\{' <<<"$text" || return 1
-  awk '/^(vllm:num_requests_(running|waiting)|sglang:num_(running|queue)_reqs)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
+  if grep -q '^vllm:num_requests_running{' <<<"$text"; then
+    grep -q '^vllm:num_requests_waiting{' <<<"$text" || return 1
+    awk '/^vllm:num_requests_(running|waiting)\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
+    return 0
+  fi
+  if grep -q '^sglang:num_running_reqs{' <<<"$text"; then
+    grep -q '^sglang:num_queue_reqs{' <<<"$text" || return 1
+    awk '/^sglang:num_(running|queue)_reqs\{/ {sum += $NF} END {print sum + 0}' <<<"$text"
+    return 0
+  fi
+  return 1
 }
 
-# Refuse a cutover unless :8000 reports zero in-flight requests three times
-# over ~6 s (a request arriving between samples is caught by the next one).
+# The runtime that owns :8000, named for a refusal: the first bridge that
+# answers (a model-labelled bridge answers only while its own engine owns the
+# port), else the metrics family the engine exposes. An unrecognised answer is
+# "an unknown runtime", never silence.
+inference_active_runtime() {
+  local text
+  if _inference_bridge_inflight http://127.0.0.1:8010/metrics 'ds4:' >/dev/null; then echo ds4-native; return 0; fi
+  if _inference_bridge_inflight http://127.0.0.1:8011/metrics 'hyperflare:' >/dev/null; then echo hyperflare; return 0; fi
+  if ! text="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/metrics 2>/dev/null)"; then
+    echo "an unknown runtime"
+    return 0
+  fi
+  if grep -q '^vllm:num_requests_running{' <<<"$text"; then echo vllm; return 0; fi
+  if grep -q '^sglang:num_running_reqs{' <<<"$text"; then echo sglang; return 0; fi
+  echo "an unknown runtime"
+}
+
+# Who holds the engine, as far as the serving host can prove: the runtime, and
+# the peers connected to :8000. A cutover runs on the serving host, so it sees
+# its clients' addresses and never their PIDs (a PID lives on the client's
+# machine); naming an address is honest, inventing a process is not. Best
+# effort throughout: attribution explains a refusal, it never becomes one.
+inference_inflight_attribution() {
+  local runtime peers
+  runtime="$(inference_active_runtime)"
+  peers="$(ss -Htn state established '( sport = :8000 )' 2>/dev/null \
+    | awk '{print $NF}' | sed 's/:[^:]*$//' | sort -u | paste -sd, -)" || peers=""
+  printf '%s; peers connected to :8000: %s' "$runtime" "${peers:-unknown}"
+}
+
+# How long a cutover waits for the engine to drain, how far apart it samples,
+# and how many consecutive idle samples prove the drain.
+# The gate used to sample at a fixed 0/3/3 and refuse on the FIRST busy sample,
+# so one request in flight -- a bursty client, or a single long reasoning turn --
+# failed a cutover that had nothing else running (2026-11-26: refused three times
+# with one request in flight, then passed with the same clients still connected).
+# Waiting is bounded; giving up is still a refusal.
+INFERENCE_IDLE_SAMPLE_SECONDS="${INFERENCE_IDLE_SAMPLE_SECONDS:-2}"
+INFERENCE_IDLE_STREAK="${INFERENCE_IDLE_STREAK:-3}"
+INFERENCE_IDLE_WAIT_SECONDS="${INFERENCE_IDLE_WAIT_SECONDS:-60}"
+
+# Refuse a cutover unless :8000 reports zero in-flight requests
+# INFERENCE_IDLE_STREAK times in a row, each sample INFERENCE_IDLE_SAMPLE_SECONDS
+# apart and all within INFERENCE_IDLE_WAIT_SECONDS. A busy sample restarts the
+# streak; an unreadable reading is refused at once, so an unknown runtime is
+# never treated as idle and never drains a budget it cannot observe.
 inference_require_idle_endpoint() {
-  local delay active
-  for delay in 0 3 3; do
-    sleep "$delay"
-    active="$(inference_active_requests)" || {
+  local deadline=$((SECONDS + INFERENCE_IDLE_WAIT_SECONDS)) streak=0 active busy=0
+  while :; do
+    if ! active="$(inference_active_requests)"; then
       echo "error: cannot read in-flight requests of the active profile; refusing cutover" >&2
       return 1
-    }
-    if [ "$active" != 0 ]; then
-      echo "error: $active request(s) are running or waiting; refusing cutover" >&2
+    fi
+    if [ "$active" = 0 ]; then
+      streak=$((streak + 1))
+      if [ "$streak" -ge "$INFERENCE_IDLE_STREAK" ]; then
+        echo "IDLE GATE: no running or waiting requests across $streak samples"
+        return 0
+      fi
+    else
+      streak=0
+      busy="$active"
+    fi
+    if ((SECONDS >= deadline)); then
+      if [ "$busy" != 0 ]; then
+        echo "error: $busy request(s) still running or waiting after ${INFERENCE_IDLE_WAIT_SECONDS} s on $(inference_inflight_attribution); refusing cutover" >&2
+      else
+        echo "error: the engine did not stay idle across ${INFERENCE_IDLE_STREAK} samples within ${INFERENCE_IDLE_WAIT_SECONDS} s; refusing cutover" >&2
+      fi
       return 1
     fi
+    sleep "$INFERENCE_IDLE_SAMPLE_SECONDS"
   done
-  echo "IDLE GATE: no running or waiting requests across three samples"
 }
 
 inference_profile_containers_except() {
