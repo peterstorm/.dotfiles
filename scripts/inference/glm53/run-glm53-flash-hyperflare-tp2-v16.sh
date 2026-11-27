@@ -36,6 +36,8 @@ source "$SCRIPT_DIR/../shared/inference-api-key.sh"
 source "$SCRIPT_DIR/../shared/inference-profile-catalog.sh"
 # shellcheck source=scripts/inference/glm53/hyperflare-variants.sh
 source "$SCRIPT_DIR/hyperflare-variants.sh"
+# shellcheck source=scripts/inference/glm53/hyperflare-workstation.sh
+source "$SCRIPT_DIR/hyperflare-workstation.sh"
 
 IMAGE="peterstorm/glm53-hyperflare:ac9136b-cu131"
 HYPERFLARE_COMMIT="ac9136b02c7c523f12d6e628e9d94f41006312ea"
@@ -126,45 +128,10 @@ if [ "$MODE" = --preflight ]; then
   exit 0
 fi
 
-NIX_GPU_CONFIG=''
-WALK_ROOT="$SCRIPT_DIR"
-while [[ -z "$NIX_GPU_CONFIG" && "$WALK_ROOT" != "/" ]]; do
-  if [[ -f "$WALK_ROOT/machines/desktop/default.nix" ]]; then
-    NIX_GPU_CONFIG="$WALK_ROOT/machines/desktop/default.nix"
-  else
-    WALK_ROOT="$(dirname "$WALK_ROOT")"
-  fi
-done
-[[ -n "$NIX_GPU_CONFIG" ]] || { echo "error: no machines/desktop/default.nix found above $SCRIPT_DIR" >&2; exit 1; }
-DECLARED_GPU_WATTS="$(sed -nE 's/^[[:space:]]*gpuPowerLimitWatts = ([0-9]+);$/\1/p' "$NIX_GPU_CONFIG" | tail -1)"
-[[ -n "$DECLARED_GPU_WATTS" ]] || { echo "error: gpuPowerLimitWatts is not pinned in $NIX_GPU_CONFIG" >&2; exit 1; }
-
-if systemctl is-active --quiet comfyui.service 2>/dev/null; then
-  echo "error: comfyui.service is active; stop it before reserving both GPUs" >&2
-  exit 1
-fi
-mapfile -t gpu_rows < <(nvidia-smi --query-gpu=index,name,memory.total,memory.used,power.limit --format=csv,noheader,nounits)
-[ "${#gpu_rows[@]}" -eq 2 ] || { echo "error: this profile requires exactly two GPUs; found ${#gpu_rows[@]}" >&2; exit 1; }
-for row in "${gpu_rows[@]}"; do
-  IFS=, read -r index name memory_total memory_used power_limit <<<"$row"
-  index="${index//[[:space:]]/}"; name="${name# }"
-  memory_total="${memory_total//[[:space:]]/}"; memory_used="${memory_used//[[:space:]]/}"
-  power_limit="${power_limit//[[:space:]]/}"
-  [[ "$name" == *"RTX PRO 6000 Blackwell"* ]] || { echo "error: GPU $index is not an RTX PRO 6000 Blackwell: $name" >&2; exit 1; }
-  ((memory_total >= 97000)) || { echo "error: GPU $index exposes only ${memory_total} MiB" >&2; exit 1; }
-  ((memory_used <= 1024)) || { echo "error: GPU $index has ${memory_used} MiB in use; stop every GPU workload" >&2; exit 1; }
-  awk -v actual="$power_limit" -v declared="$DECLARED_GPU_WATTS" \
-    'BEGIN { exit !(actual >= declared - 0.5 && actual <= declared + 0.5) }' || {
-      echo "error: GPU $index power limit is ${power_limit} W; declarative config pins ${DECLARED_GPU_WATTS} W" >&2
-      exit 1
-    }
-done
+hyperflare_require_workstation "$SCRIPT_DIR" || exit 1
 
 inference_remove_container_if_present "$NAME"
-if ss -H -ltn | awk '{print $4}' | grep -Eq '(^|:)8000$'; then
-  echo "error: host port 8000 is already listening; use switch-primary.sh to replace the active profile" >&2
-  exit 1
-fi
+hyperflare_require_free_endpoint || exit 1
 
 # The key reaches flare as a read-only file mount (--api-key-file), never as
 # an argument or environment variable.
