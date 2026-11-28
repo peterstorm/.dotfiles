@@ -26,6 +26,9 @@ EXPORT="$GLM/export-glm53-flash-hyperflare-tp2-v16.sh"
 RUN="$GLM/run-glm53-flash-hyperflare-tp2-v16.sh"
 SWITCH="$GLM/switch-glm53-hyperflare-tp2-v16.sh"
 VARIANTS="$GLM/hyperflare-variants.sh"
+# Shared with the v17 test profile: the switch transaction and the workstation gates.
+SWITCH_LIB="$GLM/hyperflare-switch.sh"
+WORKSTATION="$GLM/hyperflare-workstation.sh"
 CATALOG="$ROOT/scripts/inference/shared/inference-profile-catalog.sh"
 PI_MODELS="$ROOT/pi/models.json"
 RUNBOOK="$ROOT/scripts/inference/runbooks/glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md"
@@ -55,6 +58,15 @@ for script in "$BUILD" "$DL" "$EXPORT" "$RUN" "$SWITCH"; do
   bash -n "$script"
 done
 bash -n "$VARIANTS"
+for lib in "$SWITCH_LIB" "$WORKSTATION"; do
+  [ -f "$lib" ] || fail "missing ${lib#"$ROOT"/}"
+  bash -n "$lib"
+done
+contains "$SWITCH" 'source "$SCRIPT_DIR/hyperflare-switch.sh"'
+contains "$SWITCH" 'hyperflare_switch_main'
+contains "$RUN" 'source "$SCRIPT_DIR/hyperflare-workstation.sh"'
+contains "$RUN" 'hyperflare_require_workstation "$SCRIPT_DIR" || exit 1'
+contains "$RUN" 'hyperflare_require_free_endpoint || exit 1'
 
 # One variant table is the source of every name. v16's are the strings this contract has
 # always pinned; uncensored's are what switch-primary.sh, Pi's catalog and the vault carry.
@@ -165,8 +177,8 @@ contains "$RUN" '--api-key-file /run/inference/api-key'
 contains "$RUN" '-v "$KEYFILE:/run/inference/api-key:ro"'
 contains "$RUN" '--restart no'
 contains "$RUN" '--ulimit memlock=-1'
-contains "$RUN" 'gpuPowerLimitWatts'
-contains "$RUN" 'comfyui.service is active'
+contains "$WORKSTATION" 'gpuPowerLimitWatts'
+contains "$WORKSTATION" 'comfyui.service is active'
 absent "$RUN" 'VLLM_API_KEY=$VLLM_API_KEY'
 
 # Switcher: transactional, runtime-neutral idle gate, bridge is acceptance.
@@ -174,13 +186,13 @@ contains "$SWITCH" 'TARGET="$(hyperflare_variant_container "$VARIANT")"'
 contains "$SWITCH" 'EXPECTED_MODEL="$(hyperflare_variant_served "$VARIANT")"'
 contains "$CATALOG" 'http://127.0.0.1:8010/metrics'
 contains "$CATALOG" 'http://127.0.0.1:8011/metrics'
-contains "$SWITCH" 'inference_require_idle_endpoint'
-contains "$SWITCH" 'require_metrics_bridge'
+contains "$SWITCH_LIB" 'inference_require_idle_endpoint'
+contains "$SWITCH_LIB" 'require_metrics_bridge'
 # Acceptance decodes a token: health, /v1/models and the bridge all answer for a
 # package whose every request fails (2026-11-15, the first cyber-hybrid-bf16).
-contains "$SWITCH" 'if ! wait_for_target || ! require_generation || ! require_metrics_bridge'
-contains "$SWITCH" 'promote_restart_policy'
-contains "$SWITCH" 'restore_profiles "${previous[@]}"'
+contains "$SWITCH_LIB" 'if ! wait_for_target || ! require_generation || ! require_metrics_bridge'
+contains "$SWITCH_LIB" 'promote_restart_policy'
+contains "$SWITCH_LIB" 'restore_profiles "${previous[@]}"'
 contains "$CATALOG" "  $CONTAINER"
 contains "$CATALOG" "  $UNCENSORED_CONTAINER"
 

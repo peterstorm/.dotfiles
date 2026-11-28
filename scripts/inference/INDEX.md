@@ -29,12 +29,21 @@ Engine code lives in its own repos, pinned by commit: `~/dev/ds4-native` (the en
 `peterstorm/ds4-native`) and Project Maya (donor server, vendored checkout under `/models/ds41/`).
 The dotfiles own deployment: launchers, pins, runbooks, contracts, systemd bridges.
 
+## Test profiles (catalogued, never primaries)
+
+Started and stopped only by their own switcher; `switch-primary.sh` refuses while one holds the
+GPUs, so returning to a primary is `… stop` then `switch-primary.sh PRIMARY`.
+
+| profile | served id | engine | launcher | runbook | contract / unit tests | key pins |
+|---|---|---|---|---|---|---|
+| GLM-5.3 v17 | `glm-5.3-flash-hyperflare-tp2-v17` | upstream Hyperflare + recipes PR #55 (row-sharded prefill) + FlashInfer PR #151; `PREFILL=rowshard\|baseline` A/B | `glm53/switch-glm53-hyperflare-tp2-v17.sh` → `run-glm53-flash-hyperflare-tp2-v17.sh` | [v17 runbook](runbooks/glm53-flash-hyperflare-tp2-v17-runbook-2026-11-27.md) | `glm53-flash-hyperflare-tp2-v17-contract.sh`, `glm53-v17-hyperflare-unit.sh` | `glm53/glm53-v17-hyperflare/pins.sh` (hfi `c9935887`, hfr `71c9830c`, fi `6d2f90c8`; re-pinned 2026-11-28); v16's checkpoint; export waits on the new NVMe |
+
 ## Runbook map (live)
 
 | family | runbook |
 |---|---|
 | ds4-native | `ds41-1017-native-runbook-2026-11-19.md` (warmind + deepseek, the native engine), `glm53-native-runbook-2026-11-21.md` (GLM-5.3 full on its GLM engine) |
-| glm53 | `glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md` (v16 + uncensored variant; v14/v15 rollback sections inside), `glm53-flash-spark-tp2-v14-runbook-2026-09-19.md`, `glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md`, `glm53-flash-exl3-k4-vllm-sm120-v10-runbook-2026-08-31.md` (exl3 rollback pin) |
+| glm53 | `glm53-flash-hyperflare-tp2-v16-runbook-2026-11-13.md` (v16 + uncensored variant; v14/v15 rollback sections inside), `glm53-flash-hyperflare-tp2-v17-runbook-2026-11-27.md` (test profile: upstream Hyperflare, row-sharded prefill A/B), `glm53-flash-spark-tp2-v14-runbook-2026-09-19.md`, `glm53-flash-qad2-tp2-v15-runbook-2026-10-16.md`, `glm53-flash-exl3-k4-vllm-sm120-v10-runbook-2026-08-31.md` (exl3 rollback pin) |
 | qwen38 | `qwen38-27b-runbook-2026-08-18.md`, dflash2 (runbook, official, vllm-official, tp1-bf16kv-v3), flash-next fp8 v1/v2, blackfrost bf16 |
 | deepseek | `ds4-infernal-invocation-r18-runbook-2026-08-22.md` (r18 rollback), `ds4-flash-vision-r21-v1-runbook-2026-09-01.md`, `ds4-flash-vision-karmic-kraken-v1-runbook-2026-09-21.md`, `ds41-1017-maya-exl35-runbook-2026-10-21.md` (EXL3 predecessor) |
 | ops | `new-desktop-install.md`, `gpu-inference-crash-triage.md` |
