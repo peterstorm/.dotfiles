@@ -83,7 +83,7 @@ check "an entry names its MODEL@VERSION core" \
   '[ "$(v17_core_of_entry /flare-home/.cache/flare/cores/models/glm53-fp4-local/gb202-tp2-1)" = glm53-fp4-local@gb202-tp2-1 ]'
 
 # --- receipt ---------------------------------------------------------------------
-receipt=$'model=glm53-fp4-local\ncore=glm53-fp4-local@gb202-tp2-1\nprefill=rowshard\nchunk=8192'
+receipt=$'model=glm53-fp4-local\ncore=glm53-fp4-local@gb202-tp2-1\nprefill=rowshard\nchunk=12288'
 check "a receipt yields its core" '[ "$(v17_receipt_core glm53-fp4-local rowshard <<<"$receipt")" = glm53-fp4-local@gb202-tp2-1 ]'
 out="$(v17_receipt_core glm53-fp4-local baseline <<<"$receipt")" || true
 check "a receipt for the other mode is refused" '[ "$out" = "the receipt is for prefill '"'"'rowshard'"'"', expected baseline" ]'
