@@ -161,6 +161,15 @@
         # keeps the backend it captured at ingress until /new, so this flips
         # new conversations and scheduled skills; claude stays the CLI default.
         AGENT_BACKEND = "pi";
+        # 2026-11-28: chat falls back to Claude when the pi provider cannot
+        # serve (unreachable, rate limited, quota, auth — the same trigger set
+        # as a skill's `fallback:`), like the scheduled skills already do. The
+        # desktop (192.168.0.80:8000) dropped off the LAN 2026-11-26 19:30 and
+        # chat failed every turn for two days while skills answered on Claude.
+        # No model pin: chat takes the Claude CLI default (claude-opus-5.5,
+        # see the 2026-11-24 note above). A fallback turn moves the
+        # conversation onto Claude until /new (reclaw ADR 0015).
+        RECLAW_CHAT_FALLBACK_BACKEND = "claude";
         # Each agent run gets its own transient scope in reclaw-agents.slice
         # (defined above). A timed-out run is torn down as a whole cgroup, which
         # also reaches setsid/nohup descendants that a PID signal never could.
