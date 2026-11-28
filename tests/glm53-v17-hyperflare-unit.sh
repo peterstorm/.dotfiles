@@ -47,12 +47,14 @@ done
 
 # --- prefill modes ----------------------------------------------------------------
 check "the modes are rowshard and baseline" '[ "${V17_PREFILL_MODES[*]}" = "rowshard baseline" ]'
-check "rowshard exports 8192-token chunks" '[ "$(v17_prefill_chunk rowshard)" = 8192 ]'
+check "rowshard exports 12288-token chunks" '[ "$(v17_prefill_chunk rowshard)" = 12288 ]'
 check "baseline exports upstream's 4096-token chunks" '[ "$(v17_prefill_chunk baseline)" = 4096 ]'
 check "rowshard adds both row-shard flags" \
   '[ "$(v17_prefill_flags rowshard | paste -sd" ")" = "--row-shard-prefill --row-shard-attention" ]'
 check "baseline adds no flags" '[ -z "$(v17_prefill_flags baseline)" ]'
-check "rowshard chunks reach PR #55's row-sharded attention threshold" '(( $(v17_prefill_chunk rowshard) >= 8192 ))'
+check "rowshard chunks reach PR #55's PCIe row-sharded attention threshold" '(( $(v17_prefill_chunk rowshard) >= V17_ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE ))'
+check "the PCIe threshold is PR #55's 12288" '[ "$V17_ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE" = 12288 ]'
+check "rowshard chunks fit the quarter-MLP prefill shape at TP2" '(( $(v17_prefill_chunk rowshard) % (4 * 128 * 2) == 0 ))'
 for bogus in "" ROWSHARD row-shard v16 "rowshard " ../rowshard; do
   check "unknown mode '$bogus' has no chunk" '! v17_prefill_chunk "$bogus" >/dev/null 2>&1'
   check "unknown mode '$bogus' has no flags" '! v17_prefill_flags "$bogus" >/dev/null 2>&1'

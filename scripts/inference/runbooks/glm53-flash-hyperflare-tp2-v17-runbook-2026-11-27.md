@@ -7,11 +7,12 @@ A **test profile**, not a primary. v17 serves the same checkpoint as v16
 `glm53-fp4-local` directory) through **upstream** NVIDIA Hyperflare instead of the
 AzallazA fork v16 runs, plus two open Local Inference Lab PRs:
 
-- **hyperflare-recipes PR #55**, "sequence-parallel row-sharded prefill for
-  GLM-5.3-Flash". It adds `--row-shard-prefill` and `--row-shard-attention` to the GLM-5.3
-  recipe. On TP2/TP4 with DCP prefill, chunks of 8192+ tokens run attention row-sharded
-  across the GPUs, gathering attention weights on the fly. Smaller chunks stay
-  head-sharded.
+- **hyperflare-recipes PR #55**, "GLM-5.3 TP2/TP4 row-sharded prefill, ZeRO-3 weight
+  gather & MXFP8 attention". It adds `--row-shard-prefill` and `--row-shard-attention` to
+  the GLM-5.3 recipe. On TP2/TP4, eligible prefill graphs run attention row-sharded across
+  the GPUs, gathering attention weights on the fly. **Over PCIe that takes graphs of
+  12,288+ tokens** (`ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE`; 4,096/8,192 are the RoCE
+  thresholds). Smaller graphs stay head-sharded.
 - **FlashInfer PR #151**: the b12x kernels PR #55 needs.
   - KDA segment summarize/finalize
   - GLM `ARBITRARY_FP32` prefill MLA fusion
@@ -32,7 +33,7 @@ Nothing about v17 touches the primaries:
 |---|---|
 | container | `glm53-flash-hyperflare-tp2-v17` |
 | served id | `glm-5.3-flash-hyperflare-tp2-v17` |
-| image | `peterstorm/glm53-hyperflare-upstream:hfi6d74db3a-hfr3009ec52-fi82f23e5e-cu131` |
+| image | `peterstorm/glm53-hyperflare-upstream:hfic9935887-hfr71c9830c-fi6d2f90c8-cu131` (re-pinned 2026-11-28) |
 | state root | `V17_ROOT`, default `/models/glm53-hyperflare-v17` (`flare-home/`, `core-<mode>.txt`, export logs) |
 | checkpoint | `CKPT_ROOT`, default `/models/glm53-hyperflare` (v16's; `glm53-fp4-local/`) |
 | pins | `scripts/inference/glm53/glm53-v17-hyperflare/pins.sh`, the only place a commit is written |
@@ -42,25 +43,29 @@ Nothing about v17 touches the primaries:
 
 | source | commit | why |
 |---|---|---|
-| NVIDIA/hyperflare-inference (ignition, heliopause, `flare`) | `6d74db3a0f5c04ebcd1adf10b5b112f7cc70a7cb` | upstream main when PR #55's last commit landed (2026-11-27 06:27Z); carries #545 (RecipeParameters CLI) and #508 (recipe-declared row-sharded attention planning) |
-| local-inference-lab/hyperflare-recipes | `3009ec527d2b74a6691461124abdac298093ff01` | PR #55 head, open when pinned |
-| local-inference-lab/flashinfer | `82f23e5ed78645df74869901837f213e7c1fc367` | PR #151 head, open when pinned; sits on main `8bdfd6c9`, the commit PR #55's lock pins |
+| NVIDIA/hyperflare-inference (ignition, heliopause, `flare`) | `c99358879813f22557ac619044af514fafacecc6` | the commit PR #55 was validated with (upstream main 2026-11-28 06:23Z); carries #555 (batch capacities 6/12/24), #556 (lock-free TP DispatchRing), #557 (PreparedAllToAll) |
+| local-inference-lab/hyperflare-recipes | `71c9830c5720e19bc6bb6b53c028810edc09fab0` | PR #55 head, open, rebased onto main `d1376bb4` (has recipes #46/#49, the 11-27 GLM decode and prefill wins) |
+| local-inference-lab/flashinfer | `6d2f90c8670691c168d762cda294dcf2f4eb6dc6` | PR #151 head, open, rebased onto main `5d2a7107` (has #146–#149), the commit PR #55's lock pins |
 
-Both PRs were **open** when pinned. Pinning head SHAs means a later force-push cannot
+Both PRs were **open** when pinned. The pins above are the second set (2026-11-28); the
+first set and why it was replaced are in "Re-pin" below. Pinning head SHAs means a later force-push cannot
 change what this profile builds. Moving to a newer head, or to the merged commits once
 they land, is a pins.sh edit plus a rebuild. The contract then fails until the new
 commits are also written into it, which is deliberate.
 
 ### The stale recipes lock (finding)
 
-The recipes' `uv.lock` resolves ignition and heliopause to `425ab2d4696caee841b1fc8165ff8d806a5af7e9`
-(2026-11-23). This is true on PR #55's head and on recipes main alike. That commit has no
-`ignition.parameters` module, yet every recipe has imported it since recipes #54
-(2026-11-26). An image built with `uv sync --locked` as the repo stands would fail at the
-first `ignition` call. So the Dockerfile re-locks:
+On the first pin (2026-11-27), the recipes' `uv.lock` resolved ignition and heliopause to
+`425ab2d4696caee841b1fc8165ff8d806a5af7e9` (2026-11-23), on PR #55's head and on recipes
+main alike. That commit has no `ignition.parameters` module, yet every recipe has imported
+it since recipes #54 (2026-11-26). An image built with `uv sync --locked` as the repo stood
+would have failed at the first `ignition` call. The rebased head's lock names
+`5adb27f259d340231c384ed668bd68e2abc313c5`, which works but is four commits behind the
+`c9935887` the PR was validated with. Either way the lock is not the authority; the pins
+are. So the Dockerfile re-locks:
 
 1. **ignition**: the recipes' root `[tool.uv.sources]` entry moves from `branch = "main"`
-   to `rev = 6d74db3a…`. heliopause is a path dependency inside hyperflare-inference, so it
+   to `rev = <pin>`. heliopause is a path dependency inside hyperflare-inference, so it
    follows.
 2. **flashinfer-python**: the recipes do **not** declare it. It arrives through
    `ignition[prepare]` as `flashinfer-python[b12x]`, and ignition's own pyproject sources it
@@ -68,7 +73,7 @@ first `ignition` call. So the Dockerfile re-locks:
    recipes' root flashinfer source is therefore inert. The first build (2026-11-27) proved
    it: with the root source rewritten to PR #151's rev, the lock still resolved FlashInfer
    main `8bdfd6c9`. The fix deletes the inert line and adds
-   `[tool.uv] override-dependencies = ["flashinfer-python[b12x] @ git+…flashinfer.git@82f23e5e…"]`.
+   `[tool.uv] override-dependencies = ["flashinfer-python[b12x] @ git+…flashinfer.git@<pin>"]`.
    An override replaces every declaration of a package, transitive ones included. The
    `[b12x]` extra is kept because the override replaces ignition's requirement whole.
 3. `uv lock` re-resolves, and the build then asserts that every hyperflare-inference and
@@ -87,9 +92,9 @@ first `ignition` call. So the Dockerfile re-locks:
 
 | | v16 | v17 |
 |---|---|---|
-| engine | AzallazA fork `ac9136b0` (+ tp3 patches, b12x overlay `85ea6e76`) | upstream `6d74db3a`, recipes PR #55, FlashInfer PR #151 |
+| engine | AzallazA fork `ac9136b0` (+ tp3 patches, b12x overlay `85ea6e76`) | upstream `c9935887`, recipes PR #55, FlashInfer PR #151 |
 | export entry | vendored `export-glm-tp2.sh` | `ignition export` straight from the recipes' venv |
-| prefill | head-sharded, 4096-token chunks | `PREFILL=rowshard` (default): row-shard flags, 8192 chunks; `PREFILL=baseline`: no flags, 4096 chunks |
+| prefill | head-sharded, 4096-token chunks | `PREFILL=rowshard` (default): row-shard flags, 12288 chunks; `PREFILL=baseline`: no flags, 4096 chunks (what would be served otherwise, so the chunk size is part of the comparison) |
 | scheduler | `interactive` (the fork's TTFT guard) | `balanced` (default) or `throughput`. Upstream has no `interactive`; the run script refuses it |
 | host embedding / vision staging | fork-only, keeps them out of VRAM | upstream keeps embedding and vision tower in VRAM, so KV room is unknown at TP2/96 GB. `VISION=0` (`--language-model-only`) is the fallback |
 | core naming | receipt `package-<variant>.txt`, `model@gb202-tp2-<stamp>` | receipt `core-<mode>.txt`, whatever `model@<version>` the exporter printed (`Exported cache entry:` line) |
@@ -170,13 +175,13 @@ entirely on the new disk.
    ```
 
    - Repeat with `--prefill-sentences` around 2,800 (~80K tokens) and around 5,600
-     (~160K tokens). Row-sharding only engages on 8192+ token chunks, so a 22K prompt is
-     the floor, not the case it is for.
+     (~160K tokens). Over PCIe row-sharded attention only engages on 12,288-token
+     graphs, so a 22K prompt is the floor, not the case it is for.
    - Then `switch-glm53-hyperflare-tp2-v17.sh stop`, export or switch to the other mode
      (`PREFILL=baseline … start`), and rerun the same probe commands.
    - Compare prefill tok/s and TTFT (the PR's claim) against c1/c4/c8 decode tok/s and
      MTP acceptance. Neither of those should regress. Also compare the `Allocate` KV lines
-     in the two boot receipts: 8192 chunks cost activation memory.
+     in the two boot receipts: 12,288-token chunks cost activation memory.
 7. **Back to a primary**: `switch-glm53-hyperflare-tp2-v17.sh stop`, then
    `scripts/inference/switch-primary.sh glm` (or `uncensored`). `switch-primary.sh`
    refuses while v17 runs, so the stop is never implied.
@@ -196,8 +201,53 @@ entirely on the new disk.
   - The in-image checks passed: PR #151's KDA segment kernels import, PR #55's row-shard
     parameters exist, and `ignition export --help` runs.
 - While building, v16 kept serving. Afterwards `rpool` had 35 GB free.
+- That image (`hfi6d74db3a-hfr3009ec52-fi82f23e5e`) was superseded before any core was
+  exported from it (see Re-pin).
 
-## Not yet qualified (as of 2026-11-27)
+## Re-pin (2026-11-28)
+
+The first pin had three problems.
+
+1. **PR #55 at `3009ec52` had a bug.** It was the head before
+   `fix(glm53): fix ZeRO-3 KDA template corruption, collective ordering, …` (2026-11-27
+   19:00Z). A rowshard core exported from it was likely broken.
+2. **It missed main's 11-27 merges.** Both PRs sat on older bases, so v17 lacked:
+   - recipes #46 and #49 (tagged `deepseek41, glm53`: decode launch/reduction wins,
+     prefill collective overlap)
+   - FlashInfer #146–#149 (SM120 W4A8 MoE, mHC AllReduce, `bf16_gemv` vocabulary)
+   - Hyperflare #555–#557 (batch capacities 6/12/24, lock-free TP dispatch, prepared
+     all-to-all)
+3. **Its chunk was too small for PCIe.** The rebased PR thresholds row-sharded attention
+   by transport. On PCIe it engages at **12,288** tokens, so the first pin's 8,192-token
+   chunk would have kept attention head-sharded, and the A/B would have measured only the
+   row-sharded MLP/residual path.
+
+On 2026-11-28 both PRs were rebased onto main:
+- PR #55 became `71c9830c` on `d1376bb4`, squashed with recipes #64 (MXFP8 attention).
+- PR #151 became `6d2f90c8` on `5d2a7107`.
+
+The PR states it was "paired with flashinfer#151 and hyperflare-inference@c9935887", so
+that is the Hyperflare pin. Its validation is **TP4 only**, at `prefill12288`:
+- 22,192 prefill tok/s with MXFP8 attention, 19,908 on FP4-Local
+- decode 139–144 tok/s
+
+TP2 on this box is our own experiment. The rowshard chunk is now 12,288 (pins.sh
+`V17_ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE`, pinned by the unit test).
+
+**Rebuilt on desktop (2026-11-28): `IMAGE OK`.**
+- Image `sha256:72153189efda02b868cd0d6d6f9d716f35a5f1fb2a715789f04ab7561019e4f8`, 15 GB.
+- The lock's sources are exactly the three pins (`rev=c9935887…`, heliopause with it, and
+  `rev=6d2f90c8…`).
+- `relock.diff` is empty again.
+- The recipes checkout is at `71c9830c`, and its `glm53/stack.py` has
+  `ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE = 12288`.
+- v16 kept serving. The first image was removed, and `rpool` has 31 GB free.
+
+Not taken: PR #55's optional MXFP8 attention. It needs an offline-quantized checkpoint
+(`scripts/quantize_glm53_attention.py`), and it is a third variable. A later mode, if the
+row-shard A/B is worth pursuing.
+
+## Not yet qualified (as of 2026-11-28)
 
 - Export, serve and every benchmark wait on the NVMe.
 - Whether PR #55 and PR #151 work together at TP2 on PCIe. The PRs were developed

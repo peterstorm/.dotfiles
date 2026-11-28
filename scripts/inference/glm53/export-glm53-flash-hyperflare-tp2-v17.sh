@@ -4,7 +4,7 @@
 # (nvidia/GLM-5.3-Flash-FP4-Local, the directory glm53-fp4-local).
 #
 # PREFILL picks the core (glm53-v17-hyperflare/pins.sh):
-#   rowshard  (default) PR #55's row-sharded prefill and attention, 8192-token chunks
+#   rowshard  (default) PR #55's row-sharded prefill and attention, 12288-token chunks
 #   baseline  upstream's head-sharded prefill, 4096-token chunks: the A/B control
 # Each mode writes its own receipt, so both cores can sit in the store and the
 # run script serves either without another export.

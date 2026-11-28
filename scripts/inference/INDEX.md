@@ -36,7 +36,7 @@ GPUs, so returning to a primary is `… stop` then `switch-primary.sh PRIMARY`.
 
 | profile | served id | engine | launcher | runbook | contract / unit tests | key pins |
 |---|---|---|---|---|---|---|
-| GLM-5.3 v17 | `glm-5.3-flash-hyperflare-tp2-v17` | upstream Hyperflare + recipes PR #55 (row-sharded prefill) + FlashInfer PR #151; `PREFILL=rowshard\|baseline` A/B | `glm53/switch-glm53-hyperflare-tp2-v17.sh` → `run-glm53-flash-hyperflare-tp2-v17.sh` | [v17 runbook](runbooks/glm53-flash-hyperflare-tp2-v17-runbook-2026-11-27.md) | `glm53-flash-hyperflare-tp2-v17-contract.sh`, `glm53-v17-hyperflare-unit.sh` | `glm53/glm53-v17-hyperflare/pins.sh` (hfi `6d74db3a`, hfr `3009ec52`, fi `82f23e5e`); v16's checkpoint; export waits on the new NVMe |
+| GLM-5.3 v17 | `glm-5.3-flash-hyperflare-tp2-v17` | upstream Hyperflare + recipes PR #55 (row-sharded prefill) + FlashInfer PR #151; `PREFILL=rowshard\|baseline` A/B | `glm53/switch-glm53-hyperflare-tp2-v17.sh` → `run-glm53-flash-hyperflare-tp2-v17.sh` | [v17 runbook](runbooks/glm53-flash-hyperflare-tp2-v17-runbook-2026-11-27.md) | `glm53-flash-hyperflare-tp2-v17-contract.sh`, `glm53-v17-hyperflare-unit.sh` | `glm53/glm53-v17-hyperflare/pins.sh` (hfi `c9935887`, hfr `71c9830c`, fi `6d2f90c8`; re-pinned 2026-11-28); v16's checkpoint; export waits on the new NVMe |
 
 ## Runbook map (live)
 

@@ -10,30 +10,34 @@
 #
 # v17 is upstream Hyperflare instead of the AzallazA fork v16 runs, plus the two
 # open Local Inference Lab PRs that add sequence-parallel row-sharded prefill
-# for GLM-5.3 Flash. Both PRs were open, not merged, when pinned (2026-11-27);
-# these are their head commits then, so a later force-push cannot change what
-# this profile builds.
+# for GLM-5.3 Flash. Both PRs were open, not merged, when pinned; these are
+# their head commits then, so a later force-push cannot change what this
+# profile builds. Re-pinned 2026-11-28: both PRs were rebased onto main (so v17
+# carries main's 11-27 GLM decode and prefill wins, recipes #46/#49 and
+# flashinfer #146-#149), and #55's new head fixes a ZeRO-3 KDA template
+# corruption the first pin (3009ec52) still had.
 
 # NVIDIA/hyperflare-inference: ignition (preparation), heliopause and the
-# native flare server, all three from this one commit. NOT the commit the
-# recipes' uv.lock names: that lock (PR #55's and main's alike) still resolves
-# ignition to 425ab2d4 (2026-11-23), which has no ignition.parameters, and every
-# recipe imports it since recipes #54 (2026-11-26). This is upstream main when
-# PR #55's last commit landed (2026-11-27 06:27Z): it carries #545 (the
-# RecipeParameters CLI the recipes import) and #508 (recipe-declared row-sharded
-# attention planning PR #55 builds on). The Dockerfile re-locks onto it.
-V17_HYPERFLARE_INFERENCE_COMMIT="6d74db3a0f5c04ebcd1adf10b5b112f7cc70a7cb"
-# What the recipes' stale lock pins, kept so the contract can show the override.
-V17_RECIPES_LOCKED_HYPERFLARE_INFERENCE_COMMIT="425ab2d4696caee841b1fc8165ff8d806a5af7e9"
-# local-inference-lab/hyperflare-recipes PR #55 head: "sequence-parallel
-# row-sharded prefill for GLM-5.3-Flash" (--row-shard-prefill,
-# --row-shard-attention, on-the-fly attention weight gather).
-V17_RECIPES_COMMIT="3009ec527d2b74a6691461124abdac298093ff01"
+# native flare server, all three from this one commit: the one PR #55 was
+# validated with ("paired with flashinfer#151 and hyperflare-inference@c9935887"),
+# upstream main on 2026-11-28 06:23Z. It carries #555 (batch capacities 6/12/24),
+# #556 (lock-free same-process TP DispatchRing) and #557 (PreparedAllToAll).
+# NOT the commit the recipes' uv.lock names (below); the Dockerfile re-locks onto
+# this one. History: the first pin's recipes lock named 425ab2d4, which had no
+# ignition.parameters at all.
+V17_HYPERFLARE_INFERENCE_COMMIT="c99358879813f22557ac619044af514fafacecc6"
+# What PR #55's own lock pins (main 2026-11-27 20:43Z, four commits before the
+# validated one), kept so the contract can show the override.
+V17_RECIPES_LOCKED_HYPERFLARE_INFERENCE_COMMIT="5adb27f259d340231c384ed668bd68e2abc313c5"
+# local-inference-lab/hyperflare-recipes PR #55 head: "GLM-5.3 TP2/TP4
+# row-sharded prefill, ZeRO-3 weight gather & MXFP8 attention"
+# (--row-shard-prefill, --row-shard-attention), rebased onto main d1376bb4.
+V17_RECIPES_COMMIT="71c9830c5720e19bc6bb6b53c028810edc09fab0"
 # local-inference-lab/flashinfer PR #151 head: the b12x kernels PR #55 needs
 # (KDA segment summarize/finalize, GLM ARBITRARY_FP32 prefill MLA fusion, the
-# cooperative MoE SM reservation, high-priority PCIe DMA streams). It sits on
-# main 8bdfd6c9, the commit PR #55's own uv.lock pins.
-V17_FLASHINFER_COMMIT="82f23e5ed78645df74869901837f213e7c1fc367"
+# cooperative MoE SM reservation, high-priority PCIe DMA streams), rebased onto
+# main 5d2a7107, the commit PR #55's own lock pins.
+V17_FLASHINFER_COMMIT="6d2f90c8670691c168d762cda294dcf2f4eb6dc6"
 
 # The image tag names all three sources (short ids) and the CUDA toolkit.
 V17_IMAGE="peterstorm/glm53-hyperflare-upstream:hfi${V17_HYPERFLARE_INFERENCE_COMMIT:0:8}-hfr${V17_RECIPES_COMMIT:0:8}-fi${V17_FLASHINFER_COMMIT:0:8}-cu131"
@@ -86,17 +90,24 @@ v17_image_matches_pins() {
 # The two prefill modes a v17 core is exported in. Each is its own core and
 # receipt, so the A/B is the same image, checkpoint and capacities with only the
 # prefill path changed:
-#   rowshard  PR #55: --row-shard-prefill --row-shard-attention with 8192-token
-#             chunks (the PR's threshold: chunks of 8192+ run row-sharded attention
-#             with on-the-fly weight gather; smaller ones stay head-sharded)
-#   baseline  upstream's default: head-sharded prefill, 4096-token chunks
+#   rowshard  PR #55: --row-shard-prefill --row-shard-attention with 12288-token
+#             chunks. Over PCIe (this box) row-sharded attention engages only for
+#             prefill graphs of 12288+ tokens (glm53/stack.py
+#             ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE; 4096 and 8192 are RoCE's), and
+#             12288 is the size the PR was validated at; smaller chunks would
+#             silently keep head-sharded attention
+#   baseline  upstream's default: head-sharded prefill, 4096-token chunks (what
+#             would be served otherwise; the chunk size is part of the comparison)
 V17_PREFILL_MODES=(rowshard baseline)
+
+# The smallest prefill graph that runs row-sharded attention over PCIe (PR #55).
+V17_ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE=12288
 
 # v17_prefill_chunk MODE: the prefill chunk size the mode exports with; status 1
 # for an unknown mode. Pure.
 v17_prefill_chunk() {
   case "$1" in
-    rowshard) echo 8192 ;;
+    rowshard) echo "$V17_ROW_SHARD_ATTENTION_MIN_TOKENS_PCIE" ;;
     baseline) echo 4096 ;;
     *) return 1 ;;
   esac
